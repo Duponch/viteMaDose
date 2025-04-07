@@ -59,7 +59,12 @@ export default class CityGenerator {
             houseBaseHeight: 6,  // Hauteur fixe du cube pour la maison
             houseBaseDepth: 6,   // Profondeur fixe du cube pour la maison
             houseZoneProbability: 0.5,
-            houseModelPath: "Public/Assets/Models/HouseEdit.glb",
+            houseModelPath: "Public/Assets/Models/House.glb",
+            // Nouveautés pour les immeubles :
+            buildingModelPath: "Public/Assets/Models/Building.glb",
+            buildingBaseWidth: 10,   // Dimensions de base pour l'immeuble
+            buildingBaseHeight: 20,
+            buildingBaseDepth: 10,
             ...config
         };
 
@@ -88,12 +93,22 @@ export default class CityGenerator {
 
         this.gltfLoader = new GLTFLoader();
         this.houseModel = null;
+        this.buildingModel = null;
     }
 
     async loadHouseModel() {
         return new Promise((resolve, reject) => {
             this.gltfLoader.load(this.config.houseModelPath, (gltf) => {
                 this.houseModel = gltf.scene;
+                resolve();
+            }, null, reject);
+        });
+    }
+
+    async loadBuildingModel() {
+        return new Promise((resolve, reject) => {
+            this.gltfLoader.load(this.config.buildingModelPath, (gltf) => {
+                this.buildingModel = gltf.scene;
                 resolve();
             }, null, reject);
         });
@@ -127,9 +142,10 @@ export default class CityGenerator {
 
         try {
             await this.loadHouseModel();
+            await this.loadBuildingModel();
             this.generatePlotContentsAndSidewalks();
         } catch (error) {
-            console.error("Error loading house model:", error);
+            console.error("Error loading models:", error);
         }
 
         console.log("Génération de la ville terminée.");
@@ -170,6 +186,7 @@ export default class CityGenerator {
         this.leafPlots = [];
         this.nextPlotId = 0;
         this.houseModel = null;
+        this.buildingModel = null;
     }
 
     // Modification ici : choisir la taille minimale en fonction du type de zone
@@ -565,33 +582,53 @@ export default class CityGenerator {
                                 this.buildingGroup.add(houseMesh);
                         
                                 // --- Ajout d'un helper rouge pour visualiser la hitbox de la maison ---
-                                const boxHelper = new THREE.BoxHelper(houseMesh, 0xff0000);
-                                this.buildingGroup.add(boxHelper);
+                                /* const boxHelper = new THREE.BoxHelper(houseMesh, 0xff0000);
+                                this.buildingGroup.add(boxHelper); */
                             }
                         } else {
-                            // --- Zone immeuble : génération classique ---
-                            const height = THREE.MathUtils.randFloat(
-                                this.config.buildingMinHeight,
-                                this.config.buildingMaxHeight
-                            );
-                            const buildingMesh = new THREE.Mesh(
-                                baseBuildingGeometry,
-                                this.buildingMaterial.clone()
-                            );
-                            buildingMesh.scale.set(buildableWidth, height, buildableDepth);
-                            buildingMesh.position.set(
-                                subZone.x + subZone.width / 2,
-                                height / 2,
-                                subZone.z + subZone.depth / 2
-                            );
-                            buildingMesh.castShadow = true;
-                            buildingMesh.receiveShadow = true;
-                            buildingMesh.material.color.setHSL(
-                                Math.random() * 0.1 + 0.55,
-                                0.1,
-                                Math.random() * 0.3 + 0.4
-                            );
-                            this.buildingGroup.add(buildingMesh);
+                            // --- Zone immeuble : utilisation du modèle .glb ---
+                            if (this.buildingModel) {
+                                const buildingMesh = this.buildingModel.clone(true);
+                        
+                                // Calcul de la bounding box du modèle
+                                const buildingBoundingBox = new Box3().setFromObject(buildingMesh);
+                                const buildingSize = buildingBoundingBox.getSize(new Vector3());
+                        
+                                // Calcul des facteurs d'échelle pour adapter l'immeuble aux dimensions de base configurées
+                                const scaleFactorX = this.config.buildingBaseWidth / buildingSize.x;
+                                const scaleFactorY = this.config.buildingBaseHeight / buildingSize.y;
+                                const scaleFactorZ = this.config.buildingBaseDepth / buildingSize.z;
+                                const scaleFactor = Math.min(scaleFactorX, scaleFactorY, scaleFactorZ);
+                                buildingMesh.scale.set(scaleFactor, scaleFactor, scaleFactor);
+                        
+                                // Recentrer le modèle en décalant son pivot
+                                buildingMesh.updateMatrixWorld(true);
+                                const updatedBox = new Box3().setFromObject(buildingMesh);
+                                const center = new Vector3();
+                                updatedBox.getCenter(center);
+                                buildingMesh.position.sub(center);
+                        
+                                // Calcul du centre de la subZone
+                                const subZoneCenterX = subZone.x + subZone.width / 2;
+                                const subZoneCenterZ = subZone.z + subZone.depth / 2;
+                        
+                                // Recalcul de la bounding box après recentrage
+                                const newBox = new Box3().setFromObject(buildingMesh);
+                                const newSize = newBox.getSize(new Vector3());
+                        
+                                // Positionner l'immeuble pour que sa base soit au sol
+                                buildingMesh.position.add(new THREE.Vector3(subZoneCenterX, newSize.y / 2, subZoneCenterZ));
+                        
+                                buildingMesh.castShadow = true;
+                                buildingMesh.receiveShadow = true;
+                        
+                                // Ajout de l'immeuble au groupe de bâtiments
+                                this.buildingGroup.add(buildingMesh);
+                        
+                                // --- Ajout d'un helper rouge pour visualiser la hitbox de l'immeuble ---
+                                /* const boxHelper = new THREE.BoxHelper(buildingMesh, 0xff0000);
+                                this.buildingGroup.add(boxHelper); */
+                            }
                         }
                     }
                 });
