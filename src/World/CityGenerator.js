@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Box3, Vector3, BoxHelper } from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // --- Classe pour représenter une parcelle ---
 class Plot {
@@ -55,14 +56,13 @@ export default class CityGenerator {
             minHouseSubZoneSize: 7,
             minBuildingSubZoneSize: 10,
             buildingSubZoneMargin: 1,
-            houseBaseWidth: 6,   // Largeur fixe du cube pour la maison
-            houseBaseHeight: 6,  // Hauteur fixe du cube pour la maison
-            houseBaseDepth: 6,   // Profondeur fixe du cube pour la maison
+            houseBaseWidth: 6,
+            houseBaseHeight: 6,
+            houseBaseDepth: 6,
             houseZoneProbability: 0.5,
-            houseModelPath: "Public/Assets/Models/House.glb",
-            // Nouveautés pour les immeubles :
-            buildingModelPath: "Public/Assets/Models/Building.glb",
-            buildingBaseWidth: 10,   // Dimensions de base pour l'immeuble
+            houseModelPath: "Public/Assets/Models/House4.glb",
+            buildingModelPath: "Public/Assets/Models/Building2.glb",
+            buildingBaseWidth: 10,
             buildingBaseHeight: 20,
             buildingBaseDepth: 10,
             ...config
@@ -92,27 +92,109 @@ export default class CityGenerator {
         this.scene.add(this.buildingGroup);
 
         this.gltfLoader = new GLTFLoader();
+        // Les modèles bruts
         this.houseModel = null;
         this.buildingModel = null;
+        // Géométries fusionnées pour instancing
+        this.houseMergedGeometry = null;
+        this.buildingMergedGeometry = null;
+        // Matériaux pour instancing (on récupère celui du premier Mesh)
+        this.houseMergedMaterial = null;
+        this.buildingMergedMaterial = null;
+        // Paramètres de transformation de base (calculés lors du chargement)
+        this.houseScaleFactor = 1;
+        this.houseCenterOffset = new THREE.Vector3();
+        this.houseSizeAfterScaling = new THREE.Vector3();
+        this.buildingScaleFactor = 1;
+        this.buildingCenterOffset = new THREE.Vector3();
+        this.buildingSizeAfterScaling = new THREE.Vector3();
     }
 
     async loadHouseModel() {
-        return new Promise((resolve, reject) => {
-            this.gltfLoader.load(this.config.houseModelPath, (gltf) => {
-                this.houseModel = gltf.scene;
-                resolve();
-            }, null, reject);
-        });
-    }
+		return new Promise((resolve, reject) => {
+			this.gltfLoader.load(
+				this.config.houseModelPath,
+				(gltf) => {
+					this.houseModel = gltf.scene;
+					const geometries = [];
+					// Parcourir les Mesh enfants et fusionner leurs géométries
+					this.houseModel.traverse((child) => {
+						if (child.isMesh) {
+							child.updateMatrixWorld(true);
+							const clonedGeom = child.geometry.clone();
+							clonedGeom.applyMatrix4(child.matrixWorld);
+							geometries.push(clonedGeom);
+							if (!this.houseMergedMaterial) {
+								this.houseMergedMaterial = child.material.clone();
+							}
+						}
+					});
+					if (geometries.length === 0) {
+						return reject(new Error("Aucune géométrie trouvée dans le modèle de maison."));
+					}
+					this.houseMergedGeometry = mergeGeometries(geometries, true);
+					// Calcul de la bounding box pour obtenir la taille et le centre
+					const bbox = new THREE.Box3().setFromBufferAttribute(this.houseMergedGeometry.attributes.position);
+					const size = new THREE.Vector3();
+					bbox.getSize(size);
+					const center = new THREE.Vector3();
+					bbox.getCenter(center);
+					const scaleFactorX = this.config.houseBaseWidth / size.x;
+					const scaleFactorY = this.config.houseBaseHeight / size.y;
+					const scaleFactorZ = this.config.houseBaseDepth / size.z;
+					const scaleFactor = Math.min(scaleFactorX, scaleFactorY, scaleFactorZ);
+					this.houseScaleFactor = scaleFactor;
+					this.houseCenterOffset = center;
+					this.houseSizeAfterScaling = size.multiplyScalar(scaleFactor);
+					resolve();
+				},
+				null,
+				reject
+			);
+		});
+	}
 
     async loadBuildingModel() {
-        return new Promise((resolve, reject) => {
-            this.gltfLoader.load(this.config.buildingModelPath, (gltf) => {
-                this.buildingModel = gltf.scene;
-                resolve();
-            }, null, reject);
-        });
-    }
+		return new Promise((resolve, reject) => {
+			this.gltfLoader.load(
+				this.config.buildingModelPath,
+				(gltf) => {
+					this.buildingModel = gltf.scene;
+					const geometries = [];
+					this.buildingModel.traverse((child) => {
+						if (child.isMesh) {
+							child.updateMatrixWorld(true);
+							const clonedGeom = child.geometry.clone();
+							clonedGeom.applyMatrix4(child.matrixWorld);
+							geometries.push(clonedGeom);
+							if (!this.buildingMergedMaterial) {
+								this.buildingMergedMaterial = child.material.clone();
+							}
+						}
+					});
+					if (geometries.length === 0) {
+						return reject(new Error("Aucune géométrie trouvée dans le modèle d'immeuble."));
+					}
+					this.buildingMergedGeometry = mergeGeometries(geometries, true);
+					const bbox = new THREE.Box3().setFromBufferAttribute(this.buildingMergedGeometry.attributes.position);
+					const size = new THREE.Vector3();
+					bbox.getSize(size);
+					const center = new THREE.Vector3();
+					bbox.getCenter(center);
+					const scaleFactorX = this.config.buildingBaseWidth / size.x;
+					const scaleFactorY = this.config.buildingBaseHeight / size.y;
+					const scaleFactorZ = this.config.buildingBaseDepth / size.z;
+					const scaleFactor = Math.min(scaleFactorX, scaleFactorY, scaleFactorZ);
+					this.buildingScaleFactor = scaleFactor;
+					this.buildingCenterOffset = center;
+					this.buildingSizeAfterScaling = size.multiplyScalar(scaleFactor);
+					resolve();
+				},
+				undefined,
+				reject
+			);
+		});
+	}
 
     async generate() {
         console.log("Génération par subdivision (lignes centrales)...");
@@ -152,6 +234,7 @@ export default class CityGenerator {
     }
 
     clearScene() {
+        // (Fonction inchangée, voir code original)
         const disposeGroup = (group) => {
             while (group.children.length > 0) {
                 const obj = group.children[0];
@@ -187,6 +270,8 @@ export default class CityGenerator {
         this.nextPlotId = 0;
         this.houseModel = null;
         this.buildingModel = null;
+        this.houseMergedGeometry = null;
+        this.buildingMergedGeometry = null;
     }
 
     // Modification ici : choisir la taille minimale en fonction du type de zone
@@ -475,38 +560,41 @@ export default class CityGenerator {
         this.roadGroup.add(segmentGroup);
     }
 
-    generatePlotContentsAndSidewalks() {
-        const baseBuildingGeometry = new THREE.BoxGeometry(1, 1, 1);
+	generatePlotContentsAndSidewalks() {
         const sidewalkW = this.config.sidewalkWidth;
         const sidewalkH = this.config.sidewalkHeight;
-    
+
+        // Tableaux pour accumuler les matrices de transformation pour l'instancing
+        const houseInstanceMatrices = [];
+        const buildingInstanceMatrices = [];
+
         this.leafPlots.forEach((plot) => {
-            // Création des trottoirs
+            // Création des trottoirs (inchangée)
             if (sidewalkW > 0) {
                 const sidewalkGroup = new THREE.Group();
                 sidewalkGroup.position.set(plot.center.x, 0, plot.center.z);
-    
+
                 const horizontalLength = plot.width + 2 * sidewalkW;
                 const verticalLength = plot.depth;
                 const geomH = new THREE.BoxGeometry(horizontalLength, sidewalkH, sidewalkW);
                 const geomV = new THREE.BoxGeometry(sidewalkW, sidewalkH, verticalLength);
-    
+
                 const topSW = new THREE.Mesh(geomH, this.sidewalkMaterial);
                 topSW.position.set(0, sidewalkH / 2, -plot.depth / 2 - sidewalkW / 2);
                 sidewalkGroup.add(topSW);
-    
+
                 const bottomSW = new THREE.Mesh(geomH, this.sidewalkMaterial);
                 bottomSW.position.set(0, sidewalkH / 2, plot.depth / 2 + sidewalkW / 2);
                 sidewalkGroup.add(bottomSW);
-    
+
                 const leftSW = new THREE.Mesh(geomV, this.sidewalkMaterial);
                 leftSW.position.set(-plot.width / 2 - sidewalkW / 2, sidewalkH / 2, 0);
                 sidewalkGroup.add(leftSW);
-    
+
                 const rightSW = new THREE.Mesh(geomV, this.sidewalkMaterial);
                 rightSW.position.set(plot.width / 2 + sidewalkW / 2, sidewalkH / 2, 0);
                 sidewalkGroup.add(rightSW);
-    
+
                 sidewalkGroup.traverse((child) => {
                     if (child instanceof THREE.Mesh) {
                         child.castShadow = true;
@@ -515,8 +603,8 @@ export default class CityGenerator {
                 });
                 this.sidewalkGroup.add(sidewalkGroup);
             }
-    
-            // Si parc, on crée le sol en conséquence
+
+            // Pour un parc, on crée simplement le sol
             if (plot.isPark) {
                 const parkGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
                 const parkMesh = new THREE.Mesh(parkGeom, this.parkMaterial);
@@ -532,107 +620,92 @@ export default class CityGenerator {
                 groundMesh.position.set(plot.center.x, 0.2, plot.center.z);
                 groundMesh.receiveShadow = true;
                 this.buildingGroup.add(groundMesh);
-    
+
                 const subZones = this.subdivideForBuildings(plot);
                 const margin = this.config.buildingSubZoneMargin;
-    
+
                 subZones.forEach((subZone) => {
                     const buildableWidth = Math.max(subZone.width - margin * 2, 0.1);
                     const buildableDepth = Math.max(subZone.depth - margin * 2, 0.1);
-    
+
                     if (buildableWidth > 0.1 && buildableDepth > 0.1) {
+                        // Calcul du centre de la subZone
+                        const subZoneCenterX = subZone.x + subZone.width / 2;
+                        const subZoneCenterZ = subZone.z + subZone.depth / 2;
+
+                        // Création de la matrice de transformation pour l'instance :
+                        // On souhaite appliquer : M = T(translation) * S(scale) * T(-center)
+                        let instanceMatrix = new THREE.Matrix4();
                         if (plot.zoneType === "house") {
-                            // --- Générer une maison (GLB model) ---
-                            if (this.houseModel) {
-                                const houseMesh = this.houseModel.clone(true);
-                        
-                                // Calcul de la bounding box du modèle
-                                const houseBoundingBox = new Box3().setFromObject(houseMesh);
-                                const houseSize = houseBoundingBox.getSize(new Vector3());
-                        
-                                // Calcul des facteurs d'échelle pour adapter la maison à la taille de base
-                                const scaleFactorX = this.config.houseBaseWidth / houseSize.x;
-                                const scaleFactorY = this.config.houseBaseHeight / houseSize.y;
-                                const scaleFactorZ = this.config.houseBaseDepth / houseSize.z;
-                                const scaleFactor = Math.min(scaleFactorX, scaleFactorY, scaleFactorZ);
-                                houseMesh.scale.set(scaleFactor, scaleFactor, scaleFactor);
-                        
-                                // Recentrer le modèle en décalant son pivot
-                                houseMesh.updateMatrixWorld(true);
-                                const updatedBox = new Box3().setFromObject(houseMesh);
-                                const center = new Vector3();
-                                updatedBox.getCenter(center);
-                                houseMesh.position.sub(center);
-                        
-                                // Calcul du centre de la subZone
-                                const subZoneCenterX = subZone.x + subZone.width / 2;
-                                const subZoneCenterZ = subZone.z + subZone.depth / 2;
-                        
-                                // Recalcul de la bounding box après recentrage
-                                const newBox = new Box3().setFromObject(houseMesh);
-                                const newSize = newBox.getSize(new Vector3());
-                        
-                                // Positionner la maison pour que sa base soit au sol
-                                houseMesh.position.add(new THREE.Vector3(subZoneCenterX, newSize.y / 2, subZoneCenterZ));
-                        
-                                houseMesh.castShadow = true;
-                                houseMesh.receiveShadow = true;
-                        
-                                // Ajout de la maison au groupe de bâtiments
-                                this.buildingGroup.add(houseMesh);
-                        
-                                // --- Ajout d'un helper rouge pour visualiser la hitbox de la maison ---
-                                /* const boxHelper = new THREE.BoxHelper(houseMesh, 0xff0000);
-                                this.buildingGroup.add(boxHelper); */
-                            }
+                            const translation = new THREE.Matrix4().makeTranslation(
+                                subZoneCenterX,
+                                this.houseSizeAfterScaling.y / 2,
+                                subZoneCenterZ
+                            );
+                            const scale = new THREE.Matrix4().makeScale(
+                                this.houseScaleFactor,
+                                this.houseScaleFactor,
+                                this.houseScaleFactor
+                            );
+                            const recenter = new THREE.Matrix4().makeTranslation(
+                                -this.houseCenterOffset.x,
+                                -this.houseCenterOffset.y,
+                                -this.houseCenterOffset.z
+                            );
+                            instanceMatrix.multiplyMatrices(translation, scale.multiply(recenter));
+                            houseInstanceMatrices.push(instanceMatrix);
                         } else {
-                            // --- Zone immeuble : utilisation du modèle .glb ---
-                            if (this.buildingModel) {
-                                const buildingMesh = this.buildingModel.clone(true);
-                        
-                                // Calcul de la bounding box du modèle
-                                const buildingBoundingBox = new Box3().setFromObject(buildingMesh);
-                                const buildingSize = buildingBoundingBox.getSize(new Vector3());
-                        
-                                // Calcul des facteurs d'échelle pour adapter l'immeuble aux dimensions de base configurées
-                                const scaleFactorX = this.config.buildingBaseWidth / buildingSize.x;
-                                const scaleFactorY = this.config.buildingBaseHeight / buildingSize.y;
-                                const scaleFactorZ = this.config.buildingBaseDepth / buildingSize.z;
-                                const scaleFactor = Math.min(scaleFactorX, scaleFactorY, scaleFactorZ);
-                                buildingMesh.scale.set(scaleFactor, scaleFactor, scaleFactor);
-                        
-                                // Recentrer le modèle en décalant son pivot
-                                buildingMesh.updateMatrixWorld(true);
-                                const updatedBox = new Box3().setFromObject(buildingMesh);
-                                const center = new Vector3();
-                                updatedBox.getCenter(center);
-                                buildingMesh.position.sub(center);
-                        
-                                // Calcul du centre de la subZone
-                                const subZoneCenterX = subZone.x + subZone.width / 2;
-                                const subZoneCenterZ = subZone.z + subZone.depth / 2;
-                        
-                                // Recalcul de la bounding box après recentrage
-                                const newBox = new Box3().setFromObject(buildingMesh);
-                                const newSize = newBox.getSize(new Vector3());
-                        
-                                // Positionner l'immeuble pour que sa base soit au sol
-                                buildingMesh.position.add(new THREE.Vector3(subZoneCenterX, newSize.y / 2, subZoneCenterZ));
-                        
-                                buildingMesh.castShadow = true;
-                                buildingMesh.receiveShadow = true;
-                        
-                                // Ajout de l'immeuble au groupe de bâtiments
-                                this.buildingGroup.add(buildingMesh);
-                        
-                                // --- Ajout d'un helper rouge pour visualiser la hitbox de l'immeuble ---
-                                /* const boxHelper = new THREE.BoxHelper(buildingMesh, 0xff0000);
-                                this.buildingGroup.add(boxHelper); */
-                            }
+                            const translation = new THREE.Matrix4().makeTranslation(
+                                subZoneCenterX,
+                                this.buildingSizeAfterScaling.y / 2,
+                                subZoneCenterZ
+                            );
+                            const scale = new THREE.Matrix4().makeScale(
+                                this.buildingScaleFactor,
+                                this.buildingScaleFactor,
+                                this.buildingScaleFactor
+                            );
+                            const recenter = new THREE.Matrix4().makeTranslation(
+                                -this.buildingCenterOffset.x,
+                                -this.buildingCenterOffset.y,
+                                -this.buildingCenterOffset.z
+                            );
+                            instanceMatrix.multiplyMatrices(translation, scale.multiply(recenter));
+                            buildingInstanceMatrices.push(instanceMatrix);
                         }
                     }
                 });
             }
         });
-    }	
+
+        // Création d'un InstancedMesh pour toutes les maisons (1 draw call)
+        if (houseInstanceMatrices.length > 0) {
+            const houseInstancedMesh = new THREE.InstancedMesh(
+                this.houseMergedGeometry,
+                this.houseMergedMaterial,
+                houseInstanceMatrices.length
+            );
+            houseInstanceMatrices.forEach((matrix, index) => {
+                houseInstancedMesh.setMatrixAt(index, matrix);
+            });
+            houseInstancedMesh.castShadow = true;
+            houseInstancedMesh.receiveShadow = true;
+            this.buildingGroup.add(houseInstancedMesh);
+        }
+
+        // Création d'un InstancedMesh pour tous les immeubles (1 draw call)
+        if (buildingInstanceMatrices.length > 0) {
+            const buildingInstancedMesh = new THREE.InstancedMesh(
+                this.buildingMergedGeometry,
+                this.buildingMergedMaterial,
+                buildingInstanceMatrices.length
+            );
+            buildingInstanceMatrices.forEach((matrix, index) => {
+                buildingInstancedMesh.setMatrixAt(index, matrix);
+            });
+            buildingInstancedMesh.castShadow = true;
+            buildingInstancedMesh.receiveShadow = true;
+            this.buildingGroup.add(buildingInstancedMesh);
+        }
+    }
 }
