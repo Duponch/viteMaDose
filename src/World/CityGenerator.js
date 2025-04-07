@@ -1,4 +1,5 @@
 // src/World/CityGenerator.js
+
 import * as THREE from 'three';
 
 // --- Classe pour représenter une parcelle ---
@@ -7,11 +8,14 @@ class Plot {
         this.id = id; // Identifiant unique
         this.x = x;
         this.z = z;
-        this.width = width; // Dimension sur l'axe X
-        this.depth = depth; // Dimension sur l'axe Z
-        this.children = []; // Sous-parcelles si elle est divisée
-        this.isLeaf = true; // Est-ce une parcelle finale (non divisée) ?
+        this.width = width;  // Dimension sur l'axe X
+        this.depth = depth;  // Dimension sur l'axe Z
+        this.children = [];  // Sous-parcelles si elle est divisée
+        this.isLeaf = true;  // Est-ce une parcelle finale (non divisée) ?
         this.isPark = false; // Pourrait être un parc/espace vert
+
+        // Nouveau : type de zone, "house" ou "building"
+        this.zoneType = null;
     }
 
     get center() {
@@ -31,30 +35,35 @@ export default class CityGenerator {
         this.experience = experience;
         this.scene = this.experience.scene;
         this.config = {
-			mapSize: 150,
-			roadWidth: 10,          // Largeur de l'ESPACE route
-			sidewalkWidth: 2,       // Largeur des trottoirs
-			sidewalkHeight: 0.2,    // Hauteur des trottoirs
-			centerlineWidth: 0.15,  // Largeur de la ligne centrale blanche
-			centerlineHeight: 0.02, // Hauteur de la ligne centrale (légèrement > 0)
-			minPlotSize: 15,
-			maxRecursionDepth: 7,
-			buildingMinHeight: 5,
-			buildingMaxHeight: 25,
-			parkProbability: 0.15,
-			minBuildingSubZoneSize: 10,    // Taille minimale d'une sous-zone pour un bâtiment
-			buildingSubZoneMargin: 1,       // Marge entre le bâtiment et les bords de la sous-zone
-			...config
-		};		
+            mapSize: 150,
+            roadWidth: 10,          // Largeur de l'ESPACE route
+            sidewalkWidth: 2,       // Largeur des trottoirs
+            sidewalkHeight: 0.2,    // Hauteur des trottoirs
+            centerlineWidth: 0.15,  // Largeur de la ligne centrale blanche
+            centerlineHeight: 0.02, // Hauteur de la ligne centrale (légèrement > 0)
+            minPlotSize: 15,
+            maxRecursionDepth: 7,
+            buildingMinHeight: 5,
+            buildingMaxHeight: 25,
+            parkProbability: 0.15,
+            minBuildingSubZoneSize: 10,    // Taille minimale d'une sous-zone pour un bâtiment
+            buildingSubZoneMargin: 1,       // Marge entre le bâtiment et les bords de la sous-zone
+            // Paramètres pour les maisons
+            houseMinHeight: 3,
+            houseMaxHeight: 10,
+            houseRoofHeight: 2,
+            houseZoneProbability: 0.5, // 50% des zones (non-parcs) seront des maisons
+            ...config
+        };
 
         // Matériaux
-        // this.roadMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 }); // Supprimé car plus de surface de route
-		this.groundMaterial = new THREE.MeshStandardMaterial({ color: 0x0f0118 }); // Sol en gris foncé
-		this.sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x999999 }); // Trottoir
+        this.groundMaterial = new THREE.MeshStandardMaterial({ color: 0x0f0118 }); // Sol en gris foncé
+        this.sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x999999 }); // Trottoir
         this.centerlineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // Ligne blanche simple
         this.buildingMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.2, roughness: 0.7 });
         this.buildingGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 }); // Sol sombre
-		this.parkMaterial = new THREE.MeshStandardMaterial({ color: 0x55aa55 }); // Vert pour les parcs
+        this.parkMaterial = new THREE.MeshStandardMaterial({ color: 0x55aa55 }); // Vert pour les parcs
+
         // Structure de données principale
         this.rootPlot = null;
         this.plots = [];
@@ -70,38 +79,38 @@ export default class CityGenerator {
         this.scene.add(this.buildingGroup);
     }
 
-	generate() {
-		console.log("Génération par subdivision (lignes centrales)...");
-		this.clearScene();
-	
-		// --- Ajout du sol couvrant l'ensemble de la ville ---
-		const groundGeometry = new THREE.PlaneGeometry(this.config.mapSize, this.config.mapSize);
-		const groundMesh = new THREE.Mesh(groundGeometry, this.groundMaterial);
-		groundMesh.rotation.x = -Math.PI / 2;
-		groundMesh.position.set(0, 0.005, 0);
-		groundMesh.receiveShadow = true;
-		this.scene.add(groundMesh);
-	
-		// 1. Initialiser la parcelle racine
-		console.log("Config:", this.config);
-		this.rootPlot = new Plot(this.nextPlotId++, -this.config.mapSize / 2, -this.config.mapSize / 2, this.config.mapSize, this.config.mapSize);
-		this.plots.push(this.rootPlot);
-	
-		// 2. Lancer la subdivision récursive
-		this.subdividePlot(this.rootPlot, 0);
-	
-		// 3. Collecter les parcelles feuilles
-		this.collectLeafPlots(this.rootPlot);
-		console.log(`Subdivision terminée: ${this.leafPlots.length} parcelles finales.`);
-	
-		// 4. Générer les LIGNES CENTRALES des routes
-		this.generateRoadCenterlines();
-	
-		// 5. Générer le contenu des parcelles (Bâtiments/Parcs ET TROTTOIRS)
-		this.generatePlotContentsAndSidewalks();
-	
-		console.log("Génération de la ville terminée.");
-	}	
+    generate() {
+        console.log("Génération par subdivision (lignes centrales)...");
+        this.clearScene();
+
+        // --- Ajout du sol couvrant l'ensemble de la ville ---
+        const groundGeometry = new THREE.PlaneGeometry(this.config.mapSize, this.config.mapSize);
+        const groundMesh = new THREE.Mesh(groundGeometry, this.groundMaterial);
+        groundMesh.rotation.x = -Math.PI / 2;
+        groundMesh.position.set(0, 0.005, 0);
+        groundMesh.receiveShadow = true;
+        this.scene.add(groundMesh);
+
+        // 1. Initialiser la parcelle racine
+        console.log("Config:", this.config);
+        this.rootPlot = new Plot(this.nextPlotId++, -this.config.mapSize / 2, -this.config.mapSize / 2, this.config.mapSize, this.config.mapSize);
+        this.plots.push(this.rootPlot);
+
+        // 2. Lancer la subdivision récursive
+        this.subdividePlot(this.rootPlot, 0);
+
+        // 3. Collecter les parcelles feuilles
+        this.collectLeafPlots(this.rootPlot);
+        console.log(`Subdivision terminée: ${this.leafPlots.length} parcelles finales.`);
+
+        // 4. Générer les LIGNES CENTRALES des routes
+        this.generateRoadCenterlines();
+
+        // 5. Générer le contenu des parcelles (Bâtiments/Parcs ET TROTTOIRS)
+        this.generatePlotContentsAndSidewalks();
+
+        console.log("Génération de la ville terminée.");
+    }  
 
     clearScene() {
         // Vider les groupes et disposer les géométries/matériaux
@@ -114,11 +123,11 @@ export default class CityGenerator {
                     // Ne disposer que les matériaux clonés (bâtiments) ou spécifiques non partagés.
                     // Les matériaux de base (sidewalk, centerline, park) ne sont pas clonés ici.
                     if (obj.material && obj.material !== this.sidewalkMaterial && obj.material !== this.centerlineMaterial && obj.material !== this.parkMaterial) {
-                         if (Array.isArray(obj.material)) {
-                             obj.material.forEach(m => { if(m && m.isMaterial) m.dispose(); });
-                         } else if (obj.material && obj.material.isMaterial) {
-                             obj.material.dispose();
-                         }
+                        if (Array.isArray(obj.material)) {
+                            obj.material.forEach(m => { if(m && m.isMaterial) m.dispose(); });
+                        } else if (obj.material && obj.material.isMaterial) {
+                            obj.material.dispose();
+                        }
                     }
                 } else if (obj instanceof THREE.Group) {
                     disposeGroup(obj);
@@ -130,34 +139,37 @@ export default class CityGenerator {
         disposeGroup(this.buildingGroup);
 
         // Réinitialiser les structures de données
-        this.rootPlot = null; this.plots = []; this.leafPlots = []; this.nextPlotId = 0;
+        this.rootPlot = null; 
+        this.plots = []; 
+        this.leafPlots = []; 
+        this.nextPlotId = 0;
     }
 
-	subdivideForBuildings(plot) {
-		const minSubZoneSize = this.config.minBuildingSubZoneSize;
-		const margin = this.config.buildingSubZoneMargin;
-		let numCols = Math.floor(plot.width / minSubZoneSize);
-		let numRows = Math.floor(plot.depth / minSubZoneSize);
-		numCols = Math.max(numCols, 1);
-		numRows = Math.max(numRows, 1);
-		const subZones = [];
-		const subWidth = plot.width / numCols;
-		const subDepth = plot.depth / numRows;
-		for (let i = 0; i < numCols; i++) {
-			for (let j = 0; j < numRows; j++) {
-				subZones.push({
-					x: plot.x + i * subWidth,
-					z: plot.z + j * subDepth,
-					width: subWidth,
-					depth: subDepth,
-				});
-			}
-		}
-		return subZones;
-	}	
+    subdivideForBuildings(plot) {
+        const minSubZoneSize = this.config.minBuildingSubZoneSize;
+        const margin = this.config.buildingSubZoneMargin;
+        let numCols = Math.floor(plot.width / minSubZoneSize);
+        let numRows = Math.floor(plot.depth / minSubZoneSize);
+        numCols = Math.max(numCols, 1);
+        numRows = Math.max(numRows, 1);
+        const subZones = [];
+        const subWidth = plot.width / numCols;
+        const subDepth = plot.depth / numRows;
+        for (let i = 0; i < numCols; i++) {
+            for (let j = 0; j < numRows; j++) {
+                subZones.push({
+                    x: plot.x + i * subWidth,
+                    z: plot.z + j * subDepth,
+                    width: subWidth,
+                    depth: subDepth,
+                });
+            }
+        }
+        return subZones;
+    }  
 
     // Subdivision et CollectLeafPlots restent inchangées
-     subdividePlot(plot, depth) {
+    subdividePlot(plot, depth) {
         // Condition d'arrêt modifiée
         if (depth >= this.config.maxRecursionDepth ||
             (plot.width * plot.depth < this.config.minPlotSize * this.config.minPlotSize * 1.5))
@@ -167,18 +179,25 @@ export default class CityGenerator {
 
         // Choix de l'axe (logique inchangée)
         let splitVertical = plot.width > plot.depth;
-        if (Math.abs(plot.width - plot.depth) < this.config.minPlotSize / 2) { splitVertical = Math.random() > 0.5; }
+        if (Math.abs(plot.width - plot.depth) < this.config.minPlotSize / 2) { 
+            splitVertical = Math.random() > 0.5; 
+        }
         if (splitVertical && plot.width < (this.config.minPlotSize * 2 + this.config.roadWidth)) splitVertical = false;
         if (!splitVertical && plot.depth < (this.config.minPlotSize * 2 + this.config.roadWidth)) splitVertical = true;
 
         // Vérifier si une division est possible avant de la faire
         const road = this.config.roadWidth;
         if (splitVertical) {
-             if (plot.width < this.config.minPlotSize * 2 + road) { plot.isLeaf = true; return; } // Pas assez large
+            if (plot.width < this.config.minPlotSize * 2 + road) { 
+                plot.isLeaf = true; 
+                return; 
+            } // Pas assez large
         } else {
-             if (plot.depth < this.config.minPlotSize * 2 + road) { plot.isLeaf = true; return; } // Pas assez profonde
+            if (plot.depth < this.config.minPlotSize * 2 + road) { 
+                plot.isLeaf = true; 
+                return; 
+            } // Pas assez profonde
         }
-
 
         plot.isLeaf = false;
         let p1, p2;
@@ -192,8 +211,8 @@ export default class CityGenerator {
             p2 = new Plot(this.nextPlotId++, splitX + road / 2, plot.z, (plot.x + plot.width) - (splitX + road / 2), plot.depth);
         } else {
             // Division Horizontale
-             const minSplitPos = plot.z + this.config.minPlotSize + road / 2;
-             const maxSplitPos = plot.z + plot.depth - this.config.minPlotSize - road / 2;
+            const minSplitPos = plot.z + this.config.minPlotSize + road / 2;
+            const maxSplitPos = plot.z + plot.depth - this.config.minPlotSize - road / 2;
             const splitZ = THREE.MathUtils.randFloat(minSplitPos, maxSplitPos);
             p1 = new Plot(this.nextPlotId++, plot.x, plot.z, plot.width, splitZ - plot.z - road / 2);
             p2 = new Plot(this.nextPlotId++, plot.x, splitZ + road / 2, plot.width, (plot.z + plot.depth) - (splitZ + road / 2));
@@ -201,24 +220,33 @@ export default class CityGenerator {
 
         // Vérification et récursion
         if (p1.width > 0.1 && p1.depth > 0.1 && p2.width > 0.1 && p2.depth > 0.1) {
-            plot.children.push(p1, p2); this.plots.push(p1, p2);
-            this.subdividePlot(p1, depth + 1); this.subdividePlot(p2, depth + 1);
+            plot.children.push(p1, p2); 
+            this.plots.push(p1, p2);
+            this.subdividePlot(p1, depth + 1); 
+            this.subdividePlot(p2, depth + 1);
         } else {
-             plot.isLeaf = true; plot.children = [];
-             console.warn("Division a produit des parcelles invalides, parcelle forcée en feuille : ", plot.id);
-             const indexP1 = this.plots.indexOf(p1); if(indexP1 > -1) this.plots.splice(indexP1, 1);
-             const indexP2 = this.plots.indexOf(p2); if(indexP2 > -1) this.plots.splice(indexP2, 1);
+            plot.isLeaf = true; 
+            plot.children = [];
+            console.warn("Division a produit des parcelles invalides, parcelle forcée en feuille : ", plot.id);
+            const indexP1 = this.plots.indexOf(p1); 
+            if(indexP1 > -1) this.plots.splice(indexP1, 1);
+            const indexP2 = this.plots.indexOf(p2); 
+            if(indexP2 > -1) this.plots.splice(indexP2, 1);
         }
     }
 
     collectLeafPlots(plot) {
         if (plot.isLeaf) {
-             // S'assurer que la parcelle est assez grande pour être un parc potentiellement
+            // S'assurer que la parcelle est assez grande pour être un parc potentiel
             if (plot.width >= this.config.minPlotSize && plot.depth >= this.config.minPlotSize) {
-                 if (Math.random() < this.config.parkProbability) {
-                     plot.isPark = true;
-                 }
-             }
+                if (Math.random() < this.config.parkProbability) {
+                    plot.isPark = true;
+                }
+            }
+            // Pour les parcelles non parcs, définir le type de zone
+            if (!plot.isPark) {
+                plot.zoneType = (Math.random() < this.config.houseZoneProbability) ? 'house' : 'building';
+            }
             this.leafPlots.push(plot);
         } else {
             plot.children.forEach(child => this.collectLeafPlots(child));
@@ -240,19 +268,23 @@ export default class CityGenerator {
             for (let j = i + 1; j < this.leafPlots.length; j++) {
                 const p2 = this.leafPlots[j];
                 let roadInfo = null;
-                // Détection de Gap Vertical (inchangée)
-                const gapH = p2.x - (p1.x + p1.width); const gapHReverse = p1.x - (p2.x + p2.width);
-                const zOverlapStart = Math.max(p1.z, p2.z); const zOverlapEnd = Math.min(p1.z + p1.depth, p2.z + p2.depth);
+                // Détection de Gap Vertical
+                const gapH = p2.x - (p1.x + p1.width); 
+                const gapHReverse = p1.x - (p2.x + p2.width);
+                const zOverlapStart = Math.max(p1.z, p2.z); 
+                const zOverlapEnd = Math.min(p1.z + p1.depth, p2.z + p2.depth);
                 const zOverlapLength = zOverlapEnd - zOverlapStart;
                 if (Math.abs(gapH - roadW) < tolerance && zOverlapLength > tolerance) {
                     roadInfo = { type: 'V', x: p1.x + p1.width + roadW / 2, z: zOverlapStart, length: zOverlapLength, p1Id: p1.id, p2Id: p2.id };
                 } else if (Math.abs(gapHReverse - roadW) < tolerance && zOverlapLength > tolerance) {
-                     roadInfo = { type: 'V', x: p2.x + p2.width + roadW / 2, z: zOverlapStart, length: zOverlapLength, p1Id: p2.id, p2Id: p1.id };
+                    roadInfo = { type: 'V', x: p2.x + p2.width + roadW / 2, z: zOverlapStart, length: zOverlapLength, p1Id: p2.id, p2Id: p1.id };
                 }
-                // Détection de Gap Horizontal (inchangée)
+                // Détection de Gap Horizontal
                 if (!roadInfo) {
-                    const gapV = p2.z - (p1.z + p1.depth); const gapVReverse = p1.z - (p2.z + p2.depth);
-                    const xOverlapStart = Math.max(p1.x, p2.x); const xOverlapEnd = Math.min(p1.x + p1.width, p2.x + p2.width);
+                    const gapV = p2.z - (p1.z + p1.depth); 
+                    const gapVReverse = p1.z - (p2.z + p2.depth);
+                    const xOverlapStart = Math.max(p1.x, p2.x); 
+                    const xOverlapEnd = Math.min(p1.x + p1.width, p2.x + p2.width);
                     const xOverlapLength = xOverlapEnd - xOverlapStart;
                     if (Math.abs(gapV - roadW) < tolerance && xOverlapLength > tolerance) {
                         roadInfo = { type: 'H', x: xOverlapStart, z: p1.z + p1.depth + roadW / 2, length: xOverlapLength, p1Id: p1.id, p2Id: p2.id };
@@ -260,20 +292,18 @@ export default class CityGenerator {
                         roadInfo = { type: 'H', x: xOverlapStart, z: p2.z + p2.depth + roadW / 2, length: xOverlapLength, p1Id: p2.id, p2Id: p1.id };
                     }
                 }
-
                 // Génération si route (gap) détectée
                 if (roadInfo) {
                     const roadKey = `${Math.min(roadInfo.p1Id, roadInfo.p2Id)}-${Math.max(roadInfo.p1Id, roadInfo.p2Id)}`;
                     if (!drawnRoads.has(roadKey)) {
-                        // Appel de la nouvelle fonction pour créer la ligne centrale
+                        // Appel de la fonction pour créer la ligne centrale
                         this.createRoadCenterlineGeometry(roadInfo);
                         drawnRoads.add(roadKey);
-                        // PAS BESOIN de gérer les intersections explicitement
                     }
                 }
             }
         }
-         console.log(`Lignes centrales générées: ${drawnRoads.size} segments.`);
+        console.log(`Lignes centrales générées: ${drawnRoads.size} segments.`);
     }
 
     // Fonction MODIFIÉE : crée la LIGNE CENTRALE (BoxGeometry fine)
@@ -283,7 +313,7 @@ export default class CityGenerator {
         const clHeight = this.config.centerlineHeight;
         const clWidth = this.config.centerlineWidth;
 
-        // Calculer le centre et l'angle du segment de route (comme avant)
+        // Calculer le centre et l'angle du segment de route
         if (info.type === 'V') { // Route verticale (le long de Z)
             angle = 0;
             midX = info.x;
@@ -293,32 +323,20 @@ export default class CityGenerator {
             midX = info.x + info.length / 2;
             midZ = info.z;
         }
-        segmentGroup.position.set(midX, 0, midZ); // Positionner au centre du segment
-        segmentGroup.rotation.y = angle; // Orienter le groupe
+        segmentGroup.position.set(midX, 0, midZ);
+        segmentGroup.rotation.y = angle;
 
         // Créer la géométrie de la ligne: une boîte fine et longue
-        // Width = largeur de la ligne, Height = hauteur de la ligne, Depth = longueur de la route
         const centerlineGeom = new THREE.BoxGeometry(clWidth, clHeight, info.length);
         const centerlineMesh = new THREE.Mesh(centerlineGeom, this.centerlineMaterial);
-
-        // Positionner la ligne légèrement au-dessus du sol (y=0)
-        centerlineMesh.position.y = clHeight / 2 + 0.001; // +0.001 pour éviter Z-fight si sol à y=0
-
-        // Pas besoin de rotation X car c'est une Box
-        // Pas besoin d'ombres pour une ligne simple
+        centerlineMesh.position.y = clHeight / 2 + 0.001;
         centerlineMesh.castShadow = false;
         centerlineMesh.receiveShadow = false;
-
         segmentGroup.add(centerlineMesh);
-        this.roadGroup.add(segmentGroup); // Ajouter le groupe (contenant la ligne) au groupe principal des routes
-
-        // Disposer la géométrie après création du mesh
-        // centerlineGeom.dispose(); // Décommenter si la gestion mémoire est critique
+        this.roadGroup.add(segmentGroup);
     }
 
-    // createIntersectionSurfaceGeometry est SUPPRIMÉE
-
-    // Fonction pour générer trottoirs et contenu des parcelles (INCHANGÉE par rapport à la version précédente)
+    // Fonction pour générer trottoirs et contenu des parcelles
     generatePlotContentsAndSidewalks() {
         const baseBuildingGeometry = new THREE.BoxGeometry(1, 1, 1);
         const sidewalkW = this.config.sidewalkWidth;
@@ -337,68 +355,98 @@ export default class CityGenerator {
                 const topSW = new THREE.Mesh(geomH, this.sidewalkMaterial);
                 topSW.position.set(0, sidewalkH / 2, -plot.depth / 2 - sidewalkW / 2);
                 sidewalkGroup.add(topSW);
+
                 const bottomSW = new THREE.Mesh(geomH, this.sidewalkMaterial);
                 bottomSW.position.set(0, sidewalkH / 2, plot.depth / 2 + sidewalkW / 2);
                 sidewalkGroup.add(bottomSW);
+
                 const leftSW = new THREE.Mesh(geomV, this.sidewalkMaterial);
                 leftSW.position.set(-plot.width / 2 - sidewalkW / 2, sidewalkH / 2, 0);
                 sidewalkGroup.add(leftSW);
+
                 const rightSW = new THREE.Mesh(geomV, this.sidewalkMaterial);
                 rightSW.position.set(plot.width / 2 + sidewalkW / 2, sidewalkH / 2, 0);
                 sidewalkGroup.add(rightSW);
 
                 sidewalkGroup.traverse((child) => {
-                     if (child instanceof THREE.Mesh) {
-                         child.castShadow = true;
-                         child.receiveShadow = true;
-                     }
-                 });
+                    if (child instanceof THREE.Mesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
                 this.sidewalkGroup.add(sidewalkGroup);
-                // geomH.dispose(); // Décommenter si la gestion mémoire est critique
-                // geomV.dispose(); // Décommenter si la gestion mémoire est critique
             }
 
-            // --- Générer Contenu : Parc ou Bâtiment ---
-			if (plot.isPark) {
-				const parkGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
-				const parkMesh = new THREE.Mesh(parkGeom, this.parkMaterial);
-				parkMesh.position.set(plot.center.x, 0.2, plot.center.z);
-				parkMesh.rotation.x = -Math.PI / 2;
-				parkMesh.receiveShadow = true;
-				this.buildingGroup.add(parkMesh);
-			} else {
-				// Ajout du sol sombre pour la zone de bâtiment
-				const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
-				const groundMesh = new THREE.Mesh(groundGeom, this.buildingGroundMaterial);
-				groundMesh.rotation.x = -Math.PI / 2;
-				// Positionner le sol légèrement au-dessus du sol pour éviter le Z-fight (ajustable)
-				groundMesh.position.set(plot.center.x, 0.2, plot.center.z);
-				groundMesh.receiveShadow = true;
-				this.buildingGroup.add(groundMesh);
+            // --- Générer Contenu : Parc ou Bâtiment/Maison ---
+            if (plot.isPark) {
+                const parkGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
+                const parkMesh = new THREE.Mesh(parkGeom, this.parkMaterial);
+                parkMesh.position.set(plot.center.x, 0.2, plot.center.z);
+                parkMesh.rotation.x = -Math.PI / 2;
+                parkMesh.receiveShadow = true;
+                this.buildingGroup.add(parkMesh);
+            } else {
+                // Ajout du sol sombre pour la zone de construction
+                const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
+                const groundMesh = new THREE.Mesh(groundGeom, this.buildingGroundMaterial);
+                groundMesh.rotation.x = -Math.PI / 2;
+                groundMesh.position.set(plot.center.x, 0.2, plot.center.z);
+                groundMesh.receiveShadow = true;
+                this.buildingGroup.add(groundMesh);
 
-				// Subdivision de la parcelle en sous-zones pour placer plusieurs bâtiments
-				const subZones = this.subdivideForBuildings(plot);
-				const margin = this.config.buildingSubZoneMargin;
-				subZones.forEach(subZone => {
-					const buildableWidth = Math.max(subZone.width - margin * 2, 0.1);
-					const buildableDepth = Math.max(subZone.depth - margin * 2, 0.1);
-					if (buildableWidth > 0.1 && buildableDepth > 0.1) {
-						const height = THREE.MathUtils.randFloat(this.config.buildingMinHeight, this.config.buildingMaxHeight);
-						const buildingMesh = new THREE.Mesh(baseBuildingGeometry, this.buildingMaterial.clone());
-						buildingMesh.scale.set(buildableWidth, height, buildableDepth);
-						buildingMesh.position.set(
-							subZone.x + subZone.width / 2,
-							height / 2,
-							subZone.z + subZone.depth / 2
-						);
-						buildingMesh.castShadow = true;
-						buildingMesh.receiveShadow = true;
-						buildingMesh.material.color.setHSL(Math.random() * 0.1 + 0.55, 0.1, Math.random() * 0.3 + 0.4);
-						this.buildingGroup.add(buildingMesh);
-					}
-				});
-			}
+                // Subdivision de la parcelle en sous-zones pour placer plusieurs constructions
+                const subZones = this.subdivideForBuildings(plot);
+                const margin = this.config.buildingSubZoneMargin;
+                subZones.forEach(subZone => {
+                    const buildableWidth = Math.max(subZone.width - margin * 2, 0.1);
+                    const buildableDepth = Math.max(subZone.depth - margin * 2, 0.1);
+                    if (buildableWidth > 0.1 && buildableDepth > 0.1) {
+                        if (plot.zoneType === 'house') {
+                            // Générer une maison : hauteur réduite et ajout d'un toit
+                            const height = THREE.MathUtils.randFloat(this.config.houseMinHeight, this.config.houseMaxHeight);
+                            const houseMesh = new THREE.Mesh(baseBuildingGeometry, this.buildingMaterial.clone());
+                            houseMesh.scale.set(buildableWidth, height, buildableDepth);
+                            houseMesh.position.set(
+                                subZone.x + subZone.width / 2,
+                                height / 2,
+                                subZone.z + subZone.depth / 2
+                            );
+                            houseMesh.castShadow = true;
+                            houseMesh.receiveShadow = true;
+                            houseMesh.material.color.setHSL(Math.random() * 0.1 + 0.55, 0.1, Math.random() * 0.3 + 0.4);
+                            this.buildingGroup.add(houseMesh);
+
+                            // Création d'un toit pyramidale pour la maison
+                            const roofGeometry = new THREE.CylinderGeometry(0, Math.max(buildableWidth, buildableDepth) / 2, this.config.houseRoofHeight, 4);
+                            const roofMaterial = this.buildingMaterial.clone();
+                            roofMaterial.color.setHex(0x883322);
+                            const roofMesh = new THREE.Mesh(roofGeometry, roofMaterial);
+                            roofMesh.position.set(
+                                subZone.x + subZone.width / 2,
+                                height + this.config.houseRoofHeight / 2,
+                                subZone.z + subZone.depth / 2
+                            );
+                            roofMesh.castShadow = true;
+                            roofMesh.receiveShadow = true;
+                            this.buildingGroup.add(roofMesh);
+                        } else {
+                            // Zone immeuble : génération classique
+                            const height = THREE.MathUtils.randFloat(this.config.buildingMinHeight, this.config.buildingMaxHeight);
+                            const buildingMesh = new THREE.Mesh(baseBuildingGeometry, this.buildingMaterial.clone());
+                            buildingMesh.scale.set(buildableWidth, height, buildableDepth);
+                            buildingMesh.position.set(
+                                subZone.x + subZone.width / 2,
+                                height / 2,
+                                subZone.z + subZone.depth / 2
+                            );
+                            buildingMesh.castShadow = true;
+                            buildingMesh.receiveShadow = true;
+                            buildingMesh.material.color.setHSL(Math.random() * 0.1 + 0.55, 0.1, Math.random() * 0.3 + 0.4);
+                            this.buildingGroup.add(buildingMesh);
+                        }
+                    }
+                });
+            }
         });
-        // baseBuildingGeometry.dispose(); // Décommenter si la gestion mémoire est critique
     }
 }
