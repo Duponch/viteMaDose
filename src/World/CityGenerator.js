@@ -40,7 +40,7 @@ export default class CityGenerator {
         this.experience = experience;
         this.scene = this.experience.scene;
         this.config = {
-            mapSize: 150,
+            mapSize: 400,
             roadWidth: 10,
             sidewalkWidth: 2,
             sidewalkHeight: 0.2,
