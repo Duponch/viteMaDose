@@ -16,7 +16,7 @@ export default class World {
         this.environment = new Environment(this.experience);
 
         // Passe la configuration au CityGenerator
-        this.cityGenerator = new CityGenerator(this.experience, {
+        this.cityGenerator = new CityGenerator(this.experience, /* {
             mapSize: 150,         // Taille de la carte
             roadWidth: 5,         // Largeur de la route elle-même
             sidewalkWidth: 2,     // Largeur de chaque trottoir
@@ -25,7 +25,7 @@ export default class World {
             parkProbability: 0.1, // % de chance qu'une parcelle devienne un parc
             buildingMargin: 2.5,  // Espace entre bord de parcelle et bâtiment
             // ... autres paramètres si besoin
-        });
+        } */);
         this.cityGenerator.generate(); // Lance la génération
 
         // ...

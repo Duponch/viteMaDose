@@ -31,13 +31,13 @@ export default class CityGenerator {
         this.experience = experience;
         this.scene = this.experience.scene;
         this.config = {
-            mapSize: 100,
-            roadWidth: 4,        // Largeur de la CHAUSSÉE uniquement
-            sidewalkWidth: 1.5,  // Largeur des trottoirs (maintenant liés aux parcelles)
-            sidewalkHeight: 0.2, // Hauteur des trottoirs
+            mapSize: 150,
+            roadWidth: 10,         // Largeur de la CHAUSSÉE uniquement
+            sidewalkWidth: 2,   // Largeur des trottoirs (maintenant liés aux parcelles)
+            sidewalkHeight: 0.2,  // Hauteur des trottoirs
             minPlotSize: 15,
             maxRecursionDepth: 7,
-            buildingMargin: 2,   // Marge INTÉRIEURE de la parcelle pour le bâtiment
+            //buildingMargin: 2,   // Marge INTÉRIEURE de la parcelle pour le bâtiment (commenté car non utilisé dans le code fourni)
             buildingMinHeight: 5,
             buildingMaxHeight: 25,
             parkProbability: 0.15,
@@ -58,9 +58,9 @@ export default class CityGenerator {
         this.nextPlotId = 0;
 
         // Groupes pour l'organisation de la scène
-        this.roadGroup = new THREE.Group();       // Pour les chaussées routes/intersections
-        this.sidewalkGroup = new THREE.Group();   // Pour les trottoirs autour des parcelles
-        this.buildingGroup = new THREE.Group();   // Pour bâtiments et parcs
+        this.roadGroup = new THREE.Group();      // Pour les chaussées routes/intersections
+        this.sidewalkGroup = new THREE.Group();  // Pour les trottoirs autour des parcelles
+        this.buildingGroup = new THREE.Group();  // Pour bâtiments et parcs
         this.scene.add(this.roadGroup);
         this.scene.add(this.sidewalkGroup);
         this.scene.add(this.buildingGroup);
@@ -71,6 +71,7 @@ export default class CityGenerator {
         this.clearScene();
 
         // 1. Initialiser la parcelle racine
+		console.log(this.config);
         this.rootPlot = new Plot(this.nextPlotId++, -this.config.mapSize / 2, -this.config.mapSize / 2, this.config.mapSize, this.config.mapSize);
         this.plots.push(this.rootPlot);
 
@@ -85,7 +86,7 @@ export default class CityGenerator {
         this.generateRoadSurfaces();
 
         // 5. Générer le contenu des parcelles (Bâtiments/Parcs ET TROTTOIRS)
-        this.generatePlotContentsAndSidewalks();
+        this.generatePlotContentsAndSidewalks(); // <-- Appel de la fonction modifiée
 
         console.log("Génération de la ville terminée.");
     }
@@ -98,12 +99,14 @@ export default class CityGenerator {
                 group.remove(obj);
                 if (obj instanceof THREE.Mesh) {
                     if (obj.geometry) obj.geometry.dispose();
-                    // Ne disposer que les matériaux clonés (ex: bâtiments)
-                    if (obj.material && obj.material !== this.roadMaterial && obj.material !== this.sidewalkMaterial && obj.material !== this.parkMaterial) {
+                    // Ne disposer que les matériaux clonés (ex: bâtiments) ou spécifiques (trottoirs)
+                    // S'assure de ne pas disposer les matériaux partagés globaux (road, park) s'ils ne sont pas clonés
+                    // Ici, sidewalkMaterial n'est pas cloné, mais on peut le laisser pour être sûr si on changeait la logique.
+                    if (obj.material && obj.material !== this.roadMaterial && obj.material !== this.parkMaterial /* && obj.material !== this.sidewalkMaterial */) {
                          if (Array.isArray(obj.material)) {
-                            obj.material.forEach(m => m.dispose());
+                             obj.material.forEach(m => { if(m.isMaterial) m.dispose(); }); // Vérifier isMaterial
                          } else if (obj.material.isMaterial) { // Vérifier si c'est bien un matériau avant dispose
-                            obj.material.dispose();
+                             obj.material.dispose();
                          }
                     }
                 } else if (obj instanceof THREE.Group) {
@@ -134,43 +137,58 @@ export default class CityGenerator {
         if (splitVertical && plot.width < (this.config.minPlotSize * 2 + this.config.roadWidth)) splitVertical = false;
         if (!splitVertical && plot.depth < (this.config.minPlotSize * 2 + this.config.roadWidth)) splitVertical = true;
 
-        plot.isLeaf = false;
+        // Vérifier si une division est possible avant de la faire
         const road = this.config.roadWidth;
+        if (splitVertical) {
+             if (plot.width < this.config.minPlotSize * 2 + road) { plot.isLeaf = true; return; } // Pas assez large
+        } else {
+             if (plot.depth < this.config.minPlotSize * 2 + road) { plot.isLeaf = true; return; } // Pas assez profonde
+        }
+
+
+        plot.isLeaf = false;
         let p1, p2;
 
         if (splitVertical) {
-            // Division Verticale (logique inchangée, vérifie si split possible)
+            // Division Verticale (logique inchangée, mais vérification préalable faite)
             const minSplitPos = plot.x + this.config.minPlotSize + road / 2;
             const maxSplitPos = plot.x + plot.width - this.config.minPlotSize - road / 2;
-            if (maxSplitPos <= minSplitPos) { plot.isLeaf = true; return; }
+            // Il devrait toujours y avoir de la place grâce à la vérif précédente
             const splitX = THREE.MathUtils.randFloat(minSplitPos, maxSplitPos);
             p1 = new Plot(this.nextPlotId++, plot.x, plot.z, splitX - plot.x - road / 2, plot.depth);
             p2 = new Plot(this.nextPlotId++, splitX + road / 2, plot.z, (plot.x + plot.width) - (splitX + road / 2), plot.depth);
         } else {
-            // Division Horizontale (logique inchangée, vérifie si split possible)
+            // Division Horizontale (logique inchangée, mais vérification préalable faite)
              const minSplitPos = plot.z + this.config.minPlotSize + road / 2;
              const maxSplitPos = plot.z + plot.depth - this.config.minPlotSize - road / 2;
-             if (maxSplitPos <= minSplitPos) { plot.isLeaf = true; return; }
+             // Il devrait toujours y avoir de la place grâce à la vérif précédente
             const splitZ = THREE.MathUtils.randFloat(minSplitPos, maxSplitPos);
             p1 = new Plot(this.nextPlotId++, plot.x, plot.z, plot.width, splitZ - plot.z - road / 2);
             p2 = new Plot(this.nextPlotId++, plot.x, splitZ + road / 2, plot.width, (plot.z + plot.depth) - (splitZ + road / 2));
         }
 
         // Vérification et récursion (inchangée)
+        // Théoriquement, cette vérification post-création devient moins critique avec la vérification pré-division
         if (p1.width > 0.1 && p1.depth > 0.1 && p2.width > 0.1 && p2.depth > 0.1) {
             plot.children.push(p1, p2); this.plots.push(p1, p2);
             this.subdividePlot(p1, depth + 1); this.subdividePlot(p2, depth + 1);
         } else {
-             plot.isLeaf = true; plot.children = [];
-             console.warn("Division annulée (post-check), résultat invalide pour la parcelle ", plot.id);
+             plot.isLeaf = true; plot.children = []; // Marquer comme feuille si les enfants ne sont pas valides
+             console.warn("Division a produit des parcelles invalides (malgré la vérification pré), parcelle forcée en feuille : ", plot.id);
+             // Nettoyer les plots invalides de la liste globale si nécessaire (plus complexe)
+             const indexP1 = this.plots.indexOf(p1); if(indexP1 > -1) this.plots.splice(indexP1, 1);
+             const indexP2 = this.plots.indexOf(p2); if(indexP2 > -1) this.plots.splice(indexP2, 1);
         }
     }
 
     collectLeafPlots(plot) {
         if (plot.isLeaf) {
-            if (Math.random() < this.config.parkProbability && plot.width > this.config.minPlotSize && plot.depth > this.config.minPlotSize) {
-                plot.isPark = true;
-            }
+             // S'assurer que la parcelle est assez grande pour être un parc potentiellement
+            if (plot.width >= this.config.minPlotSize && plot.depth >= this.config.minPlotSize) {
+                 if (Math.random() < this.config.parkProbability) {
+                     plot.isPark = true;
+                 }
+             } // Sinon elle reste une parcelle normale (potentiellement petite)
             this.leafPlots.push(plot);
         } else {
             plot.children.forEach(child => this.collectLeafPlots(child));
@@ -237,44 +255,55 @@ export default class CityGenerator {
     createRoadSurfaceGeometry(info, roadW) {
         const segmentGroup = new THREE.Group();
         let midX, midZ, angle;
-        midX = info.x; midZ = info.z;
-        if (info.type === 'V') { angle = 0; midZ = info.z + info.length / 2; }
-        else { angle = Math.PI / 2; midX = info.x + info.length / 2; }
-        segmentGroup.position.set(midX, 0, midZ);
-        segmentGroup.rotation.y = angle;
+        midX = info.x; midZ = info.z; // Centre de la géométrie
+        if (info.type === 'V') {
+            angle = 0; // Pas de rotation pour vertical (aligné sur Z)
+            midZ = info.z + info.length / 2;
+        } else { // type 'H'
+            angle = Math.PI / 2; // Rotation 90 degrés pour horizontal (aligné sur X)
+            midX = info.x + info.length / 2;
+        }
+        segmentGroup.position.set(midX, 0, midZ); // Positionner au centre calculé
+        segmentGroup.rotation.y = angle; // Appliquer la rotation
 
+        // La PlaneGeometry est créée avec (width, height)
+        // Pour une route verticale (angle=0), width=roadW, height=info.length
+        // Pour une route horizontale (angle=90), width doit être roadW et height info.length *avant rotation*
+        // Donc on utilise toujours (roadW, info.length) et la rotation fera le reste.
         const roadGeom = new THREE.PlaneGeometry(roadW, info.length);
         const roadMesh = new THREE.Mesh(roadGeom, this.roadMaterial);
-        roadMesh.rotation.x = -Math.PI / 2;
-        roadMesh.position.y = 0.01; // Offset Y
+        roadMesh.rotation.x = -Math.PI / 2; // Mettre le plan à plat
+        roadMesh.position.y = 0.01; // Léger offset Y pour éviter Z-fighting avec le sol (si existant)
         roadMesh.receiveShadow = true;
         segmentGroup.add(roadMesh);
-        roadGeom.dispose();
+        // roadGeom.dispose(); // On dispose la géométrie après l'avoir utilisée
 
         this.roadGroup.add(segmentGroup);
     }
 
     // Fonction simplifiée : crée uniquement la surface de l'intersection
-     createIntersectionSurfaceGeometry(centerPos, roadW) {
-         const baseGeom = new THREE.PlaneGeometry(roadW, roadW);
-         const baseMesh = new THREE.Mesh(baseGeom, this.roadMaterial);
-         baseMesh.position.copy(centerPos);
-         baseMesh.rotation.x = -Math.PI / 2;
-         baseMesh.position.y = 0.005; // Offset Y (légèrement sous route adjacente)
-         baseMesh.receiveShadow = true;
-         this.roadGroup.add(baseMesh);
-         baseGeom.dispose();
-     }
+    createIntersectionSurfaceGeometry(centerPos, roadW) {
+        const baseGeom = new THREE.PlaneGeometry(roadW, roadW);
+        const baseMesh = new THREE.Mesh(baseGeom, this.roadMaterial);
+        baseMesh.position.copy(centerPos);
+        baseMesh.rotation.x = -Math.PI / 2;
+        baseMesh.position.y = 0.005; // Offset Y (légèrement sous route adjacente pour éviter Z-fighting)
+        baseMesh.receiveShadow = true;
+        this.roadGroup.add(baseMesh);
+        // baseGeom.dispose(); // On dispose la géométrie après l'avoir utilisée
+    }
 
-    // Fonction modifiée pour générer contenu ET trottoirs autour des parcelles
+    // Fonction modifiée pour générer contenu ET trottoirs autour des parcelles (bâtiments ET parcs)
     generatePlotContentsAndSidewalks() {
-        const baseBuildingGeometry = new THREE.BoxGeometry(1, 1, 1);
+        const baseBuildingGeometry = new THREE.BoxGeometry(1, 1, 1); // Géométrie de base pour les bâtiments
         const sidewalkW = this.config.sidewalkWidth;
         const sidewalkH = this.config.sidewalkHeight;
 
         this.leafPlots.forEach(plot => {
-            // --- Générer Trottoir autour de la parcelle si non-parc ---
-            if (!plot.isPark && sidewalkW > 0) {
+
+            // --- Générer Trottoir autour de la parcelle (bâtiment OU parc) ---
+            // MODIFICATION ICI : Suppression de la condition "!plot.isPark"
+            if (sidewalkW > 0) { // On génère des trottoirs pour TOUTES les parcelles feuilles si largeur > 0
                 const sidewalkGroup = new THREE.Group();
                 // Positionner le groupe au centre de la parcelle pour faciliter les positions locales
                 sidewalkGroup.position.set(plot.center.x, 0, plot.center.z);
@@ -286,6 +315,7 @@ export default class CityGenerator {
                 const verticalLength = plot.depth;
 
                 // Géométries (réutilisables pour les paires opposées)
+                // Création à l'intérieur pour pouvoir les disposer après usage pour cette parcelle
                 const geomH = new THREE.BoxGeometry(horizontalLength, sidewalkH, sidewalkW);
                 const geomV = new THREE.BoxGeometry(sidewalkW, sidewalkH, verticalLength);
 
@@ -324,36 +354,45 @@ export default class CityGenerator {
                 // Disposer les géométries de base une fois les 4 maillages créés
                 geomH.dispose();
                 geomV.dispose();
-            }
+            } // Fin de la génération du trottoir pour cette parcelle
 
             // --- Générer Contenu : Parc ---
             if (plot.isPark) {
                 const parkGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
                 const parkMesh = new THREE.Mesh(parkGeom, this.parkMaterial);
-                parkMesh.position.set(plot.center.x, 0.05, plot.center.z);
+                parkMesh.position.set(plot.center.x, 0.05, plot.center.z); // Léger offset Y pour être au-dessus de la route/intersection
                 parkMesh.rotation.x = -Math.PI / 2;
                 parkMesh.receiveShadow = true;
-                this.buildingGroup.add(parkMesh);
-                parkGeom.dispose();
+                this.buildingGroup.add(parkMesh); // Ajouté au groupe 'building' qui contient aussi les parcs
+                // parkGeom.dispose(); // On dispose la géométrie après usage
             }
             // --- Générer Contenu : Bâtiment ---
-            else {
-                const margin = this.config.buildingMargin;
-                const buildableWidth = plot.width - margin * 2;
-                const buildableDepth = plot.depth - margin * 2;
+            else { // Si ce n'est pas un parc, c'est un bâtiment potentiel
+                //const margin = this.config.buildingMargin; // Non utilisé
+                const buildableWidth = plot.width /* - margin * 2 */ ;
+                const buildableDepth = plot.depth /* - margin * 2 */ ;
 
+                // S'assurer qu'il y a de la place pour construire
                 if (buildableWidth > 1 && buildableDepth > 1) {
                     const height = THREE.MathUtils.randFloat(this.config.buildingMinHeight, this.config.buildingMaxHeight);
+                    // Cloner le matériau pour pouvoir changer la couleur individuellement
                     const buildingMesh = new THREE.Mesh(baseBuildingGeometry, this.buildingMaterial.clone());
                     buildingMesh.scale.set(buildableWidth, height, buildableDepth);
+                    // Positionner au centre de la parcelle, avec Y au milieu de sa hauteur
                     buildingMesh.position.set(plot.center.x, height / 2, plot.center.z);
                     buildingMesh.castShadow = true;
                     buildingMesh.receiveShadow = true;
+                    // Donner une teinte légèrement variable
                     buildingMesh.material.color.setHSL(Math.random() * 0.1 + 0.55, 0.1, Math.random() * 0.3 + 0.4);
                     this.buildingGroup.add(buildingMesh);
-                }
+                 } else {
+                    // Optionnel: logguer si une parcelle non-parc est trop petite pour un bâtiment
+                    // console.log(`Parcelle ${plot.id} trop petite pour un bâtiment.`);
+                 }
             }
-        });
+        }); // Fin de la boucle forEach sur leafPlots
+
+        // Disposer la géométrie de base du bâtiment APRÈS la boucle car elle est réutilisée
          baseBuildingGeometry.dispose();
     }
 }

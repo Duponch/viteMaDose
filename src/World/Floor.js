@@ -18,7 +18,7 @@ export default class Floor {
     setMaterial() {
         // Matériau simple pour le sol
         this.material = new THREE.MeshStandardMaterial({
-            color: 0x888888, // Gris
+            color: 0x000000, // Gris
             metalness: 0.1, // Peu métallique
             roughness: 0.8  // Assez rugueux
         });
