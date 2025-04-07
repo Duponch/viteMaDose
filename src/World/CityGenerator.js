@@ -51,13 +51,13 @@ export default class CityGenerator {
             buildingMinHeight: 5,
             buildingMaxHeight: 25,
             parkProbability: 0.15,
-            minBuildingSubZoneSize: 10,
+            minBuildingSubZoneSize: 7,
             buildingSubZoneMargin: 1,
-            houseBaseWidth: 8,   // Fixed width of the house cube
-            houseBaseHeight: 8,  // Fixed height of the house cube
-            houseBaseDepth: 8,   // Fixed depth of the house cube
+            houseBaseWidth: 6,   // Fixed width of the house cube
+            houseBaseHeight: 6,  // Fixed height of the house cube
+            houseBaseDepth: 6,   // Fixed depth of the house cube
             houseZoneProbability: 0.5,
-            houseModelPath: "Public/Assets/Models/House.glb",
+            houseModelPath: "Public/Assets/Models/HouseEdit.glb",
             ...config
         };
 
@@ -453,51 +453,10 @@ export default class CityGenerator {
         this.roadGroup.add(segmentGroup);
     }
 
-    _createRectangularPyramid(baseWidth, baseDepth, height) {
-        const geometry = new THREE.BufferGeometry();
-
-        const halfW = baseWidth / 2;
-        const halfD = baseDepth / 2;
-
-        const vertices = [
-            -halfW, 0, -halfD,
-            halfW, 0, -halfD,
-            halfW, 0, halfD,
-            -halfW, 0, halfD,
-            0, height, 0
-        ];
-
-        const indices = [
-            0, 4, 1,
-            1, 4, 2,
-            2, 4, 3,
-            3, 4, 0
-        ];
-
-        geometry.setIndex(new THREE.BufferAttribute(new Uint16Array(indices), 1));
-        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-        geometry.computeVertexNormals();
-
-        return geometry;
-    }
-
-    _createWindowGeometry(width, height) {
-        const geometry = new THREE.PlaneGeometry(width, height);
-        return geometry;
-    }
-
-    _createDoorGeometry(width, height) {
-        const geometry = new THREE.PlaneGeometry(width, height);
-        return geometry;
-    }
-
     generatePlotContentsAndSidewalks() {
 		const baseBuildingGeometry = new THREE.BoxGeometry(1, 1, 1);
 		const sidewalkW = this.config.sidewalkWidth;
 		const sidewalkH = this.config.sidewalkHeight;
-		const houseWidth = this.config.houseBaseWidth;
-		const houseDepth = this.config.houseBaseDepth;
-		const houseHeight = this.config.houseBaseHeight;
 	
 		this.leafPlots.forEach((plot) => {
 			// Création des trottoirs
