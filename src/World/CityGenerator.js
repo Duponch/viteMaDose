@@ -31,19 +31,21 @@ export default class CityGenerator {
         this.experience = experience;
         this.scene = this.experience.scene;
         this.config = {
-            mapSize: 150,
-            roadWidth: 10,          // Largeur de l'ESPACE route
-            sidewalkWidth: 2,       // Largeur des trottoirs
-            sidewalkHeight: 0.2,    // Hauteur des trottoirs
-            centerlineWidth: 0.15,  // Largeur de la ligne centrale blanche
-            centerlineHeight: 0.02, // Hauteur de la ligne centrale (légèrement > 0)
-            minPlotSize: 15,
-            maxRecursionDepth: 7,
-            buildingMinHeight: 5,
-            buildingMaxHeight: 25,
-            parkProbability: 0.15,
-            ...config
-        };
+			mapSize: 150,
+			roadWidth: 10,          // Largeur de l'ESPACE route
+			sidewalkWidth: 2,       // Largeur des trottoirs
+			sidewalkHeight: 0.2,    // Hauteur des trottoirs
+			centerlineWidth: 0.15,  // Largeur de la ligne centrale blanche
+			centerlineHeight: 0.02, // Hauteur de la ligne centrale (légèrement > 0)
+			minPlotSize: 15,
+			maxRecursionDepth: 7,
+			buildingMinHeight: 5,
+			buildingMaxHeight: 25,
+			parkProbability: 0.15,
+			minBuildingSubZoneSize: 10,    // Taille minimale d'une sous-zone pour un bâtiment
+			buildingSubZoneMargin: 1,       // Marge entre le bâtiment et les bords de la sous-zone
+			...config
+		};		
 
         // Matériaux
         // this.roadMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 }); // Supprimé car plus de surface de route
@@ -121,6 +123,29 @@ export default class CityGenerator {
         // Réinitialiser les structures de données
         this.rootPlot = null; this.plots = []; this.leafPlots = []; this.nextPlotId = 0;
     }
+
+	subdivideForBuildings(plot) {
+		const minSubZoneSize = this.config.minBuildingSubZoneSize;
+		const margin = this.config.buildingSubZoneMargin;
+		let numCols = Math.floor(plot.width / minSubZoneSize);
+		let numRows = Math.floor(plot.depth / minSubZoneSize);
+		numCols = Math.max(numCols, 1);
+		numRows = Math.max(numRows, 1);
+		const subZones = [];
+		const subWidth = plot.width / numCols;
+		const subDepth = plot.depth / numRows;
+		for (let i = 0; i < numCols; i++) {
+			for (let j = 0; j < numRows; j++) {
+				subZones.push({
+					x: plot.x + i * subWidth,
+					z: plot.z + j * subDepth,
+					width: subWidth,
+					depth: subDepth,
+				});
+			}
+		}
+		return subZones;
+	}	
 
     // Subdivision et CollectLeafPlots restent inchangées
      subdividePlot(plot, depth) {
@@ -325,28 +350,37 @@ export default class CityGenerator {
             }
 
             // --- Générer Contenu : Parc ou Bâtiment ---
-            if (plot.isPark) {
-                const parkGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
-                const parkMesh = new THREE.Mesh(parkGeom, this.parkMaterial);
-                parkMesh.position.set(plot.center.x, 0.2, plot.center.z);
-                parkMesh.rotation.x = -Math.PI / 2;
-                parkMesh.receiveShadow = true;
-                this.buildingGroup.add(parkMesh);
-                // parkGeom.dispose(); // Décommenter si la gestion mémoire est critique
-            } else {
-                const buildableWidth = plot.width;
-                const buildableDepth = plot.depth;
-                if (buildableWidth > 1 && buildableDepth > 1) {
-                    const height = THREE.MathUtils.randFloat(this.config.buildingMinHeight, this.config.buildingMaxHeight);
-                    const buildingMesh = new THREE.Mesh(baseBuildingGeometry, this.buildingMaterial.clone()); // Clone pour couleur unique
-                    buildingMesh.scale.set(buildableWidth, height, buildableDepth);
-                    buildingMesh.position.set(plot.center.x, height / 2, plot.center.z);
-                    buildingMesh.castShadow = true;
-                    buildingMesh.receiveShadow = true;
-                    buildingMesh.material.color.setHSL(Math.random() * 0.1 + 0.55, 0.1, Math.random() * 0.3 + 0.4);
-                    this.buildingGroup.add(buildingMesh);
-                }
-            }
+			if (plot.isPark) {
+				const parkGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
+				const parkMesh = new THREE.Mesh(parkGeom, this.parkMaterial);
+				parkMesh.position.set(plot.center.x, 0.2, plot.center.z);
+				parkMesh.rotation.x = -Math.PI / 2;
+				parkMesh.receiveShadow = true;
+				this.buildingGroup.add(parkMesh);
+			} else {
+				// Subdivision de la parcelle en sous-zones pour placer plusieurs bâtiments
+				const subZones = this.subdivideForBuildings(plot);
+				const margin = this.config.buildingSubZoneMargin;
+				subZones.forEach(subZone => {
+					// On retire la marge pour que le bâtiment ne remplisse pas entièrement la sous-zone
+					const buildableWidth = Math.max(subZone.width - margin * 2, 0.1);
+					const buildableDepth = Math.max(subZone.depth - margin * 2, 0.1);
+					if (buildableWidth > 0.1 && buildableDepth > 0.1) {
+						const height = THREE.MathUtils.randFloat(this.config.buildingMinHeight, this.config.buildingMaxHeight);
+						const buildingMesh = new THREE.Mesh(baseBuildingGeometry, this.buildingMaterial.clone());
+						buildingMesh.scale.set(buildableWidth, height, buildableDepth);
+						buildingMesh.position.set(
+							subZone.x + subZone.width / 2,
+							height / 2,
+							subZone.z + subZone.depth / 2
+						);
+						buildingMesh.castShadow = true;
+						buildingMesh.receiveShadow = true;
+						buildingMesh.material.color.setHSL(Math.random() * 0.1 + 0.55, 0.1, Math.random() * 0.3 + 0.4);
+						this.buildingGroup.add(buildingMesh);
+					}
+				});
+			}
         });
         // baseBuildingGeometry.dispose(); // Décommenter si la gestion mémoire est critique
     }
