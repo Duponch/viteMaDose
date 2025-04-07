@@ -52,7 +52,8 @@ export default class CityGenerator {
         this.sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x999999 }); // Trottoir
         this.centerlineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // Ligne blanche simple
         this.buildingMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.2, roughness: 0.7 });
-        this.parkMaterial = new THREE.MeshStandardMaterial({ color: 0x55aa55 }); // Vert pour les parcs
+        this.buildingGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 }); // Sol sombre
+		this.parkMaterial = new THREE.MeshStandardMaterial({ color: 0x55aa55 }); // Vert pour les parcs
 
         // Structure de données principale
         this.rootPlot = null;
@@ -358,11 +359,19 @@ export default class CityGenerator {
 				parkMesh.receiveShadow = true;
 				this.buildingGroup.add(parkMesh);
 			} else {
+				// Ajout du sol sombre pour la zone de bâtiment
+				const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
+				const groundMesh = new THREE.Mesh(groundGeom, this.buildingGroundMaterial);
+				groundMesh.rotation.x = -Math.PI / 2;
+				// Positionner le sol légèrement au-dessus du sol pour éviter le Z-fight (ajustable)
+				groundMesh.position.set(plot.center.x, 0.2, plot.center.z);
+				groundMesh.receiveShadow = true;
+				this.buildingGroup.add(groundMesh);
+
 				// Subdivision de la parcelle en sous-zones pour placer plusieurs bâtiments
 				const subZones = this.subdivideForBuildings(plot);
 				const margin = this.config.buildingSubZoneMargin;
 				subZones.forEach(subZone => {
-					// On retire la marge pour que le bâtiment ne remplisse pas entièrement la sous-zone
 					const buildableWidth = Math.max(subZone.width - margin * 2, 0.1);
 					const buildableDepth = Math.max(subZone.depth - margin * 2, 0.1);
 					if (buildableWidth > 0.1 && buildableDepth > 0.1) {
