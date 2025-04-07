@@ -49,12 +49,12 @@ export default class CityGenerator {
 
         // Matériaux
         // this.roadMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 }); // Supprimé car plus de surface de route
-        this.sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x999999 }); // Trottoir
+		this.groundMaterial = new THREE.MeshStandardMaterial({ color: 0x0f0118 }); // Sol en gris foncé
+		this.sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x999999 }); // Trottoir
         this.centerlineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // Ligne blanche simple
         this.buildingMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.2, roughness: 0.7 });
         this.buildingGroundMaterial = new THREE.MeshStandardMaterial({ color: 0x333333 }); // Sol sombre
 		this.parkMaterial = new THREE.MeshStandardMaterial({ color: 0x55aa55 }); // Vert pour les parcs
-
         // Structure de données principale
         this.rootPlot = null;
         this.plots = [];
@@ -70,30 +70,38 @@ export default class CityGenerator {
         this.scene.add(this.buildingGroup);
     }
 
-    generate() {
-        console.log("Génération par subdivision (lignes centrales)...");
-        this.clearScene();
-
-        // 1. Initialiser la parcelle racine
-        console.log("Config:", this.config);
-        this.rootPlot = new Plot(this.nextPlotId++, -this.config.mapSize / 2, -this.config.mapSize / 2, this.config.mapSize, this.config.mapSize);
-        this.plots.push(this.rootPlot);
-
-        // 2. Lancer la subdivision récursive
-        this.subdividePlot(this.rootPlot, 0);
-
-        // 3. Collecter les parcelles feuilles
-        this.collectLeafPlots(this.rootPlot);
-        console.log(`Subdivision terminée: ${this.leafPlots.length} parcelles finales.`);
-
-        // 4. Générer les LIGNES CENTRALES des routes
-        this.generateRoadCenterlines(); // Fonction renommée/modifiée
-
-        // 5. Générer le contenu des parcelles (Bâtiments/Parcs ET TROTTOIRS)
-        this.generatePlotContentsAndSidewalks();
-
-        console.log("Génération de la ville terminée.");
-    }
+	generate() {
+		console.log("Génération par subdivision (lignes centrales)...");
+		this.clearScene();
+	
+		// --- Ajout du sol couvrant l'ensemble de la ville ---
+		const groundGeometry = new THREE.PlaneGeometry(this.config.mapSize, this.config.mapSize);
+		const groundMesh = new THREE.Mesh(groundGeometry, this.groundMaterial);
+		groundMesh.rotation.x = -Math.PI / 2;
+		groundMesh.position.set(0, 0.005, 0);
+		groundMesh.receiveShadow = true;
+		this.scene.add(groundMesh);
+	
+		// 1. Initialiser la parcelle racine
+		console.log("Config:", this.config);
+		this.rootPlot = new Plot(this.nextPlotId++, -this.config.mapSize / 2, -this.config.mapSize / 2, this.config.mapSize, this.config.mapSize);
+		this.plots.push(this.rootPlot);
+	
+		// 2. Lancer la subdivision récursive
+		this.subdividePlot(this.rootPlot, 0);
+	
+		// 3. Collecter les parcelles feuilles
+		this.collectLeafPlots(this.rootPlot);
+		console.log(`Subdivision terminée: ${this.leafPlots.length} parcelles finales.`);
+	
+		// 4. Générer les LIGNES CENTRALES des routes
+		this.generateRoadCenterlines();
+	
+		// 5. Générer le contenu des parcelles (Bâtiments/Parcs ET TROTTOIRS)
+		this.generatePlotContentsAndSidewalks();
+	
+		console.log("Génération de la ville terminée.");
+	}	
 
     clearScene() {
         // Vider les groupes et disposer les géométries/matériaux
