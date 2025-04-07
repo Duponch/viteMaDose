@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { Box3, Vector3, BoxHelper } from 'three';
 
 // --- Classe pour représenter une parcelle ---
 class Plot {
@@ -51,9 +53,11 @@ export default class CityGenerator {
             parkProbability: 0.15,
             minBuildingSubZoneSize: 10,
             buildingSubZoneMargin: 1,
-            houseBaseHeight: 5, // Hauteur de base d'un étage
-            houseRoofHeight: 2,
+            houseBaseWidth: 8,   // Fixed width of the house cube
+            houseBaseHeight: 8,  // Fixed height of the house cube
+            houseBaseDepth: 8,   // Fixed depth of the house cube
             houseZoneProbability: 0.5,
+            houseModelPath: "Public/Assets/Models/House.glb",
             ...config
         };
 
@@ -79,9 +83,21 @@ export default class CityGenerator {
         this.scene.add(this.roadGroup);
         this.scene.add(this.sidewalkGroup);
         this.scene.add(this.buildingGroup);
+
+        this.gltfLoader = new GLTFLoader();
+        this.houseModel = null;
     }
 
-    generate() {
+    async loadHouseModel() {
+        return new Promise((resolve, reject) => {
+            this.gltfLoader.load(this.config.houseModelPath, (gltf) => {
+                this.houseModel = gltf.scene;
+                resolve();
+            }, null, reject);
+        });
+    }
+
+    async generate() {
         console.log("Génération par subdivision (lignes centrales)...");
         this.clearScene();
 
@@ -106,7 +122,13 @@ export default class CityGenerator {
         console.log(`Subdivision terminée: ${this.leafPlots.length} parcelles finales.`);
 
         this.generateRoadCenterlines();
-        this.generatePlotContentsAndSidewalks();
+
+        try {
+            await this.loadHouseModel();
+            this.generatePlotContentsAndSidewalks();
+        } catch (error) {
+            console.error("Error loading house model:", error);
+        }
 
         console.log("Génération de la ville terminée.");
     }
@@ -145,6 +167,7 @@ export default class CityGenerator {
         this.plots = [];
         this.leafPlots = [];
         this.nextPlotId = 0;
+        this.houseModel = null;
     }
 
     subdivideForBuildings(plot) {
@@ -468,23 +491,13 @@ export default class CityGenerator {
         return geometry;
     }
 
-    // Helper function to determine the "outer" face of a house
-    _getOuterFaceDirection(housePosition, plotCenter) {
-        const dx = housePosition.x - plotCenter.x;
-        const dz = housePosition.z - plotCenter.z;
-
-        if (Math.abs(dx) > Math.abs(dz)) {
-            return dx > 0 ? "E" : "W";
-        } else {
-            return dz > 0 ? "S" : "N";
-        }
-    }
-
     generatePlotContentsAndSidewalks() {
         const baseBuildingGeometry = new THREE.BoxGeometry(1, 1, 1);
         const sidewalkW = this.config.sidewalkWidth;
         const sidewalkH = this.config.sidewalkHeight;
-        const houseBaseHeight = this.config.houseBaseHeight;
+        const houseWidth = this.config.houseBaseWidth;
+        const houseDepth = this.config.houseBaseDepth;
+        const houseHeight = this.config.houseBaseHeight;
 
         this.leafPlots.forEach((plot) => {
             if (sidewalkW > 0) {
@@ -545,56 +558,50 @@ export default class CityGenerator {
 
                     if (buildableWidth > 0.1 && buildableDepth > 0.1) {
                         if (plot.zoneType === "house") {
-                            // --- Générer une maison ---
-                            const numFloors = Math.floor(Math.random() * 3) + 1; // 1 à 3 étages
-                            const houseHeight = houseBaseHeight * numFloors;
+                            // --- Générer une maison (GLB model) ---
+                            if (this.houseModel) {
+                                const houseMesh = this.houseModel.clone(true);
 
-                            // Corps de la maison
-                            const houseMesh = new THREE.Mesh(
-                                baseBuildingGeometry,
-                                this.buildingMaterial.clone()
-                            );
-                            houseMesh.scale.set(buildableWidth, houseHeight, buildableDepth);
-                            houseMesh.position.set(
-                                subZone.x + subZone.width / 2,
-                                houseHeight / 2,
-                                subZone.z + subZone.depth / 2
-                            );
-                            houseMesh.castShadow = true;
-                            houseMesh.receiveShadow = true;
-                            houseMesh.material.color.setHSL(
-                                Math.random() * 0.1 + 0.55,
-                                0.1,
-                                Math.random() * 0.3 + 0.4
-                            );
-                            this.buildingGroup.add(houseMesh);
+                                // Get the bounding box of the house model
+                                const houseBoundingBox = new Box3().setFromObject(houseMesh);
+                                const houseSize = houseBoundingBox.getSize(new Vector3());
 
-                            // Toit pyramidal
-                            const roofMaterial = this.buildingMaterial.clone();
-                            roofMaterial.color.setHex(0x883322);
-                            roofMaterial.flatShading = true;
+                                // Calculate scaling factors to fit the house within the cube
+                                const scaleFactorX = this.config.houseBaseWidth / houseSize.x;
+                                const scaleFactorY = this.config.houseBaseHeight / houseSize.y;
+                                const scaleFactorZ = this.config.houseBaseDepth / houseSize.z;
 
-                            const roofGeometry = this._createRectangularPyramid(
-                                buildableWidth,
-                                buildableDepth,
-                                this.config.houseRoofHeight
-                            );
-                            const roofMesh = new THREE.Mesh(
-                                roofGeometry,
-                                roofMaterial
-                            );
-                            roofMesh.position.set(
-                                subZone.x + subZone.width / 2,
-                                houseHeight,
-                                subZone.z + subZone.depth / 2
-                            );
-                            roofMesh.castShadow = true;
-                            roofMesh.receiveShadow = true;
-                            this.buildingGroup.add(roofMesh);
+                                // Use the smallest scale factor to ensure the house fits entirely
+                                const scaleFactor = Math.min(scaleFactorX, scaleFactorY, scaleFactorZ);
 
-                            // Ajout des fenêtres et de la porte
-                            const outerFace = this._getOuterFaceDirection(houseMesh.position, plot.center);
-                            this._addHouseDetails(houseMesh, subZone, outerFace, numFloors);
+                                houseMesh.scale.set(scaleFactor, scaleFactor, scaleFactor);
+
+                                // Calculate the center of the subZone
+                                const subZoneCenterX = subZone.x + subZone.width / 2;
+                                const subZoneCenterZ = subZone.z + subZone.depth / 2;
+
+                                // Calculate the house's position, adjusting for the house's size
+                                const houseCenterX = subZoneCenterX;
+                                const houseCenterZ = subZoneCenterZ;
+
+                                houseMesh.position.set(
+                                    houseCenterX,
+                                    houseBoundingBox.min.y + (houseSize.y * scaleFactor) / 2, // Adjust for model's height
+                                    houseCenterZ
+                                );
+
+                                houseMesh.castShadow = true;
+                                houseMesh.receiveShadow = true;
+
+                                this.buildingGroup.add(houseMesh);
+
+                                // Add a red box helper *around* the house with fixed dimensions
+                                const helperGeometry = new THREE.BoxGeometry(houseWidth, houseHeight, houseDepth);
+                                const helperMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+                                const helperMesh = new THREE.Mesh(helperGeometry, helperMaterial);
+                                helperMesh.position.copy(houseMesh.position); // Match house position
+                                this.buildingGroup.add(helperMesh);
+                            }
 
                         } else {
                             // --- Zone immeuble : génération classique ---
@@ -623,77 +630,6 @@ export default class CityGenerator {
                         }
                     }
                 });
-            }
-        });
-    }
-
-    _addHouseDetails(houseMesh, subZone, outerFace, numFloors) {
-        const houseWidth = houseMesh.scale.x;
-        const houseHeight = houseMesh.scale.y;
-        const houseDepth = houseMesh.scale.z;
-        const housePosition = houseMesh.position;
-
-        const windowWidth = 1;
-        const windowHeight = 1.5;
-        const windowSpacing = 2;
-        const windowMaterial = new THREE.MeshStandardMaterial({ color: 0x77aaff });
-
-        const doorWidth = 2;
-        const doorHeight = 2.5;
-        const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
-
-        const addWindows = (face, numWindows, startOffset, offsetY, rotationY = 0) => {
-            for (let i = 0; i < numWindows; i++) {
-                const windowGeometry = this._createWindowGeometry(windowWidth, windowHeight);
-                const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
-                let x = 0, z = 0;
-                if (face === "N" || face === "S") {
-                    x = startOffset + i * windowSpacing;
-                } else {
-                    z = startOffset + i * windowSpacing;
-                }
-                windowMesh.position.set(
-                    housePosition.x + (face === "W" ? -houseWidth / 2 - 0.01 : face === "E" ? houseWidth / 2 + 0.01 : x),
-                    housePosition.y + offsetY,
-                    housePosition.z + (face === "N" ? houseDepth / 2 + 0.01 : face === "S" ? -houseDepth / 2 - 0.01 : z)
-                );
-                windowMesh.rotation.y = rotationY;
-                this.buildingGroup.add(windowMesh);
-            }
-        };
-
-        // Face avant (avec porte)
-        if (outerFace === "N" || outerFace === "S" || outerFace === "E" || outerFace === "W") {
-            const doorGeometry = this._createDoorGeometry(doorWidth, doorHeight);
-            const doorMesh = new THREE.Mesh(doorGeometry, doorMaterial);
-            doorMesh.position.set(
-                housePosition.x,
-                housePosition.y - houseHeight / 2 + doorHeight / 2,
-                housePosition.z + (outerFace === "N" ? houseDepth / 2 + 0.01 : outerFace === "S" ? -houseDepth / 2 - 0.01 : 0) +
-                (outerFace === "E" ? houseWidth / 2 + 0.01 : outerFace === "W" ? -houseWidth / 2 - 0.01 : 0)
-            );
-            this.buildingGroup.add(doorMesh);
-
-            const availableWidth = (outerFace === "N" || outerFace === "S") ? houseWidth : houseDepth;
-            const numWindows = Math.floor((availableWidth - doorWidth - 2) / windowSpacing); // -2 to ensure space on both sides of door
-            const startOffset = - (numWindows * windowSpacing + doorWidth) / 2 + windowWidth / 2; // Offset to start windows
-
-            for (let floor = 0; floor < numFloors; floor++) {
-                const offsetY = -houseHeight / 2 + windowHeight / 2 + 1 + floor * this.config.houseBaseHeight;
-                addWindows(outerFace, numWindows, startOffset + doorWidth / 2, offsetY, (outerFace === "E" ? -Math.PI / 2 : outerFace === "W" ? Math.PI / 2 : 0));
-            }
-        }
-
-        // Autres faces
-        const otherFaces = ["N", "S", "E", "W"].filter(face => face !== outerFace);
-        otherFaces.forEach(face => {
-            const availableWidth = (face === "N" || face === "S") ? houseWidth : houseDepth;
-            const numWindows = Math.floor(availableWidth / windowSpacing);
-            const startOffset = - (numWindows - 1) * windowSpacing / 2 + windowWidth / 2;
-
-            for (let floor = 0; floor < numFloors; floor++) {
-                const offsetY = -houseHeight / 2 + windowHeight / 2 + 1 + floor * this.config.houseBaseHeight;
-                addWindows(face, numWindows, startOffset, offsetY, (face === "E" ? -Math.PI / 2 : face === "W" ? Math.PI / 2 : 0));
             }
         });
     }
