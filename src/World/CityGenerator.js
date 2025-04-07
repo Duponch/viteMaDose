@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 import { Box3, Vector3, BoxHelper } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
@@ -41,7 +43,7 @@ export default class CityGenerator {
         this.experience = experience;
         this.scene = this.experience.scene;
         this.config = {
-            mapSize: 400,
+            mapSize: 150,
             roadWidth: 10,
             sidewalkWidth: 2,
             sidewalkHeight: 0.2,
@@ -61,7 +63,9 @@ export default class CityGenerator {
             houseBaseDepth: 6,
             houseZoneProbability: 0.5,
             houseModelPath: "Public/Assets/Models/House4.glb",
-            buildingModelPath: "Public/Assets/Models/Building2.glb",
+            // Utilisation de l'OBJ pour le bâtiment
+            buildingModelPath: "Public/Assets/Models/Building2.obj",
+            buildingMaterialPath: "Public/Assets/Models/Building.mtl",
             buildingBaseWidth: 10,
             buildingBaseHeight: 20,
             buildingBaseDepth: 10,
@@ -156,45 +160,69 @@ export default class CityGenerator {
 
     async loadBuildingModel() {
 		return new Promise((resolve, reject) => {
-			this.gltfLoader.load(
-				this.config.buildingModelPath,
-				(gltf) => {
-					this.buildingModel = gltf.scene;
-					const geometries = [];
-					this.buildingModel.traverse((child) => {
-						if (child.isMesh) {
-							child.updateMatrixWorld(true);
-							const clonedGeom = child.geometry.clone();
-							clonedGeom.applyMatrix4(child.matrixWorld);
-							geometries.push(clonedGeom);
-							if (!this.buildingMergedMaterial) {
-								this.buildingMergedMaterial = child.material.clone();
+			// Charger le fichier MTL pour récupérer les matériaux
+			const mtlLoader = new MTLLoader();
+			mtlLoader.load(
+				this.config.buildingMaterialPath,
+				(materials) => {
+					materials.preload();
+					// Charger le fichier OBJ en appliquant les matériaux chargés
+					const objLoader = new OBJLoader();
+					objLoader.setMaterials(materials);
+					objLoader.load(
+						this.config.buildingModelPath,
+						(obj) => {
+							this.buildingModel = obj;
+							const geometries = [];
+							this.buildingModel.traverse((child) => {
+								if (child.isMesh) {
+									child.updateMatrixWorld(true);
+									const clonedGeom = child.geometry.clone();
+									clonedGeom.applyMatrix4(child.matrixWorld);
+									geometries.push(clonedGeom);
+									// Vérifier si le matériau est clonable ou s'il s'agit d'un tableau
+									if (!this.buildingMergedMaterial) {
+										let material;
+										if (Array.isArray(child.material)) {
+											material = child.material[0];
+										} else {
+											material = child.material;
+										}
+										if (material && typeof material.clone === "function") {
+											this.buildingMergedMaterial = material.clone();
+										} else {
+											this.buildingMergedMaterial = material;
+										}
+									}
+								}
+							});
+							if (geometries.length === 0) {
+								return reject(new Error("Aucune géométrie trouvée dans le modèle d'immeuble."));
 							}
-						}
-					});
-					if (geometries.length === 0) {
-						return reject(new Error("Aucune géométrie trouvée dans le modèle d'immeuble."));
-					}
-					this.buildingMergedGeometry = mergeGeometries(geometries, true);
-					const bbox = new THREE.Box3().setFromBufferAttribute(this.buildingMergedGeometry.attributes.position);
-					const size = new THREE.Vector3();
-					bbox.getSize(size);
-					const center = new THREE.Vector3();
-					bbox.getCenter(center);
-					const scaleFactorX = this.config.buildingBaseWidth / size.x;
-					const scaleFactorY = this.config.buildingBaseHeight / size.y;
-					const scaleFactorZ = this.config.buildingBaseDepth / size.z;
-					const scaleFactor = Math.min(scaleFactorX, scaleFactorY, scaleFactorZ);
-					this.buildingScaleFactor = scaleFactor;
-					this.buildingCenterOffset = center;
-					this.buildingSizeAfterScaling = size.multiplyScalar(scaleFactor);
-					resolve();
+							this.buildingMergedGeometry = mergeGeometries(geometries, true);
+							const bbox = new THREE.Box3().setFromBufferAttribute(this.buildingMergedGeometry.attributes.position);
+							const size = new THREE.Vector3();
+							bbox.getSize(size);
+							const center = new THREE.Vector3();
+							bbox.getCenter(center);
+							const scaleFactorX = this.config.buildingBaseWidth / size.x;
+							const scaleFactorY = this.config.buildingBaseHeight / size.y;
+							const scaleFactorZ = this.config.buildingBaseDepth / size.z;
+							const scaleFactor = Math.min(scaleFactorX, scaleFactorY, scaleFactorZ);
+							this.buildingScaleFactor = scaleFactor;
+							this.buildingCenterOffset = center;
+							this.buildingSizeAfterScaling = size.multiplyScalar(scaleFactor);
+							resolve();
+						},
+						undefined,
+						reject
+					);
 				},
 				undefined,
 				reject
 			);
 		});
-	}
+	}	
 
     async generate() {
         console.log("Génération par subdivision (lignes centrales)...");
