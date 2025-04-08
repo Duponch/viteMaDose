@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 
 export default class RoadNetworkGenerator {
-    constructor(config, materials) {
-        this.config = config; // roadWidth, centerlineWidth, centerlineHeight
-        this.materials = materials; // centerlineMaterial, roadSurfaceMaterial (pour plus tard)
+	constructor(config, materials) {
+        this.config = config;
+        this.materials = materials;
         this.roadGroup = new THREE.Group();
-        this.drawnRoads = new Set(); // Pour éviter les doublons
+        this.drawnRoads = new Set();
     }
 
     generateRoads(leafPlots) {
@@ -68,74 +68,79 @@ export default class RoadNetworkGenerator {
     }
 
     reset() {
-         // Vider le groupe et disposer les géométries précédentes
-         while (this.roadGroup.children.length > 0) {
-             const segmentGroup = this.roadGroup.children[0];
-             this.roadGroup.remove(segmentGroup);
-             if (segmentGroup.children.length > 0) {
-                 const mesh = segmentGroup.children[0]; // Le mesh de la ligne centrale
+        // Vider le groupe et disposer les géométries précédentes
+        while (this.roadGroup.children.length > 0) {
+            const segmentGroup = this.roadGroup.children[0];
+            this.roadGroup.remove(segmentGroup);
+            // Disposer la géométrie du mesh à l'intérieur du groupe
+            if (segmentGroup.children.length > 0 && segmentGroup.children[0].isMesh) {
+                 const mesh = segmentGroup.children[0];
                  if (mesh.geometry) mesh.geometry.dispose();
                  // Le matériau est partagé, ne pas le disposer ici
-             }
-         }
-         this.drawnRoads.clear();
-         console.log("Road Network Generator réinitialisé.");
+            }
+        }
+        this.drawnRoads.clear();
+        console.log("Road Network Generator réinitialisé.");
     }
 
-    // --- Copiez/Collez createRoadCenterlineGeometry ici ---
-    // Renommez-la peut-être createRoadSegmentGeometry
-    // Utilisez this.config et this.materials
+
+    // Méthode modifiée :
     createRoadSegmentGeometry(info) {
-        const segmentGroup = new THREE.Group(); // Un groupe par segment pour rotation facile
+        const segmentGroup = new THREE.Group(); // Groupe pour contenir la ligne (et potentiellement la route)
         let midX, midZ, angle;
         const clHeight = this.config.centerlineHeight;
-        const clWidth = this.config.centerlineWidth;
+        const clWidth = this.config.centerlineWidth; // La largeur visuelle de la ligne blanche
 
-        if (info.type === "V") { // Vertical road segment
-            angle = 0; // No rotation needed relative to world Z
-            midX = info.x; // Center X of the road segment
-            midZ = info.z + info.length / 2; // Center Z of the road segment
-        } else { // Horizontal road segment ("H")
-            angle = Math.PI / 2; // Rotate 90 degrees
-            midX = info.x + info.length / 2; // Center X of the road segment
-            midZ = info.z; // Center Z of the road segment
+        // 1. Déterminer la position centrale et l'angle de rotation du SEGMENT de route
+        if (info.type === "V") { // Segment vertical
+            angle = 0; // Pas de rotation nécessaire
+            midX = info.x; // Le centre X est donné par l'info
+            midZ = info.z + info.length / 2; // Le centre Z est au milieu de la longueur
+        } else { // Segment horizontal ("H")
+            angle = Math.PI / 2; // Rotation de 90 degrés autour de l'axe Y
+            midX = info.x + info.length / 2; // Le centre X est au milieu de la longueur
+            midZ = info.z; // Le centre Z est donné par l'info
         }
 
-        // Position the group at the center of the road segment
+        // 2. Positionner et orienter le GROUPE qui contiendra la ligne
         segmentGroup.position.set(midX, 0, midZ);
-        // Rotate the group to align the geometry correctly
-        segmentGroup.rotation.y = angle;
+        segmentGroup.rotation.y = angle; // Appliquer la rotation au groupe
 
-        // The BoxGeometry dimensions depend on the road type (V or H)
-        // We create the box aligned with the X-axis *before* rotation.
-        // For a Vertical road (angle=0), length is along Z.
-        // For a Horizontal road (angle=PI/2), length is along X (after rotation).
+        // 3. Créer la GÉOMÉTRIE de la ligne blanche TOUJOURS de la même manière
+        //    (par exemple, longue le long de l'axe Z local du groupe)
+        //    La largeur visuelle est 'clWidth', la longueur du segment est 'info.length'.
         const centerlineGeom = new THREE.BoxGeometry(
-            info.type === "V" ? clWidth : info.length, // Width is clWidth for V, length for H
-            clHeight,                                 // Height is constant
-            info.type === "V" ? info.length : clWidth // Depth is length for V, clWidth for H
+            clWidth,    // La largeur de la ligne (devient la dimension X locale)
+            clHeight,   // La hauteur de la ligne (dimension Y locale)
+            info.length // La longueur de la ligne (devient la dimension Z locale)
         );
 
-         const centerlineMesh = new THREE.Mesh(centerlineGeom, this.materials.centerlineMaterial);
-        // Position slightly above ground within its group
+        // 4. Créer le MESH de la ligne et l'ajouter au groupe
+        const centerlineMesh = new THREE.Mesh(centerlineGeom, this.materials.centerlineMaterial);
+        // Positionner légèrement au-dessus du sol (0.001 pour éviter z-fighting avec le sol global)
+        // La position Y est relative au groupe.
         centerlineMesh.position.y = clHeight / 2 + 0.001;
-        centerlineMesh.castShadow = false; // Lines usually don't cast shadows
-        centerlineMesh.receiveShadow = false;
+        centerlineMesh.castShadow = false;
+        centerlineMesh.receiveShadow = false; // Les lignes ne reçoivent généralement pas d'ombres
 
-        // Add the mesh to the segment group
+        // Ajouter le mesh de la ligne au groupe du segment
         segmentGroup.add(centerlineMesh);
-        // Add the segment group to the main road group
+
+        // Ajouter le groupe du segment (qui contient la ligne correctement orientée)
+        // au groupe principal des routes
         this.roadGroup.add(segmentGroup);
 
-        // TODO: Ajouter la géométrie de la surface de la route (un plan ou une boîte fine)
-        // const roadSurfaceGeom = new THREE.BoxGeometry(
-        //     info.type === "V" ? this.config.roadWidth : info.length,
-        //     0.01, // Très fin
-        //     info.type === "V" ? info.length : this.config.roadWidth
-        // );
-        // const roadSurfaceMesh = new THREE.Mesh(roadSurfaceGeom, this.materials.roadSurfaceMaterial);
-        // roadSurfaceMesh.position.y = 0.005; // Juste au dessus du sol global
-        // roadSurfaceMesh.receiveShadow = true;
-        // segmentGroup.add(roadSurfaceMesh);
+        // --- Optionnel : Ajouter la surface de la route ---
+        // Si vous voulez ajouter un mesh pour la surface de la route elle-même,
+        // vous le créeriez aussi avec des dimensions standard (largeur=roadWidth, longueur=info.length)
+        // et l'ajouteriez à ce même 'segmentGroup'. La rotation du groupe l'orienterait correctement.
+        /*
+        const roadSurfaceGeom = new THREE.PlaneGeometry(this.config.roadWidth, info.length); // Ou BoxGeometry fine
+        const roadSurfaceMesh = new THREE.Mesh(roadSurfaceGeom, this.materials.roadSurfaceMaterial); // Assurez-vous d'avoir ce matériau
+        roadSurfaceMesh.rotation.x = -Math.PI / 2; // Orienter le plan horizontalement DANS le groupe
+        roadSurfaceMesh.position.y = 0.005; // Juste au dessus du sol global
+        roadSurfaceMesh.receiveShadow = true;
+        segmentGroup.add(roadSurfaceMesh); // Ajouter au même groupe que la ligne
+        */
     }
 }
