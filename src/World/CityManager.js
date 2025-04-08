@@ -95,7 +95,28 @@ export default class CityManager {
                 { file: "Table.glb", scale: 0.5 }     // Table plus grande
             ],
             parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
-            // --- Fin Configuration Assets ---
+
+			treeModelDir: "Public/Assets/Models/Trees/",
+            treeModelFiles: [
+                { file: "Tree.glb", scale: 0.9 },
+                { file: "Tree2.glb", scale: 0.9 },
+                { file: "Tree3.glb", scale: 0.9 },
+				{ file: "Tree4.glb", scale: 0.9 },
+                { file: "Tree5.glb", scale: 0.9 },
+                { file: "Tree6.glb", scale: 0.9 },
+                { file: "Tree7.glb", scale: 0.9 },
+                // Ajoutez autant de modèles d'arbres que vous voulez
+            ],
+            // Dimensions de base pour le calcul du fittingScaleFactor
+            // Mettez des dimensions moyennes pour vos arbres
+            treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
+            // *** Fin Configuration Arbres ***
+
+            // --- Paramètres de Densité des Arbres (NOUVEAU) ---
+            // Probabilité (0 à 1) de placer un arbre à un emplacement potentiel
+            treePlacementProbabilitySidewalk: 0, // 30% de chance sur les coins/bords des trottoirs
+            treePlacementProbabilityPark: 0.04,    // Densité dans les parcs (par m² par exemple, ou par point testé)
+            treePlacementProbabilityMargin: 0.008,   // Densité dans les marges des autres parcelles
 
             // --- Fusion avec config fournie ---
             ...config
@@ -135,12 +156,13 @@ export default class CityManager {
                 minBuildingSubZoneSize: this.config.minBuildingSubZoneSize,
                 minIndustrialSubZoneSize: this.config.minIndustrialSubZoneSize,
                 minParkSubZoneSize: this.config.minParkSubZoneSize,
+				treePlacementProbabilitySidewalk: this.config.treePlacementProbabilitySidewalk,
+                treePlacementProbabilityPark: this.config.treePlacementProbabilityPark,
+                treePlacementProbabilityMargin: this.config.treePlacementProbabilityMargin,
+                 // Passer aussi les dimensions du trottoir pour le placement
+                sidewalkWidth: this.config.sidewalkWidth,
             },
-            {
-                sidewalkMaterial: this.materials.sidewalkMaterial,
-                parkMaterial: this.materials.parkMaterial,
-                buildingGroundMaterial: this.materials.buildingGroundMaterial,
-            }
+            this.materials
         );
 
         // --- Groupes pour Organisation Scène ---

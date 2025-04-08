@@ -12,17 +12,20 @@ export default class CityAssetLoader {
         this.fbxLoader = new FBXLoader();
         this.gltfLoader = new GLTFLoader();
 
+        // MODIFIÉ: Ajouter 'tree'
         this.assets = {
             house: [],
             building: [],
             industrial: [],
-            park: []
+            park: [],
+            tree: [] // Nouveau type
         };
         this.assetIdCounter = 0;
-        console.log("CityAssetLoader initialisé (support FBX & GLB/GLTF et scale par modèle).");
+        console.log("CityAssetLoader initialisé (support FBX & GLB/GLTF et scale par modèle, incluant arbres).");
     }
 
     getRandomAssetData(type) {
+        // Fonctionne tel quel si 'type' est 'tree'
         const modelList = this.assets[type];
         if (!modelList || modelList.length === 0) { return null; }
         const randomIndex = Math.floor(Math.random() * modelList.length);
@@ -30,6 +33,7 @@ export default class CityAssetLoader {
     }
 
     getAssetDataById(id) {
+        // Fonctionne tel quel, parcourt tous les types
         for (const type in this.assets) {
              if (this.assets.hasOwnProperty(type)) {
                 const found = this.assets[type].find(asset => asset.id === id);
@@ -40,69 +44,76 @@ export default class CityAssetLoader {
     }
 
     async loadAssets() {
-        console.log("Chargement des assets (avec scale spécifique)...");
+        console.log("Chargement des assets (incluant arbres)...");
         this.reset();
 
-        // MODIFIÉ: Fonction interne pour gérer la nouvelle structure de config
+        // Fonction interne createLoadPromises (inchangée dans sa logique interne,
+        // elle lit les configs passées en argument)
         const createLoadPromises = (assetConfigs, dir, type, width, height, depth) => {
-            if (!assetConfigs || !dir || !type || width == null || height == null || depth == null) {
+           // ... (code inchangé, gère les { file, scale } objets)
+           if (!assetConfigs || !dir || !type || width == null || height == null || depth == null) {
                 console.warn(`Configuration incomplète pour le type '${type}', chargement ignoré.`);
                 return [];
             }
-            // map sur les objets de configuration { file, scale }
             return (assetConfigs || []).map(assetConfig => {
-                    // Vérifie si l'élément est un objet avec 'file' (nouvelle structure) ou juste une string (ancienne structure pour compatibilité ?)
-                    // Pour ce cas, on assume que c'est toujours un objet comme défini dans CityManager
                     if (typeof assetConfig !== 'object' || !assetConfig.file) {
                         console.error(`Format de configuration d'asset invalide pour le type ${type}:`, assetConfig);
-                        return Promise.resolve(null); // Retourne une promesse résolue à null pour ne pas bloquer Promise.all
+                        return Promise.resolve(null);
                     }
                     const fileName = assetConfig.file;
-                    const userScale = assetConfig.scale !== undefined ? assetConfig.scale : 1; // Default scale is 1
+                    const userScale = assetConfig.scale !== undefined ? assetConfig.scale : 1;
 
-                    return this.loadAssetModel(dir + fileName, type, width, height, depth, userScale) // Passe userScale
+                    return this.loadAssetModel(dir + fileName, type, width, height, depth, userScale)
                         .catch(error => {
                             console.error(`Echec chargement ${type} ${fileName}:`, error);
-                            return null; // Permet à Promise.all de continuer même si un modèle échoue
+                            return null;
                         });
                 }
             );
         };
 
-        // Utilise la fonction modifiée createLoadPromises
+        // Créer les promesses pour tous les types, y compris les arbres
         const housePromises = createLoadPromises(this.config.houseModelFiles, this.config.houseModelDir, 'house', this.config.houseBaseWidth, this.config.houseBaseHeight, this.config.houseBaseDepth);
         const buildingPromises = createLoadPromises(this.config.buildingModelFiles, this.config.buildingModelDir, 'building', this.config.buildingBaseWidth, this.config.buildingBaseHeight, this.config.buildingBaseDepth);
         const industrialPromises = createLoadPromises(this.config.industrialModelFiles, this.config.industrialModelDir, 'industrial', this.config.industrialBaseWidth, this.config.industrialBaseHeight, this.config.industrialBaseDepth);
         const parkPromises = createLoadPromises(this.config.parkModelFiles, this.config.parkModelDir, 'park', this.config.parkBaseWidth, this.config.parkBaseHeight, this.config.parkBaseDepth);
+        // *** NOUVEAU: Promesses pour les arbres ***
+        const treePromises = createLoadPromises(this.config.treeModelFiles, this.config.treeModelDir, 'tree', this.config.treeBaseWidth, this.config.treeBaseHeight, this.config.treeBaseDepth);
 
 
         try {
-            const [houseResults, buildingResults, industrialResults, parkResults] = await Promise.all([
+            // Attendre toutes les promesses
+            // MODIFIÉ: Ajouter treeResults
+            const [houseResults, buildingResults, industrialResults, parkResults, treeResults] = await Promise.all([
                  Promise.all(housePromises),
                  Promise.all(buildingPromises),
                  Promise.all(industrialPromises),
-                 Promise.all(parkPromises)
+                 Promise.all(parkPromises),
+                 Promise.all(treePromises) // Attendre les arbres
             ]);
 
-            // Assigner les résultats filtrés
+            // Assigner les résultats
             this.assets.house = houseResults.filter(r => r !== null);
             this.assets.building = buildingResults.filter(r => r !== null);
             this.assets.industrial = industrialResults.filter(r => r !== null);
             this.assets.park = parkResults.filter(r => r !== null);
+            this.assets.tree = treeResults.filter(r => r !== null); // Assigner les arbres
 
-            console.log(`Assets chargés: ${this.assets.house.length} maisons, ${this.assets.building.length} immeubles, ${this.assets.industrial.length} usines, ${this.assets.park.length} parcs (FBX/GLB).`);
+            // Mettre à jour le log
+            console.log(`Assets chargés: ${this.assets.house.length} maisons, ${this.assets.building.length} immeubles, ${this.assets.industrial.length} usines, ${this.assets.park.length} parcs, ${this.assets.tree.length} arbres.`); // Log modifié
             return this.assets;
 
         } catch (error) {
             console.error("Erreur durant le chargement groupé des assets:", error);
             this.reset();
-            return this.assets; // Retourner l'objet assets (potentiellement vide ou partiellement rempli)
+            return this.assets;
         }
     }
 
     reset() {
         this.disposeAssets();
-        this.assets = { house: [], building: [], industrial: [], park: [] };
+        // MODIFIÉ: Réinitialiser aussi 'tree'
+        this.assets = { house: [], building: [], industrial: [], park: [], tree: [] };
         this.assetIdCounter = 0;
     }
 
@@ -208,19 +219,20 @@ export default class CityAssetLoader {
     }
 
     disposeAssets() {
-        console.log("Disposition des assets chargés (incluant Parcs)...");
+        console.log("Disposition des assets chargés (incluant arbres)...");
         let disposedGeometries = 0;
+        // MODIFIÉ: Itérer sur tous les types incluant 'tree'
         Object.keys(this.assets).forEach(type => {
             this.assets[type].forEach(assetData => {
                 if (assetData.geometry) {
                     assetData.geometry.dispose();
                     disposedGeometries++;
                 }
-                // Les matériaux sont clonés maintenant, donc ils devraient être gérés par GC
-                // Si on utilisait des matériaux partagés ici, il faudrait les disposer aussi.
+                // Matériaux clonés gérés par GC
             });
         });
          if (disposedGeometries > 0) { console.log(`  - ${disposedGeometries} géometries disposées.`); }
-         this.assets = { house: [], building: [], industrial: [], park: [] };
+         // MODIFIÉ: Vider explicitement 'tree' aussi
+         this.assets = { house: [], building: [], industrial: [], park: [], tree: [] };
     }
 }
