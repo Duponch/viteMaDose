@@ -107,6 +107,78 @@ export default class CityManager {
                 { file: "Tree7.glb", scale: 0.9 },
                 // Ajoutez autant de modèles d'arbres que vous voulez
             ],
+
+			/* houseModelDir: "Public/Assets/Models/Houses/",
+            houseModelFiles: [
+                { file: "HouseLOD.glb" }, // scale par défaut (1)
+                { file: "HouseLOD.glb", scale: 1.1 }, // Légèrement plus grand
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb", scale: 0.9 }, // Légèrement plus petit
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb", scale: 1.5 }, // Beaucoup plus grand
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+            ],
+            houseBaseWidth: 6, houseBaseHeight: 6, houseBaseDepth: 6,
+            // Buildings
+            buildingModelDir: "Public/Assets/Models/Buildings/",
+            buildingModelFiles: [
+				{ file: "HouseLOD.glb", scale: 1.0 },
+                { file: "HouseLOD.glb" }, // Défaut 1
+                { file: "HouseLOD.glb", scale: 1 },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb", scale: 0.95 },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+                { file: "HouseLOD.glb" },
+			],
+            buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
+            // Industrials
+            industrialModelDir: "Public/Assets/Models/Industrials/",
+            industrialModelFiles: [
+                { file: "HouseLOD.glb", scale: 1 }, // Plus grand
+                { file: "HouseLOD.glb" },            // Défaut 1
+                { file: "HouseLOD.glb" }             // Défaut 1
+            ],
+            industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
+            // Parks
+            parkModelDir: "Public/Assets/Models/Parks/",
+            parkModelFiles: [
+                { file: "HouseLOD.glb", scale: 0.5 },   // Banc plus grand
+                { file: "HouseLOD.glb", scale: 1.0 }, // Fontaine taille normale
+                { file: "HouseLOD.glb", scale: 2 },             // Kiosque taille défaut (1)
+                { file: "HouseLOD.glb", scale: 0.5 }     // Table plus grande
+            ],
+            parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
+
+			treeModelDir: "Public/Assets/Models/Trees/",
+            treeModelFiles: [
+                { file: "HouseLOD.glb", scale: 0.9 },
+                { file: "HouseLOD.glb", scale: 0.9 },
+                { file: "HouseLOD.glb", scale: 0.9 },
+				{ file: "HouseLOD.glb", scale: 0.9 },
+                { file: "HouseLOD.glb", scale: 0.9 },
+                { file: "HouseLOD.glb", scale: 0.9 },
+                { file: "HouseLOD.glb", scale: 0.9 },
+                // Ajoutez autant de modèles d'arbres que vous voulez
+            ], */
+
             // Dimensions de base pour le calcul du fittingScaleFactor
             // Mettez des dimensions moyennes pour vos arbres
             treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,

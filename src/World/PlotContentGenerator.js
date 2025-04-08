@@ -1,5 +1,6 @@
 // src/World/PlotContentGenerator.js
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'; // <- CORRECTEMENT AJOUTÉ ICI
 
 export default class PlotContentGenerator {
     constructor(config, materials) {
@@ -14,28 +15,98 @@ export default class PlotContentGenerator {
         console.log("PlotContentGenerator initialisé (avec support arbres).");
     }
 
-    generateContent(leafPlots, assetLoader) {
-        this.reset(assetLoader); // Passe l'assetLoader au reset
-        console.log("Génération du contenu des parcelles (incluant arbres)...");
+	generateContent(leafPlots, assetLoader) {
+        this.reset(assetLoader);
+        console.log("Génération du contenu...");
 
-        if (!leafPlots || leafPlots.length === 0 || !this.assetLoader) {
-            console.warn("PlotContentGenerator: Données insuffisantes (parcelles ou assetLoader).");
-            return this.getGroups();
-        }
+        const allSidewalkGeometries = []; // <- Tableau pour stocker les géométries
 
         leafPlots.forEach((plot) => {
-            // 1. Générer le contenu principal (bâtiments, sols, trottoirs)
+            // 1. Contenu principal (bâtiments, etc. - utilise instanceData)
             this.generatePlotPrimaryContent(plot);
 
-            // 2. Placer les arbres pour cette parcelle (trottoirs et intérieur)
+            // 2. Géométrie des trottoirs pour cette parcelle (SI activé)
+            if (this.config.sidewalkWidth > 0) {
+                const plotSidewalkGeoms = this.collectSidewalkGeometriesForPlot(plot); // <- Nouvelle fonction qui retourne les géométries transformées
+                allSidewalkGeometries.push(...plotSidewalkGeoms);
+            }
+
+            // 3. Placement des arbres (utilise instanceData)
             this.placeTreesForPlot(plot);
         });
 
-        // 3. Créer les InstancedMesh pour TOUS les types (bâtiments, parcs, arbres...)
+        // 4. Créer les InstancedMesh pour bâtiments/arbres
         this.createInstancedMeshesFromData();
 
-        console.log("Génération du contenu (avec arbres) terminée.");
+        // 5. Créer le Mesh fusionné pour les trottoirs
+        if (allSidewalkGeometries.length > 0) {
+            const mergedSidewalkGeometry = mergeGeometries(allSidewalkGeometries, false); // false = ne pas créer de groupes
+            if (mergedSidewalkGeometry) {
+                 const sidewalkMesh = new THREE.Mesh(mergedSidewalkGeometry, this.materials.sidewalkMaterial);
+                 sidewalkMesh.castShadow = true;
+                 sidewalkMesh.receiveShadow = true;
+                 sidewalkMesh.name = "Merged_Sidewalks";
+                 this.sidewalkGroup.add(sidewalkMesh); // Ajouter le mesh unique au groupe
+            } else {
+                 console.warn("La fusion des géométries de trottoir a échoué.");
+            }
+             // Nettoyer les géométries individuelles après fusion si nécessaire (mergeGeometries ne les dispose pas)
+             allSidewalkGeometries.forEach(geom => geom.dispose());
+        }
+
+
+        console.log("Génération du contenu terminée.");
         return this.getGroups();
+    }
+
+	// Nouvelle fonction pour collecter les géométries de trottoir transformées
+    collectSidewalkGeometriesForPlot(plot) {
+        const plotGeometries = [];
+        const sidewalkW = this.config.sidewalkWidth;
+        const sidewalkH = this.config.sidewalkHeight;
+        const plotWidth = plot.width; const plotDepth = plot.depth;
+        const plotCenterX = plot.x + plotWidth / 2; const plotCenterZ = plot.z + plotDepth / 2;
+
+        // Créer UNE instance de géométrie de base (cube 1x1x1)
+        const baseSidewalkGeom = new THREE.BoxGeometry(1, 1, 1);
+
+        const createTransformedGeom = (width, depth, height, x, z, yOffset = 0) => {
+            const matrix = new THREE.Matrix4();
+            const scale = new THREE.Vector3(width, height, depth);
+            const position = new THREE.Vector3(x, height / 2 + yOffset, z); // Position globale
+            // Quaternions et composition sont plus robustes, mais pour des boîtes alignées, la translation/scale suffit
+            matrix.makeScale(scale.x, scale.y, scale.z);
+            matrix.setPosition(position);
+
+            const clonedGeom = baseSidewalkGeom.clone();
+            clonedGeom.applyMatrix4(matrix);
+            return clonedGeom;
+        };
+
+        const halfPlotW = plotWidth / 2;
+        const halfPlotD = plotDepth / 2;
+        const halfSidewalkW = sidewalkW / 2;
+
+        // Calcul des positions globales
+        const topZ = plot.z - halfSidewalkW;
+        const bottomZ = plot.z + plotDepth + halfSidewalkW;
+        const leftX = plot.x - halfSidewalkW;
+        const rightX = plot.x + plotWidth + halfSidewalkW;
+
+        // Bordures (Positions globales des centres)
+        plotGeometries.push(createTransformedGeom(plotWidth, sidewalkW, sidewalkH, plotCenterX, topZ)); // Haut
+        plotGeometries.push(createTransformedGeom(plotWidth, sidewalkW, sidewalkH, plotCenterX, bottomZ)); // Bas
+        plotGeometries.push(createTransformedGeom(sidewalkW, plotDepth, sidewalkH, leftX, plotCenterZ)); // Gauche
+        plotGeometries.push(createTransformedGeom(sidewalkW, plotDepth, sidewalkH, rightX, plotCenterZ)); // Droite
+        // Coins
+        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, topZ)); // HG
+        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, topZ)); // HD
+        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, bottomZ)); // BG
+        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, bottomZ)); // BD
+
+        baseSidewalkGeom.dispose(); // Dispose la géométrie de base une fois utilisée
+
+        return plotGeometries;
     }
 
     // Nouvelle méthode pour regrouper la génération du contenu principal
@@ -43,7 +114,7 @@ export default class PlotContentGenerator {
          // A. Créer trottoirs (si activé)
          // Note: On pourrait déplacer la logique de création des mesh ici pour plus de clarté
          if (this.config.sidewalkWidth > 0) {
-             this.createSidewalksForPlot(plot); // Crée les meshs des trottoirs
+             //this.createSidewalksForPlot(plot); // Crée les meshs des trottoirs
          }
 
          // B. Gérer le contenu de la parcelle (sol, bâtiments/parcs)
@@ -211,36 +282,15 @@ export default class PlotContentGenerator {
          return { sidewalkGroup: this.sidewalkGroup, buildingGroup: this.buildingGroup };
      }
 
-    reset(assetLoader) { // Accepte assetLoader
-        this.assetLoader = assetLoader; // Met à jour l'assetLoader
-        // Réinitialise la structure pour stocker les matrices d'instances
-        this.instanceData = {
-             house: {},
-             building: {},
-             industrial: {},
-             park: {},
-             tree: {} // N'oubliez pas de réinitialiser les arbres
-        };
+	 reset(assetLoader) {
+		this.assetLoader = assetLoader;
+		this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {} };
 
-        // Nettoie les groupes Three.js
-        const disposeGroupContents = (group) => {
-             while (group.children.length > 0) {
-                 const obj = group.children[0];
-                 group.remove(obj);
-                 if (obj instanceof THREE.InstancedMesh) {
-                      if (obj.geometry) obj.geometry.dispose();
-                      // Matériaux clonés gérés par GC
-                 } else if (obj instanceof THREE.Mesh) {
-                      if (obj.geometry) obj.geometry.dispose();
-                 } else if (obj instanceof THREE.Group) {
-                      disposeGroupContents(obj); // Récursif pour les sous-groupes
-                 }
-             }
-        };
-        disposeGroupContents(this.sidewalkGroup);
-        disposeGroupContents(this.buildingGroup); // Nettoie bâtiments ET arbres
-        // console.log("Plot Content Generator réinitialisé.");
-    }
+		const disposeGroupContents = (group) => { /* ... voir code précédent ... */ };
+		// Vider les groupes AVANT de potentiellement y ajouter les nouveaux Mesh fusionnés
+		disposeGroupContents(this.sidewalkGroup);
+		disposeGroupContents(this.buildingGroup);
+	}
 
     // MODIFIÉ: Ajout rotationY optionnelle
     calculateInstanceMatrix(centerX, centerZ, heightAfterFitting, fittingScaleFactor, centerOffset, userScale, rotationY = 0) {

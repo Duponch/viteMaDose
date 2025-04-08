@@ -1,11 +1,13 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'; // <--- AJOUTEZ CETTE LIGNE
 
 export default class RoadNetworkGenerator {
 	constructor(config, materials) {
         this.config = config;
         this.materials = materials;
-        this.roadGroup = new THREE.Group();
+        this.roadGroup = new THREE.Group(); // Contiendra le mesh fusionné
         this.drawnRoads = new Set();
+        this.centerlineGeometries = []; // <- Stockage temporaire
     }
 
     generateRoads(leafPlots) {
@@ -56,33 +58,73 @@ export default class RoadNetworkGenerator {
                 if (roadInfo) {
                     const roadKey = `${Math.min(roadInfo.p1Id, roadInfo.p2Id)}-${Math.max(roadInfo.p1Id, roadInfo.p2Id)}-${roadInfo.type}`;
                     if (!this.drawnRoads.has(roadKey)) {
-                        this.createRoadSegmentGeometry(roadInfo);
-                        this.drawnRoads.add(roadKey);
+						// Au lieu de créer le mesh, on collecte la géométrie transformée
+						this.collectRoadSegmentGeometry(roadInfo);
+						this.drawnRoads.add(roadKey);
                     }
                 }
             }
+        }
+
+		// Fusionner et créer le mesh final
+		if (this.centerlineGeometries.length > 0) {
+            // Maintenant, mergeGeometries sera défini ici car il est importé en haut du fichier
+            const mergedCenterlineGeometry = mergeGeometries(this.centerlineGeometries, false);
+             if (mergedCenterlineGeometry) {
+                const centerlineMesh = new THREE.Mesh(mergedCenterlineGeometry, this.materials.centerlineMaterial);
+                centerlineMesh.castShadow = false;
+                centerlineMesh.receiveShadow = false;
+                centerlineMesh.name = "Merged_Road_Centerlines";
+                this.roadGroup.add(centerlineMesh);
+            } else {
+                console.warn("La fusion des géométries de lignes centrales a échoué.");
+            }
+            // Nettoyer
+            this.centerlineGeometries.forEach(geom => geom.dispose());
+            this.centerlineGeometries = [];
         }
 
         console.log(`Réseau routier généré: ${this.drawnRoads.size} segments.`);
         return this.roadGroup;
     }
 
-    reset() {
-        // Vider le groupe et disposer les géométries précédentes
-        while (this.roadGroup.children.length > 0) {
-            const segmentGroup = this.roadGroup.children[0];
-            this.roadGroup.remove(segmentGroup);
-            // Disposer la géométrie du mesh à l'intérieur du groupe
-            if (segmentGroup.children.length > 0 && segmentGroup.children[0].isMesh) {
-                 const mesh = segmentGroup.children[0];
-                 if (mesh.geometry) mesh.geometry.dispose();
-                 // Le matériau est partagé, ne pas le disposer ici
-            }
-        }
-        this.drawnRoads.clear();
-        console.log("Road Network Generator réinitialisé.");
+	collectRoadSegmentGeometry(info) {
+        let midX, midZ, angle;
+        const clHeight = this.config.centerlineHeight;
+        const clWidth = this.config.centerlineWidth;
+
+        if (info.type === "V") { angle = 0; midX = info.x; midZ = info.z + info.length / 2; }
+        else { angle = Math.PI / 2; midX = info.x + info.length / 2; midZ = info.z; }
+
+        // Créer la géométrie de base (non transformée)
+        const centerlineGeom = new THREE.BoxGeometry(clWidth, clHeight, info.length);
+
+        // Créer la matrice de transformation
+        const matrix = new THREE.Matrix4();
+        const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+        const position = new THREE.Vector3(midX, clHeight / 2 + 0.001, midZ); // Légèrement au-dessus du sol
+        matrix.compose(position, rotation, new THREE.Vector3(1, 1, 1)); // Compose position, rotation, scale(1,1,1)
+
+        // Appliquer la matrice à une copie de la géométrie
+        const transformedGeom = centerlineGeom.clone().applyMatrix4(matrix);
+
+        // Stocker la géométrie transformée
+        this.centerlineGeometries.push(transformedGeom);
+
+        // Disposer la géométrie de base qui a été clonée
+        centerlineGeom.dispose();
     }
 
+	reset() {
+        while (this.roadGroup.children.length > 0) {
+             const mesh = this.roadGroup.children[0];
+             this.roadGroup.remove(mesh);
+             if (mesh.geometry) mesh.geometry.dispose();
+        }
+        this.drawnRoads.clear();
+        this.centerlineGeometries = []; // <- Réinitialiser ici aussi
+        // console.log("Road Network Generator réinitialisé."); // Moins verbeux
+    }
 
     // Méthode modifiée :
     createRoadSegmentGeometry(info) {
