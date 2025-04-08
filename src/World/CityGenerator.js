@@ -66,7 +66,7 @@ export default class CityGenerator {
             houseBaseDepth: 6,
             houseZoneProbability: 0.5,
             houseModelPath: "Public/Assets/Models/House4.glb",
-            buildingModelPath: "Public/Assets/Models/Building5.glb",
+            buildingModelPath: "Public/Assets/Models/Building5fix.glb",
             //buildingMaterialPath: "Public/Assets/Models/Building4.mtl",
             buildingBaseWidth: 10,
             buildingBaseHeight: 20,
