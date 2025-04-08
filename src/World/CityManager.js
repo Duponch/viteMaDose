@@ -31,8 +31,8 @@ export default class CityManager {
             // Plot Content & SubZones
             minHouseSubZoneSize: 7,
             minBuildingSubZoneSize: 10,
-            minIndustrialSubZoneSize: 10,
-            minParkSubZoneSize: 20,
+            minIndustrialSubZoneSize: 13,
+            minParkSubZoneSize: 10,
             buildingSubZoneMargin: 1.5,
 
             // --- Configuration Assets (MODIFIÉ) ---
@@ -70,7 +70,7 @@ export default class CityManager {
             buildingModelFiles: [
 				{ file: "Building1.fbx", scale: 1.0 },
                 { file: "Building2.fbx" }, // Défaut 1
-                { file: "Building3.fbx", scale: 1.05 },
+                { file: "Building3.fbx", scale: 1 },
                 { file: "Building4.fbx" },
                 { file: "Building5.fbx", scale: 0.95 },
                 { file: "Building6.fbx" },
@@ -81,7 +81,7 @@ export default class CityManager {
             // Industrials
             industrialModelDir: "Public/Assets/Models/Industrials/",
             industrialModelFiles: [
-                { file: "Factory1_glb.glb", scale: 1.2 }, // Plus grand
+                { file: "Factory1_glb.glb", scale: 1 }, // Plus grand
                 { file: "Factory2_glb.glb" },            // Défaut 1
                 { file: "Factory3_glb.glb" }             // Défaut 1
             ],
@@ -91,8 +91,8 @@ export default class CityManager {
             parkModelFiles: [
                 { file: "Bench.glb", scale: 0.5 },   // Banc plus grand
                 { file: "Fountain.glb", scale: 1.0 }, // Fontaine taille normale
-                { file: "Gazebo.glb", scale: 2.5 },             // Kiosque taille défaut (1)
-                { file: "Table.glb", scale: 0.4 }     // Table plus grande
+                { file: "Gazebo.glb", scale: 2 },             // Kiosque taille défaut (1)
+                { file: "Table.glb", scale: 0.5 }     // Table plus grande
             ],
             parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
             // --- Fin Configuration Assets ---
