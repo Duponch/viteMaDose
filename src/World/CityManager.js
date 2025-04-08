@@ -199,7 +199,7 @@ export default class CityManager {
             groundMaterial: new THREE.MeshStandardMaterial({ color: 0x0f0118 }),
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
             centerlineMaterial: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-            parkMaterial: new THREE.MeshStandardMaterial({ color: 0x55aa55 }),
+            parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
             buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x333333 }),
         };
 
