@@ -20,10 +20,9 @@ export default class CityManager {
             maxPlotSize: 40,
             maxRecursionDepth: 7,
             // --- Probabilités des Zones ---
-            parkProbability: 0.10, // Probabilité qu'une parcelle devienne un parc
+            parkProbability: 0.10,
             industrialZoneProbability: 0.15,
             houseZoneProbability: 0.40,
-            // Le reste sera 'building'
             // Roads/Sidewalks
             sidewalkWidth: 2,
             sidewalkHeight: 0.2,
@@ -33,38 +32,69 @@ export default class CityManager {
             minHouseSubZoneSize: 7,
             minBuildingSubZoneSize: 10,
             minIndustrialSubZoneSize: 10,
-            minParkSubZoneSize: 20, // *** NOUVEAU: Taille min pour subdivision parc (ou grande pour 1 modèle)
+            minParkSubZoneSize: 20,
             buildingSubZoneMargin: 1.5,
 
-            // --- Configuration Assets ---
+            // --- Configuration Assets (MODIFIÉ) ---
             // Houses
             houseModelDir: "Public/Assets/Models/Houses/",
             houseModelFiles: [
-				"House1.fbx", "House2.fbx", "House3.fbx", "House4.fbx", "House5.fbx",
-                "House6.fbx", "House7.fbx", "House8.fbx", "House9.fbx", "House10.fbx",
-                "House11.fbx", "House12.fbx", "House13.fbx", "House14.fbx", "House15.fbx",
-                "House16.fbx", "House17.fbx", "House18.fbx", "House19.fbx", "House20.fbx",
-                "House21.fbx", "House22.fbx", "House23.fbx", "House24.fbx",
-			],
+                { file: "House1.fbx" }, // scale par défaut (1)
+                { file: "House2.fbx", scale: 1.1 }, // Légèrement plus grand
+                { file: "House3.fbx" },
+                { file: "House4.fbx", scale: 0.9 }, // Légèrement plus petit
+                { file: "House5.fbx" },
+                { file: "House6.fbx" },
+                { file: "House7.fbx" },
+                { file: "House8.fbx" },
+                { file: "House9.fbx" },
+                { file: "House10.fbx", scale: 1.5 }, // Beaucoup plus grand
+                { file: "House11.fbx" },
+                { file: "House12.fbx" },
+                { file: "House13.fbx" },
+                { file: "House14.fbx" },
+                { file: "House15.fbx" },
+                { file: "House16.fbx" },
+                { file: "House17.fbx" },
+                { file: "House18.fbx" },
+                { file: "House19.fbx" },
+                { file: "House20.fbx" },
+                { file: "House21.fbx" },
+                { file: "House22.fbx" },
+                { file: "House23.fbx" },
+                { file: "House24.fbx" },
+            ],
             houseBaseWidth: 6, houseBaseHeight: 6, houseBaseDepth: 6,
             // Buildings
             buildingModelDir: "Public/Assets/Models/Buildings/",
             buildingModelFiles: [
-				"Building1.fbx", "Building2.fbx", "Building3.fbx", "Building4.fbx",
-                "Building5.fbx", "Building6.fbx", "Building7.fbx", "Building8.fbx",
+				{ file: "Building1.fbx", scale: 1.0 },
+                { file: "Building2.fbx" }, // Défaut 1
+                { file: "Building3.fbx", scale: 1.05 },
+                { file: "Building4.fbx" },
+                { file: "Building5.fbx", scale: 0.95 },
+                { file: "Building6.fbx" },
+                { file: "Building7.fbx" },
+                { file: "Building8.fbx" },
 			],
             buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
             // Industrials
             industrialModelDir: "Public/Assets/Models/Industrials/",
-            industrialModelFiles: ["Factory1_glb.glb", "Factory2_glb.glb", "Factory3_glb.glb"],
+            industrialModelFiles: [
+                { file: "Factory1_glb.glb", scale: 1.2 }, // Plus grand
+                { file: "Factory2_glb.glb" },            // Défaut 1
+                { file: "Factory3_glb.glb" }             // Défaut 1
+            ],
             industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
-            // *** NOUVEAU: Parks ***
+            // Parks
             parkModelDir: "Public/Assets/Models/Parks/",
             parkModelFiles: [
-                "Bench.glb", "Fountain.glb", "Gazebo.glb", "Table.glb" // Ajoutez ici tous vos fichiers de parcs
-                // "Park3.fbx", ...
+                { file: "Bench.glb", scale: 0.5 },   // Banc plus grand
+                { file: "Fountain.glb", scale: 1.0 }, // Fontaine taille normale
+                { file: "Gazebo.glb", scale: 2.5 },             // Kiosque taille défaut (1)
+                { file: "Table.glb", scale: 0.4 }     // Table plus grande
             ],
-            parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15, // Ajustez ces dimensions
+            parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
             // --- Fin Configuration Assets ---
 
             // --- Fusion avec config fournie ---
@@ -76,29 +106,18 @@ export default class CityManager {
             groundMaterial: new THREE.MeshStandardMaterial({ color: 0x0f0118 }),
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
             centerlineMaterial: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-            // parkMaterial n'est plus forcément utile si on charge des modèles, mais on le garde pour le sol des parcelles
-            parkMaterial: new THREE.MeshStandardMaterial({ color: 0x55aa55 }), // Vert pour le sol sous les parcs
+            parkMaterial: new THREE.MeshStandardMaterial({ color: 0x55aa55 }),
             buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x333333 }),
         };
 
         // --- Instanciation des Composants ---
-        this.assetLoader = new CityAssetLoader({
-            // Passez toutes les configurations d'assets, y compris les parcs
-            houseModelDir: this.config.houseModelDir, houseModelFiles: this.config.houseModelFiles,
-            houseBaseWidth: this.config.houseBaseWidth, houseBaseHeight: this.config.houseBaseHeight, houseBaseDepth: this.config.houseBaseDepth,
-            buildingModelDir: this.config.buildingModelDir, buildingModelFiles: this.config.buildingModelFiles,
-            buildingBaseWidth: this.config.buildingBaseWidth, buildingBaseHeight: this.config.buildingBaseHeight, buildingBaseDepth: this.config.buildingBaseDepth,
-            industrialModelDir: this.config.industrialModelDir, industrialModelFiles: this.config.industrialModelFiles,
-            industrialBaseWidth: this.config.industrialBaseWidth, industrialBaseHeight: this.config.industrialBaseHeight, industrialBaseDepth: this.config.industrialBaseDepth,
-            // *** NOUVEAU: Passer la config des parcs ***
-            parkModelDir: this.config.parkModelDir, parkModelFiles: this.config.parkModelFiles,
-            parkBaseWidth: this.config.parkBaseWidth, parkBaseHeight: this.config.parkBaseHeight, parkBaseDepth: this.config.parkBaseDepth,
-        });
+        // Passe la config directement, CityAssetLoader lira les listes modifiées
+        this.assetLoader = new CityAssetLoader(this.config); // MODIFIÉ: Passe toute la config
 
         this.layoutGenerator = new CityLayoutGenerator({
             roadWidth: this.config.roadWidth, minPlotSize: this.config.minPlotSize,
             maxPlotSize: this.config.maxPlotSize, maxRecursionDepth: this.config.maxRecursionDepth,
-            parkProbability: this.config.parkProbability, // La probabilité est déjà gérée ici
+            parkProbability: this.config.parkProbability,
             industrialZoneProbability: this.config.industrialZoneProbability,
             houseZoneProbability: this.config.houseZoneProbability,
         });
@@ -115,12 +134,11 @@ export default class CityManager {
                 minHouseSubZoneSize: this.config.minHouseSubZoneSize,
                 minBuildingSubZoneSize: this.config.minBuildingSubZoneSize,
                 minIndustrialSubZoneSize: this.config.minIndustrialSubZoneSize,
-                minParkSubZoneSize: this.config.minParkSubZoneSize, // *** NOUVEAU: Passer la config de subdivision parc ***
+                minParkSubZoneSize: this.config.minParkSubZoneSize,
             },
             {
                 sidewalkMaterial: this.materials.sidewalkMaterial,
-                // Passer le matériau pour le SOL des parcelles (pas le modèle 3D lui-même)
-                parkMaterial: this.materials.parkMaterial, // Utilisé par createPlotGround si zoneType='park'
+                parkMaterial: this.materials.parkMaterial,
                 buildingGroundMaterial: this.materials.buildingGroundMaterial,
             }
         );
@@ -131,7 +149,7 @@ export default class CityManager {
         this.roadGroup = null;
         this.sidewalkGroup = null;
         this.buildingGroup = null;
-        this.groundMesh = null; // Sol global
+        this.groundMesh = null;
 
         this.scene.add(this.cityContainer);
         console.log("CityManager initialisé.");
@@ -146,18 +164,19 @@ export default class CityManager {
             this.createGlobalGround();
 
             console.time("AssetLoading");
+            // assetLoader utilise maintenant la config passée au constructeur
             const loadedAssets = await this.assetLoader.loadAssets();
             console.timeEnd("AssetLoading");
 
              const hasHouses = loadedAssets.house && loadedAssets.house.length > 0;
              const hasBuildings = loadedAssets.building && loadedAssets.building.length > 0;
              const hasFactories = loadedAssets.industrial && loadedAssets.industrial.length > 0;
-             const hasParks = loadedAssets.park && loadedAssets.park.length > 0; // *** NOUVEAU: Vérifier parcs ***
+             const hasParks = loadedAssets.park && loadedAssets.park.length > 0;
 
-             if (!hasHouses && !hasBuildings && !hasFactories && !hasParks) { // *** MODIFIÉ: Inclure parcs ***
+             if (!hasHouses && !hasBuildings && !hasFactories && !hasParks) {
                  console.warn("Aucun asset (maison, immeuble, usine ou parc) n'a pu être chargé.");
              } else {
-                 console.log(`Assets chargés: ${loadedAssets.house?.length || 0} maisons, ${loadedAssets.building?.length || 0} immeubles, ${loadedAssets.industrial?.length || 0} usines, ${loadedAssets.park?.length || 0} parcs.`); // *** MODIFIÉ: Log parcs ***
+                 console.log(`Assets chargés: ${loadedAssets.house?.length || 0} maisons, ${loadedAssets.building?.length || 0} immeubles, ${loadedAssets.industrial?.length || 0} usines, ${loadedAssets.park?.length || 0} parcs.`);
              }
 
             console.time("LayoutGeneration");
@@ -177,7 +196,7 @@ export default class CityManager {
             console.time("ContentGeneration");
             const { sidewalkGroup, buildingGroup } = this.contentGenerator.generateContent(
                  leafPlots,
-                 this.assetLoader
+                 this.assetLoader // Passe l'instance du loader
              );
             this.sidewalkGroup = sidewalkGroup;
             this.buildingGroup = buildingGroup;
@@ -245,7 +264,7 @@ export default class CityManager {
     }
 
     getBuildings() {
-        return []; // A implémenter (devrait inclure parcs ?)
+        return []; // A implémenter
     }
 
     update() {
