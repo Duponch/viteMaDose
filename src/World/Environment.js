@@ -1,6 +1,7 @@
 // src/World/Environment.js
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export default class Environment {
     constructor(experience, world) {
@@ -67,10 +68,15 @@ export default class Environment {
         this.skyBox = null; this.starsMesh = null; this.outerGroundMesh = null; // moonMesh ajouté ci-dessus
         this.skyboxRadius = 0;
 
+		this.cloudGroup = new THREE.Group();
+        this.cloudGroup.name = "Clouds";
+        this.cloudMaterial = null; // Sera défini dans setCloudMaterial
+
         // --- Appels d'initialisation ---
         this.setSunLight();
         this.setAmbientLight();
-        this.setMoonLight(); // <- NOUVEL APPEL
+        this.setMoonLight();
+		this.setCloudMaterial();
     }
 
     async initialize() {
@@ -88,13 +94,115 @@ export default class Environment {
             this.renderSkybox(); // Initialise skyboxRadius, sunDistance, moonDistance
             this.outerGroundDisplayRadius = this.skyboxRadius + 10;
             this.createOuterGround();
-            this.createStarsPoints(); // Déplacé après renderSkybox pour avoir skyboxRadius
-            this.createMoonMesh(); // <- NOUVEL APPEL (après renderSkybox pour moonDistance)
+            this.createStarsPoints();
+            this.createMoonMesh();
+			this.createClouds();
 
             this.updateDayNightCycle(0); // Applique l'état initial (soleil, lune, ciel...)
             this.isInitialized = true;
             console.log("Environment: Initialisation terminée.");
         } catch (error) { console.error("Environment: Erreur init:", error); }
+    }
+
+	setCloudMaterial() {
+        this.cloudMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffffff, // Blanc
+            roughness: 0.9,  // Peu brillant
+            metalness: 0.1,
+            flatShading: true // <-- ESSENTIEL pour le style Low Poly !
+        });
+         console.log("Matériau Low Poly pour les nuages créé.");
+    }
+
+	createLowPolyCloudGeometry() {
+        const cloudPartGeometries = [];
+
+        // Créer plusieurs "morceaux" de nuage (icosaèdres = plus low-poly que sphères)
+        const baseGeometry = new THREE.IcosahedronGeometry(5, 0); // Rayon 5, détail 0 (le plus low-poly)
+
+        const parts = [
+            { scale: 1.0, position: new THREE.Vector3(0, 0, 0) },
+            { scale: 0.7, position: new THREE.Vector3(5, 1, 1) },
+            { scale: 0.8, position: new THREE.Vector3(-4, -1, -2) },
+            { scale: 0.6, position: new THREE.Vector3(2, -2, 3) },
+            { scale: 0.5, position: new THREE.Vector3(0, 3, -1) }
+        ];
+
+        parts.forEach(part => {
+            const matrix = new THREE.Matrix4();
+            matrix.compose(part.position, new THREE.Quaternion(), new THREE.Vector3(part.scale, part.scale, part.scale));
+            const clonedGeom = baseGeometry.clone();
+            clonedGeom.applyMatrix4(matrix);
+            cloudPartGeometries.push(clonedGeom);
+        });
+
+        // Fusionner les morceaux en une seule géométrie
+        const mergedGeometry = mergeGeometries(cloudPartGeometries, false);
+
+        // Nettoyer les géométries clonées individuellement
+        cloudPartGeometries.forEach(geom => geom.dispose());
+        baseGeometry.dispose(); // Dispose de la géométrie de base
+
+        if (mergedGeometry) {
+            // Optionnel : Centrer la géométrie fusionnée si nécessaire
+             // mergedGeometry.center();
+             return mergedGeometry;
+        } else {
+            console.warn("Échec de la fusion de la géométrie du nuage.");
+            // Retourner une géométrie simple en fallback
+            return new THREE.IcosahedronGeometry(8, 0);
+        }
+    }
+    // -------------------------------------------------------------------
+
+
+    // ... (votre code existant pour setSunLight, setAmbientLight, setMoonLight, renderSkybox, etc.) ...
+
+    // --- NOUVEAU : Méthode pour créer les instances de nuages ---
+    createClouds() {
+        if (!this.cloudMaterial) {
+             console.error("Impossible de créer les nuages: matériau non défini.");
+             return;
+         }
+        if (this.cloudGroup.children.length > 0) {
+             console.warn("Tentative de recréer les nuages alors qu'ils existent déjà.");
+             return; // Éviter de recréer si déjà fait
+         }
+
+        const numberOfClouds = 15; // Combien de nuages ?
+        const skyHeight = 150;     // Hauteur moyenne des nuages
+        const spreadRadius = this.config.mapSize * 0.8; // Rayon de dispersion
+
+        console.log(`Création de ${numberOfClouds} nuages...`);
+
+        for (let i = 0; i < numberOfClouds; i++) {
+            const cloudGeometry = this.createLowPolyCloudGeometry(); // Génère une forme unique (ou non)
+            const cloudMesh = new THREE.Mesh(cloudGeometry, this.cloudMaterial);
+
+            // Position aléatoire dans le ciel
+            const angle = Math.random() * Math.PI * 2;
+            const radius = Math.random() * spreadRadius;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            const y = skyHeight + (Math.random() - 0.5) * 40; // Variation de hauteur
+
+            cloudMesh.position.set(x, y, z);
+
+            // Rotation et échelle aléatoires pour la variété
+            cloudMesh.rotation.y = Math.random() * Math.PI * 2;
+            const scale = 1.0 + (Math.random() - 0.5) * 0.8; // Échelle entre 0.6 et 1.4 env.
+            cloudMesh.scale.set(scale, scale, scale);
+
+            // Activer les ombres (optionnel, peut coûter en performance)
+            cloudMesh.castShadow = true;
+            // cloudMesh.receiveShadow = false; // Les nuages ne reçoivent généralement pas d'ombre
+
+            cloudMesh.name = `Cloud_${i}`;
+            this.cloudGroup.add(cloudMesh);
+        }
+
+        this.scene.add(this.cloudGroup); // Ajouter le groupe à la scène
+        console.log("Groupe de nuages ajouté à la scène.");
     }
 
     setSunLight() {
@@ -360,12 +468,29 @@ export default class Environment {
             this.moonMesh.material?.dispose();
             this.moonMesh = null;
         }
-        // -------------------------------
+        
+		 // --- Nettoyage spécifique aux Nuages ---
+		 if (this.cloudGroup) {
+            this.scene.remove(this.cloudGroup);
+            while(this.cloudGroup.children.length > 0) {
+                const cloudMesh = this.cloudGroup.children[0];
+                this.cloudGroup.remove(cloudMesh);
+                cloudMesh.geometry?.dispose();
+                // Le matériau est partagé (this.cloudMaterial), on le dispose séparément
+            }
+            this.cloudGroup = null;
+        }
+        if (this.cloudMaterial) {
+             this.cloudMaterial.dispose();
+             this.cloudMaterial = null;
+        }
+        // ---------------------------------------
 
         // Nullification des références
         this.sunLight = null;
         this.ambientLight = null;
-        this.moonLight = null; // <- NOUVEAU
+        this.moonLight = null;
+        this.cloudMaterial = null;
 
         console.log("Environnement nettoyé.");
     }
@@ -374,6 +499,20 @@ export default class Environment {
         // Appeler updateDayNightCycle seulement si initialisé
         if (this.isInitialized) {
             this.updateDayNightCycle(deltaTime);
+
+            // --- Animation simple des nuages ---
+            const cloudSpeed = 0.0005 * deltaTime; // Vitesse de déplacement (ajustez selon deltaTime)
+            this.cloudGroup.children.forEach(cloud => {
+                cloud.position.x += cloudSpeed * (cloud.scale.x * 10); // Les plus gros bougent un peu plus vite
+                // Optionnel : faire réapparaître les nuages de l'autre côté
+                const limit = this.config.mapSize * 1.2; // Limite avant de réapparaître
+                 if (cloud.position.x > limit) {
+                     cloud.position.x = -limit;
+                     // Peut aussi changer la position Z ou Y légèrement pour plus de variété
+                     cloud.position.z = (Math.random() - 0.5) * (this.config.mapSize * 1.6);
+                 }
+            });
+            // -----------------------------------
         }
     }
 }
