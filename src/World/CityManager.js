@@ -12,6 +12,9 @@ export default class CityManager {
         this.scene = this.experience.scene;
 
         // --- Configuration Principale ---
+        // (La configuration reste inchangée pour cette stratégie,
+        // mais vous pourriez aussi ajuster les probabilités initiales
+        // et de conversion en complément si désiré)
         this.config = {
             // Map & Layout
             mapSize: 500,
@@ -20,20 +23,49 @@ export default class CityManager {
             maxPlotSize: 40,
             maxRecursionDepth: 7,
 
-            // --- District Formation ---
-            minDistrictSize: 5, // NOUVEAU
-            maxDistrictSize: 12, // NOUVEAU
-            // (Suppression des ratios de zone globale)
+            // ... (District Formation comme avant) ...
+            minDistrictSize: 5,
+            maxDistrictSize: 12,
 
-            // --- Plot Type Adjustment Probabilities ---
-            businessConversionProbability: 0.9,
-            industrialConversionProbability: 0.85,
+            // ... (Plot Type Adjustment Probabilities comme avant) ...
+            businessConversionProbability: 0,
+            industrialConversionProbability: 0,
 
-            // --- Initial Plot Type Probabilities (LayoutGenerator) ---
+            // ... (Initial Plot Type Probabilities comme avant) ...
             parkProbability: 0.10,
-            industrialZoneProbability: 0,
-            houseZoneProbability: 0.35,
-            skyscraperZoneProbability: 0.10,
+            industrialZoneProbability: 0.05,
+            houseZoneProbability: 0.50,
+            skyscraperZoneProbability: 0.1,
+
+            // **** NOUVELLE SECTION POUR LES PROBABILITÉS DE TYPE DE DISTRICT ****
+            districtProbabilities: {
+				// Paramètres pour les quartiers d'affaires (Business/Skyscraper)
+				business: {
+					// Augmenter 'max' pour plus de dominance au centre (peut être > 1 avant normalisation)
+					max: 3,  // Était 1.0 dans votre code, essayons plus pour vraiment dominer
+					// Garder une décroissance assez rapide pour laisser place aux autres types plus loin
+					decay: 11 // Était 10. Une valeur légèrement plus élevée = décroissance plus rapide.
+				},
+				// Paramètres pour les quartiers industriels
+				industrial: {
+					// Seuil à partir duquel la probabilité augmente (distance normalisée)
+					threshold: 0.85, // Était 0.85. Commencer l'augmentation un peu plus tôt.
+					// Facteur contrôlant la rapidité de la montée après le seuil
+					factor: 9,     // Était 5. Augmenter pour une montée plus rapide.
+					// Facteur multiplicateur pour la partie croissante (probabilité max en périphérie)
+					multiplier: 0.9, // Était 0.2. Augmenter SIGNIFICATIVEMENT pour plus d'industrie loin du centre.
+					// Probabilité de base en dessous du seuil (près du centre)
+					base: 0.005   // Était 0.01. Réduire pour avoir très peu d'industrie au centre.
+				},
+				// Paramètres pour les quartiers résidentiels (Ajustés pour remplir l'espace restant)
+				residential: {
+					peakCenter: 0.45, // Centrer le pic résidentiel entre le centre et la périphérie. Était 0.5.
+					peakWidth: 0.28,  // Largeur du pic. Était 0.2. Un peu plus large peut-être.
+					// Probabilité de base réduite car business/industrial prennent plus de place aux extrêmes.
+					base: 0.1        // Était 0.8. Réduire pour laisser la place aux autres types.
+				}
+			},
+             // Le reste deviendra 'building' (environ 0.30)
 
             // Roads/Sidewalks & Plot Content (Inchangé)
             sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
@@ -41,7 +73,6 @@ export default class CityManager {
             minParkSubZoneSize: 10, minSkyscraperSubZoneSize: 13, buildingSubZoneMargin: 1.5,
 
             // Asset Config (Inchangé)
-            // ... (config assets houses, buildings, etc.) ...
              houseModelDir: "Public/Assets/Models/Houses/",
              houseModelFiles: [ { file: "House1.fbx" }, /* ... autres maisons ... */ { file: "House24.fbx" }, ],
              houseBaseWidth: 6, houseBaseHeight: 6, houseBaseDepth: 6,
@@ -61,7 +92,6 @@ export default class CityManager {
              skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 }, ],
              skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
 
-
             // Tree Placement (Inchangé)
             treePlacementProbabilitySidewalk: 0.3, treePlacementProbabilityPark: 0.04, treePlacementProbabilityMargin: 0.008,
 
@@ -72,45 +102,27 @@ export default class CityManager {
             ...config
         };
 
+		if (config.districtProbabilities) {
+            this.config.districtProbabilities.business = { ...this.config.districtProbabilities.business, ...config.districtProbabilities.business };
+            this.config.districtProbabilities.industrial = { ...this.config.districtProbabilities.industrial, ...config.districtProbabilities.industrial };
+            this.config.districtProbabilities.residential = { ...this.config.districtProbabilities.residential, ...config.districtProbabilities.residential };
+        }
+
         // Materials (Inchangé)
         this.materials = {
-            // ... (autres matériaux inchangés) ...
             groundMaterial: new THREE.MeshStandardMaterial({ color: 0x0f0118 }),
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
             centerlineMaterial: new THREE.MeshBasicMaterial({ color: 0xffffff }),
             parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
             buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x333333 }),
-
-            // --- NOUVEAU: Matériaux Debug (Plans colorés) ---
-            debugResidentialMat: new THREE.MeshBasicMaterial({
-                color: 0x0077ff, // Bleu pour résidentiel
-                transparent: true,
-                opacity: 0.4, // Ajustez l'opacité si besoin
-                side: THREE.DoubleSide // Pour être visible des deux côtés si jamais
-            }),
-            debugIndustrialMat: new THREE.MeshBasicMaterial({
-                color: 0xffa500, // Orange pour industriel
-                transparent: true,
-                opacity: 0.4,
-                side: THREE.DoubleSide
-            }),
-            debugBusinessMat: new THREE.MeshBasicMaterial({
-                color: 0xcc0000, // Rouge pour affaires
-                transparent: true,
-                opacity: 0.4,
-                side: THREE.DoubleSide
-            }),
-             // Garder un matériau par défaut pour les cas imprévus (optionnel)
-             debugDefaultMat: new THREE.MeshBasicMaterial({
-                color: 0xcccccc,
-                transparent: true,
-                opacity: 0.3,
-                side: THREE.DoubleSide
-             }),
+            debugResidentialMat: new THREE.MeshBasicMaterial({ color: 0x0077ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
+            debugIndustrialMat: new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
+            debugBusinessMat: new THREE.MeshBasicMaterial({ color: 0xcc0000, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
+             debugDefaultMat: new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
         };
 
         // Composants (Inchangé)
-        this.assetLoader = new CityAssetLoader(this.config); /* ... etc ... */
+        this.assetLoader = new CityAssetLoader(this.config);
         this.layoutGenerator = new CityLayoutGenerator(this.config);
         this.roadGenerator = new RoadNetworkGenerator(this.config, this.materials);
         this.contentGenerator = new PlotContentGenerator(this.config, this.materials);
@@ -119,7 +131,7 @@ export default class CityManager {
         this.districts = []; this.leafPlots = [];
 
         // Groupes Scène (Inchangé)
-        this.cityContainer = new THREE.Group(); this.cityContainer.name = "CityContainer"; /* ... etc ... */
+        this.cityContainer = new THREE.Group(); this.cityContainer.name = "CityContainer";
         this.roadGroup = null;
         this.sidewalkGroup = null;
         this.contentGroup = null;
@@ -140,7 +152,7 @@ export default class CityManager {
             console.log("--- Démarrage génération ville ---");
             this.createGlobalGround();
 
-            console.time("AssetLoading"); /* ... */ await this.assetLoader.loadAssets(); console.timeEnd("AssetLoading"); this.logLoadedAssets();
+            console.time("AssetLoading"); await this.assetLoader.loadAssets(); console.timeEnd("AssetLoading"); this.logLoadedAssets();
 
             console.time("LayoutGeneration");
             this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
@@ -150,24 +162,20 @@ export default class CityManager {
 
             if (!this.leafPlots || this.leafPlots.length === 0) throw new Error("Layout n'a produit aucune parcelle.");
 
-            // --- NOUVELLE Logique: Formation des Quartiers ---
             console.time("DistrictFormation");
-            this.createDistricts_V2(); // Utilise la nouvelle méthode
+            this.createDistricts_V2(); // Appel de la fonction qui utilise les probabilités modifiées
             console.timeEnd("DistrictFormation");
             console.log(`Districts formés: ${this.districts.length}`);
 
-            // --- Ajustement des types de parcelles DANS les districts ---
             console.time("PlotTypeAdjustment");
             this.adjustPlotTypesWithinDistricts();
             console.timeEnd("PlotTypeAdjustment");
             this.logAdjustedZoneTypes();
             this.logDistrictStats();
 
-            // --- Suite génération (Roads, Content) ---
-            console.time("RoadGeneration"); /* ... */ this.roadGroup = this.roadGenerator.generateRoads(this.leafPlots); this.cityContainer.add(this.roadGroup); console.timeEnd("RoadGeneration");
-            console.time("ContentGeneration"); /* ... */ const { sidewalkGroup, buildingGroup } = this.contentGenerator.generateContent(this.leafPlots, this.assetLoader); this.sidewalkGroup = sidewalkGroup; this.contentGroup = buildingGroup; this.cityContainer.add(this.sidewalkGroup); this.cityContainer.add(this.contentGroup); console.timeEnd("ContentGeneration");
+            console.time("RoadGeneration"); this.roadGroup = this.roadGenerator.generateRoads(this.leafPlots); this.cityContainer.add(this.roadGroup); console.timeEnd("RoadGeneration");
+            console.time("ContentGeneration"); const { sidewalkGroup, buildingGroup } = this.contentGenerator.generateContent(this.leafPlots, this.assetLoader); this.sidewalkGroup = sidewalkGroup; this.contentGroup = buildingGroup; this.cityContainer.add(this.sidewalkGroup); this.cityContainer.add(this.contentGroup); console.timeEnd("ContentGeneration");
 
-            // --- Debug Visuals ---
             if (this.config.showDistrictBoundaries) { console.time("DebugVisualsGeneration"); this.createDistrictDebugVisuals(); console.timeEnd("DebugVisualsGeneration"); }
 
             console.log("--- Génération ville terminée ---");
@@ -175,108 +183,112 @@ export default class CityManager {
         } catch (error) { console.error("Erreur majeure:", error); this.clearCity(); } finally { console.timeEnd("CityGeneration"); }
     }
 
-    // ----- NOUVELLE MÉTHODE: createDistricts_V2 -----
+    // ----- NOUVELLE MÉTHODE: createDistricts_V2 (Fonction appelante) -----
     createDistricts_V2() {
         if (!this.leafPlots || this.leafPlots.length === 0) return;
 
-        const allPlots = [...this.leafPlots]; // Copie pour pouvoir filtrer
+        const allPlots = [...this.leafPlots];
         const assignedPlotIds = new Set();
-        this.districts = []; // Reset districts
+        this.districts = [];
 
-        // Filtrer les parcelles non constructibles initialement
         let availablePlots = allPlots.filter(p => p.zoneType !== 'unbuildable');
 
         while (availablePlots.length >= this.config.minDistrictSize) {
-            // 1. Choisir une graine aléatoire parmi les disponibles
             const seedIndex = Math.floor(Math.random() * availablePlots.length);
             const seedPlot = availablePlots[seedIndex];
 
-            // 2. Déterminer le type de district probabiliste pour cette graine
-            const distToCenter = seedPlot.center.length(); // Distance du centre (Vector3)
+            // *** APPEL à getDistrictTypeProbabilities (qui est maintenant modifiée) ***
+            const distToCenter = seedPlot.center.length();
             const probabilities = this.getDistrictTypeProbabilities(distToCenter);
             const districtType = this.chooseDistrictType(probabilities);
+            // *** FIN APPEL ***
 
-            // 3. Faire grandir le district (BFS)
             const newDistrict = new District(districtType);
             const queue = [seedPlot];
-            const currentDistrictAssigned = new Set(); // IDs assignés à CE district pendant sa croissance
+            const currentDistrictAssigned = new Set();
 
-            // Ajouter la graine
             newDistrict.addPlot(seedPlot);
             assignedPlotIds.add(seedPlot.id);
             currentDistrictAssigned.add(seedPlot.id);
 
-            let head = 0; // Index pour simuler une file (plus efficace que shift())
+            let head = 0;
             while (head < queue.length && newDistrict.plots.length < this.config.maxDistrictSize) {
-                const currentPlot = queue[head++]; // Prend l'élément et avance l'index
-
-                // Trouver voisins non déjà assignés (ni globalement, ni à ce district)
-                const neighbors = this.findNeighbors(currentPlot, allPlots); // Cherche dans toutes les parcelles
+                const currentPlot = queue[head++];
+                const neighbors = this.findNeighbors(currentPlot, allPlots);
                 for (const neighbor of neighbors) {
                      if (neighbor.zoneType !== 'unbuildable' &&
                          !assignedPlotIds.has(neighbor.id) &&
                          !currentDistrictAssigned.has(neighbor.id))
                      {
-                        // Vérifier si on peut encore ajouter
                         if (newDistrict.plots.length < this.config.maxDistrictSize) {
                             newDistrict.addPlot(neighbor);
                             assignedPlotIds.add(neighbor.id);
                             currentDistrictAssigned.add(neighbor.id);
                             queue.push(neighbor);
                         } else {
-                            break; // Arrêter d'ajouter des voisins si max atteint
+                            break;
                         }
                     }
                 }
-            } // Fin BFS pour ce district
-
-            // 4. Valider et stocker le district
-            if (newDistrict.plots.length >= this.config.minDistrictSize) {
-                this.districts.push(newDistrict);
-                // Les parcelles restent marquées comme assignées dans assignedPlotIds, c'est correct.
-            } else {
-                // Si le district n'atteint pas la taille min:
-                // AFFICHER L'AVERTISSEMENT MAIS NE PAS LIBÉRER LES PARCELLES
-                console.warn(`District potentiel (type ${districtType}) démarré à ${seedPlot.id} n'a pas atteint la taille min (${newDistrict.plots.length}). Ces ${newDistrict.plots.length} parcelles resteront assignées mais hors district.`);
-
-                // ---> COMMENTER OU SUPPRIMER LA LOGIQUE DE LIBÉRATION <---
-                /*
-                currentDistrictAssigned.forEach(plotId => {
-                    // Ne pas faire ceci : assignedPlotIds.delete(plotId);
-                    const plot = allPlots.find(p => p.id === plotId);
-                    if (plot) {
-                        plot.districtId = null; // Garder districtId à null est ok
-                    }
-                });
-                */
-               // Les parcelles restent dans le Set global 'assignedPlotIds'
-               // Elles ne seront donc pas réutilisées comme graines.
             }
 
-            // 5. Mettre à jour la liste des parcelles disponibles pour la prochaine itération
-            // Ce filtre exclura correctement les parcelles de la tentative échouée car elles sont toujours dans assignedPlotIds
+            if (newDistrict.plots.length >= this.config.minDistrictSize) {
+                this.districts.push(newDistrict);
+            } else {
+                console.warn(`District potentiel (type ${districtType}) démarré à ${seedPlot.id} n'a pas atteint la taille min (${newDistrict.plots.length}). Ces ${newDistrict.plots.length} parcelles resteront assignées mais hors district.`);
+                // Les parcelles restent dans assignedPlotIds et ne sont pas réutilisées
+            }
+
             availablePlots = availablePlots.filter(p => !assignedPlotIds.has(p.id));
-        } // Fin boucle While (assez de parcelles dispo)
+        }
 
         console.log(`Formation districts terminée. ${this.districts.length} districts créés. ${availablePlots.length} parcelles restantes non assignées.`);
     }
 
 
-    // ----- getDistrictTypeProbabilities (Nouvelle fonction helper) -----
+    // ----- getDistrictTypeProbabilities (Fonction MODIFIÉE selon Stratégie 1) -----
     getDistrictTypeProbabilities(distanceToCenter) {
         const mapRadius = this.config.mapSize / 2;
-        if (mapRadius <= 0) return { business: 1/3, industrial: 1/3, residential: 1/3 }; // Eviter division par zero
+        // Récupérer les paramètres depuis la config pour lisibilité
+        const bizConf = this.config.districtProbabilities.business;
+        const indConf = this.config.districtProbabilities.industrial;
+        const resConf = this.config.districtProbabilities.residential;
+
+        // Valeurs par défaut robustes si la config est mal formée
+        const defaultProbs = { business: 0.1, industrial: 0.1, residential: 0.8 };
+        if (!bizConf || !indConf || !resConf || mapRadius <= 0) {
+            console.warn("Config districtProbabilities incomplète ou mapRadius nul, utilisation des probabilités par défaut.");
+            return defaultProbs;
+        }
 
         const normalizedDistance = Math.max(0, Math.min(1, distanceToCenter / mapRadius));
         const d = normalizedDistance;
 
-        // Probabilités brutes (Ajustez ces courbes si nécessaire)
-        const rawPBusiness = Math.exp(-d * 5);
-        const rawPIndustrial = d > 0.6 ? 1 - Math.exp(-(d - 0.6) * 5) : 0.05; // Augmente surtout après 60%, petite base sinon
-        const rawPResidential = Math.exp(-((d - 0.4)**2) / (2 * 0.1)) + 0.15; // Pic vers 40%, plus large base
+        // --- Calcul des probabilités brutes EN UTILISANT LA CONFIG ---
 
+        // Affaires (Business/Skyscraper)
+        const rawPBusiness = Math.exp(-d * (bizConf.decay || 10)) * (bizConf.max !== undefined ? bizConf.max : 0.15);
+
+        // Industriel
+        let rawPIndustrial;
+        if (d > (indConf.threshold !== undefined ? indConf.threshold : 0.85)) {
+            rawPIndustrial = (1 - Math.exp(-(d - (indConf.threshold !== undefined ? indConf.threshold : 0.85)) * (indConf.factor || 5))) * (indConf.multiplier !== undefined ? indConf.multiplier : 0.2);
+        } else {
+            rawPIndustrial = (indConf.base !== undefined ? indConf.base : 0.01);
+        }
+
+        // Résidentiel
+        const residentialPeakTerm = Math.exp(-((d - (resConf.peakCenter !== undefined ? resConf.peakCenter : 0.5))**2) / (2 * (resConf.peakWidth || 0.2)));
+        const rawPResidential = residentialPeakTerm + (resConf.base !== undefined ? resConf.base : 0.8);
+
+        // --- Fin Calcul ---
+
+        // Normalisation (inchangée)
         const totalRawP = rawPBusiness + rawPIndustrial + rawPResidential;
-        if (totalRawP === 0) return { business: 1/3, industrial: 1/3, residential: 1/3 };
+        if (totalRawP <= 0) { // Utiliser <= pour inclure le cas où tout est à 0
+             console.warn("Somme des probabilités brutes nulle ou négative, utilisation des probabilités par défaut.");
+             return defaultProbs; // Retourner les valeurs par défaut
+        }
 
         return {
             business: rawPBusiness / totalRawP,
@@ -285,19 +297,35 @@ export default class CityManager {
         };
     }
 
-    // ----- chooseDistrictType (Nouvelle fonction helper) -----
+    // ----- chooseDistrictType (Fonction Helper - Inchangée mais essentielle) -----
     chooseDistrictType(probabilities) {
         const rand = Math.random();
         let cumulative = 0;
+        // Important: Tester business et industrial d'abord car ils ont les probabilités les plus faibles.
+        // Si on testait résidentiel en premier, il serait presque toujours choisi.
         if (rand < (cumulative += probabilities.business)) return 'business';
         if (rand < (cumulative += probabilities.industrial)) return 'industrial';
+        // Tout ce qui reste est résidentiel
         return 'residential';
     }
 
+    // ... Reste du fichier CityManager.js (adjustPlotTypesWithinDistricts, clearCity, etc.) ...
+    // Ces autres fonctions n'ont pas besoin d'être modifiées pour la Stratégie 1
+    // mais elles seront appelées après la création des districts dont les types
+    // auront été influencés par getDistrictTypeProbabilities modifié.
 
-    // ----- adjustPlotTypesWithinDistricts (Logique interne inchangée) -----
+    // ... (coller ici le reste des fonctions de CityManager.js:
+    // adjustPlotTypesWithinDistricts, createDistrictDebugVisuals, findNeighbors,
+    // clearCity, createGlobalGround, destroy, logLoadedAssets, logInitialZoneTypes,
+    // logAdjustedZoneTypes, logDistrictStats, update)
+    // ...
+
+    // NOTE : J'ai omis le reste des fonctions pour la clarté, mais assurez-vous
+    // de placer ces fonctions modifiées au bon endroit dans votre fichier complet.
+
+
+    // ----- adjustPlotTypesWithinDistricts (Inchangé pour Stratégie 1) -----
     adjustPlotTypesWithinDistricts() {
-         // ... (Le code est identique à la version précédente, il fonctionne sur les nouveaux districts) ...
          console.log("Ajustement des types de parcelles selon les règles de district...");
          const stats = { convertedToSkyscraper: 0, convertedToIndustrial: 0, convertedToResidential: 0, parksProtected: 0 };
 
@@ -309,86 +337,80 @@ export default class CityManager {
                  const initialType = plot.zoneType;
                  let finalType = initialType;
 
+                 // La logique ici reste la même, mais elle s'appliquera à des districts
+                 // dont la répartition des types (business, industrial, residential)
+                 // a été modifiée en amont par getDistrictTypeProbabilities.
                  switch (district.type) {
-                     case 'business':
+                     case 'business': // Moins de districts de ce type seront créés
                          if (initialType !== 'skyscraper') {
                              if (Math.random() < this.config.businessConversionProbability) {
                                  finalType = 'skyscraper';
                                  if (initialType !== finalType) stats.convertedToSkyscraper++;
                              } else if (initialType === 'industrial' || initialType === 'house') {
-                                 finalType = 'building';
-                                 if (initialType !== finalType) stats.convertedToResidential++;
+                                 finalType = 'building'; // Fallback si pas converti
+                                 if (initialType !== finalType && (finalType === 'building' || finalType === 'house')) stats.convertedToResidential++;
                              }
                          }
                          break;
-                     case 'industrial':
+                     case 'industrial': // Moins de districts de ce type seront créés
                          if (initialType !== 'industrial') {
                               if (Math.random() < this.config.industrialConversionProbability) {
                                   finalType = 'industrial';
                                   if (initialType !== finalType) stats.convertedToIndustrial++;
                               } else if (['skyscraper', 'business', 'house'].includes(initialType)) {
-                                  finalType = 'building';
-                                 if (initialType !== finalType) stats.convertedToResidential++;
+                                  finalType = 'building'; // Fallback si pas converti
+                                  if (initialType !== finalType && (finalType === 'building' || finalType === 'house')) stats.convertedToResidential++;
                               }
                          }
                          break;
-                     case 'residential':
+                     case 'residential': // Plus de districts de ce type seront créés
                          if (['industrial', 'business', 'skyscraper'].includes(initialType)) {
+                             // Convertir les types non résidentiels en résidentiel (maison ou immeuble)
                              finalType = (plot.width * plot.depth > 150) ? 'building' : 'house';
                              if (initialType !== finalType) stats.convertedToResidential++;
                          }
+                         // Si c'était déjà 'house' ou 'building', on ne change rien.
                          break;
                  }
                   plot.zoneType = finalType;
                   plot.isPark = (finalType === 'park');
              });
          });
-         console.log(`Ajustement terminé. Conversions -> Skyscraper: ${stats.convertedToSkyscraper}, Industrial: ${stats.convertedToIndustrial}, Residential: ${stats.convertedToResidential}. Parcs protégés: ${stats.parksProtected}`);
+         console.log(`Ajustement terminé. Conversions -> Skyscraper: ${stats.convertedToSkyscraper}, Industrial: ${stats.convertedToIndustrial}, Residential (convertis): ${stats.convertedToResidential}. Parcs protégés: ${stats.parksProtected}`);
     }
 
 
-    // ----- createDistrictDebugVisuals (Logique interne inchangée) -----
+    // ----- createDistrictDebugVisuals (Inchangé) -----
     createDistrictDebugVisuals() {
-		// Vider les anciens visuels (inchangé)
 		while (this.debugGroup.children.length > 0) {
 			const child = this.debugGroup.children[0];
 			this.debugGroup.remove(child);
 			if (child.geometry) child.geometry.dispose();
-			// Les matériaux sont partagés, ne pas les disposer ici
 		}
 
 		this.districts.forEach(district => {
 			if (district.plots.length === 0) return;
 
-			const bounds = district.bounds; // Récupère la Box3 calculée (y min/max sont ignorés ici)
+			const bounds = district.bounds;
 			const size = new THREE.Vector3();
-			bounds.getSize(size); // Donne la taille X, Y(faible), Z
+			bounds.getSize(size);
 			const center = new THREE.Vector3();
-			bounds.getCenter(center); // Donne le centre X, Y(faible), Z
+			bounds.getCenter(center);
 
-			// Ignorer si la taille est invalide sur les axes X ou Z
 			if (size.x <= 0 || size.z <= 0) return;
 
-			// --- CHANGEMENT ICI : Utiliser PlaneGeometry ---
-			// La taille du plan correspond à la taille X et Z de la boîte englobante
 			const planeGeom = new THREE.PlaneGeometry(size.x, size.z);
 
-			// Choisir le matériau en fonction du type de district
 			let material;
 			switch(district.type) {
 				case 'residential': material = this.materials.debugResidentialMat; break;
 				case 'industrial': material = this.materials.debugIndustrialMat; break;
 				case 'business': material = this.materials.debugBusinessMat; break;
-				default: material = this.materials.debugDefaultMat; // Utiliser le matériau par défaut
+				default: material = this.materials.debugDefaultMat;
 			}
 
-			// Créer le Mesh avec le plan et le matériau
 			const planeMesh = new THREE.Mesh(planeGeom, material);
-
-			// --- Positionner et Orienter le Plan ---
-			// Positionner au centre X/Z de la boîte, et légèrement au-dessus du sol (ex: Y=0.1)
 			planeMesh.position.set(center.x, 0.1, center.z);
-			// Orienter le plan pour qu'il soit horizontal (couché sur le sol)
 			planeMesh.rotation.x = -Math.PI / 2;
 
 			planeMesh.name = `District_${district.id}_${district.type}_DebugPlane`;
@@ -399,7 +421,6 @@ export default class CityManager {
 
     // ----- findNeighbors (Inchangé) -----
     findNeighbors(plot, allPlots) {
-        // ... (code identique à la version précédente) ...
         const neighbors = [];
         const roadW = this.config.roadWidth;
         const tolerance = 0.1;
@@ -413,13 +434,17 @@ export default class CityManager {
 
             const xOverlap = Math.max(0, Math.min(p1Bounds.maxX, p2Bounds.maxX) - Math.max(p1Bounds.minX, p2Bounds.minX));
             const zOverlap = Math.max(0, Math.min(p1Bounds.maxZ, p2Bounds.maxZ) - Math.max(p1Bounds.minZ, p2Bounds.minZ));
-            const xGap = Math.max(0, p2Bounds.minX - p1Bounds.maxX, p1Bounds.minX - p2Bounds.maxX); // Prend la plus grande distance si non contigu
-            const zGap = Math.max(0, p2Bounds.minZ - p1Bounds.maxZ, p1Bounds.minZ - p2Bounds.maxZ);
+            // Calcul des gaps (distance entre les bords les plus proches)
+            const xDist = Math.max(p2Bounds.minX - p1Bounds.maxX, p1Bounds.minX - p2Bounds.maxX);
+            const zDist = Math.max(p2Bounds.minZ - p1Bounds.maxZ, p1Bounds.minZ - p2Bounds.maxZ);
 
-            const touchesHorizontally = Math.abs(xGap) < tolerance && zOverlap > tolerance;
-            const touchesVertically = Math.abs(zGap) < tolerance && xOverlap > tolerance;
-            const separatedByHorizontalRoad = Math.abs(zGap - roadW) < tolerance && xOverlap > tolerance;
-            const separatedByVerticalRoad = Math.abs(xGap - roadW) < tolerance && zOverlap > tolerance;
+            // Voisin si :
+            // - Se touchent directement (gap proche de 0) sur un côté ET ont un chevauchement sur l'autre axe
+            const touchesHorizontally = Math.abs(xDist) < tolerance && zOverlap > tolerance;
+            const touchesVertically = Math.abs(zDist) < tolerance && xOverlap > tolerance;
+            // - Sont séparés par exactement la largeur d'une route ET ont un chevauchement sur l'autre axe
+            const separatedByHorizontalRoad = Math.abs(zDist - roadW) < tolerance && xOverlap > tolerance;
+            const separatedByVerticalRoad = Math.abs(xDist - roadW) < tolerance && zOverlap > tolerance;
 
             if (touchesHorizontally || touchesVertically || separatedByHorizontalRoad || separatedByVerticalRoad) {
                 neighbors.push(p2);
@@ -429,25 +454,21 @@ export default class CityManager {
     }
 
 
-    // ----- clearCity MODIFIÉ -----
+    // ----- clearCity (Inchangé) -----
     clearCity() {
         console.log("Nettoyage de la ville existante...");
-        // ... (reset des générateurs comme avant) ...
         this.layoutGenerator?.reset();
         this.roadGenerator?.reset();
-        // Passer null à reset si assetLoader n'est pas encore prêt ou si on veut juste vider
         this.contentGenerator?.reset(this.assetLoader || null);
 
-        // Vider les groupes de la scène
         while (this.cityContainer.children.length > 0) {
             const group = this.cityContainer.children[0];
-             // Vider aussi le contenu des groupes principaux avant de les retirer
              if (group === this.contentGroup || group === this.sidewalkGroup || group === this.roadGroup || group === this.debugGroup) {
                   while (group.children.length > 0) {
                       const child = group.children[0];
                       group.remove(child);
                       if (child.geometry) child.geometry.dispose();
-                      // Ne pas disposer les matériaux partagés ici (debug ou autres)
+                      // Ne pas disposer les matériaux partagés ici
                   }
              }
             this.cityContainer.remove(group);
@@ -455,21 +476,18 @@ export default class CityManager {
          this.roadGroup = null;
          this.sidewalkGroup = null;
          this.contentGroup = null;
-         this.debugGroup = new THREE.Group(); // Recréer le groupe debug vide
-         if (this.config.showDistrictBoundaries) { // Le rajouter au container si activé
+         this.debugGroup = new THREE.Group(); this.debugGroup.name = "DebugVisuals";
+         if (this.config.showDistrictBoundaries) {
              this.cityContainer.add(this.debugGroup);
          }
 
-
-         // Vider les listes internes
          this.districts = [];
          this.leafPlots = [];
 
-        // Supprimer le sol global
-        // ... (comme avant) ...
         if (this.groundMesh) {
             if (this.groundMesh.parent) this.groundMesh.parent.remove(this.groundMesh);
-            this.groundMesh.geometry.dispose();
+            if (this.groundMesh.geometry) this.groundMesh.geometry.dispose();
+            // Le matériau est dans this.materials, disposé dans destroy()
             this.groundMesh = null;
         }
 
@@ -478,7 +496,6 @@ export default class CityManager {
 
     // ----- createGlobalGround (Inchangé) -----
     createGlobalGround() {
-        // ... (code identique) ...
         if (this.groundMesh && this.groundMesh.parent) return;
         if (this.groundMesh && !this.groundMesh.parent) { this.scene.add(this.groundMesh); return; }
 
@@ -489,18 +506,15 @@ export default class CityManager {
         this.groundMesh.receiveShadow = true;
         this.groundMesh.name = "GlobalGround";
         this.scene.add(this.groundMesh);
-        // console.log("Sol global créé."); // Moins verbeux
     }
 
-    // ----- destroy MODIFIÉ -----
+    // ----- destroy (Inchangé) -----
     destroy() {
         console.log("Destruction du CityManager...");
-        this.clearCity(); // Nettoie d'abord (y compris debugGroup)
+        this.clearCity();
 
-        // Dispose assets
         this.assetLoader?.disposeAssets();
 
-        // Dispose matériaux partagés (y compris debug)
         Object.values(this.materials).forEach(material => {
             if (material && typeof material.dispose === 'function') {
                 material.dispose();
@@ -509,44 +523,47 @@ export default class CityManager {
         this.materials = {};
         console.log("  - Matériaux partagés disposés.");
 
-        // Retirer conteneur principal
-        if (this.cityContainer.parent) {
+        if (this.cityContainer && this.cityContainer.parent) {
            this.cityContainer.parent.remove(this.cityContainer);
         }
 
-        // Mettre à null
         this.assetLoader = null; this.layoutGenerator = null; this.roadGenerator = null;
         this.contentGenerator = null; this.experience = null; this.scene = null;
         this.districts = null; this.leafPlots = null;
-        this.cityContainer = null; this.debugGroup = null; // Mettre les groupes à null aussi
+        this.cityContainer = null; this.debugGroup = null;
 
         console.log("CityManager détruit.");
     }
 
-    // --- Méthodes utilitaires ---
+    // --- Méthodes utilitaires (Inchangées) ---
     getPlots() { return this.leafPlots || []; }
     getDistricts() { return this.districts || []; }
-    logLoadedAssets() { /* ... (inchangé) ... */ }
 
-    // --- NOUVEAU: Logging pour types de zones ---
+    logLoadedAssets() {
+       if (!this.assetLoader || !this.assetLoader.assets) return;
+       const counts = Object.entries(this.assetLoader.assets).map(([type, list]) => `${type}: ${list.length}`).join(', ');
+       console.log(`Assets chargés - ${counts}`);
+   }
+
     logInitialZoneTypes() {
+        if (!this.leafPlots) return;
         const counts = {};
         this.leafPlots.forEach(p => {
             counts[p.zoneType] = (counts[p.zoneType] || 0) + 1;
         });
-        console.log("Répartition initiale des types de parcelles (par LayoutGenerator):", counts);
+        console.log("Répartition initiale des types (par LayoutGenerator):", counts);
     }
      logAdjustedZoneTypes() {
+         if (!this.leafPlots) return;
          const counts = {};
          this.leafPlots.forEach(p => {
              counts[p.zoneType] = (counts[p.zoneType] || 0) + 1;
          });
-         console.log("Répartition finale des types de parcelles (après ajustement District):", counts);
+         console.log("Répartition finale des types (après ajustement District):", counts);
      }
 
 
     logDistrictStats() {
-        // ... (légèrement modifié pour clarté) ...
         if (!this.districts || this.districts.length === 0) return;
         const stats = { residential: 0, industrial: 0, business: 0 };
         let totalPlotsInDistricts = 0;
@@ -554,14 +571,21 @@ export default class CityManager {
             if (stats[d.type] !== undefined) stats[d.type]++;
             totalPlotsInDistricts += d.plots.length;
         });
-        console.log(`Stats Districts -> Total: ${this.districts.length} (R: ${stats.residential}, I: ${stats.industrial}, B: ${stats.business}). Parcelles dans districts: ${totalPlotsInDistricts}/${this.leafPlots.length}`);
+        console.log(`Stats Districts -> Total: ${this.districts.length} (R: ${stats.residential}, I: ${stats.industrial}, B: ${stats.business}). Parcelles dans districts: ${totalPlotsInDistricts}/${this.leafPlots?.length || 0}`);
         this.districts.forEach(d => {
             const plotCounts = {};
             d.plots.forEach(p => { plotCounts[p.zoneType] = (plotCounts[p.zoneType] || 0) + 1; });
             const plotCountsString = Object.entries(plotCounts).map(([k, v]) => `${k}:${v}`).join(', ');
-            console.log(` - District ${d.id} (${d.type}): ${d.plots.length} parcelles [${plotCountsString}]. Centre: (${d.center.x.toFixed(1)}, ${d.center.z.toFixed(1)})`);
+            // Utiliser le getter .center de District
+            const centerX = d.center ? d.center.x.toFixed(1) : 'N/A';
+            const centerZ = d.center ? d.center.z.toFixed(1) : 'N/A';
+            console.log(` - District ${d.id} (${d.type}): ${d.plots.length} parcelles [${plotCountsString}]. Centre: (${centerX}, ${centerZ})`);
         });
     }
 
-    update() { }
-}
+    update() {
+        // Mettre à jour les composants si nécessaire (ex: animations)
+        // this.cityManager?.update(); // Est appelé depuis World.js
+        // this.environment?.update(); // Est appelé depuis World.js
+    }
+} // Fin de la classe CityManager
