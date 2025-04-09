@@ -117,7 +117,7 @@ export default class CityManager {
 			parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
 
 			treeModelDir: "Public/Assets/Models/Trees/",
-			treeModelFiles: [ { file: "Tree.glb", scale: 0.9 }, /* ... */ { file: "Tree7.glb", scale: 0.9 }, ],
+			treeModelFiles: [{ file: "Tree2.glb", scale: 0.9 }, { file: "Tree3.glb", scale: 0.9 }, { file: "Tree4.glb", scale: 0.9 }, { file: "Tree5.glb", scale: 0.9 }, { file: "Tree6.glb", scale: 0.9 } ],
 			treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
 
 			skyscraperModelDir: "Public/Assets/Models/Skyscrapers/",
