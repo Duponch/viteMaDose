@@ -1,83 +1,74 @@
 // src/World/PlotContentGenerator.js
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'; // <- CORRECTEMENT AJOUTÉ ICI
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export default class PlotContentGenerator {
     constructor(config, materials) {
-        this.config = config; // Contient maintenant les probabilités et sidewalkWidth
+        this.config = config; // Contient notamment sidewalkWidth, les marges, minSubZoneSize pour chaque type...
         this.materials = materials;
         this.sidewalkGroup = new THREE.Group();
-        this.buildingGroup = new THREE.Group(); // Contiendra bâtiments ET arbres
+        this.buildingGroup = new THREE.Group(); // Contiendra bâtiments, maisons, industriels, parcs, gratte-ciels ET arbres
         this.assetLoader = null;
-        // Structure pour stocker les matrices d'instances (par ID de modèle)
-        this.instanceData = {}; // Initialisé dans reset()
-
-        console.log("PlotContentGenerator initialisé (avec support arbres).");
+        // Structure pour stocker les matrices d'instances, indexées par type
+        this.instanceData = {}; // Sera initialisé dans reset()
+        console.log("PlotContentGenerator initialisé (avec support arbres et gratte-ciels).");
     }
 
-	generateContent(leafPlots, assetLoader) {
+    generateContent(leafPlots, assetLoader) {
         this.reset(assetLoader);
         console.log("Génération du contenu...");
 
-        const allSidewalkGeometries = []; // <- Tableau pour stocker les géométries
+        const allSidewalkGeometries = [];
 
         leafPlots.forEach((plot) => {
-            // 1. Contenu principal (bâtiments, etc. - utilise instanceData)
+            // 1. Gestion du contenu principal de la parcelle (selon type de zone)
             this.generatePlotPrimaryContent(plot);
-
-            // 2. Géométrie des trottoirs pour cette parcelle (SI activé)
+            // 2. Création des trottoirs pour la parcelle (si activé)
             if (this.config.sidewalkWidth > 0) {
-                const plotSidewalkGeoms = this.collectSidewalkGeometriesForPlot(plot); // <- Nouvelle fonction qui retourne les géométries transformées
+                const plotSidewalkGeoms = this.collectSidewalkGeometriesForPlot(plot);
                 allSidewalkGeometries.push(...plotSidewalkGeoms);
             }
-
-            // 3. Placement des arbres (utilise instanceData)
+            // 3. Placement des arbres
             this.placeTreesForPlot(plot);
         });
 
-        // 4. Créer les InstancedMesh pour bâtiments/arbres
+        // 4. Création des InstancedMesh pour tous les éléments (bâtiments, gratte-ciels, arbres, etc.)
         this.createInstancedMeshesFromData();
 
-        // 5. Créer le Mesh fusionné pour les trottoirs
+        // 5. Fusion des géométries de trottoir et ajout dans le groupe dédié
         if (allSidewalkGeometries.length > 0) {
-            const mergedSidewalkGeometry = mergeGeometries(allSidewalkGeometries, false); // false = ne pas créer de groupes
+            const mergedSidewalkGeometry = mergeGeometries(allSidewalkGeometries, false);
             if (mergedSidewalkGeometry) {
-                 const sidewalkMesh = new THREE.Mesh(mergedSidewalkGeometry, this.materials.sidewalkMaterial);
-                 sidewalkMesh.castShadow = true;
-                 sidewalkMesh.receiveShadow = true;
-                 sidewalkMesh.name = "Merged_Sidewalks";
-                 this.sidewalkGroup.add(sidewalkMesh); // Ajouter le mesh unique au groupe
+                const sidewalkMesh = new THREE.Mesh(mergedSidewalkGeometry, this.materials.sidewalkMaterial);
+                sidewalkMesh.castShadow = true;
+                sidewalkMesh.receiveShadow = true;
+                sidewalkMesh.name = "Merged_Sidewalks";
+                this.sidewalkGroup.add(sidewalkMesh);
             } else {
-                 console.warn("La fusion des géométries de trottoir a échoué.");
+                console.warn("La fusion des géométries de trottoir a échoué.");
             }
-             // Nettoyer les géométries individuelles après fusion si nécessaire (mergeGeometries ne les dispose pas)
-             allSidewalkGeometries.forEach(geom => geom.dispose());
+            allSidewalkGeometries.forEach(geom => geom.dispose());
         }
-
 
         console.log("Génération du contenu terminée.");
         return this.getGroups();
     }
 
-	// Nouvelle fonction pour collecter les géométries de trottoir transformées
+    // Fonction qui collecte les géométries transformées pour les trottoirs d'une parcelle
     collectSidewalkGeometriesForPlot(plot) {
         const plotGeometries = [];
         const sidewalkW = this.config.sidewalkWidth;
         const sidewalkH = this.config.sidewalkHeight;
-        const plotWidth = plot.width; const plotDepth = plot.depth;
-        const plotCenterX = plot.x + plotWidth / 2; const plotCenterZ = plot.z + plotDepth / 2;
+        const plotWidth = plot.width, plotDepth = plot.depth;
+        const plotCenterX = plot.x + plotWidth / 2, plotCenterZ = plot.z + plotDepth / 2;
 
-        // Créer UNE instance de géométrie de base (cube 1x1x1)
+        // Géométrie de base (cube 1x1x1)
         const baseSidewalkGeom = new THREE.BoxGeometry(1, 1, 1);
 
         const createTransformedGeom = (width, depth, height, x, z, yOffset = 0) => {
             const matrix = new THREE.Matrix4();
-            const scale = new THREE.Vector3(width, height, depth);
-            const position = new THREE.Vector3(x, height / 2 + yOffset, z); // Position globale
-            // Quaternions et composition sont plus robustes, mais pour des boîtes alignées, la translation/scale suffit
-            matrix.makeScale(scale.x, scale.y, scale.z);
-            matrix.setPosition(position);
-
+            matrix.makeScale(width, height, depth);
+            matrix.setPosition(new THREE.Vector3(x, height / 2 + yOffset, z));
             const clonedGeom = baseSidewalkGeom.clone();
             clonedGeom.applyMatrix4(matrix);
             return clonedGeom;
@@ -86,149 +77,115 @@ export default class PlotContentGenerator {
         const halfPlotW = plotWidth / 2;
         const halfPlotD = plotDepth / 2;
         const halfSidewalkW = sidewalkW / 2;
-
-        // Calcul des positions globales
+        // Coordonnées globales des bords
         const topZ = plot.z - halfSidewalkW;
         const bottomZ = plot.z + plotDepth + halfSidewalkW;
         const leftX = plot.x - halfSidewalkW;
         const rightX = plot.x + plotWidth + halfSidewalkW;
 
-        // Bordures (Positions globales des centres)
+        // Ajout des géométries pour les bords et coins
         plotGeometries.push(createTransformedGeom(plotWidth, sidewalkW, sidewalkH, plotCenterX, topZ)); // Haut
         plotGeometries.push(createTransformedGeom(plotWidth, sidewalkW, sidewalkH, plotCenterX, bottomZ)); // Bas
         plotGeometries.push(createTransformedGeom(sidewalkW, plotDepth, sidewalkH, leftX, plotCenterZ)); // Gauche
         plotGeometries.push(createTransformedGeom(sidewalkW, plotDepth, sidewalkH, rightX, plotCenterZ)); // Droite
-        // Coins
-        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, topZ)); // HG
-        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, topZ)); // HD
-        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, bottomZ)); // BG
-        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, bottomZ)); // BD
+        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, topZ)); // Coin HG
+        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, topZ)); // Coin HD
+        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, bottomZ)); // Coin BG
+        plotGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, bottomZ)); // Coin BD
 
-        baseSidewalkGeom.dispose(); // Dispose la géométrie de base une fois utilisée
-
+        baseSidewalkGeom.dispose();
         return plotGeometries;
     }
 
-    // Nouvelle méthode pour regrouper la génération du contenu principal
+    // Regroupe la génération du contenu principal de la parcelle en distinguant le cas "skyscraper"
     generatePlotPrimaryContent(plot) {
-         // A. Créer trottoirs (si activé)
-         // Note: On pourrait déplacer la logique de création des mesh ici pour plus de clarté
-         if (this.config.sidewalkWidth > 0) {
-             //this.createSidewalksForPlot(plot); // Crée les meshs des trottoirs
-         }
-
-         // B. Gérer le contenu de la parcelle (sol, bâtiments/parcs)
-         if (plot.zoneType && ['house', 'building', 'industrial', 'park'].includes(plot.zoneType)) {
-             // Créer le sol de la parcelle
-             this.createPlotGround(plot);
-
-             // Subdiviser pour placement multiple (si nécessaire)
-             const subZones = this.subdivideForPlacement(plot);
-             const margin = this.config.buildingSubZoneMargin; // Marge utilisée aussi pour les arbres
-
-             subZones.forEach((subZone) => {
-                 // Calculer zone constructible dans la sous-zone
-                 const buildableWidth = Math.max(0, subZone.width - margin * 2);
-                 const buildableDepth = Math.max(0, subZone.depth - margin * 2);
-
-                 if (buildableWidth > 0.1 && buildableDepth > 0.1) {
-                     const subZoneCenterX = subZone.x + subZone.width / 2;
-                     const subZoneCenterZ = subZone.z + subZone.depth / 2;
-
-                     // Choisir un modèle du bon type (house, building, industrial, park)
-                     const assetInfo = this.assetLoader.getRandomAssetData(plot.zoneType);
-
-                     if (assetInfo) {
-                         const instanceMatrix = this.calculateInstanceMatrix(
-                             subZoneCenterX, subZoneCenterZ,
-                             assetInfo.sizeAfterFitting.y,
-                             assetInfo.fittingScaleFactor,
-                             assetInfo.centerOffset,
-                             assetInfo.userScale
-                         );
-
-                         const modelId = assetInfo.id;
-                         const type = plot.zoneType;
-
-                         // Stocker la matrice pour l'InstancedMesh plus tard
-                         if (!this.instanceData[type]) this.instanceData[type] = {};
-                         if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
-                         this.instanceData[type][modelId].push(instanceMatrix);
-
-                         // *** Stocker l'emprise de ce bâtiment pour éviter les arbres (simplifié) ***
-                         // On stocke juste le centre et les dimensions de la *sous-zone* utilisée
-                         // Une approche plus précise stockerait la BBox exacte après transformation
-                         if (!plot.occupiedSubZones) plot.occupiedSubZones = [];
-                         plot.occupiedSubZones.push({
-                             x: subZone.x + margin, // Centre de la zone *construite*
-                             z: subZone.z + margin,
-                             width: buildableWidth,
-                             depth: buildableDepth
-                         });
-                     }
-                 }
-             }); // Fin boucle subZones
-         }
+        if (plot.zoneType) {
+            if (['house', 'building', 'industrial', 'park', 'skyscraper'].includes(plot.zoneType)) {
+                // Traitement pour les autres zones
+                this.createPlotGround(plot);
+                const subZones = this.subdivideForPlacement(plot);
+                const margin = this.config.buildingSubZoneMargin;
+                subZones.forEach((subZone) => {
+                    const buildableWidth = Math.max(0, subZone.width - margin * 2);
+                    const buildableDepth = Math.max(0, subZone.depth - margin * 2);
+                    if (buildableWidth > 0.1 && buildableDepth > 0.1) {
+                        const subZoneCenterX = subZone.x + subZone.width / 2;
+                        const subZoneCenterZ = subZone.z + subZone.depth / 2;
+                        const assetInfo = this.assetLoader.getRandomAssetData(plot.zoneType);
+                        if (assetInfo) {
+                            const instanceMatrix = this.calculateInstanceMatrix(
+                                subZoneCenterX, subZoneCenterZ,
+                                assetInfo.sizeAfterFitting.y,
+                                assetInfo.fittingScaleFactor,
+                                assetInfo.centerOffset,
+                                assetInfo.userScale
+                            );
+                            const modelId = assetInfo.id;
+                            if (!this.instanceData[plot.zoneType]) this.instanceData[plot.zoneType] = {};
+                            if (!this.instanceData[plot.zoneType][modelId]) this.instanceData[plot.zoneType][modelId] = [];
+                            this.instanceData[plot.zoneType][modelId].push(instanceMatrix);
+                            // Stockage simplifié de l'emprise pour éviter de placer des arbres dans la zone occupée
+                            if (!plot.occupiedSubZones) plot.occupiedSubZones = [];
+                            plot.occupiedSubZones.push({
+                                x: subZone.x + margin,
+                                z: subZone.z + margin,
+                                width: buildableWidth,
+                                depth: buildableDepth
+                            });
+                        }
+                    }
+                });
+            }
+        }
     }
 
-    // Nouvelle méthode pour placer les arbres
+    // Place les arbres sur la parcelle selon le type de zone et des probabilités configurées
     placeTreesForPlot(plot) {
         if (!this.assetLoader.assets.tree || this.assetLoader.assets.tree.length === 0) {
-            return; // Pas de modèles d'arbres chargés
+            return;
         }
-
         const probSidewalk = this.config.treePlacementProbabilitySidewalk;
         const probPark = this.config.treePlacementProbabilityPark;
         const probMargin = this.config.treePlacementProbabilityMargin;
         const sidewalkW = this.config.sidewalkWidth;
 
-        // --- 1. Arbres sur les trottoirs ---
+        // 1. Arbres sur trottoir (aux coins par exemple)
         if (sidewalkW > 0 && probSidewalk > 0) {
-            // Placer aux coins et potentiellement le long des bords
             const corners = [
-                { x: plot.x - sidewalkW / 2, z: plot.z - sidewalkW / 2 }, // Coin HG
-                { x: plot.x + plot.width + sidewalkW / 2, z: plot.z - sidewalkW / 2 }, // Coin HD
-                { x: plot.x - sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 }, // Coin BG
-                { x: plot.x + plot.width + sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 }, // Coin BD
+                { x: plot.x - sidewalkW / 2, z: plot.z - sidewalkW / 2 },
+                { x: plot.x + plot.width + sidewalkW / 2, z: plot.z - sidewalkW / 2 },
+                { x: plot.x - sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 },
+                { x: plot.x + plot.width + sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 }
             ];
             corners.forEach(corner => {
                 if (Math.random() < probSidewalk) {
                     this.addTreeInstance(corner.x, corner.z);
                 }
             });
-            // On pourrait ajouter d'autres points le long des bords ici si souhaité
         }
 
-        // --- 2. Arbres dans les parcelles ---
+        // 2. Arbres dans la parcelle (cas des parcs ou en marge des zones construites)
         const plotBounds = {
             minX: plot.x, maxX: plot.x + plot.width,
             minZ: plot.z, maxZ: plot.z + plot.depth,
         };
-
         if (plot.zoneType === 'park' && probPark > 0) {
-            // Placer aléatoirement dans les parcs
             const area = plot.width * plot.depth;
-            const numTreesToTry = Math.ceil(area * probPark); // Nb d'arbres basé sur densité/surface
-
+            const numTreesToTry = Math.ceil(area * probPark);
             for (let i = 0; i < numTreesToTry; i++) {
                 const treeX = THREE.MathUtils.randFloat(plotBounds.minX, plotBounds.maxX);
                 const treeZ = THREE.MathUtils.randFloat(plotBounds.minZ, plotBounds.maxZ);
-                 // Optionnel: vérifier si ça tombe sur un élément de parc déjà placé si on stockait leur BBox
                 this.addTreeInstance(treeX, treeZ);
             }
         } else if (['house', 'building', 'industrial'].includes(plot.zoneType) && probMargin > 0) {
-            // Placer dans les marges des autres parcelles
             const margin = this.config.buildingSubZoneMargin;
             const area = plot.width * plot.depth;
             const occupiedArea = (plot.occupiedSubZones || []).reduce((acc, sz) => acc + (sz.width * sz.depth), 0);
             const marginArea = area - occupiedArea;
-            const numTreesToTry = Math.ceil(marginArea * probMargin); // Nb arbres basé sur surface de marge
-
-             for (let i = 0; i < numTreesToTry; i++) {
+            const numTreesToTry = Math.ceil(marginArea * probMargin);
+            for (let i = 0; i < numTreesToTry; i++) {
                 const treeX = THREE.MathUtils.randFloat(plotBounds.minX, plotBounds.maxX);
                 const treeZ = THREE.MathUtils.randFloat(plotBounds.minZ, plotBounds.maxZ);
-
-                // Vérifier si le point tombe DANS une zone occupée
                 let isOccupied = false;
                 if (plot.occupiedSubZones) {
                     for (const sz of plot.occupiedSubZones) {
@@ -239,8 +196,6 @@ export default class PlotContentGenerator {
                         }
                     }
                 }
-
-                // Si le point n'est PAS dans une zone occupée, ajouter l'arbre
                 if (!isOccupied) {
                     this.addTreeInstance(treeX, treeZ);
                 }
@@ -248,105 +203,93 @@ export default class PlotContentGenerator {
         }
     }
 
-    // Helper pour ajouter une instance d'arbre
+    // Ajoute une instance d'arbre à partir d'un asset aléatoire
     addTreeInstance(treeX, treeZ) {
         const assetInfo = this.assetLoader.getRandomAssetData('tree');
         if (assetInfo) {
-             // Ajoute une petite variation de scale pour le naturel
-             const randomScaleMultiplier = THREE.MathUtils.randFloat(0.85, 1.15);
-             const finalUserScale = assetInfo.userScale * randomScaleMultiplier;
-
-             // Ajoute une petite rotation aléatoire pour le naturel
-             const randomRotationY = Math.random() * Math.PI * 2;
-
+            const randomScaleMultiplier = THREE.MathUtils.randFloat(0.85, 1.15);
+            const finalUserScale = assetInfo.userScale * randomScaleMultiplier;
+            const randomRotationY = Math.random() * Math.PI * 2;
             const instanceMatrix = this.calculateInstanceMatrix(
                 treeX, treeZ,
                 assetInfo.sizeAfterFitting.y,
                 assetInfo.fittingScaleFactor,
                 assetInfo.centerOffset,
-                finalUserScale, // Utilise le scale avec variation
-                randomRotationY // Passe la rotation
+                finalUserScale,
+                randomRotationY
             );
-
             const modelId = assetInfo.id;
-            const type = 'tree'; // Spécifique pour les arbres
-
+            const type = 'tree';
             if (!this.instanceData[type]) this.instanceData[type] = {};
             if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
             this.instanceData[type][modelId].push(instanceMatrix);
         }
     }
 
-
+    // Retourne les groupes créés pour insertion dans la scène
     getGroups() {
-         return { sidewalkGroup: this.sidewalkGroup, buildingGroup: this.buildingGroup };
-     }
+        return { sidewalkGroup: this.sidewalkGroup, buildingGroup: this.buildingGroup };
+    }
 
-	 reset(assetLoader) {
-		this.assetLoader = assetLoader;
-		this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {} };
+    // Réinitialise les données et stocke la référence vers l'assetLoader
+    reset(assetLoader) {
+        this.assetLoader = assetLoader;
+        // On ajoute "skyscraper" dans l'instanceData pour que tous les types soient préparés
+        this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {}, skyscraper: {} };
 
-		const disposeGroupContents = (group) => { /* ... voir code précédent ... */ };
-		// Vider les groupes AVANT de potentiellement y ajouter les nouveaux Mesh fusionnés
-		disposeGroupContents(this.sidewalkGroup);
-		disposeGroupContents(this.buildingGroup);
-	}
+        const disposeGroupContents = (group) => {
+            while (group.children.length > 0) {
+                const child = group.children[0];
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+                group.remove(child);
+            }
+        };
+        disposeGroupContents(this.sidewalkGroup);
+        disposeGroupContents(this.buildingGroup);
+    }
 
-    // MODIFIÉ: Ajout rotationY optionnelle
+    // Calcule la matrice d'instance à partir de la position, du scale, d'une rotation optionnelle et du décalage
     calculateInstanceMatrix(centerX, centerZ, heightAfterFitting, fittingScaleFactor, centerOffset, userScale, rotationY = 0) {
         const instanceMatrix = new THREE.Matrix4();
         const finalScaleValue = fittingScaleFactor * userScale;
         const scaleMatrix = new THREE.Matrix4().makeScale(finalScaleValue, finalScaleValue, finalScaleValue);
-        const rotationMatrix = new THREE.Matrix4().makeRotationY(rotationY); // Matrice de rotation
+        const rotationMatrix = new THREE.Matrix4().makeRotationY(rotationY);
         const recenterMatrix = new THREE.Matrix4().makeTranslation(-centerOffset.x, -centerOffset.y, -centerOffset.z);
-        const finalHeight = heightAfterFitting * userScale; // Hauteur après TOUS les scales
-        const finalTranslationMatrix = new THREE.Matrix4().makeTranslation(centerX, finalHeight / 2 + 0.05, centerZ); // Un peu moins haut que les bâtiments
-
-        // Combinaison: Scale -> Rotate -> Recenter -> Translate
-        instanceMatrix.multiplyMatrices(scaleMatrix, rotationMatrix); // Scale * Rotation
-        instanceMatrix.multiply(recenterMatrix);                   // (Scale * Rotation) * Recenter
-        instanceMatrix.premultiply(finalTranslationMatrix);         // Translation * ((Scale * Rotation) * Recenter)
-
+        const finalHeight = heightAfterFitting * userScale;
+        const finalTranslationMatrix = new THREE.Matrix4().makeTranslation(centerX, finalHeight / 2 + 0.05, centerZ);
+        instanceMatrix.multiplyMatrices(scaleMatrix, rotationMatrix);
+        instanceMatrix.multiply(recenterMatrix);
+        instanceMatrix.premultiply(finalTranslationMatrix);
         return instanceMatrix;
     }
 
-    // MODIFIÉ: Itère sur TOUS les types dans instanceData, y compris 'tree'
+    // Itère sur instanceData pour créer pour chaque asset un InstancedMesh et l'ajouter au groupe principal
     createInstancedMeshesFromData() {
-        console.log("Création des InstancedMesh par modèle (incluant arbres)...");
+        console.log("Création des InstancedMesh par modèle (incluant arbres et gratte-ciels)...");
         let totalInstancesCreated = 0;
         let instancedMeshCount = 0;
-
         if (!this.assetLoader) {
             console.error("Impossible de créer InstancedMesh: AssetLoader non disponible.");
             return;
         }
-
-        // Parcourir TOUS les types stockés ('house', 'building', 'industrial', 'park', 'tree')
         for (const type in this.instanceData) {
-            if (!this.instanceData.hasOwnProperty(type)) continue; // Sécurité
-
+            if (!this.instanceData.hasOwnProperty(type)) continue;
             for (const modelId in this.instanceData[type]) {
                 if (!this.instanceData[type].hasOwnProperty(modelId)) continue;
-
                 const matrices = this.instanceData[type][modelId];
-
                 if (matrices && matrices.length > 0) {
                     const assetData = this.assetLoader.getAssetDataById(modelId);
-
                     if (assetData && assetData.geometry && assetData.material) {
-                        // Créer l'InstancedMesh
                         const instancedMesh = new THREE.InstancedMesh(
                             assetData.geometry,
-                            assetData.material, // Matériau cloné
+                            assetData.material,
                             matrices.length
                         );
                         matrices.forEach((matrix, index) => instancedMesh.setMatrixAt(index, matrix));
-
                         instancedMesh.castShadow = true;
-                        instancedMesh.receiveShadow = true; // Les arbres peuvent recevoir des ombres
-                        instancedMesh.name = `${type}_${modelId}`; // Nom plus descriptif
-
-                        // Ajouter au groupe principal (qui contient bâtiments, parcs, et maintenant arbres)
+                        instancedMesh.receiveShadow = true;
+                        instancedMesh.name = `${type}_${modelId}`;
                         this.buildingGroup.add(instancedMesh);
                         instancedMeshCount++;
                         totalInstancesCreated += matrices.length;
@@ -355,69 +298,16 @@ export default class PlotContentGenerator {
                     }
                 }
             }
-        } // Fin boucle sur les types
-
+        }
         if (instancedMeshCount > 0) {
-             console.log(`Création InstancedMesh terminée: ${instancedMeshCount} mesh(es) InstancedMesh créés pour ${totalInstancesCreated} instances au total (tous types).`);
+            console.log(`Création InstancedMesh terminée: ${instancedMeshCount} mesh(es) InstancedMesh créés pour ${totalInstancesCreated} instances au total (tous types).`);
         } else {
-             console.log("Aucune instance à créer via InstancedMesh.");
+            console.log("Aucune instance à créer via InstancedMesh.");
         }
     }
 
-    // Création des trottoirs - Peut rester globalement inchangée
-    // Mais on n'y place plus les arbres directement
-    createSidewalksForPlot(plot) {
-       const sidewalkW = this.config.sidewalkWidth; if (sidewalkW <= 0) return;
-       const sidewalkH = this.config.sidewalkHeight;
-       const plotWidth = plot.width; const plotDepth = plot.depth;
-       const plotCenterX = plot.x + plotWidth / 2; const plotCenterZ = plot.z + plotDepth / 2;
-
-       // Utiliser un groupe spécifique pour les trottoirs de cette parcelle facilite le nettoyage si nécessaire
-       const singlePlotSidewalkGroup = new THREE.Group();
-       singlePlotSidewalkGroup.position.set(plotCenterX, 0, plotCenterZ); // Positionne le groupe au centre de la parcelle
-       singlePlotSidewalkGroup.name = `Sidewalk_Plot_${plot.id}`;
-
-       const sidewalkGeom = new THREE.BoxGeometry(1, sidewalkH, 1);
-       const sidewalkMat = this.materials.sidewalkMaterial;
-
-       const createMesh = (width, depth, x, z) => {
-           const mesh = new THREE.Mesh(sidewalkGeom, sidewalkMat);
-           mesh.scale.set(width, 1, depth);
-           // Positions relatives au centre du groupe (centre de la parcelle)
-           mesh.position.set(x, sidewalkH / 2, z);
-           mesh.castShadow = true;
-           mesh.receiveShadow = true;
-           return mesh;
-       };
-
-       // Coordonnées relatives au centre (plotCenterX, plotCenterZ)
-       const halfPlotW = plotWidth / 2;
-       const halfPlotD = plotDepth / 2;
-       const halfSidewalkW = sidewalkW / 2;
-
-       // Bordures
-       singlePlotSidewalkGroup.add(createMesh(plotWidth, sidewalkW, 0, -halfPlotD - halfSidewalkW)); // Haut
-       singlePlotSidewalkGroup.add(createMesh(plotWidth, sidewalkW, 0, halfPlotD + halfSidewalkW));  // Bas
-       singlePlotSidewalkGroup.add(createMesh(sidewalkW, plotDepth, -halfPlotW - halfSidewalkW, 0)); // Gauche
-       singlePlotSidewalkGroup.add(createMesh(sidewalkW, plotDepth, halfPlotW + halfSidewalkW, 0));  // Droite
-       // Coins
-       singlePlotSidewalkGroup.add(createMesh(sidewalkW, sidewalkW, -halfPlotW - halfSidewalkW, -halfPlotD - halfSidewalkW)); // HG
-       singlePlotSidewalkGroup.add(createMesh(sidewalkW, sidewalkW, halfPlotW + halfSidewalkW, -halfPlotD - halfSidewalkW));  // HD
-       singlePlotSidewalkGroup.add(createMesh(sidewalkW, sidewalkW, -halfPlotW - halfSidewalkW, halfPlotD + halfSidewalkW));  // BG
-       singlePlotSidewalkGroup.add(createMesh(sidewalkW, sidewalkW, halfPlotW + halfSidewalkW, halfPlotD + halfSidewalkW));   // BD
-
-       // Ajoute le groupe de trottoirs de cette parcelle au groupe global des trottoirs
-       this.sidewalkGroup.add(singlePlotSidewalkGroup);
-
-       // Important: Ne disposez PAS la géométrie ici si vous prévoyez de réutiliser `sidewalkGeom`
-       // Si elle est créée à chaque appel, il FAUT la disposer. Si elle est créée une fois dans le constructeur, non.
-       // Pour être sûr, créons-la à chaque fois et disposons-la.
-       sidewalkGeom.dispose();
-   }
-
-    // Création du sol de la parcelle - inchangé
+    // Crée le sol de la parcelle (pour tout type de zone)
     createPlotGround(plot) {
-        // ... (code inchangé)
         const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
         let groundMaterial;
         if (plot.zoneType === 'park') {
@@ -427,49 +317,68 @@ export default class PlotContentGenerator {
         }
         const groundMesh = new THREE.Mesh(groundGeom, groundMaterial);
         groundMesh.rotation.x = -Math.PI / 2;
-        groundMesh.position.set(plot.center.x, 0.05, plot.center.z);
+        // On suppose que plot possède une propriété center calculée en amont
+        groundMesh.position.set(plot.center ? plot.center.x : plot.x + plot.width / 2, 0.05, plot.center ? plot.center.z : plot.z + plot.depth / 2);
         groundMesh.receiveShadow = true;
         groundMesh.name = `Ground_Plot_${plot.id}_${plot.zoneType}`;
-        this.buildingGroup.add(groundMesh); // Ajouter au groupe 'building'
+        this.buildingGroup.add(groundMesh);
     }
 
-    // Subdivision pour placement - inchangé
+    // Subdivision pour le placement de contenus dans la parcelle (pour zones autres que skyscraper)
     subdivideForPlacement(plot) {
-        // ... (code inchangé)
-         let minSubZoneSize;
+        let minSubZoneSize;
         switch (plot.zoneType) {
-            case 'house': minSubZoneSize = this.config.minHouseSubZoneSize; break;
-            case 'building': minSubZoneSize = this.config.minBuildingSubZoneSize; break;
-            case 'industrial': minSubZoneSize = this.config.minIndustrialSubZoneSize; break;
-            case 'park': minSubZoneSize = this.config.minParkSubZoneSize; break;
-            default: minSubZoneSize = 10;
+            case 'house': 
+                minSubZoneSize = this.config.minHouseSubZoneSize; 
+                break;
+            case 'building': 
+                minSubZoneSize = this.config.minBuildingSubZoneSize; 
+                break;
+            case 'industrial': 
+                minSubZoneSize = this.config.minIndustrialSubZoneSize; 
+                break;
+            case 'park': 
+                minSubZoneSize = this.config.minParkSubZoneSize; 
+                break;
+            case 'skyscraper':
+                // Bien que les gratte-ciels soient gérés séparément, on peut définir la taille minimale ici
+                minSubZoneSize = this.config.minSkyscraperSubZoneSize; 
+                break;
+            default: 
+                minSubZoneSize = 10;
         }
         minSubZoneSize = Math.max(minSubZoneSize, 1);
-
-       if (plot.width < minSubZoneSize && plot.depth < minSubZoneSize) {
+        if (plot.width < minSubZoneSize && plot.depth < minSubZoneSize) {
             return [{ x: plot.x, z: plot.z, width: plot.width, depth: plot.depth }];
-       }
+        }
         if (plot.width < minSubZoneSize) {
-           let numRows = Math.max(1, Math.floor(plot.depth / minSubZoneSize));
-           const subDepth = plot.depth / numRows; const subZones = [];
-            for (let j = 0; j < numRows; j++) subZones.push({ x: plot.x, z: plot.z + j * subDepth, width: plot.width, depth: subDepth });
+            let numRows = Math.max(1, Math.floor(plot.depth / minSubZoneSize));
+            const subDepth = plot.depth / numRows;
+            const subZones = [];
+            for (let j = 0; j < numRows; j++) {
+                subZones.push({ x: plot.x, z: plot.z + j * subDepth, width: plot.width, depth: subDepth });
+            }
             return subZones;
         }
-         if (plot.depth < minSubZoneSize) {
-           let numCols = Math.max(1, Math.floor(plot.width / minSubZoneSize));
-            const subWidth = plot.width / numCols; const subZones = [];
-             for (let i = 0; i < numCols; i++) subZones.push({ x: plot.x + i * subWidth, z: plot.z, width: subWidth, depth: plot.depth });
-             return subZones;
-         }
-
-       let numCols = Math.max(1, Math.floor(plot.width / minSubZoneSize));
-       let numRows = Math.max(1, Math.floor(plot.depth / minSubZoneSize));
-       const subZones = []; const subWidth = plot.width / numCols; const subDepth = plot.depth / numRows;
-       for (let i = 0; i < numCols; i++) {
-           for (let j = 0; j < numRows; j++) {
-               subZones.push({ x: plot.x + i * subWidth, z: plot.z + j * subDepth, width: subWidth, depth: subDepth });
-           }
-       }
-       return subZones;
-   }
+        if (plot.depth < minSubZoneSize) {
+            let numCols = Math.max(1, Math.floor(plot.width / minSubZoneSize));
+            const subWidth = plot.width / numCols;
+            const subZones = [];
+            for (let i = 0; i < numCols; i++) {
+                subZones.push({ x: plot.x + i * subWidth, z: plot.z, width: subWidth, depth: plot.depth });
+            }
+            return subZones;
+        }
+        let numCols = Math.max(1, Math.floor(plot.width / minSubZoneSize));
+        let numRows = Math.max(1, Math.floor(plot.depth / minSubZoneSize));
+        const subZones = [];
+        const subWidth = plot.width / numCols;
+        const subDepth = plot.depth / numRows;
+        for (let i = 0; i < numCols; i++) {
+            for (let j = 0; j < numRows; j++) {
+                subZones.push({ x: plot.x + i * subWidth, z: plot.z + j * subDepth, width: subWidth, depth: subDepth });
+            }
+        }
+        return subZones;
+    }
 }
