@@ -21,7 +21,7 @@ export default class CityManager {
             maxRecursionDepth: 7,
 
             // --- District Formation ---
-            minDistrictSize: 10, // NOUVEAU
+            minDistrictSize: 5, // NOUVEAU
             maxDistrictSize: 12, // NOUVEAU
             // (Suppression des ratios de zone globale)
 
@@ -31,7 +31,7 @@ export default class CityManager {
 
             // --- Initial Plot Type Probabilities (LayoutGenerator) ---
             parkProbability: 0.10,
-            industrialZoneProbability: 0.15,
+            industrialZoneProbability: 0,
             houseZoneProbability: 0.35,
             skyscraperZoneProbability: 0.10,
 
@@ -73,15 +73,40 @@ export default class CityManager {
         };
 
         // Materials (Inchangé)
-        this.materials = { /* ... matériaux ... */
+        this.materials = {
+            // ... (autres matériaux inchangés) ...
             groundMaterial: new THREE.MeshStandardMaterial({ color: 0x0f0118 }),
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
             centerlineMaterial: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-            parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }), // Sol des parcs
-            buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x333333 }), // Sol des zones construites
-            debugResidentialMat: new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true, transparent: true, opacity: 0.5 }), // Rendu plus discret
-            debugIndustrialMat: new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true, transparent: true, opacity: 0.5 }),
-            debugBusinessMat: new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0.5 }),
+            parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
+            buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x333333 }),
+
+            // --- NOUVEAU: Matériaux Debug (Plans colorés) ---
+            debugResidentialMat: new THREE.MeshBasicMaterial({
+                color: 0x0077ff, // Bleu pour résidentiel
+                transparent: true,
+                opacity: 0.4, // Ajustez l'opacité si besoin
+                side: THREE.DoubleSide // Pour être visible des deux côtés si jamais
+            }),
+            debugIndustrialMat: new THREE.MeshBasicMaterial({
+                color: 0xffa500, // Orange pour industriel
+                transparent: true,
+                opacity: 0.4,
+                side: THREE.DoubleSide
+            }),
+            debugBusinessMat: new THREE.MeshBasicMaterial({
+                color: 0xcc0000, // Rouge pour affaires
+                transparent: true,
+                opacity: 0.4,
+                side: THREE.DoubleSide
+            }),
+             // Garder un matériau par défaut pour les cas imprévus (optionnel)
+             debugDefaultMat: new THREE.MeshBasicMaterial({
+                color: 0xcccccc,
+                transparent: true,
+                opacity: 0.3,
+                side: THREE.DoubleSide
+             }),
         };
 
         // Composants (Inchangé)
@@ -324,35 +349,53 @@ export default class CityManager {
 
     // ----- createDistrictDebugVisuals (Logique interne inchangée) -----
     createDistrictDebugVisuals() {
-        // ... (Le code est identique à la version précédente, il dessinera les nouveaux districts) ...
-         while (this.debugGroup.children.length > 0) { /* ... Vider ... */
-             const child = this.debugGroup.children[0];
-             this.debugGroup.remove(child);
-             if (child.geometry) child.geometry.dispose();
-         }
+		// Vider les anciens visuels (inchangé)
+		while (this.debugGroup.children.length > 0) {
+			const child = this.debugGroup.children[0];
+			this.debugGroup.remove(child);
+			if (child.geometry) child.geometry.dispose();
+			// Les matériaux sont partagés, ne pas les disposer ici
+		}
 
-         this.districts.forEach(district => {
-             if (district.plots.length === 0) return;
-             const bounds = district.bounds;
-             const size = new THREE.Vector3(); bounds.getSize(size);
-             const center = new THREE.Vector3(); bounds.getCenter(center);
-             if (size.x <= 0 || size.y <= 0 || size.z <= 0) return;
+		this.districts.forEach(district => {
+			if (district.plots.length === 0) return;
 
-             const boxGeom = new THREE.BoxGeometry(size.x, size.y, size.z);
-             let material;
-             switch(district.type) {
-                 case 'residential': material = this.materials.debugResidentialMat; break;
-                 case 'industrial': material = this.materials.debugIndustrialMat; break;
-                 case 'business': material = this.materials.debugBusinessMat; break;
-                 default: material = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.3 });
-             }
-             const boxMesh = new THREE.Mesh(boxGeom, material);
-             boxMesh.position.copy(center);
-             boxMesh.name = `District_${district.id}_${district.type}_Debug`;
-             this.debugGroup.add(boxMesh);
-         });
-          console.log(`Visuels de débogage pour ${this.debugGroup.children.length} districts créés.`);
-    }
+			const bounds = district.bounds; // Récupère la Box3 calculée (y min/max sont ignorés ici)
+			const size = new THREE.Vector3();
+			bounds.getSize(size); // Donne la taille X, Y(faible), Z
+			const center = new THREE.Vector3();
+			bounds.getCenter(center); // Donne le centre X, Y(faible), Z
+
+			// Ignorer si la taille est invalide sur les axes X ou Z
+			if (size.x <= 0 || size.z <= 0) return;
+
+			// --- CHANGEMENT ICI : Utiliser PlaneGeometry ---
+			// La taille du plan correspond à la taille X et Z de la boîte englobante
+			const planeGeom = new THREE.PlaneGeometry(size.x, size.z);
+
+			// Choisir le matériau en fonction du type de district
+			let material;
+			switch(district.type) {
+				case 'residential': material = this.materials.debugResidentialMat; break;
+				case 'industrial': material = this.materials.debugIndustrialMat; break;
+				case 'business': material = this.materials.debugBusinessMat; break;
+				default: material = this.materials.debugDefaultMat; // Utiliser le matériau par défaut
+			}
+
+			// Créer le Mesh avec le plan et le matériau
+			const planeMesh = new THREE.Mesh(planeGeom, material);
+
+			// --- Positionner et Orienter le Plan ---
+			// Positionner au centre X/Z de la boîte, et légèrement au-dessus du sol (ex: Y=0.1)
+			planeMesh.position.set(center.x, 0.1, center.z);
+			// Orienter le plan pour qu'il soit horizontal (couché sur le sol)
+			planeMesh.rotation.x = -Math.PI / 2;
+
+			planeMesh.name = `District_${district.id}_${district.type}_DebugPlane`;
+			this.debugGroup.add(planeMesh);
+		});
+		 console.log(`Visuels de débogage (Plans) pour ${this.debugGroup.children.length} districts créés.`);
+	}
 
     // ----- findNeighbors (Inchangé) -----
     findNeighbors(plot, allPlots) {
