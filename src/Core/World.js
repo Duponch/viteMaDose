@@ -60,14 +60,16 @@ export default class World {
     // --- Ajouter une méthode destroy pour nettoyer ---
     destroy() {
         console.log("Destruction du World...");
-        this.cityManager?.destroy(); // Appeler destroy sur le CityManager
-        // Nettoyer l'environnement, etc.
-        // this.environment.destroy(); // Si Environment a une méthode destroy
-         // Supprimer les lumières, etc. de la scène si Environment ne le fait pas
+        this.cityManager?.destroy(); // Nettoie CityGround
+        this.environment?.destroy(); // <-- AJOUT: Appelle le nettoyage de Environment (Skybox, OuterGround, Lune, Lumières)
 
-         // Vider la scène explicitement si nécessaire (attention aux éléments gérés par Experience)
-         // while(this.scene.children.length > 0){
-         //     this.scene.remove(this.scene.children[0]);
-         // }
+        // Vider la scène explicitement si les destroy précédents ne suffisent pas
+        // (Peut-être pas nécessaire si les destroy sont complets)
+        // while(this.scene.children.length > 0){
+        //    const object = this.scene.children[0];
+        //    this.scene.remove(object);
+        //    // Ajouter dispose pour geometry/material si nécessaire
+        // }
+        console.log("World détruit.");
     }
 }

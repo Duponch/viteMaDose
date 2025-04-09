@@ -6,24 +6,32 @@ export default class Environment {
         this.experience = experience;
         this.scene = this.experience.scene;
         this.debug = this.experience.debug;
-        // Propriétés de la Skybox ajoutées
+
+        // Propriétés Skybox
         this.skyboxCanvas = null;
         this.skyboxContext = null;
-        this.starsCanvas = null;
+		this.starsCanvas = null;
         this.skyboxTexture = null;
         this.skyBox = null;
         this.moonMesh = null;
         this.skyboxGreenProgress = 0;
         this.targetSkyboxGreenProgress = 0;
+        this.skyboxRadius = 0; // <-- AJOUT: Pour stocker le rayon
         this.skyboxTransitionSpeed = 0.2; // ou récupérer depuis config
-        // Fin propriétés Skybox
 
-        this.mapSize = 700; // Ou récupérez-la dynamiquement
+        // Propriété pour le nouveau sol extérieur
+        this.outerGroundMesh = null; // <-- AJOUT
+
+        // Récupérer mapSize depuis la config de CityManager (plus fiable)
+        this.mapSize = this.experience.world?.cityManager?.config?.mapSize || 700; // Valeur par défaut si non trouvé
+        //this.mapSize = 700; // Ou récupérez-la dynamiquement
+
         this.setSunLight();
         this.setAmbientLight();
 
-        // Appel pour créer la Skybox
+        // Appels pour créer Skybox ET le nouveau sol
         this.renderSkybox();
+        this.createOuterGround(); // <-- AJOUT
     }
 
     setSunLight() {
@@ -101,15 +109,47 @@ export default class Environment {
         // Création de la texture et du skybox
         this.skyboxTexture = new THREE.CanvasTexture(this.skyboxCanvas);
         this.skyboxTexture.needsUpdate = true;
-        // Utilisez une taille de sphère cohérente avec votre scène
-        const skyGeometry = new THREE.SphereGeometry(this.mapSize * 0.8, 60, 40); // Ex: 80% de mapSize
+
+        // Définir et stocker le rayon de la skybox
+        this.skyboxRadius = this.mapSize * 0.8; // Ex: 80% de mapSize, AJUSTEZ SI BESOIN
+        const skyGeometry = new THREE.SphereGeometry(this.skyboxRadius, 60, 40); // <-- Utilise skyboxRadius
+
         const skyMaterial = new THREE.MeshBasicMaterial({
             map: this.skyboxTexture,
             side: THREE.BackSide,
         });
         this.skyBox = new THREE.Mesh(skyGeometry, skyMaterial);
-        this.skyBox.renderOrder = -1; // Rendre avant le reste
+        this.skyBox.renderOrder = -1;
         this.scene.add(this.skyBox);
+
+        console.log(`Skybox créée avec rayon: ${this.skyboxRadius}`);
+
+        //this.renderMoon();
+    }
+
+	createOuterGround() {
+        if (this.outerGroundMesh) return; // Ne pas recréer si existe déjà
+
+        const outerGroundRadius = this.skyboxRadius; // Légèrement plus grand que la skybox pour éviter les bords visibles
+        const segments = 64; // Nombre de segments pour le cercle
+
+        const outerGroundGeometry = new THREE.CircleGeometry(outerGroundRadius, segments);
+        const outerGroundMaterial = new THREE.MeshStandardMaterial({
+            color: 0x003300, // Vert très foncé
+            metalness: 0.1,
+            roughness: 0.9,
+            side: THREE.DoubleSide // Au cas où on le verrait de dessous
+        });
+
+        this.outerGroundMesh = new THREE.Mesh(outerGroundGeometry, outerGroundMaterial);
+        this.outerGroundMesh.rotation.x = -Math.PI / 2; // Orienter horizontalement
+        // Positionner LÉGÈREMENT EN DESSOUS du sol de la ville (-0.01)
+        this.outerGroundMesh.position.y = -0.1; // <-- AJUSTER si besoin
+        this.outerGroundMesh.receiveShadow = true; // Reçoit les ombres
+        this.outerGroundMesh.name = "OuterGround";
+
+        this.scene.add(this.outerGroundMesh);
+        console.log(`Sol extérieur (OuterGround) créé avec rayon: ${outerGroundRadius}`);
     }
 
     updateSkyboxTransition(delta, normalizedHealth) {
@@ -188,6 +228,48 @@ export default class Environment {
         }
     }
 
+	destroy() {
+        console.log("Nettoyage de l'environnement...");
+
+        // Nettoyer Skybox
+        if (this.skyBox) {
+            this.scene.remove(this.skyBox);
+            this.skyBox.geometry?.dispose();
+            this.skyBox.material?.dispose();
+            this.skyBox = null;
+        }
+        if (this.skyboxTexture) {
+            this.skyboxTexture.dispose();
+            this.skyboxTexture = null;
+        }
+        // Les canvas (skyboxCanvas, starsCanvas) seront nettoyés par le garbage collector
+
+        // Nettoyer Lune
+        if (this.moonMesh) {
+             this.scene.remove(this.moonMesh);
+             // Nettoyer géométrie/matériaux si OBJLoader ne le fait pas
+             this.moonMesh.traverse(child => {
+                 if (child.isMesh) {
+                     child.geometry?.dispose();
+                     child.material?.dispose();
+                 }
+             });
+             this.moonMesh = null;
+        }
+
+        // Nettoyer OuterGround
+        if (this.outerGroundMesh) {
+            this.scene.remove(this.outerGroundMesh);
+            this.outerGroundMesh.geometry?.dispose();
+            this.outerGroundMesh.material?.dispose(); // Important car matériau unique
+            this.outerGroundMesh = null;
+        }
+
+        // Nettoyer Lumières (si non géré ailleurs)
+        if (this.sunLight) this.scene.remove(this.sunLight);
+        if (this.ambientLight) this.scene.remove(this.ambientLight);
+        // Si vous aviez des helpers de lumière, les supprimer aussi
+    }
 
     // Méthode update à ajouter ou modifier dans Environment.js
     update(deltaTime, /* Ajoutez ici la variable 'normalizedHealth' */ healthFactor = 1) {

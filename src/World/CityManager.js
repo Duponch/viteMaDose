@@ -142,7 +142,7 @@ export default class CityManager {
             this.config.districtProbabilities.residential = { ...this.config.districtProbabilities.residential, ...config.districtProbabilities.residential };
         }
         this.materials = {
-            groundMaterial: new THREE.MeshStandardMaterial({ color: 0x0f0118 }),
+            groundMaterial: new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.1, roughness: 0.8 }), // <-- MODIFIÉ
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
             centerlineMaterial: new THREE.MeshBasicMaterial({ color: 0xffffff }),
             parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
@@ -241,6 +241,25 @@ export default class CityManager {
         }
     }
 
+	createGlobalGround() {
+        if (this.groundMesh && this.groundMesh.parent) return;
+        if (this.groundMesh && !this.groundMesh.parent) { this.scene.add(this.groundMesh); return; }
+
+        // Utiliser mapSize directement, sans le * 1.2
+        const groundGeometry = new THREE.PlaneGeometry(
+            this.config.mapSize, // <-- MODIFIÉ
+            this.config.mapSize  // <-- MODIFIÉ
+        );
+        this.groundMesh = new THREE.Mesh(groundGeometry, this.materials.groundMaterial);
+        this.groundMesh.rotation.x = -Math.PI / 2;
+        // Garder légèrement en dessous de 0
+        this.groundMesh.position.y = -0.01;
+        this.groundMesh.receiveShadow = true;
+        this.groundMesh.name = "CityGround"; // Renommé pour clarté
+        this.scene.add(this.groundMesh);
+        console.log(`Sol intérieur (CityGround) créé : ${this.config.mapSize}x${this.config.mapSize}`);
+    }
+	
     // ----- createDistricts_V2 (MODIFIÉ avec Phase 2) -----
     createDistricts_V2() {
         if (!this.leafPlots || this.leafPlots.length === 0) {
@@ -745,34 +764,13 @@ export default class CityManager {
 
     clearCity() {
         console.log("Nettoyage de la ville existante...");
-        this.layoutGenerator?.reset();
-        this.roadGenerator?.reset();
-        this.contentGenerator?.reset(this.assetLoader || null);
+        // ... (début de clearCity) ...
 
-        while (this.cityContainer.children.length > 0) {
-            const group = this.cityContainer.children[0];
-             if (group === this.contentGroup || group === this.sidewalkGroup || group === this.roadGroup || group === this.debugGroup) {
-                  while (group.children.length > 0) {
-                      const child = group.children[0];
-                      group.remove(child);
-                      if (child.geometry) child.geometry.dispose();
-                  }
-             }
-            this.cityContainer.remove(group);
-        }
-         this.roadGroup = null;
-         this.sidewalkGroup = null;
-         this.contentGroup = null;
-         // Ne pas recréer debugGroup ici, juste le vider
-         while (this.debugGroup.children.length > 0) { this.debugGroup.remove(this.debugGroup.children[0]); }
-
-
-         this.districts = [];
-         this.leafPlots = [];
-
+        // Assurez-vous que ce sol est aussi nettoyé
         if (this.groundMesh) {
             if (this.groundMesh.parent) this.groundMesh.parent.remove(this.groundMesh);
             if (this.groundMesh.geometry) this.groundMesh.geometry.dispose();
+            // Le matériau est partagé, il sera disposé à la fin si nécessaire
             this.groundMesh = null;
         }
 
@@ -794,14 +792,15 @@ export default class CityManager {
 
     destroy() {
         console.log("Destruction du CityManager...");
-        this.clearCity();
-        this.assetLoader?.disposeAssets();
-        Object.values(this.materials).forEach(material => {
-            if (material && typeof material.dispose === 'function') {
-                material.dispose();
-            }
-        });
-        this.materials = {};
+		this.clearCity(); // Appelle déjà le nettoyage du groundMesh
+
+		// Dispose des matériaux centraux s'ils ne sont plus utilisés ailleurs
+		Object.values(this.materials).forEach(material => {
+			if (material && typeof material.dispose === 'function') {
+				material.dispose();
+			}
+		});
+		this.materials = {};
         if (this.cityContainer && this.cityContainer.parent) {
            this.cityContainer.parent.remove(this.cityContainer);
         }
