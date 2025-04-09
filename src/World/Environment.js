@@ -33,7 +33,8 @@ export default class Environment {
         this.setSunLight();
         this.setAmbientLight();
         this.renderSkybox(); // Définit this.skyboxRadius
-        this.outerGroundDisplayRadius = this.skyboxRadius - 10; // Lier le rayon visible à la skybox
+		console.log(this.skyboxRadius);
+        this.outerGroundDisplayRadius = this.skyboxRadius + 10; // Lier le rayon visible à la skybox
         this.createOuterGround(); // Appel de la fonction mise à jour
     }
 
