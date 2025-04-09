@@ -111,7 +111,7 @@ export default class Environment {
             metalness: 0.1,
             flatShading: true,     // Style Low Poly
             transparent: true,     // <-- AJOUTER : Activer la transparence
-            opacity: 0.5          // <-- AJOUTER : Niveau d'opacité (0.0 = invisible, 1.0 = opaque)
+            opacity: 0.6          // <-- AJOUTER : Niveau d'opacité (0.0 = invisible, 1.0 = opaque)
             // Optionnel: si vous rencontrez des problèmes de rendu/tri avec la transparence:
             // depthWrite: false
         });
@@ -196,7 +196,7 @@ export default class Environment {
 
             // --- MODIFIÉ : Échelle aléatoire avec une plus grande plage ---
             // Exemple: échelle allant de 0.5 à 4.0 (0.5 + 3.5 * 1.0)
-            const scale = 0.5 + Math.random() * 10;
+            const scale = 0.5 + Math.random() * 15;
             cloudMesh.scale.set(scale, scale, scale);
             // -----------------------------------------------------------
 
@@ -507,7 +507,7 @@ export default class Environment {
             this.updateDayNightCycle(deltaTime);
 
             // --- Animation simple des nuages ---
-            const cloudSpeed = 0.0005 * deltaTime; // Vitesse de déplacement (ajustez selon deltaTime)
+            const cloudSpeed = 0.00005 * deltaTime; // Vitesse de déplacement (ajustez selon deltaTime)
             this.cloudGroup.children.forEach(cloud => {
                 cloud.position.x += cloudSpeed * (cloud.scale.x * 10); // Les plus gros bougent un peu plus vite
                 // Optionnel : faire réapparaître les nuages de l'autre côté
