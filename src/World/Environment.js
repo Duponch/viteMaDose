@@ -191,7 +191,7 @@ export default class Environment {
 
         // --- Matériau (sans alphaMap maintenant) ---
         const material = new THREE.MeshStandardMaterial({
-            color: 0x465e39, // Vert foncé (ou 0x596c3d comme dans l'exemple?)
+            color: 0x2e3407, // Vert foncé (ou 0x596c3d comme dans l'exemple?)
             metalness: 0.1,
             roughness: 0.9,
             // side: THREE.DoubleSide // Peut-être plus nécessaire si on ne voit jamais dessous
