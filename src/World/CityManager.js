@@ -326,58 +326,84 @@ export default class CityManager {
 
     // ----- adjustPlotTypesWithinDistricts (Inchangé pour Stratégie 1) -----
     adjustPlotTypesWithinDistricts() {
-         console.log("Ajustement des types de parcelles selon les règles de district...");
-         const stats = { convertedToSkyscraper: 0, convertedToIndustrial: 0, convertedToResidential: 0, parksProtected: 0 };
-
-         this.districts.forEach(district => {
-             district.plots.forEach(plot => {
-                 if (plot.zoneType === 'park') { stats.parksProtected++; return; }
-                 if (plot.zoneType === 'unbuildable') { return; }
-
-                 const initialType = plot.zoneType;
-                 let finalType = initialType;
-
-                 // La logique ici reste la même, mais elle s'appliquera à des districts
-                 // dont la répartition des types (business, industrial, residential)
-                 // a été modifiée en amont par getDistrictTypeProbabilities.
-                 switch (district.type) {
-                     case 'business': // Moins de districts de ce type seront créés
-                         if (initialType !== 'skyscraper') {
-                             if (Math.random() < this.config.businessConversionProbability) {
-                                 finalType = 'skyscraper';
-                                 if (initialType !== finalType) stats.convertedToSkyscraper++;
-                             } else if (initialType === 'industrial' || initialType === 'house') {
-                                 finalType = 'building'; // Fallback si pas converti
-                                 if (initialType !== finalType && (finalType === 'building' || finalType === 'house')) stats.convertedToResidential++;
-                             }
-                         }
-                         break;
-                     case 'industrial': // Moins de districts de ce type seront créés
-                         if (initialType !== 'industrial') {
-                              if (Math.random() < this.config.industrialConversionProbability) {
-                                  finalType = 'industrial';
-                                  if (initialType !== finalType) stats.convertedToIndustrial++;
-                              } else if (['skyscraper', 'business', 'house'].includes(initialType)) {
-                                  finalType = 'building'; // Fallback si pas converti
-                                  if (initialType !== finalType && (finalType === 'building' || finalType === 'house')) stats.convertedToResidential++;
-                              }
-                         }
-                         break;
-                     case 'residential': // Plus de districts de ce type seront créés
-                         if (['industrial', 'business', 'skyscraper'].includes(initialType)) {
-                             // Convertir les types non résidentiels en résidentiel (maison ou immeuble)
-                             finalType = (plot.width * plot.depth > 150) ? 'building' : 'house';
-                             if (initialType !== finalType) stats.convertedToResidential++;
-                         }
-                         // Si c'était déjà 'house' ou 'building', on ne change rien.
-                         break;
-                 }
-                  plot.zoneType = finalType;
-                  plot.isPark = (finalType === 'park');
-             });
-         });
-         console.log(`Ajustement terminé. Conversions -> Skyscraper: ${stats.convertedToSkyscraper}, Industrial: ${stats.convertedToIndustrial}, Residential (convertis): ${stats.convertedToResidential}. Parcs protégés: ${stats.parksProtected}`);
-    }
+		// Logique modifiée pour être STRICTE
+		console.log("Ajustement STRICT des types de parcelles pour correspondre au type du district...");
+		// Ajout de compteurs pour mieux suivre ce qui se passe
+		const stats = {
+			forcedToSkyscraper: 0,
+			forcedToIndustrial: 0,
+			forcedToResidential: 0, // Compte les conversions vers house/building
+			parksProtected: 0,
+			alreadyCorrect: 0, // Compte les parcelles déjà du bon type
+			unbuildableSkipped: 0
+		};
+	
+		this.districts.forEach(district => {
+			district.plots.forEach(plot => {
+				// 1. Préserver les parcs existants
+				if (plot.zoneType === 'park') {
+					stats.parksProtected++;
+					plot.isPark = true; // Assurer la cohérence
+					return; // Ne pas modifier les parcs
+				}
+				// 2. Ignorer les parcelles non constructibles
+				if (plot.zoneType === 'unbuildable') {
+					stats.unbuildableSkipped++;
+					return;
+				}
+	
+				const initialType = plot.zoneType; // Garder une trace du type initial pour les stats
+				let targetType = null; // Le type que la parcelle DEVRAIT avoir
+	
+				// 3. Déterminer le type CIBLE basé STRICTEMENT sur le type du DISTRICT
+				switch (district.type) {
+					case 'business':
+						// Un district d'affaires ne contient QUE des gratte-ciels
+						targetType = 'skyscraper';
+						if (initialType !== targetType) stats.forcedToSkyscraper++; else stats.alreadyCorrect++;
+						break;
+	
+					case 'industrial':
+						// Un district industriel ne contient QUE des bâtiments industriels
+						targetType = 'industrial';
+						if (initialType !== targetType) stats.forcedToIndustrial++; else stats.alreadyCorrect++;
+						break;
+	
+					case 'residential':
+						// Un district résidentiel contient des maisons ou des immeubles standards
+						// Choisir entre 'house' et 'building' basé sur la taille de la parcelle
+						// (Vous pouvez ajuster le seuil de 150 m² si nécessaire)
+						const plotArea = plot.width * plot.depth;
+						targetType = (plotArea > 150) ? 'building' : 'house';
+						// Compter comme conversion si ce n'était pas déjà le bon type résidentiel
+						if (initialType !== targetType) stats.forcedToResidential++; else stats.alreadyCorrect++;
+						break;
+	
+					default:
+						// Si le type de district n'est pas reconnu, on ne change pas la parcelle
+						targetType = initialType; // Garder le type initial
+						stats.alreadyCorrect++; // ou le considérer comme correct/inchangé
+						break;
+				}
+	
+				// 4. Appliquer le type cible à la parcelle
+				if (targetType !== null) {
+					 plot.zoneType = targetType;
+					 // Mettre à jour la propriété isPark par sécurité (elle devrait être false sauf si type='park')
+					 plot.isPark = (targetType === 'park');
+				}
+			});
+		});
+	
+		// Afficher les statistiques détaillées
+		console.log(`Ajustement STRICT terminé:`);
+		console.log(`  - Forcés Gratte-ciel: ${stats.forcedToSkyscraper}`);
+		console.log(`  - Forcés Industriel: ${stats.forcedToIndustrial}`);
+		console.log(`  - Forcés Résidentiel (maison/immeuble): ${stats.forcedToResidential}`);
+		console.log(`  - Parcs Protégés: ${stats.parksProtected}`);
+		console.log(`  - Déjà Corrects / Inchangés: ${stats.alreadyCorrect}`);
+		console.log(`  - Non-constructibles Ignorés: ${stats.unbuildableSkipped}`);
+	}
 
 
     // ----- createDistrictDebugVisuals (Inchangé) -----
