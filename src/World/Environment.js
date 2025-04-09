@@ -42,26 +42,29 @@ export default class Environment {
 	setSunLight() {
         this.sunLight = new THREE.DirectionalLight(0xffffff, 3);
         this.sunLight.castShadow = true;
-        this.sunLight.shadow.mapSize.set(2048, 2048);
+        this.sunLight.shadow.mapSize.set(4096, 4096);
         this.sunLight.shadow.normalBias = 0.05;
-        this.sunLight.position.set(50, 80, 50);
-        const shadowCamSize = this.mapSize / 2; // Taille de la ville
+        this.sunLight.position.set(200, 320, 200);
+        const shadowCamSize = 1000; // Taille de la ville
         // Ajuster la caméra d'ombre pour couvrir un peu plus large à cause des collines
-        const shadowMargin = 100; // Marge supplémentaire
+        const shadowMargin = 200; // Marge supplémentaire
         this.sunLight.shadow.camera.left = -shadowCamSize - shadowMargin;
         this.sunLight.shadow.camera.right = shadowCamSize + shadowMargin;
         this.sunLight.shadow.camera.top = shadowCamSize + shadowMargin;
         this.sunLight.shadow.camera.bottom = -shadowCamSize - shadowMargin;
         this.sunLight.shadow.camera.near = 0.5;
         // Augmenter far pour inclure les collines et la position de la lumière
-        this.sunLight.shadow.camera.far = this.sunLight.position.y + 100;
+        this.sunLight.shadow.camera.far = 2000;
         this.sunLight.shadow.camera.updateProjectionMatrix();
         this.scene.add(this.sunLight);
+
+		/* const helper = new THREE.CameraHelper(this.sunLight.shadow.camera);
+		this.scene.add(helper); */
     }
 
     // setAmbientLight() reste inchangé...
     setAmbientLight() {
-        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
         this.scene.add(this.ambientLight);
     }
 

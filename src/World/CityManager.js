@@ -14,7 +14,7 @@ export default class CityManager {
 
 		this.config = {
 			// Map & Layout
-			mapSize: 700,
+			mapSize: 1000,
 			roadWidth: 10,
 			minPlotSize: 13,
 			maxPlotSize: 40,
