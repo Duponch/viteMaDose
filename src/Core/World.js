@@ -10,12 +10,43 @@ export default class World {
         this.experience = experience;
         this.scene = this.experience.scene;
         this.resources = this.experience.resources;
-        this.cityManager = new CityManager(this.experience); // Passe la config via CityManager
+        this.cityManager = new CityManager(this.experience);
 
-        // Environment est initialisé avec la config via CityManager
+        // Instancier Environment (le constructeur est maintenant synchrone)
         this.environment = new Environment(this.experience, this);
 
-        this.generateCityAsync();
+        // Appeler l'initialisation asynchrone du monde
+        this.initializeWorld();
+    }
+
+    // NOUVELLE méthode pour gérer l'initialisation asynchrone
+    async initializeWorld() {
+        console.log("World: Initialisation asynchrone...");
+        try {
+            // Démarrer l'initialisation asynchrone de l'environnement ET attendre qu'elle soit finie
+            await this.environment.initialize();
+            console.log("World: Environnement initialisé.");
+
+            // Démarrer la génération de la ville (peut aussi être fait en parallèle si besoin)
+            await this.generateCityAsync();
+
+            console.log("World: Initialisation complète.");
+            // Vous pouvez émettre un événement ou définir un flag si d'autres parties doivent savoir que le monde est prêt
+
+        } catch (error) {
+            console.error("World: Erreur lors de l'initialisation asynchrone:", error);
+        }
+    }
+
+    // NOUVELLE méthode pour gérer l'initialisation asynchrone
+    async generateCityAsync() {
+        // Cette fonction reste asynchrone
+        try {
+            await this.cityManager.generateCity();
+            console.log("Ville chargée dans le monde.");
+        } catch (error) {
+            console.error("Impossible de générer la ville dans World:", error);
+        }
     }
 
     async generateCityAsync() {

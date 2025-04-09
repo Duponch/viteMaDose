@@ -2,53 +2,6 @@
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 
-// Importer les shaders (assurez-vous que le chemin est correct)
-// Vous pouvez utiliser un loader ou les coller comme chaînes de caractères
-// Exemple avec import (nécessite un bundler configuré pour .glsl, comme Vite avec plugin)
-// import skyVertexShader from './shaders/skyVertex.glsl';
-// import skyFragmentShader from './shaders/skyFragment.glsl';
-
-// Si vous n'avez pas de loader GLSL, collez le code ici :
-const skyVertexShader = `
-varying vec3 vWorldDirection;
-void main() {
-    vec4 worldPosition = modelMatrix * vec4( position, 1.0 );
-    vWorldDirection = worldPosition.xyz - cameraPosition;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-}`;
-
-const skyFragmentShader = `
-varying vec3 vWorldDirection;
-uniform vec3 uSunDirection;
-uniform float uDayFactor;
-uniform vec3 uZenithColorDay;
-uniform vec3 uHorizonColorDay;
-uniform vec3 uZenithColorNight;
-uniform vec3 uHorizonColorNight;
-uniform vec3 uSunInfluenceColor;
-
-vec3 mixVec3(vec3 a, vec3 b, float t) {
-    return a * (1.0 - t) + b * t;
-}
-
-void main() {
-    vec3 viewDirection = normalize(vWorldDirection);
-    vec3 zenithColor = mixVec3(uZenithColorNight, uZenithColorDay, uDayFactor);
-    vec3 horizonColor = mixVec3(uHorizonColorNight, uHorizonColorDay, uDayFactor);
-    float skyFactor = smoothstep(0.0, 0.6, viewDirection.y);
-    vec3 skyGradient = mixVec3(horizonColor, zenithColor, skyFactor);
-    float dotSun = dot(viewDirection, normalize(uSunDirection));
-    float sunHalo = smoothstep(0.95, 1.0, dotSun);
-    sunHalo = pow(sunHalo, 10.0) * uDayFactor;
-    float sunTint = smoothstep(0.6, 1.0, dotSun);
-    sunTint = pow(sunTint, 2.0) * uDayFactor;
-    vec3 finalColor = skyGradient;
-    finalColor = mixVec3(finalColor, uSunInfluenceColor * 1.5, sunTint * 0.4);
-    finalColor += uSunInfluenceColor * sunHalo * 1.2;
-    gl_FragColor = vec4(finalColor, 1.0);
-}`;
-
-
 export default class Environment {
     constructor(experience, world) {
         this.experience = experience;
@@ -60,29 +13,22 @@ export default class Environment {
         this.mapSize = this.config.mapSize + 550;
         this.outerGroundDisplayRadius = 0;
 
-        // --- Propriétés Cycle Jour/Nuit (Identiques) ---
+        // --- Propriétés Cycle Jour/Nuit ---
         this.cycleEnabled = this.config.dayNightCycleEnabled;
         this.dayDurationMs = this.config.dayDurationMinutes * 60 * 1000;
         this.cycleTime = (this.dayDurationMs * (this.config.startTimeOfDay || 0.25)) % this.dayDurationMs;
         this.sunDistance = 0;
-
-        // --- CORRECTION : Définir les couleurs ---
         this.sunColors = {
-            dawn: new THREE.Color(0xffa500), // Lever (Orange)
-            day: new THREE.Color(0xffffff),  // Journée (Blanc)
-            dusk: new THREE.Color(0xff4500), // Coucher (Rouge-Orange)
-            night: new THREE.Color(0x000033) // Nuit (Bleu très sombre) - Pour la teinte ambiante/solaire nuit
+            dawn: new THREE.Color(0xffa500), day: new THREE.Color(0xffffff),
+            dusk: new THREE.Color(0xff4500), night: new THREE.Color(0x000033)
         };
-        this.sunIntensity = { day: 3.5, night: 0 }; // Gardez ceci
-
+        this.sunIntensity = { day: 3.5, night: 0 };
         this.ambientColors = {
-             day: new THREE.Color(0xb0c4de),   // Acier clair
-             night: new THREE.Color(0x111133) // Bleu nuit
+            day: new THREE.Color(0xb0c4de), night: new THREE.Color(0x111133)
         };
-        this.ambientIntensity = { day: 0.6, night: 0.1 }; // Gardez ceci
-        // --- FIN CORRECTION ---
+        this.ambientIntensity = { day: 0.6, night: 0.1 };
 
-        // --- Uniforms (identique) ---
+        // --- Uniforms pour le Shader Skybox ---
         this.skyUniforms = {
             uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
             uDayFactor: { value: 0.0 },
@@ -93,24 +39,74 @@ export default class Environment {
             uSunInfluenceColor: { value: new THREE.Color(0xffccaa) }
         };
 
-        // ... (reste du constructeur) ...
+        // --- Propriétés pour le chargement asynchrone ---
+        this.vertexShaderCode = null;
+        this.fragmentShaderCode = null;
+        this.isInitialized = false; // Flag pour savoir si l'init asynchrone est terminée
 
-        this.setSunLight();
-        this.setAmbientLight();
-        this.renderSkybox();
-        this.outerGroundDisplayRadius = this.skyboxRadius + 10;
-        this.createOuterGround();
+        // --- Variables pour les objets (initialisées à null) ---
+        this.skyBox = null;
+        this.starsMesh = null;
+        this.outerGroundMesh = null;
+        this.moonMesh = null; // Si vous l'utilisez
 
-        this.updateDayNightCycle(0); // Appliquer l'état initial
+        // --- Autres propriétés ---
+        this.skyboxRadius = 0;
+        // ... (skyboxGreenProgress, etc. si vous les gardez pour l'effet santé)
+
+        // --- Configuration de base synchrone ---
+        this.setSunLight();      // Crée l'objet lumière
+        this.setAmbientLight(); // Crée l'objet lumière
+
+        // Le reste (renderSkybox, createOuterGround, updateDayNightCycle(0))
+        // sera appelé depuis la méthode initialize() asynchrone.
+    }
+
+    // --- NOUVELLE Méthode d'initialisation asynchrone ---
+    async initialize() {
+        console.log("Environment: Initialisation asynchrone...");
+        try {
+            // Charger les shaders en parallèle
+			const [vertexResponse, fragmentResponse] = await Promise.all([
+                fetch('src/World/Shaders/SkyVertex.glsl'),   // Chemin depuis la racine du serveur
+                fetch('src/World/Shaders/SkyFragment.glsl')  // Chemin depuis la racine du serveur
+            ]);
+
+            if (!vertexResponse.ok || !fragmentResponse.ok) {
+                throw new Error(`HTTP error! status: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`);
+            }
+
+            this.vertexShaderCode = await vertexResponse.text();
+            this.fragmentShaderCode = await fragmentResponse.text();
+
+            console.log("Environment: Shaders chargés.");
+
+            // Maintenant que les shaders sont chargés, on peut créer la skybox
+            this.renderSkybox(); // Crée skyBox et starsMesh
+
+            // Créer le sol extérieur (peut être fait avant ou après)
+            this.outerGroundDisplayRadius = this.skyboxRadius + 10;
+            this.createOuterGround();
+
+            // Appliquer l'état initial du cycle jour/nuit
+            this.updateDayNightCycle(0);
+
+            this.isInitialized = true; // Marquer comme initialisé
+            console.log("Environment: Initialisation terminée.");
+
+        } catch (error) {
+            console.error("Environment: Erreur lors de l'initialisation asynchrone:", error);
+            // Gérer l'erreur (par exemple, afficher un message, utiliser un fallback)
+        }
     }
 
     setSunLight() {
-        // ... (Identique à avant) ...
+        // ... (code identique à avant) ...
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1);
         this.sunLight.castShadow = true;
-        this.sunLight.shadow.mapSize.set(4096, 4096); // Envisagez de réduire à 2048 pour perfs
+        this.sunLight.shadow.mapSize.set(2048, 2048); // Taille réduite pour perfs
         this.sunLight.shadow.normalBias = 0.05;
-        this.sunDistance = this.mapSize * 0.7;
+        this.sunDistance = this.mapSize * 0.7; // Défini ici ou dans renderSkybox
 
         const shadowCamSize = this.config.mapSize / 2;
         const shadowMargin = 250;
@@ -124,111 +120,88 @@ export default class Environment {
     }
 
     setAmbientLight() {
-        // ... (Identique à avant) ...
-         this.ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
-         this.scene.add(this.ambientLight);
+        // ... (code identique à avant) ...
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
+        this.scene.add(this.ambientLight);
     }
 
-    // --- renderSkybox MODIFIÉ ---
+    // --- renderSkybox utilise maintenant le code chargé ---
     renderSkybox() {
+        // Vérifier si les shaders sont chargés (sécurité)
+        if (!this.vertexShaderCode || !this.fragmentShaderCode) {
+            console.error("Tentative de rendu de Skybox avant le chargement des shaders.");
+            return;
+        }
+
         this.skyboxRadius = this.mapSize * 0.8;
         this.sunDistance = this.skyboxRadius * 0.9; // S'assurer que c'est défini
-        console.log(`Rayon Skybox: ${this.skyboxRadius}, Distance Soleil: ${this.sunDistance}`);
+        console.log(`Skybox: Rayon=${this.skyboxRadius}, DistSoleil=${this.sunDistance}`);
 
-        const skyGeometry = new THREE.SphereGeometry(this.skyboxRadius, 32, 15); // Moins de segments suffisent souvent
+        const skyGeometry = new THREE.SphereGeometry(this.skyboxRadius, 32, 15);
 
-        // --- Création du ShaderMaterial ---
         const skyMaterial = new THREE.ShaderMaterial({
-            vertexShader: skyVertexShader,     // Code GLSL du vertex shader
-            fragmentShader: skyFragmentShader, // Code GLSL du fragment shader
-            uniforms: this.skyUniforms,        // Lien vers nos uniforms JS
-            side: THREE.BackSide,              // Important: Rendre l'intérieur
-            depthWrite: false                  // Le ciel est toujours derrière
+            vertexShader: this.vertexShaderCode, // Utilise le code chargé
+            fragmentShader: this.fragmentShaderCode, // Utilise le code chargé
+            uniforms: this.skyUniforms,
+            side: THREE.BackSide,
+            depthWrite: false
         });
-        // --- Fin Création ---
 
         this.skyBox = new THREE.Mesh(skyGeometry, skyMaterial);
-        this.skyBox.renderOrder = -1; // Rendu en premier (le plus loin)
+        this.skyBox.renderOrder = -1;
         this.scene.add(this.skyBox);
 
-        // --- Supprimer toute la logique Canvas ---
-        // Plus besoin de starsCanvas, skyboxCanvas, skyboxContext, skyboxTexture
+        this.createStarsPoints(); // Crée les étoiles
 
-        // Optionnel : Remplacer les étoiles canvas par des THREE.Points
-        this.createStarsPoints(); // Appeler une nouvelle fonction
-
-        console.log(`Skybox Shader initialisée. Rayon: ${this.skyboxRadius}`);
+        console.log(`Skybox Shader créée.`);
     }
 
     // --- NOUVELLE Fonction pour les étoiles avec Points ---
-    createStarsPoints() {
-        const starCount = 10000; // Plus d'étoiles si besoin
+	createStarsPoints() {
+        // ... (code identique à avant) ...
+        const starCount = 10000;
         const positions = new Float32Array(starCount * 3);
-        const colors = new Float32Array(starCount * 3); // Optionnel: pour varier la couleur/luminosité
+        const colors = new Float32Array(starCount * 3);
         const baseColor = new THREE.Color(0xffffff);
 
         for (let i = 0; i < starCount; i++) {
-            // Position sur une sphère (plus grande que la skybox)
-            const radius = this.skyboxRadius + Math.random() * 500; // Etoiles plus lointaines
-            const theta = 2 * Math.PI * Math.random(); // Angle horizontal
-            const phi = Math.acos(2 * Math.random() - 1); // Angle vertical
-
+            const radius = this.skyboxRadius + Math.random() * 500;
+            const theta = 2 * Math.PI * Math.random();
+            const phi = Math.acos(2 * Math.random() - 1);
             const x = radius * Math.sin(phi) * Math.cos(theta);
             const y = radius * Math.sin(phi) * Math.sin(theta);
             const z = radius * Math.cos(phi);
-
-            positions[i * 3] = x;
-            positions[i * 3 + 1] = y;
-            positions[i * 3 + 2] = z;
-
-            // Couleur/Luminosité aléatoire
-            const intensity = Math.random() * 0.5 + 0.5; // 0.5 à 1.0
-            colors[i * 3] = baseColor.r * intensity;
-            colors[i * 3 + 1] = baseColor.g * intensity;
-            colors[i * 3 + 2] = baseColor.b * intensity;
+            positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
+            const intensity = Math.random() * 0.5 + 0.5;
+            colors[i * 3] = baseColor.r * intensity; colors[i * 3 + 1] = baseColor.g * intensity; colors[i * 3 + 2] = baseColor.b * intensity;
         }
-
         const starsGeometry = new THREE.BufferGeometry();
         starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        starsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3)); // Utiliser les couleurs
-
+        starsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         const starsMaterial = new THREE.PointsMaterial({
-            size: 3, // Taille des étoiles (ajuster)
-            sizeAttenuation: true, // Etoiles plus petites si plus loin
-            vertexColors: true, // Utiliser les couleurs définies par vertex
-            transparent: true,
-            opacity: 0.0, // Commencer transparent (sera mis à jour)
-            depthWrite: false // Ne pas masquer les objets derrière
+            size: 3, sizeAttenuation: true, vertexColors: true,
+            transparent: true, opacity: 0.0, depthWrite: false
         });
-
         this.starsMesh = new THREE.Points(starsGeometry, starsMaterial);
         this.scene.add(this.starsMesh);
     }
 
-
     // --- updateDayNightCycle MODIFIÉ ---
     updateDayNightCycle(deltaTime) {
-        if (!this.cycleEnabled || this.dayDurationMs <= 0) return;
+        if (!this.isInitialized || !this.cycleEnabled || this.dayDurationMs <= 0) return;
 
+        // --- Reste de la fonction identique à avant ---
         this.cycleTime += deltaTime;
         this.cycleTime %= this.dayDurationMs;
-
         const angle = (this.cycleTime / this.dayDurationMs) * Math.PI * 2;
-        const normalizedTime = this.cycleTime / this.dayDurationMs; // 0 à 1
-
-        // --- Position Soleil (Identique) ---
+        const normalizedTime = this.cycleTime / this.dayDurationMs;
         const sunX = Math.cos(angle) * this.sunDistance;
         const sunY = Math.sin(angle) * this.sunDistance;
         const sunZ = 100;
         this.sunLight.position.set(sunX, sunY, sunZ);
-
-        // --- Facteur Jour (Identique) ---
         const dayFactor = Math.max(0, Math.sin(angle));
-
-        // --- Mettre à jour les lumières (Identique) ---
         this.sunLight.intensity = THREE.MathUtils.lerp(this.sunIntensity.night, this.sunIntensity.day, dayFactor);
         this.ambientLight.intensity = THREE.MathUtils.lerp(this.ambientIntensity.night, this.ambientIntensity.day, dayFactor);
-
         let sunColorTarget = new THREE.Color();
         if (normalizedTime < 0.25) { sunColorTarget.lerpColors(this.sunColors.night, this.sunColors.dawn, normalizedTime * 4); }
         else if (normalizedTime < 0.5) { sunColorTarget.lerpColors(this.sunColors.dawn, this.sunColors.day, (normalizedTime - 0.25) * 4); }
@@ -237,30 +210,14 @@ export default class Environment {
         this.sunLight.color.copy(sunColorTarget);
         this.ambientLight.color.lerpColors(this.ambientColors.night, this.ambientColors.day, dayFactor);
 
-
-        // --- Mettre à jour les UNIFORMS du Shader Skybox ---
-        // Pas besoin d'appeler updateSkyboxAppearance !
+        // Mise à jour des uniforms
         this.skyUniforms.uSunDirection.value.copy(this.sunLight.position).normalize();
         this.skyUniforms.uDayFactor.value = dayFactor;
-        // --- Fin Mise à jour Uniforms ---
 
-
-        // --- Mettre à jour l'opacité des étoiles Points ---
+        // Mise à jour des étoiles
         if (this.starsMesh) {
-             // Fade out rapide quand dayFactor > 0, fade in lent quand < 0.1
-            const starsOpacity = THREE.MathUtils.smoothstep(dayFactor, 0.1, 0.0); // Inverse: 1 la nuit, 0 le jour
-            this.starsMesh.material.opacity = starsOpacity;
-        }
-
-
-        // --- Effet Santé (Optionnel, peut être appliqué ici aussi) ---
-        const healthFactor = 1.0; // Votre valeur
-        if (healthFactor < 1.0) { // Appliquer seulement si la santé n'est pas max
-             const baseSunColor = this.sunLight.color.clone();
-             const healthTargetColor = new THREE.Color(0x5b0000);
-             this.sunLight.color.lerpColors(baseSunColor, healthTargetColor, 1.0 - healthFactor);
-             // Vous pourriez aussi teinter les uniforms du ciel ici si besoin
-             // Exemple : this.skyUniforms.uSunInfluenceColor.value.lerpColors(...)
+             const starsOpacity = THREE.MathUtils.smoothstep(dayFactor, 0.1, 0.0);
+             this.starsMesh.material.opacity = starsOpacity;
         }
     }
 
@@ -420,8 +377,11 @@ export default class Environment {
         console.log("Environnement nettoyé.");
     }
 
-    update(deltaTime) { // healthFactor n'est plus nécessaire ici si géré dans updateDayNightCycle
-        this.updateDayNightCycle(deltaTime);
+    update(deltaTime) {
+        // Appeler updateDayNightCycle seulement si initialisé
+        if (this.isInitialized) {
+            this.updateDayNightCycle(deltaTime);
+        }
         // La logique de transition de santé (si séparée) irait ici
     }
 }
