@@ -17,7 +17,7 @@ export default class CityManager {
         // et de conversion en complément si désiré)
         this.config = {
             // Map & Layout
-            mapSize: 600,
+            mapSize: 700,
             roadWidth: 10,
             minPlotSize: 13,
             maxPlotSize: 40,
@@ -25,7 +25,7 @@ export default class CityManager {
 
             // ... (District Formation comme avant) ...
             minDistrictSize: 5,
-            maxDistrictSize: 12,
+            maxDistrictSize: 10,
 
             // ... (Plot Type Adjustment Probabilities comme avant) ...
             businessConversionProbability: 0,
@@ -49,13 +49,13 @@ export default class CityManager {
 				// Paramètres pour les quartiers industriels
 				industrial: {
 					// Seuil à partir duquel la probabilité augmente (distance normalisée)
-					threshold: 0.85, // Était 0.85. Commencer l'augmentation un peu plus tôt.
+					threshold: 0.9, // Était 0.85. Commencer l'augmentation un peu plus tôt.
 					// Facteur contrôlant la rapidité de la montée après le seuil
-					factor: 9,     // Était 5. Augmenter pour une montée plus rapide.
+					factor: 2,     // Était 5. Augmenter pour une montée plus rapide.
 					// Facteur multiplicateur pour la partie croissante (probabilité max en périphérie)
-					multiplier: 0.9, // Était 0.2. Augmenter SIGNIFICATIVEMENT pour plus d'industrie loin du centre.
+					multiplier: 0.1, // Était 0.2. Augmenter SIGNIFICATIVEMENT pour plus d'industrie loin du centre.
 					// Probabilité de base en dessous du seuil (près du centre)
-					base: 0.005   // Était 0.01. Réduire pour avoir très peu d'industrie au centre.
+					base: 0.001   // Était 0.01. Réduire pour avoir très peu d'industrie au centre.
 				},
 				// Paramètres pour les quartiers résidentiels (Ajustés pour remplir l'espace restant)
 				residential: {
@@ -80,7 +80,7 @@ export default class CityManager {
              buildingModelFiles: [ { file: "Building1.fbx", scale: 1.0 }, /* ... autres immeubles ... */ { file: "Building10.glb", scale: 1 }, ],
              buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
              industrialModelDir: "Public/Assets/Models/Industrials/",
-             industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 1 }, { file: "Factory2_glb.glb" }, { file: "Factory3_glb.glb" } ],
+             industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 4 }/* , { file: "Factory2_glb.glb", scale: 4 }, { file: "Factory3_glb.glb", scale: 4 } */ ],
              industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
              parkModelDir: "Public/Assets/Models/Parks/",
              parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
