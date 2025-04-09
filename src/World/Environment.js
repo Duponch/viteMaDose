@@ -16,116 +16,119 @@ export default class Environment {
         // --- Propriétés Cycle Jour/Nuit ---
         this.cycleEnabled = this.config.dayNightCycleEnabled;
         this.dayDurationMs = this.config.dayDurationMinutes * 60 * 1000;
-        this.cycleTime = (this.dayDurationMs * (this.config.startTimeOfDay || 0.25)) % this.dayDurationMs;
+        const initialNormalizedTime = this.config.startTimeOfDay !== undefined ? this.config.startTimeOfDay : 0.25; // 0.25 = Lever
+        this.cycleTime = (this.dayDurationMs * initialNormalizedTime) % this.dayDurationMs;
         this.sunDistance = 0;
-        // Lumières (inchangé)
+
+        // --- Lumières Soleil & Ambiante ---
+        // (Vous pouvez garder les couleurs d'aube/crépuscule pour le soleil si vous voulez,
+        // ou les simplifier aussi en interpolant juste entre blanc et bleu nuit)
         this.sunColors = {
-            dawn: new THREE.Color(0xffa500), day: new THREE.Color(0xffffff),
-            dusk: new THREE.Color(0xff4500), night: new THREE.Color(0x000033)
+            dawn: new THREE.Color(0xFFCA87), // Utilisé pour la transition de couleur du soleil
+            day: new THREE.Color(0xFFFFFF),  // Soleil blanc à midi
+            dusk: new THREE.Color(0xFFB17A), // Utilisé pour la transition de couleur du soleil
+            night: new THREE.Color(0x435E7A) // Couleur du soleil la nuit (très faible intensité)
         };
-        this.sunIntensity = { day: 3.5, night: 0 };
-        this.ambientColors = { day: new THREE.Color(0xb0c4de), night: new THREE.Color(0x111133) };
-        this.ambientIntensity = { day: 0.6, night: 0.1 };
-
-        // --- NOUVEAU : Couleurs de BASE pour le gradient du ciel ---
-        this.skyGradientBaseColors = {
-             // [Zénith, Milieu, Horizon] - Important : Objets THREE.Color
-             night: [new THREE.Color('#000000'), new THREE.Color('#00001a'), new THREE.Color('#000033')],
-             dawn:  [new THREE.Color('#111133'), new THREE.Color('#ff8c00'), new THREE.Color('#ff4500')],
-             day:   [new THREE.Color('#87CEEB'), new THREE.Color('#B0E0E6'), new THREE.Color('#ADD8E6')],
-             dusk:  [new THREE.Color('#111133'), new THREE.Color('#ff4500'), new THREE.Color('#8B0000')]
+        this.sunIntensity = { day: 3.0, night: 0.01 }; // Légère intensité nuit pour couleur
+        this.ambientColors = {
+            day: new THREE.Color(0xADCDE7),
+            night: new THREE.Color(0x2B3A4F)
         };
-        // --- FIN NOUVEAU ---
+        this.ambientIntensity = { day: 0.7, night: 0.1 };
 
-        // --- Uniforms MODIFIÉS pour le Shader Skybox ---
+        // --- NOUVEAU : Couleurs simples Jour/Nuit pour le Ciel ---
+        // Zénith (haut du ciel)
+        this.dayZenithColor = new THREE.Color('#87CEEB');   // Bleu ciel
+        this.nightZenithColor = new THREE.Color('#00001a'); // Bleu très sombre / noir
+
+        // Milieu (entre zénith et horizon)
+        this.dayMiddleColor = new THREE.Color('#ADD8E6');   // Bleu clair
+        this.nightMiddleColor = new THREE.Color('#00002a'); // Un peu moins sombre
+
+        // Horizon
+        this.dayHorizonColor = new THREE.Color('#B0E0E6');  // Bleu très clair / poudré
+        this.nightHorizonColor = new THREE.Color('#0b1028'); // Couleur nuit horizon
+        // ------------------------------------------------------
+
+        // --- Uniforms pour le Shader Skybox ---
         this.skyUniforms = {
             uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
-            uDayFactor: { value: 0.0 }, // Gardé pour l'effet solaire
-            // Supprimé : uZenithColorDay, uHorizonColorDay, uZenithColorNight, uHorizonColorNight
-            // NOUVEAU : Couleurs courantes interpolées
+            uDayFactor: { value: 0.0 },
             uCurrentZenithColor: { value: new THREE.Color() },
             uCurrentMiddleColor: { value: new THREE.Color() },
             uCurrentHorizonColor: { value: new THREE.Color() },
-            // Gardé
             uSunInfluenceColor: { value: new THREE.Color(0xffccaa) }
         };
-        // --- Fin Uniforms MODIFIÉS ---
+        // -----------------------------------
 
-        // Propriétés chargement shader (inchangé)
+        // Le reste du constructeur reste identique...
         this.vertexShaderCode = null;
         this.fragmentShaderCode = null;
         this.isInitialized = false;
-
-        // Variables objets (inchangé)
         this.skyBox = null; this.starsMesh = null; this.outerGroundMesh = null; this.moonMesh = null;
         this.skyboxRadius = 0;
-
-        // Configuration synchrone (inchangé)
         this.setSunLight();
         this.setAmbientLight();
     }
 
-    // --- initialize() MODIFIÉ pour les nouveaux chemins ---
+    // initialize() reste identique...
     async initialize() {
         console.log("Environment: Initialisation asynchrone...");
         try {
             const [vertexResponse, fragmentResponse] = await Promise.all([
-                fetch('src/World/Shaders/skyVertex.glsl'),   // Vérifiez ce chemin
-                fetch('src/World/Shaders/skyFragment.glsl') // Vérifiez ce chemin
+                fetch('src/World/Shaders/skyVertex.glsl'),
+                fetch('src/World/Shaders/skyFragment.glsl')
             ]);
-
-            if (!vertexResponse.ok || !fragmentResponse.ok) { /* ... erreur ... */ throw new Error(`HTTP error! status: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`);}
-
+            if (!vertexResponse.ok || !fragmentResponse.ok) { throw new Error(`Erreur chargement shaders: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`); }
             this.vertexShaderCode = await vertexResponse.text();
             this.fragmentShaderCode = await fragmentResponse.text();
             console.log("Environment: Shaders chargés.");
-
-            this.renderSkybox(); // Crée skyBox (avec nouveau shader) et starsMesh
+            this.renderSkybox();
             this.outerGroundDisplayRadius = this.skyboxRadius + 10;
             this.createOuterGround();
-            this.updateDayNightCycle(0); // Applique état initial (maintenant avec interpolation couleur)
-
+            this.updateDayNightCycle(0); // Applique l'état initial
             this.isInitialized = true;
             console.log("Environment: Initialisation terminée.");
         } catch (error) { console.error("Environment: Erreur init:", error); }
     }
 
     setSunLight() {
-        // ... (code identique à avant) ...
         this.sunLight = new THREE.DirectionalLight(0xffffff, 1);
         this.sunLight.castShadow = true;
-        this.sunLight.shadow.mapSize.set(2048, 2048); // Taille réduite pour perfs
-        this.sunLight.shadow.normalBias = 0.05;
-        this.sunDistance = this.mapSize * 0.7; // Défini ici ou dans renderSkybox
-
-        const shadowCamSize = this.config.mapSize / 2;
-        const shadowMargin = 250;
-        this.sunLight.shadow.camera.left = -shadowCamSize - shadowMargin;
-        this.sunLight.shadow.camera.right = shadowCamSize + shadowMargin;
-        this.sunLight.shadow.camera.top = shadowCamSize + shadowMargin;
-        this.sunLight.shadow.camera.bottom = -shadowCamSize - shadowMargin;
+        this.sunLight.shadow.mapSize.set(2048, 2048);
         this.sunLight.shadow.camera.near = 10;
-        this.sunLight.shadow.camera.far = this.sunDistance * 2.5;
+        this.sunLight.shadow.camera.far = this.config.mapSize * 2;
+        this.sunLight.shadow.bias = -0.002;
+        this.sunLight.shadow.normalBias = 0.02;
+        const mapSize = this.config.mapSize;
+        const shadowCamSize = mapSize * 0.6;
+        this.sunLight.shadow.camera.left = -shadowCamSize;
+        this.sunLight.shadow.camera.right = shadowCamSize;
+        this.sunLight.shadow.camera.top = shadowCamSize;
+        this.sunLight.shadow.camera.bottom = -shadowCamSize;
+        this.sunLight.shadow.camera.updateProjectionMatrix();
+        this.sunDistance = this.config.mapSize * 0.8; // Ajuster si besoin
         this.scene.add(this.sunLight);
     }
 
+    // setAmbientLight() reste identique...
     setAmbientLight() {
-        // ... (code identique à avant) ...
         this.ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
         this.scene.add(this.ambientLight);
     }
 
     renderSkybox() {
-        // Utilise this.vertexShaderCode et this.fragmentShaderCode chargés
-        if (!this.vertexShaderCode || !this.fragmentShaderCode) { /* ... erreur ... */ console.error("renderSkybox: Shaders non chargés."); return; }
-        this.skyboxRadius = this.mapSize * 0.8;
+        if (!this.vertexShaderCode || !this.fragmentShaderCode) { console.error("renderSkybox: Shaders non chargés."); return; }
+        this.skyboxRadius = this.config.mapSize * 1.5;
         this.sunDistance = this.skyboxRadius * 0.9;
-        console.log(`Skybox: Rayon=${this.skyboxRadius}, DistSoleil=${this.sunDistance}`);
+        console.log(`Skybox: Rayon=${this.skyboxRadius.toFixed(0)}, DistSoleil=${this.sunDistance.toFixed(0)}`);
         const skyGeometry = new THREE.SphereGeometry(this.skyboxRadius, 32, 15);
         const skyMaterial = new THREE.ShaderMaterial({
-            vertexShader: this.vertexShaderCode, fragmentShader: this.fragmentShaderCode,
-            uniforms: this.skyUniforms, // Utilise les uniforms mis à jour
-            side: THREE.BackSide, depthWrite: false
+            vertexShader: this.vertexShaderCode,
+            fragmentShader: this.fragmentShaderCode,
+            uniforms: this.skyUniforms,
+            side: THREE.BackSide,
+            depthWrite: false
         });
         this.skyBox = new THREE.Mesh(skyGeometry, skyMaterial);
         this.skyBox.renderOrder = -1;
@@ -147,84 +150,55 @@ export default class Environment {
 
         this.cycleTime += deltaTime;
         this.cycleTime %= this.dayDurationMs;
-        const angle = (this.cycleTime / this.dayDurationMs) * Math.PI * 2;
-        const normalizedTime = this.cycleTime / this.dayDurationMs; // 0 à 1
+        const normalizedTime = this.cycleTime / this.dayDurationMs;
 
-        // Position Soleil (inchangé)
-        const sunX = Math.cos(angle) * this.sunDistance;
-        const sunY = Math.sin(angle) * this.sunDistance;
-        const sunZ = 100;
+        const sunAngle = normalizedTime * Math.PI * 2 - Math.PI / 2;
+        const sunX = Math.cos(sunAngle) * this.sunDistance;
+        const sunY = Math.sin(sunAngle) * this.sunDistance;
+        const sunZ = 0;
         this.sunLight.position.set(sunX, sunY, sunZ);
 
-        const dayFactor = Math.max(0, Math.sin(angle));
+        // --- Calcul du facteur Jour/Nuit ---
+        // 0.0 la nuit, 1.0 à midi, avec transition douce via smoothstep
+        // Basé sur la hauteur normalisée du soleil (-1 la nuit, 0 horizon, +1 midi)
+        const sunHeightFactor = sunY / this.sunDistance;
+        const dayNightFactor = THREE.MathUtils.smoothstep(sunHeightFactor, -0.15, 0.15); // Transition douce autour de l'horizon
 
-        // Lumières (inchangé)
-        this.sunLight.intensity = THREE.MathUtils.lerp(this.sunIntensity.night, this.sunIntensity.day, dayFactor);
-        this.ambientLight.intensity = THREE.MathUtils.lerp(this.ambientIntensity.night, this.ambientIntensity.day, dayFactor);
+        // --- Mise à jour Lumière Soleil ---
+        this.sunLight.intensity = THREE.MathUtils.lerp(this.sunIntensity.night, this.sunIntensity.day, dayNightFactor);
+        // Interpolation couleur soleil (peut rester telle quelle ou être simplifiée)
         let sunColorTarget = new THREE.Color();
-        // ... (interpolation couleur soleil identique à avant) ...
-        if (normalizedTime < 0.25) { sunColorTarget.lerpColors(this.sunColors.night, this.sunColors.dawn, normalizedTime * 4); }
-        else if (normalizedTime < 0.5) { sunColorTarget.lerpColors(this.sunColors.dawn, this.sunColors.day, (normalizedTime - 0.25) * 4); }
-        else if (normalizedTime < 0.75) { sunColorTarget.lerpColors(this.sunColors.day, this.sunColors.dusk, (normalizedTime - 0.5) * 4); }
-        else { sunColorTarget.lerpColors(this.sunColors.dusk, this.sunColors.night, (normalizedTime - 0.75) * 4); }
+        const phaseTime = normalizedTime * 4;
+        if (normalizedTime < 0.25) { sunColorTarget.lerpColors(this.sunColors.night, this.sunColors.dawn, phaseTime); }
+        else if (normalizedTime < 0.5) { sunColorTarget.lerpColors(this.sunColors.dawn, this.sunColors.day, phaseTime - 1); }
+        else if (normalizedTime < 0.75) { sunColorTarget.lerpColors(this.sunColors.day, this.sunColors.dusk, phaseTime - 2); }
+        else { sunColorTarget.lerpColors(this.sunColors.dusk, this.sunColors.night, phaseTime - 3); }
         this.sunLight.color.copy(sunColorTarget);
-        this.ambientLight.color.lerpColors(this.ambientColors.night, this.ambientColors.day, dayFactor);
 
 
-        // --- NOUVEAU : Interpolation des couleurs du dégradé de ciel ---
-        const nightSet   = this.skyGradientBaseColors.night;
-        const dawnSet    = this.skyGradientBaseColors.dawn;
-        const daySet     = this.skyGradientBaseColors.day;
-        const duskSet    = this.skyGradientBaseColors.dusk;
-
-        let colors1, colors2, t; // Jeux de couleurs source/cible et facteur d'interpolation
-
-        // Définir les points de transition (0 = minuit, 0.25 = lever, 0.5 = midi, 0.75 = coucher)
-        // Ajustez ces valeurs pour changer la durée des transitions
-        const tNightEnd = 0.22; // Fin nuit noire -> début transition aube
-        const tDawnEnd  = 0.28; // Fin transition aube -> début jour
-        const tDayEnd   = 0.72; // Fin jour -> début transition crépuscule
-        const tDuskEnd  = 0.78; // Fin transition crépuscule -> début retour nuit
-
-        if (normalizedTime < tNightEnd) { // Nuit
-            colors1 = nightSet; colors2 = nightSet; t = 0;
-        } else if (normalizedTime < tDawnEnd) { // Transition Nuit -> Aube
-            colors1 = nightSet; colors2 = dawnSet;
-            t = (normalizedTime - tNightEnd) / (tDawnEnd - tNightEnd);
-        } else if (normalizedTime < tDayEnd) { // Transition Aube -> Jour (ou juste Jour si transitions instantanées voulues)
-             colors1 = dawnSet; colors2 = daySet; // Transition douce
-             t = (normalizedTime - tDawnEnd) / (tDayEnd - tDawnEnd);
-            // Ou : colors1 = daySet; colors2 = daySet; t = 0; // Pour un jour stable
-        } else if (normalizedTime < tDuskEnd) { // Transition Jour -> Crépuscule
-            colors1 = daySet; colors2 = duskSet;
-            t = (normalizedTime - tDayEnd) / (tDuskEnd - tDayEnd);
-        } else { // Transition Crépuscule -> Nuit
-            colors1 = duskSet; colors2 = nightSet;
-            t = (normalizedTime - tDuskEnd) / (1.0 - tDuskEnd);
-        }
-
-        // Appliquer une fonction d'easing pour une transition plus douce (optionnel)
-        t = THREE.MathUtils.smoothstep(t, 0.0, 1.0);
-
-        // Interpoler chaque arrêt de couleur et mettre à jour les uniforms
-        this.skyUniforms.uCurrentZenithColor.value.lerpColors(colors1[0], colors2[0], t);
-        this.skyUniforms.uCurrentMiddleColor.value.lerpColors(colors1[1], colors2[1], t);
-        this.skyUniforms.uCurrentHorizonColor.value.lerpColors(colors1[2], colors2[2], t);
-        // --- FIN Interpolation Ciel ---
+        // --- Mise à jour Lumière Ambiante ---
+        this.ambientLight.intensity = THREE.MathUtils.lerp(this.ambientIntensity.night, this.ambientIntensity.day, dayNightFactor);
+        this.ambientLight.color.lerpColors(this.ambientColors.night, this.ambientColors.day, dayNightFactor);
 
 
-        // Mettre à jour les autres uniforms (inchangé)
+        // --- Interpolation SIMPLE et DIRECTE des couleurs du ciel ---
+        // Utilise le dayNightFactor (0 la nuit, 1 le jour) pour interpoler
+        this.skyUniforms.uCurrentZenithColor.value.lerpColors(this.nightZenithColor, this.dayZenithColor, dayNightFactor);
+        this.skyUniforms.uCurrentMiddleColor.value.lerpColors(this.nightMiddleColor, this.dayMiddleColor, dayNightFactor);
+        this.skyUniforms.uCurrentHorizonColor.value.lerpColors(this.nightHorizonColor, this.dayHorizonColor, dayNightFactor);
+        // -------------------------------------------------------------
+
+
+        // Mettre à jour les uniforms restants
         this.skyUniforms.uSunDirection.value.copy(this.sunLight.position).normalize();
-        this.skyUniforms.uDayFactor.value = dayFactor; // Le shader l'utilise toujours pour l'effet solaire
+        this.skyUniforms.uDayFactor.value = dayNightFactor; // Utiliser dayNightFactor pour le halo solaire aussi
 
-        // Étoiles (inchangé)
+        // Mise à jour Étoiles
         if (this.starsMesh) {
-             const starsOpacity = THREE.MathUtils.smoothstep(dayFactor, 0.1, 0.0);
-             this.starsMesh.material.opacity = starsOpacity;
+            const starsOpacity = 1.0 - dayNightFactor; // Inverse du facteur jour/nuit
+            this.starsMesh.material.opacity = THREE.MathUtils.smoothstep(starsOpacity, 0.0, 0.8); // Apparition/disparition douce
+            this.starsMesh.visible = this.starsMesh.material.opacity > 0.01;
         }
-
-         // Effet Santé (inchangé / optionnel)
-         // ...
     }
 
     // --- SUPPRIMER la fonction updateSkyboxAppearance ---
