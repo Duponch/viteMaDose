@@ -148,7 +148,14 @@ export default class CityManager {
         this.materials = {
             groundMaterial: new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.1, roughness: 0.8 }), // <-- MODIFIÉ
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
-            centerlineMaterial: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+			centerlineMaterial: new THREE.MeshStandardMaterial({
+				color: 0xffffff,    // Garder la couleur blanche de base
+				metalness: 0.1,     // Peu métallique (ajustable)
+				roughness: 0.8,     // Plutôt rugueux (ajustable)
+				// Pas besoin d'emissive, sauf si vous voulez qu'elles brillent légèrement la nuit
+				// emissive: 0x111111,
+				// emissiveIntensity: 0.5
+			}),
             parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
             buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x333333 }),
             debugResidentialMat: new THREE.MeshBasicMaterial({ color: 0x0077ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),

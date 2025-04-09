@@ -70,13 +70,15 @@ export default class RoadNetworkGenerator {
 		if (this.centerlineGeometries.length > 0) {
             // Maintenant, mergeGeometries sera défini ici car il est importé en haut du fichier
             const mergedCenterlineGeometry = mergeGeometries(this.centerlineGeometries, false);
-             if (mergedCenterlineGeometry) {
-                const centerlineMesh = new THREE.Mesh(mergedCenterlineGeometry, this.materials.centerlineMaterial);
-                centerlineMesh.castShadow = false;
-                centerlineMesh.receiveShadow = false;
-                centerlineMesh.name = "Merged_Road_Centerlines";
-                this.roadGroup.add(centerlineMesh);
-            } else {
+            if (mergedCenterlineGeometry) {
+				const centerlineMesh = new THREE.Mesh(mergedCenterlineGeometry, this.materials.centerlineMaterial);
+				centerlineMesh.castShadow = false; // Les lignes n'ont pas besoin de projeter des ombres
+				// centerlineMesh.receiveShadow = false; // <-- LIGNE ORIGINALE À CHANGER
+				centerlineMesh.receiveShadow = true;  // <-- MODIFIÉ : Activer la réception d'ombres
+			
+				centerlineMesh.name = "Merged_Road_Centerlines";
+				this.roadGroup.add(centerlineMesh);
+			} else {
                 console.warn("La fusion des géométries de lignes centrales a échoué.");
             }
             // Nettoyer
