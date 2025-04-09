@@ -94,3 +94,20 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.time-display {
+	position: absolute; /* Nécessaire pour top/left/right/bottom */
+	top: 15px;          /* Espace depuis le haut */
+	right: 15px;         /* Espace depuis la gauche */
+	color: white;       /* Couleur du texte */
+	background-color: rgba(0, 0, 0, 0.5); /* Fond semi-transparent */
+	padding: 8px 12px;  /* Espacement intérieur */
+	border-radius: 5px; /* Coins arrondis */
+	font-family: 'Consolas', 'Courier New', monospace; /* Police à chasse fixe */
+	font-size: 1.6em;   /* Taille de police */
+	z-index: 100;       /* Assure qu'il est au-dessus du canvas */
+	pointer-events: none; /* Permet aux clics de passer à travers */
+	text-shadow: 1px 1px 2px black; /* Ombre portée pour lisibilité */
+  }
+  
+  

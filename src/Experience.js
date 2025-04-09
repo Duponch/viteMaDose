@@ -1,3 +1,4 @@
+// src/Experience.js
 import * as THREE from 'three';
 import Stats from 'stats.js';
 import Sizes from './Utils/Sizes.js';
@@ -6,12 +7,13 @@ import Camera from './Core/Camera.js';
 import Renderer from './Core/Renderer.js';
 import World from './Core/World.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import TimeUI from './UI/TimeUI.js'; // <-- Importer TimeUI
 
 let instance = null;
 
 export default class Experience {
     constructor(canvas) {
-        // singleton...
+        // ... (singleton)
         if (instance) {
             return instance;
         }
@@ -24,24 +26,32 @@ export default class Experience {
         this.scene = new THREE.Scene();
         this.camera = new Camera(this);
         this.renderer = new Renderer(this);
-        this.world = new World(this);
+        this.world = new World(this); // World est créé ici
+
+        // --- Instancier TimeUI APRÈS la création de World ---
+        // World a besoin d'être créé pour que l'environnement soit accessible
+        // Note: L'initialisation de l'environnement est asynchrone,
+        // TimeUI gère le cas où l'environnement n'est pas encore prêt.
+        this.timeUI = new TimeUI(this); // <-- Créer l'instance TimeUI
 
         this.controls = new OrbitControls(this.camera.instance, this.canvas);
         this.controls.enableDamping = true;
 
         // --- Initialisation de Stats.js ---
         this.stats = new Stats();
-        // Vous pouvez configurer le mode (0: FPS, 1: ms, etc.)
         this.stats.showPanel(0);
         document.body.appendChild(this.stats.dom);
-        // --- Fin initialisation Stats.js ---
 
-        // --- Utiliser addEventListener au lieu de on ---
-        this.resizeHandler = () => this.resize(); // Pour removeEventListener plus tard
+        // --- EventListeners ---
+        this.resizeHandler = () => this.resize();
         this.sizes.addEventListener('resize', this.resizeHandler);
 
-        this.updateHandler = () => this.update(); // Pour removeEventListener plus tard
+        this.updateHandler = () => this.update();
         this.time.addEventListener('tick', this.updateHandler);
+
+        // IMPORTANT : Attendre potentiellement que le monde soit prêt
+        // avant de lancer certaines logiques si nécessaire, mais pour l'UI,
+        // elle peut se mettre à jour dès le début (elle affichera --:-- tant que l'env n'est pas prêt)
     }
 
     resize() {
@@ -50,34 +60,43 @@ export default class Experience {
     }
 
     update() {
-        // Commencez la mesure
         this.stats.begin();
 
         this.controls.update();
         this.camera.update();
-        this.world.update();
+        this.world.update(); // Met à jour l'environnement et son cycleTime
         this.renderer.update();
 
-        // Fin de la mesure
+        // --- Mettre à jour l'UI de l'heure ---
+        if (this.timeUI) {
+            this.timeUI.update(); // <-- Appeler la mise à jour de TimeUI
+        }
+
         this.stats.end();
     }
 
     destroy() {
-        // --- Nettoyage des EventListeners ---
+        // --- Nettoyage EventListeners ---
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
 
-        // Traverse la scène et effectuez le nettoyage nécessaire...
-        // (reste identique)
+        // --- Détruire l'UI ---
+        if (this.timeUI) {
+            this.timeUI.destroy(); // <-- Appeler la destruction de TimeUI
+            this.timeUI = null;
+        }
 
-        this.controls.dispose(); // Dispose OrbitControls
+        // --- Détruire le monde ---
+        this.world.destroy(); // S'assurer que le monde nettoie aussi (y compris l'environnement)
+
+        // ... (reste du nettoyage : controls, renderer, stats)
+        this.controls.dispose();
         this.renderer.instance.dispose();
-
-        // Supprimez l'élément Stats du DOM
-        document.body.removeChild(this.stats.dom);
+        if (this.stats.dom.parentNode) {
+             document.body.removeChild(this.stats.dom);
+        }
 
         instance = null;
-        // Potentiellement supprimer d'autres listeners globaux si ajoutés
-        // window.removeEventListener(...)
+        console.log("Experience détruite.");
     }
 }
