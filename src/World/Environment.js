@@ -3,6 +3,12 @@ import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
+// --- Objets temporaires pour l'update (performance) ---
+const _tempMatrix = new THREE.Matrix4();
+const _tempPosition = new THREE.Vector3();
+const _tempQuaternion = new THREE.Quaternion();
+const _tempScale = new THREE.Vector3();
+
 export default class Environment {
     constructor(experience, world) {
         this.experience = experience;
@@ -11,31 +17,26 @@ export default class Environment {
         this.debug = this.experience.debug;
         this.config = this.world.cityManager.config;
 
+        // Config spécifique aux nuages instanciés (peut être mise dans CityManager.config si besoin)
+        this.numberOfCloudBaseShapes = 5; // Combien de formes de base différentes
+        this.totalNumberOfClouds = 50;   // Combien de nuages au total à afficher
+        this.cloudAnimationSpeed = 0.00005; // Vitesse de base de l'animation
+
         this.mapSize = this.config.mapSize + 550;
         this.outerGroundDisplayRadius = 0;
 
-        // --- Propriétés Cycle Jour/Nuit ---
+        // --- Propriétés Cycle Jour/Nuit --- (INCHANGÉ)
         this.cycleEnabled = this.config.dayNightCycleEnabled;
         this.dayDurationMs = this.config.dayDurationMinutes * 60 * 1000;
         const initialNormalizedTime = this.config.startTimeOfDay !== undefined ? this.config.startTimeOfDay : 0.25;
         this.cycleTime = (this.dayDurationMs * initialNormalizedTime) % this.dayDurationMs;
-        this.sunDistance = 0; // Sera défini dans renderSkybox
+        this.sunDistance = 0;
 
-        // --- Lumières Soleil & Ambiante ---
-        this.sunColors = { /* ... (inchangé) ... */
-            dawn: new THREE.Color(0xFFCA87),
-            day: new THREE.Color(0xFFFFFF),
-            dusk: new THREE.Color(0xFFB17A),
-            night: new THREE.Color(0x435E7A)
-        };
+        // --- Lumières Soleil & Ambiante & Couleurs Ciel --- (INCHANGÉ)
+        this.sunColors = { dawn: new THREE.Color(0xFFCA87), day: new THREE.Color(0xFFFFFF), dusk: new THREE.Color(0xFFB17A), night: new THREE.Color(0x435E7A) };
         this.sunIntensity = { day: 3.0, night: 0.01 };
-        this.ambientColors = { /* ... (inchangé) ... */
-            day: new THREE.Color(0xADCDE7),
-            night: new THREE.Color(0x2B3A4F)
-        };
+        this.ambientColors = { day: new THREE.Color(0xADCDE7), night: new THREE.Color(0x2B3A4F) };
         this.ambientIntensity = { day: 0.7, night: 0.1 };
-
-        // --- Couleurs simples Jour/Nuit pour le Ciel ---
         this.dayZenithColor = new THREE.Color('#87CEEB');
         this.nightZenithColor = new THREE.Color('#00001a');
         this.dayMiddleColor = new THREE.Color('#ADD8E6');
@@ -43,8 +44,8 @@ export default class Environment {
         this.dayHorizonColor = new THREE.Color('#B0E0E6');
         this.nightHorizonColor = new THREE.Color('#0b1028');
 
-        // --- Uniforms pour le Shader Skybox ---
-        this.skyUniforms = { /* ... (inchangé) ... */
+        // --- Uniforms pour le Shader Skybox --- (INCHANGÉ)
+        this.skyUniforms = {
             uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
             uDayFactor: { value: 0.0 },
             uCurrentZenithColor: { value: new THREE.Color() },
@@ -53,35 +54,36 @@ export default class Environment {
             uSunInfluenceColor: { value: new THREE.Color(0xffccaa) }
          };
 
-        // --- NOUVEAU : Propriétés de la Lune ---
-        this.moonLight = null;
-        this.moonMesh = null;
-        this.moonDistance = 0; // Sera défini dans renderSkybox
-        this.moonColor = new THREE.Color('#E8F0F5'); // Couleur blanc froid/légèrement bleu
-        this.moonIntensity = { max: 0.2, min: 0.0 }; // Intensité max la nuit
-        this.moonSize = 20; // Rayon du mesh de la lune
-        // --------------------------------------
+        // --- Propriétés de la Lune --- (INCHANGÉ)
+        this.moonLight = null; this.moonMesh = null; this.moonDistance = 0;
+        this.moonColor = new THREE.Color('#E8F0F5'); this.moonIntensity = { max: 0.2, min: 0.0 };
+        this.moonSize = 20;
 
         this.vertexShaderCode = null;
         this.fragmentShaderCode = null;
         this.isInitialized = false;
-        this.skyBox = null; this.starsMesh = null; this.outerGroundMesh = null; // moonMesh ajouté ci-dessus
+        this.skyBox = null; this.starsMesh = null; this.outerGroundMesh = null;
         this.skyboxRadius = 0;
 
-		this.cloudGroup = new THREE.Group();
-        this.cloudGroup.name = "Clouds";
-        this.cloudMaterial = null; // Sera défini dans setCloudMaterial
+        // --- NOUVEAU: Pour les nuages instanciés ---
+        this.cloudGroup = new THREE.Group(); // Contiendra les InstancedMesh
+        this.cloudGroup.name = "InstancedCloudsGroup";
+        this.cloudMaterial = null; // Défini dans setCloudMaterial
+        this.cloudBaseGeometries = []; // Stocke les K géométries de base
+        this.cloudInstancedMeshes = []; // Stocke les K InstancedMesh
+        // -----------------------------------------
 
         // --- Appels d'initialisation ---
         this.setSunLight();
         this.setAmbientLight();
         this.setMoonLight();
-		this.setCloudMaterial();
+        this.setCloudMaterial(); // Crée le matériau partagé
     }
 
     async initialize() {
         console.log("Environment: Initialisation asynchrone...");
         try {
+            // --- Chargement Shaders --- (INCHANGÉ)
             const [vertexResponse, fragmentResponse] = await Promise.all([
                 fetch('src/World/Shaders/skyVertex.glsl'),
                 fetch('src/World/Shaders/skyFragment.glsl')
@@ -91,14 +93,19 @@ export default class Environment {
             this.fragmentShaderCode = await fragmentResponse.text();
             console.log("Environment: Shaders chargés.");
 
-            this.renderSkybox(); // Initialise skyboxRadius, sunDistance, moonDistance
+            // --- Création Éléments Scène ---
+            this.renderSkybox(); // Définit les rayons/distances
             this.outerGroundDisplayRadius = this.skyboxRadius + 10;
             this.createOuterGround();
             this.createStarsPoints();
             this.createMoonMesh();
-			this.createClouds();
 
-            this.updateDayNightCycle(0); // Applique l'état initial (soleil, lune, ciel...)
+            // --- NOUVEAU: Création des nuages instanciés ---
+            this.createInstancedClouds(); // Appel de la nouvelle fonction
+            this.scene.add(this.cloudGroup); // Ajoute le groupe contenant les InstancedMesh
+            // ----------------------------------------------
+
+            this.updateDayNightCycle(0); // Applique l'état initial
             this.isInitialized = true;
             console.log("Environment: Initialisation terminée.");
         } catch (error) { console.error("Environment: Erreur init:", error); }
@@ -111,7 +118,7 @@ export default class Environment {
             metalness: 0.1,
             flatShading: true,     // Style Low Poly
             transparent: true,     // <-- AJOUTER : Activer la transparence
-            opacity: 0.6          // <-- AJOUTER : Niveau d'opacité (0.0 = invisible, 1.0 = opaque)
+            opacity: 0.4          // <-- AJOUTER : Niveau d'opacité (0.0 = invisible, 1.0 = opaque)
             // Optionnel: si vous rencontrez des problèmes de rendu/tri avec la transparence:
             // depthWrite: false
         });
@@ -123,51 +130,123 @@ export default class Environment {
         const baseGeometry = new THREE.IcosahedronGeometry(5, 0); // Rayon 5, détail 0
 
         // --- RANDOMISATION ---
-        const numParts = THREE.MathUtils.randInt(4, 8); // Nombre aléatoire de parties (ex: entre 4 et 8)
-        const maxOffset = 6; // Écart maximal des parties par rapport au centre
+        const numParts = THREE.MathUtils.randInt(4, 8); // Nombre aléatoire de parties
+        const maxOffset = 6;
         const minPartScale = 0.4;
         const maxPartScale = 1.2;
         // --------------------
 
         for (let i = 0; i < numParts; i++) {
-            // Position aléatoire autour du centre (0,0,0)
             const randomPosition = new THREE.Vector3(
                 (Math.random() - 0.5) * 2 * maxOffset,
-                (Math.random() - 0.5) * 2 * maxOffset * 0.5, // Moins d'écart vertical
+                (Math.random() - 0.5) * 2 * maxOffset * 0.5,
                 (Math.random() - 0.5) * 2 * maxOffset
             );
-
-            // Échelle aléatoire pour cette partie
             const randomScale = THREE.MathUtils.randFloat(minPartScale, maxPartScale);
             const scaleVector = new THREE.Vector3(randomScale, randomScale, randomScale);
-
-            // Créer la matrice de transformation pour cette partie
             const matrix = new THREE.Matrix4();
-            // Utiliser .compose pour position, rotation (ici nulle), et échelle
             matrix.compose(randomPosition, new THREE.Quaternion(), scaleVector);
 
-            // Cloner la géométrie de base et appliquer la transformation
             const clonedGeom = baseGeometry.clone();
             clonedGeom.applyMatrix4(matrix);
             cloudPartGeometries.push(clonedGeom);
         }
 
-        // Fusionner les morceaux aléatoires en une seule géométrie
         const mergedGeometry = mergeGeometries(cloudPartGeometries, false);
-
-        // Nettoyer les géométries clonées individuellement
         cloudPartGeometries.forEach(geom => geom.dispose());
-        baseGeometry.dispose(); // Dispose de la géométrie de base
+        baseGeometry.dispose();
 
         if (mergedGeometry) {
-            // Optionnel : Centrer la géométrie fusionnée peut aider au positionnement/rotation global
-             mergedGeometry.center();
+            mergedGeometry.center(); // Centrer la forme finale
             return mergedGeometry;
         } else {
             console.warn("Échec de la fusion de la géométrie du nuage aléatoire.");
-            // Retourner une géométrie simple en fallback
-            return new THREE.IcosahedronGeometry(8, 0);
+            return new THREE.IcosahedronGeometry(8, 0); // Fallback
         }
+    }
+
+	createInstancedClouds() {
+        if (!this.cloudMaterial) {
+            console.error("Impossible de créer les nuages instanciés: matériau non défini.");
+            return;
+        }
+        if (this.cloudInstancedMeshes.length > 0 || this.cloudBaseGeometries.length > 0) {
+             console.warn("Tentative de recréer les nuages instanciés alors qu'ils existent déjà.");
+             return;
+         }
+
+        console.log(`Création du pool de ${this.numberOfCloudBaseShapes} formes de base de nuages...`);
+        // 1. Générer les K formes de base
+        for (let i = 0; i < this.numberOfCloudBaseShapes; i++) {
+            this.cloudBaseGeometries.push(this.createLowPolyCloudGeometry());
+        }
+        console.log(`${this.cloudBaseGeometries.length} formes de base générées.`);
+
+        // 2. Créer les K InstancedMesh
+        const instancesPerMesh = Math.ceil(this.totalNumberOfClouds / this.numberOfCloudBaseShapes);
+        console.log(`Création de ${this.numberOfCloudBaseShapes} InstancedMesh (environ ${instancesPerMesh} instances chacun) pour un total de ${this.totalNumberOfClouds} nuages.`);
+
+        this.cloudBaseGeometries.forEach((baseGeom, index) => {
+            const instancedMesh = new THREE.InstancedMesh(
+                baseGeom,
+                this.cloudMaterial,
+                instancesPerMesh
+            );
+            instancedMesh.castShadow = true;
+            instancedMesh.receiveShadow = false; // Les nuages ne reçoivent généralement pas bien les ombres
+            instancedMesh.name = `InstancedCloudMesh_${index}`;
+
+            this.cloudInstancedMeshes.push(instancedMesh);
+            this.cloudGroup.add(instancedMesh); // Ajouter au groupe principal des nuages
+        });
+
+        // 3. Placer les instances
+        const skyHeight = 230;
+        const spreadRadius = this.config.mapSize * 0.8;
+        const scaleMin = 0.8; // Ajuster la plage d'échelle globale si besoin
+        const scaleMax = 12.0;
+
+        let currentInstanceIndex = 0;
+        const instanceCounters = new Array(this.numberOfCloudBaseShapes).fill(0); // Compteur pour chaque InstancedMesh
+
+        while(currentInstanceIndex < this.totalNumberOfClouds) {
+             // Choisir à quel InstancedMesh appartient cette instance
+            const meshIndex = currentInstanceIndex % this.numberOfCloudBaseShapes;
+            const targetInstancedMesh = this.cloudInstancedMeshes[meshIndex];
+            const indexInMesh = instanceCounters[meshIndex]; // Obtenir l'index DANS cet InstancedMesh
+
+            // S'assurer qu'on ne dépasse pas la taille allouée (important si total / K n'est pas entier)
+             if (indexInMesh < targetInstancedMesh.count) {
+                // Calculer la transformation aléatoire
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * spreadRadius;
+                const x = Math.cos(angle) * radius;
+                const z = Math.sin(angle) * radius;
+                const y = skyHeight + (Math.random() - 0.5) * 90;
+                const randomYRotation = Math.random() * Math.PI * 2;
+                const randomScale = THREE.MathUtils.randFloat(scaleMin, scaleMax);
+
+                _tempPosition.set(x, y, z);
+                _tempQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), randomYRotation);
+                _tempScale.set(randomScale, randomScale, randomScale);
+
+                _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+
+                // Appliquer la matrice à l'instance correcte dans le bon InstancedMesh
+                targetInstancedMesh.setMatrixAt(indexInMesh, _tempMatrix);
+
+                instanceCounters[meshIndex]++; // Incrémenter le compteur pour ce mesh spécifique
+            }
+            currentInstanceIndex++; // Passer à l'instance globale suivante
+        }
+
+
+        // Marquer les matrices comme nécessitant une mise à jour
+        this.cloudInstancedMeshes.forEach(mesh => {
+            mesh.instanceMatrix.needsUpdate = true;
+        });
+
+        console.log(`Placement terminé pour ${currentInstanceIndex} instances de nuages distribuées sur ${this.cloudInstancedMeshes.length} InstancedMesh.`);
     }
     // -------------------------------------------------------------------
 
@@ -185,7 +264,7 @@ export default class Environment {
              return;
          }
 
-        const numberOfClouds = 15;
+        const numberOfClouds = 10;
         const skyHeight = 150;
         const spreadRadius = this.config.mapSize * 0.8;
 
@@ -208,7 +287,7 @@ export default class Environment {
 
             // --- MODIFIÉ : Échelle aléatoire avec une plus grande plage ---
             // Exemple: échelle allant de 0.5 à 4.0 (0.5 + 3.5 * 1.0)
-            const scale = 0.5 + Math.random() * 15;
+            const scale = 0.5 + Math.random() * 10;
             cloudMesh.scale.set(scale, scale, scale);
             // -----------------------------------------------------------
 
@@ -449,86 +528,85 @@ export default class Environment {
     }
 
     destroy() {
-        console.log("Nettoyage de l'environnement (Shader Skybox, Lune)...");
-        // Lumières
+        console.log("Nettoyage de l'environnement (Shader Skybox, Lune, Nuages Instanciés)...");
+        // Lumières, Skybox, Étoiles, Sol Extérieur, Lune (INCHANGÉ)
         if (this.sunLight) this.scene.remove(this.sunLight);
         if (this.ambientLight) this.scene.remove(this.ambientLight);
-        if (this.moonLight) this.scene.remove(this.moonLight); // <- NOUVEAU
+        if (this.moonLight) this.scene.remove(this.moonLight);
+        if (this.skyBox) { this.scene.remove(this.skyBox); this.skyBox.geometry?.dispose(); this.skyBox.material?.dispose(); this.skyBox = null; }
+        if (this.starsMesh) { this.scene.remove(this.starsMesh); this.starsMesh.geometry?.dispose(); this.starsMesh.material?.dispose(); this.starsMesh = null; }
+        if (this.outerGroundMesh) { this.scene.remove(this.outerGroundMesh); this.outerGroundMesh.geometry?.dispose(); this.outerGroundMesh.material?.dispose(); this.outerGroundMesh = null; }
+        if (this.moonMesh) { this.scene.remove(this.moonMesh); this.moonMesh.geometry?.dispose(); this.moonMesh.material?.dispose(); this.moonMesh = null; }
 
-        // Skybox
-        if (this.skyBox) { /* ... (nettoyage inchangé) ... */
-             this.scene.remove(this.skyBox);
-             this.skyBox.geometry?.dispose();
-             this.skyBox.material?.dispose();
-             this.skyBox = null;
-         }
-
-        // Étoiles
-        if (this.starsMesh) { /* ... (nettoyage inchangé) ... */
-             this.scene.remove(this.starsMesh);
-             this.starsMesh.geometry?.dispose();
-             this.starsMesh.material?.dispose();
-             this.starsMesh = null;
-         }
-
-        // Sol extérieur
-        if (this.outerGroundMesh) { /* ... (nettoyage inchangé) ... */
-             this.scene.remove(this.outerGroundMesh);
-             this.outerGroundMesh.geometry?.dispose();
-             this.outerGroundMesh.material?.dispose();
-             this.outerGroundMesh = null;
-         }
-
-        // --- NOUVEAU : Nettoyage Lune ---
-        if (this.moonMesh) {
-            this.scene.remove(this.moonMesh);
-            this.moonMesh.geometry?.dispose();
-            this.moonMesh.material?.dispose();
-            this.moonMesh = null;
+        // --- Nettoyage spécifique aux Nuages Instanciés ---
+        if (this.cloudGroup) {
+            // Retirer les InstancedMesh du groupe et de la scène
+            this.cloudInstancedMeshes.forEach(mesh => {
+                this.cloudGroup.remove(mesh);
+                // La géométrie est disposée via cloudBaseGeometries ci-dessous
+                // Le matériau est disposé via cloudMaterial ci-dessous
+            });
+            if(this.cloudGroup.parent) this.cloudGroup.parent.remove(this.cloudGroup);
+            this.cloudInstancedMeshes = []; // Vider le tableau
         }
-        
-		 // --- Nettoyage spécifique aux Nuages ---
-		 if (this.cloudGroup) {
-            this.scene.remove(this.cloudGroup);
-            while(this.cloudGroup.children.length > 0) {
-                const cloudMesh = this.cloudGroup.children[0];
-                this.cloudGroup.remove(cloudMesh);
-                cloudMesh.geometry?.dispose();
-                // Le matériau est partagé (this.cloudMaterial), on le dispose séparément
-            }
-            this.cloudGroup = null;
-        }
+        this.cloudGroup = null;
+
+        // Disposer les géométries de base uniques
+        this.cloudBaseGeometries.forEach(geom => geom.dispose());
+        this.cloudBaseGeometries = []; // Vider le tableau
+        console.log("Géométries de base des nuages disposées.");
+
+        // Disposer le matériau partagé des nuages
         if (this.cloudMaterial) {
-             this.cloudMaterial.dispose();
-             this.cloudMaterial = null;
+            this.cloudMaterial.dispose();
+            this.cloudMaterial = null;
+            console.log("Matériau des nuages disposé.");
         }
-        // ---------------------------------------
+        // ---------------------------------------------------
 
-        // Nullification des références
-        this.sunLight = null;
-        this.ambientLight = null;
-        this.moonLight = null;
-        this.cloudMaterial = null;
-
+        // Nullification des références (INCHANGÉ)
+        this.sunLight = null; this.ambientLight = null; this.moonLight = null;
         console.log("Environnement nettoyé.");
     }
+    // ------------------------------------
 
+    // --- MÉTHODE UPDATE MODIFIÉE ---
     update(deltaTime) {
         // Appeler updateDayNightCycle seulement si initialisé
         if (this.isInitialized) {
             this.updateDayNightCycle(deltaTime);
 
-            // --- Animation simple des nuages ---
-            const cloudSpeed = 0.00005 * deltaTime; // Vitesse de déplacement (ajustez selon deltaTime)
-            this.cloudGroup.children.forEach(cloud => {
-                cloud.position.x += cloudSpeed * (cloud.scale.x * 10); // Les plus gros bougent un peu plus vite
-                // Optionnel : faire réapparaître les nuages de l'autre côté
-                const limit = this.config.mapSize * 1.2; // Limite avant de réapparaître
-                 if (cloud.position.x > limit) {
-                     cloud.position.x = -limit;
-                     // Peut aussi changer la position Z ou Y légèrement pour plus de variété
-                     cloud.position.z = (Math.random() - 0.5) * (this.config.mapSize * 1.6);
-                 }
+            // --- Animation des nuages instanciés ---
+            const actualCloudSpeed = this.cloudAnimationSpeed * deltaTime;
+            const limit = this.config.mapSize * 1.2; // Limite avant de réapparaître
+
+            this.cloudInstancedMeshes.forEach(instancedMesh => {
+                let needsMatrixUpdate = false; // Drapeau pour ce mesh
+
+                for (let i = 0; i < instancedMesh.count; i++) {
+                    instancedMesh.getMatrixAt(i, _tempMatrix); // Récupérer la matrice actuelle
+                    _tempMatrix.decompose(_tempPosition, _tempQuaternion, _tempScale); // Décomposer
+
+                    // Appliquer le mouvement
+                    _tempPosition.x += actualCloudSpeed * (_tempScale.x * 10); // Vitesse dépend de l'échelle
+
+                    // Logique de wrap-around
+                    if (_tempPosition.x > limit) {
+                        _tempPosition.x = -limit;
+                        // Optionnel: changer Z aussi pour varier la trajectoire de retour
+                         _tempPosition.z = (Math.random() - 0.5) * (this.config.mapSize * 1.6);
+                    }
+
+                    // Recomposer la matrice avec la nouvelle position
+                    _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+                    instancedMesh.setMatrixAt(i, _tempMatrix); // Remettre la matrice à jour
+                    needsMatrixUpdate = true; // Marquer que ce mesh a besoin d'une màj
+                }
+
+                // Mettre à jour instanceMatrix UNE SEULE FOIS par mesh, si des instances ont bougé
+                if (needsMatrixUpdate) {
+                    instancedMesh.instanceMatrix.needsUpdate = true;
+                }
             });
             // -----------------------------------
         }
