@@ -120,27 +120,39 @@ export default class Environment {
 
 	createLowPolyCloudGeometry() {
         const cloudPartGeometries = [];
+        const baseGeometry = new THREE.IcosahedronGeometry(5, 0); // Rayon 5, détail 0
 
-        // Créer plusieurs "morceaux" de nuage (icosaèdres = plus low-poly que sphères)
-        const baseGeometry = new THREE.IcosahedronGeometry(5, 0); // Rayon 5, détail 0 (le plus low-poly)
+        // --- RANDOMISATION ---
+        const numParts = THREE.MathUtils.randInt(4, 8); // Nombre aléatoire de parties (ex: entre 4 et 8)
+        const maxOffset = 6; // Écart maximal des parties par rapport au centre
+        const minPartScale = 0.4;
+        const maxPartScale = 1.2;
+        // --------------------
 
-        const parts = [
-            { scale: 1.0, position: new THREE.Vector3(0, 0, 0) },
-            { scale: 0.7, position: new THREE.Vector3(5, 1, 1) },
-            { scale: 0.8, position: new THREE.Vector3(-4, -1, -2) },
-            { scale: 0.6, position: new THREE.Vector3(2, -2, 3) },
-            { scale: 0.5, position: new THREE.Vector3(0, 3, -1) }
-        ];
+        for (let i = 0; i < numParts; i++) {
+            // Position aléatoire autour du centre (0,0,0)
+            const randomPosition = new THREE.Vector3(
+                (Math.random() - 0.5) * 2 * maxOffset,
+                (Math.random() - 0.5) * 2 * maxOffset * 0.5, // Moins d'écart vertical
+                (Math.random() - 0.5) * 2 * maxOffset
+            );
 
-        parts.forEach(part => {
+            // Échelle aléatoire pour cette partie
+            const randomScale = THREE.MathUtils.randFloat(minPartScale, maxPartScale);
+            const scaleVector = new THREE.Vector3(randomScale, randomScale, randomScale);
+
+            // Créer la matrice de transformation pour cette partie
             const matrix = new THREE.Matrix4();
-            matrix.compose(part.position, new THREE.Quaternion(), new THREE.Vector3(part.scale, part.scale, part.scale));
+            // Utiliser .compose pour position, rotation (ici nulle), et échelle
+            matrix.compose(randomPosition, new THREE.Quaternion(), scaleVector);
+
+            // Cloner la géométrie de base et appliquer la transformation
             const clonedGeom = baseGeometry.clone();
             clonedGeom.applyMatrix4(matrix);
             cloudPartGeometries.push(clonedGeom);
-        });
+        }
 
-        // Fusionner les morceaux en une seule géométrie
+        // Fusionner les morceaux aléatoires en une seule géométrie
         const mergedGeometry = mergeGeometries(cloudPartGeometries, false);
 
         // Nettoyer les géométries clonées individuellement
@@ -148,11 +160,11 @@ export default class Environment {
         baseGeometry.dispose(); // Dispose de la géométrie de base
 
         if (mergedGeometry) {
-            // Optionnel : Centrer la géométrie fusionnée si nécessaire
-             // mergedGeometry.center();
-             return mergedGeometry;
+            // Optionnel : Centrer la géométrie fusionnée peut aider au positionnement/rotation global
+             mergedGeometry.center();
+            return mergedGeometry;
         } else {
-            console.warn("Échec de la fusion de la géométrie du nuage.");
+            console.warn("Échec de la fusion de la géométrie du nuage aléatoire.");
             // Retourner une géométrie simple en fallback
             return new THREE.IcosahedronGeometry(8, 0);
         }
