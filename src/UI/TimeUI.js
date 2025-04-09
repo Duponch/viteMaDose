@@ -19,18 +19,6 @@ export default class TimeUI {
     createTimeDisplay() {
         this.element = document.createElement('div');
         this.element.classList.add('time-display'); // Classe CSS pour le style
-
-        // Style initial (peut être affiné dans style.css)
-        /* this.element.style.position = 'absolute';
-        this.element.style.top = '10px';
-        this.element.style.right = '10px';
-        this.element.style.color = 'white';
-        this.element.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-        this.element.style.padding = '5px 10px';
-        this.element.style.fontFamily = 'Arial, sans-serif';
-        this.element.style.fontSize = '24px';
-        this.element.style.zIndex = '100'; // Pour être au-dessus du canvas */
-
         this.container.appendChild(this.element);
         this.update(); // Afficher l'heure initiale
     }

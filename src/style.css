@@ -64,7 +64,6 @@ h1 {
 }
 
 button {
-  border-radius: 8px;
   border: 1px solid transparent;
   padding: 0.6em 1.2em;
   font-size: 1em;
@@ -73,13 +72,6 @@ button {
   background-color: #1a1a1a;
   cursor: pointer;
   transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
 }
 
 @media (prefers-color-scheme: light) {
@@ -97,17 +89,64 @@ button:focus-visible {
 
 .time-display {
 	position: absolute; /* Nécessaire pour top/left/right/bottom */
-	top: 15px;          /* Espace depuis le haut */
-	right: 15px;         /* Espace depuis la gauche */
+	top: 20px;          /* Espace depuis le haut */
+	right: 20px;         /* Espace depuis la gauche */
 	color: white;       /* Couleur du texte */
 	background-color: rgba(0, 0, 0, 0.5); /* Fond semi-transparent */
 	padding: 8px 12px;  /* Espacement intérieur */
-	border-radius: 5px; /* Coins arrondis */
+	border-radius: 10px; /* Coins arrondis */
 	font-family: 'Consolas', 'Courier New', monospace; /* Police à chasse fixe */
 	font-size: 1.6em;   /* Taille de police */
 	z-index: 100;       /* Assure qu'il est au-dessus du canvas */
 	pointer-events: none; /* Permet aux clics de passer à travers */
-	text-shadow: 1px 1px 2px black; /* Ombre portée pour lisibilité */
   }
   
+  .time-controls {
+	position: absolute;   /* ESSENTIEL pour z-index */
+	bottom: 20px;
+	right: 20px;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	z-index: 101;         /* DOIT être supérieur au z-index du canvas (par défaut 0 ou auto) */
+	color: white;
+	font-family: sans-serif;
+  }
   
+  /* --- Styles des éléments enfants (que vous avez déjà) --- */
+  
+  .time-controls button {
+	border-radius: 100px;
+	background-color: rgba(0, 0, 0, 0.6);
+	color: white;
+	width: 40px;
+	height: 40px;
+	font-size: 1.2em;
+	line-height: 1;
+	padding: 5px 10px;
+	/* z-index: 1000; <-- Pas nécessaire ici si le parent a le bon z-index */
+  }
+  
+  .time-controls button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+  }
+  
+  .time-controls button:hover:not(:disabled) {
+	background-color: rgba(255, 255, 255, 0.6);
+	color: #000000;
+  }
+  
+  #pause-play-button {
+	font-size: 1em;
+  }
+  
+  #pause-play-button.paused {
+   /* Optionnel: style différent si en pause */
+  }
+  
+  #speed-display {
+	font-weight: bold;
+	min-width: 40px;
+	text-align: center;
+  }

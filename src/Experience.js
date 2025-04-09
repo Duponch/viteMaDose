@@ -2,12 +2,13 @@
 import * as THREE from 'three';
 import Stats from 'stats.js';
 import Sizes from './Utils/Sizes.js';
-import Time from './Utils/Time.js';
+import Time from './Utils/Time.js'; // <-- Time est déjà importé
 import Camera from './Core/Camera.js';
 import Renderer from './Core/Renderer.js';
 import World from './Core/World.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import TimeUI from './UI/TimeUI.js'; // <-- Importer TimeUI
+import TimeUI from './UI/TimeUI.js';
+import TimeControlUI from './UI/TimeControlUI.js'; // <-- Importer la nouvelle UI
 
 let instance = null;
 
@@ -22,17 +23,15 @@ export default class Experience {
         this.canvas = canvas;
 
         this.sizes = new Sizes();
-        this.time = new Time();
+        this.time = new Time(); // <-- L'instance Time est créée ici
         this.scene = new THREE.Scene();
         this.camera = new Camera(this);
         this.renderer = new Renderer(this);
-        this.world = new World(this); // World est créé ici
+        this.world = new World(this);
 
-        // --- Instancier TimeUI APRÈS la création de World ---
-        // World a besoin d'être créé pour que l'environnement soit accessible
-        // Note: L'initialisation de l'environnement est asynchrone,
-        // TimeUI gère le cas où l'environnement n'est pas encore prêt.
-        this.timeUI = new TimeUI(this); // <-- Créer l'instance TimeUI
+        // --- Instancier les UIs APRÈS la création de Time et World ---
+        this.timeUI = new TimeUI(this);
+        this.timeControlUI = new TimeControlUI(this); // <-- Créer l'instance TimeControlUI
 
         this.controls = new OrbitControls(this.camera.instance, this.canvas);
         this.controls.enableDamping = true;
@@ -46,12 +45,9 @@ export default class Experience {
         this.resizeHandler = () => this.resize();
         this.sizes.addEventListener('resize', this.resizeHandler);
 
+        // La boucle update écoute déjà le 'tick' de Time
         this.updateHandler = () => this.update();
         this.time.addEventListener('tick', this.updateHandler);
-
-        // IMPORTANT : Attendre potentiellement que le monde soit prêt
-        // avant de lancer certaines logiques si nécessaire, mais pour l'UI,
-        // elle peut se mettre à jour dès le début (elle affichera --:-- tant que l'env n'est pas prêt)
     }
 
     resize() {
@@ -62,15 +58,22 @@ export default class Experience {
     update() {
         this.stats.begin();
 
+        // Le delta utilisé ici est maintenant le delta ajusté par Time.js
+        const deltaTime = this.time.delta;
+
         this.controls.update();
         this.camera.update();
-        this.world.update(); // Met à jour l'environnement et son cycleTime
+        // World.update utilise experience.time.delta, donc il utilisera aussi le temps ajusté
+        this.world.update();
         this.renderer.update();
 
-        // --- Mettre à jour l'UI de l'heure ---
+        // --- Mettre à jour les UIs si nécessaire (TimeUI a besoin de l'heure, TimeControlUI réagit aux events) ---
         if (this.timeUI) {
-            this.timeUI.update(); // <-- Appeler la mise à jour de TimeUI
+            this.timeUI.update();
         }
+        // if (this.timeControlUI) {
+        //     this.timeControlUI.update(); // Probablement pas nécessaire
+        // }
 
         this.stats.end();
     }
@@ -78,16 +81,20 @@ export default class Experience {
     destroy() {
         // --- Nettoyage EventListeners ---
         this.sizes.removeEventListener('resize', this.resizeHandler);
-        this.time.removeEventListener('tick', this.updateHandler);
+        this.time.removeEventListener('tick', this.updateHandler); // On retire l'écouteur principal
 
-        // --- Détruire l'UI ---
+        // --- Détruire les UIs ---
         if (this.timeUI) {
-            this.timeUI.destroy(); // <-- Appeler la destruction de TimeUI
+            this.timeUI.destroy();
             this.timeUI = null;
+        }
+        if (this.timeControlUI) {
+            this.timeControlUI.destroy(); // <-- Appeler la destruction de TimeControlUI
+            this.timeControlUI = null;
         }
 
         // --- Détruire le monde ---
-        this.world.destroy(); // S'assurer que le monde nettoie aussi (y compris l'environnement)
+        this.world.destroy();
 
         // ... (reste du nettoyage : controls, renderer, stats)
         this.controls.dispose();
@@ -95,6 +102,10 @@ export default class Experience {
         if (this.stats.dom.parentNode) {
              document.body.removeChild(this.stats.dom);
         }
+
+        // Nettoyer l'instance Time elle-même si nécessaire (arrêter son requestAnimationFrame ?)
+        // Pour l'instant, on le laisse tourner car il ne consomme pas grand chose une fois l'experience détruite.
+        // Si Time avait des listeners internes ou des ressources lourdes, il faudrait une méthode destroy() dans Time.js
 
         instance = null;
         console.log("Experience détruite.");
