@@ -318,7 +318,7 @@ export default class PlotContentGenerator {
         const groundMesh = new THREE.Mesh(groundGeom, groundMaterial);
         groundMesh.rotation.x = -Math.PI / 2;
         // On suppose que plot possède une propriété center calculée en amont
-        groundMesh.position.set(plot.center ? plot.center.x : plot.x + plot.width / 2, 0.05, plot.center ? plot.center.z : plot.z + plot.depth / 2);
+        groundMesh.position.set(plot.center ? plot.center.x : plot.x + plot.width / 2, 0.2, plot.center ? plot.center.z : plot.z + plot.depth / 2);
         groundMesh.receiveShadow = true;
         groundMesh.name = `Ground_Plot_${plot.id}_${plot.zoneType}`;
         this.buildingGroup.add(groundMesh);

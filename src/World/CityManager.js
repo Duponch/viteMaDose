@@ -17,7 +17,7 @@ export default class CityManager {
         // et de conversion en complément si désiré)
         this.config = {
             // Map & Layout
-            mapSize: 500,
+            mapSize: 600,
             roadWidth: 10,
             minPlotSize: 13,
             maxPlotSize: 40,
@@ -96,7 +96,7 @@ export default class CityManager {
             treePlacementProbabilitySidewalk: 0.3, treePlacementProbabilityPark: 0.04, treePlacementProbabilityMargin: 0.008,
 
             // Debug (Inchangé)
-             showDistrictBoundaries: true,
+             showDistrictBoundaries: false,
 
             // Fusion (Inchangé)
             ...config

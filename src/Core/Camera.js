@@ -15,7 +15,7 @@ export default class Camera {
             45, // FOV (Champ de vision vertical)
             this.sizes.width / this.sizes.height, // Aspect Ratio
             0.1, // Near clipping plane
-            500 // Far clipping plane (à ajuster selon la taille de la ville)
+            1000 // Far clipping plane (à ajuster selon la taille de la ville)
         );
         // Position initiale de la caméra (à ajuster)
         this.instance.position.set(50, 60, 50);
