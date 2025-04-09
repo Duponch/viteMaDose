@@ -1,13 +1,29 @@
 import * as THREE from 'three';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 
 export default class Environment {
     constructor(experience) {
         this.experience = experience;
         this.scene = this.experience.scene;
-        this.debug = this.experience.debug; // Pour ajouter des contrôles de debug plus tard
-        this.mapSize = 500; // Ou récupérez-la dynamiquement
+        this.debug = this.experience.debug;
+        // Propriétés de la Skybox ajoutées
+        this.skyboxCanvas = null;
+        this.skyboxContext = null;
+        this.starsCanvas = null;
+        this.skyboxTexture = null;
+        this.skyBox = null;
+        this.moonMesh = null;
+        this.skyboxGreenProgress = 0;
+        this.targetSkyboxGreenProgress = 0;
+        this.skyboxTransitionSpeed = 0.2; // ou récupérer depuis config
+        // Fin propriétés Skybox
+
+        this.mapSize = 700; // Ou récupérez-la dynamiquement
         this.setSunLight();
         this.setAmbientLight();
+
+        // Appel pour créer la Skybox
+        this.renderSkybox();
     }
 
     setSunLight() {
@@ -46,6 +62,137 @@ export default class Environment {
         this.scene.add(this.ambientLight);
     }
 
-    // Méthodes pour mettre à jour l'environnement si nécessaire (ex: cycle jour/nuit)
-    update() {}
+	renderSkybox() {
+        // Création du canvas principal
+        this.skyboxCanvas = document.createElement('canvas');
+        this.skyboxCanvas.width = 10240; // Ajustez si nécessaire
+        this.skyboxCanvas.height = 5120; // Ajustez si nécessaire
+        this.skyboxContext = this.skyboxCanvas.getContext('2d');
+
+        // Création d'un canvas hors-écran pour les étoiles
+        this.starsCanvas = document.createElement('canvas');
+        this.starsCanvas.width = this.skyboxCanvas.width;
+        this.starsCanvas.height = this.skyboxCanvas.height;
+        const starsContext = this.starsCanvas.getContext('2d');
+
+        // Dessiner les étoiles une seule fois sur le starsCanvas
+        const numStars = 3000; // Ajustez si nécessaire
+        for (let i = 0; i < numStars; i++) {
+            const x = Math.random() * this.starsCanvas.width;
+            const y = Math.random() * this.starsCanvas.height;
+            const radius = Math.random() * 2.5 + 0.5;
+            starsContext.beginPath();
+            starsContext.arc(x, y, radius, 0, Math.PI * 2, false);
+            starsContext.fillStyle = '#ffffff';
+            starsContext.fill();
+        }
+
+        // Dessiner le gradient initial sur le skyboxCanvas
+        const gradient = this.skyboxContext.createLinearGradient(0, 0, 0, this.skyboxCanvas.height);
+        gradient.addColorStop(0, '#000000');
+        gradient.addColorStop(0.45, '#0b0322'); // Couleurs initiales
+        gradient.addColorStop(0.6, '#f73428');  // Couleurs initiales
+        this.skyboxContext.fillStyle = gradient;
+        this.skyboxContext.fillRect(0, 0, this.skyboxCanvas.width, this.skyboxCanvas.height);
+
+        // Superposer le starsCanvas par-dessus le gradient
+        this.skyboxContext.drawImage(this.starsCanvas, 0, 0);
+
+        // Création de la texture et du skybox
+        this.skyboxTexture = new THREE.CanvasTexture(this.skyboxCanvas);
+        this.skyboxTexture.needsUpdate = true;
+        // Utilisez une taille de sphère cohérente avec votre scène
+        const skyGeometry = new THREE.SphereGeometry(this.mapSize * 0.8, 60, 40); // Ex: 80% de mapSize
+        const skyMaterial = new THREE.MeshBasicMaterial({
+            map: this.skyboxTexture,
+            side: THREE.BackSide,
+        });
+        this.skyBox = new THREE.Mesh(skyGeometry, skyMaterial);
+        this.skyBox.renderOrder = -1; // Rendre avant le reste
+        this.scene.add(this.skyBox);
+    }
+
+    updateSkyboxTransition(delta, normalizedHealth) {
+        // Assurez-vous que skyboxContext et skyboxTexture existent
+         if (!this.skyboxContext || !this.skyboxTexture || !this.skyboxCanvas || !this.starsCanvas) {
+            return;
+        }
+        // Calcule la cible de transition : 0 = santé max (ciel normal), 1 = santé min (ciel "vert")
+        // L'ancien code utilisait "GreenProgress", adaptez si la logique est différente
+        this.targetSkyboxGreenProgress = 1 - normalizedHealth;
+
+        if (this.skyboxGreenProgress !== this.targetSkyboxGreenProgress) {
+            const diff = this.targetSkyboxGreenProgress - this.skyboxGreenProgress;
+            // Utilisez le delta de Experience pour une transition basée sur le temps réel
+            const change = this.skyboxTransitionSpeed * delta;
+            if (Math.abs(change) >= Math.abs(diff)) {
+                this.skyboxGreenProgress = this.targetSkyboxGreenProgress;
+            } else {
+                this.skyboxGreenProgress += Math.sign(diff) * change;
+            }
+
+            const context = this.skyboxContext;
+            context.clearRect(0, 0, this.skyboxCanvas.width, this.skyboxCanvas.height);
+
+            const gradient = context.createLinearGradient(0, 0, 0, this.skyboxCanvas.height);
+            gradient.addColorStop(0, '#000000');
+
+            // Interpolation du gradient de la skybox (comme dans l'ancien code)
+            const baseColor1 = new THREE.Color(0x0b0322);
+            const targetColor1 = new THREE.Color(0x0c0100); // Ajustez la couleur cible si "vert" n'est plus le thème
+            const currentColor1 = baseColor1.clone().lerp(targetColor1, this.skyboxGreenProgress);
+            gradient.addColorStop(0.45, '#' + currentColor1.getHexString());
+
+            const baseColor2 = new THREE.Color(0xf73428);
+            const targetColor2 = new THREE.Color(0x950900); // Ajustez la couleur cible
+            const currentColor2 = baseColor2.clone().lerp(targetColor2, this.skyboxGreenProgress);
+            gradient.addColorStop(0.6, '#' + currentColor2.getHexString());
+
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, this.skyboxCanvas.width, this.skyboxCanvas.height);
+            // Redessiner les étoiles par-dessus le nouveau gradient
+            context.drawImage(this.starsCanvas, 0, 0);
+            this.skyboxTexture.needsUpdate = true;
+
+            // --- Mise à jour d'autres éléments (Lumières, Lune, etc.) ---
+
+            // Exemple: Transition pour la lumière directionnelle (soleil)
+            // Note: Le code original modifiait aussi fog, eau, spotlight, herbe...
+            // Adaptez ceci à ce qui est pertinent dans votre NOUVEAU jeu.
+            const initialSunColor = new THREE.Color(0xffffff); // Couleur normale du soleil
+            const targetSunColor = new THREE.Color(0x5b0000);  // Couleur cible (rougeâtre dans l'ex)
+            const currentSunColor = initialSunColor.clone().lerp(targetSunColor, this.skyboxGreenProgress);
+             if (this.sunLight) {
+                 this.sunLight.color.copy(currentSunColor);
+             }
+             // Vous pourriez aussi ajuster l'ambientLight, le fog si vous en avez un, etc.
+             // this.ambientLight.color.lerpColors(initialAmbientColor, targetAmbientColor, this.skyboxGreenProgress);
+             // this.scene.fog.color.lerpColors(initialFogColor, targetFogColor, this.skyboxGreenProgress);
+
+
+            // Transition progressive pour la lune
+            if (this.moonMesh) {
+                const initialMoonColor = new THREE.Color(0xffffff);
+                const targetMoonColor  = new THREE.Color(0xff3325); // Ajustez la couleur cible
+                const currentMoonColor = initialMoonColor.clone().lerp(targetMoonColor, this.skyboxGreenProgress);
+
+                this.moonMesh.traverse((child) => {
+                    if (child.isMesh && child.material && child.material.emissive) {
+                        child.material.emissive.copy(currentMoonColor);
+                        // Si vous voulez aussi changer la couleur de base (non émissive)
+                        // child.material.color.copy(currentMoonColor);
+                    }
+                });
+            }
+            // --- Fin Mise à jour autres éléments ---
+        }
+    }
+
+
+    // Méthode update à ajouter ou modifier dans Environment.js
+    update(deltaTime, /* Ajoutez ici la variable 'normalizedHealth' */ healthFactor = 1) {
+        // deltaTime vient de Experience.js via World.js
+        // healthFactor (entre 0 et 1) doit être passé depuis votre logique de jeu
+        this.updateSkyboxTransition(deltaTime, healthFactor);
+    }
 }

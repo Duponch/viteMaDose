@@ -39,11 +39,22 @@ export default class World {
         }
     }
 
-
     update() {
+        const deltaTime = this.experience.time.delta / 1000; // Obtenir delta en secondes
+
+        // --- Récupérer l'état de santé ---
+        // Ceci est un EXEMPLE. Vous devrez implémenter la logique pour obtenir
+        // l'état de santé de votre jeu (ex: depuis un gestionnaire de joueur, etc.)
+        // et le normaliser entre 0 (santé min) et 1 (santé max).
+        const playerHealth = 0.8; // Exemple: Le joueur a 80% de santé
+        const normalizedHealth = playerHealth; // Assurez-vous que c'est bien entre 0 et 1
+        // --- Fin Récupération Santé ---
+
+
         // Mettre à jour les composants de la ville si nécessaire
         this.cityManager?.update(); // Appelera la méthode update de CityManager
-        this.environment?.update();
+        // Appel de l'update de l'environnement avec delta et santé
+        this.environment?.update(deltaTime, normalizedHealth);
     }
 
     // --- Ajouter une méthode destroy pour nettoyer ---
