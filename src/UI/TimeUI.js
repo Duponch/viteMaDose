@@ -36,7 +36,7 @@ export default class TimeUI {
     }
 
     /**
-     * Formate le temps du cycle en HH:MM.
+     * Formate le temps du cycle en HH:MM, en tenant compte du décalage visuel.
      * @param {number} cycleTime - Temps écoulé dans le cycle en ms.
      * @param {number} dayDurationMs - Durée totale du cycle en ms.
      * @returns {string} - L'heure formatée "HH:MM".
@@ -44,15 +44,27 @@ export default class TimeUI {
     formatTime(cycleTime, dayDurationMs) {
         if (dayDurationMs <= 0) return "00:00"; // Éviter division par zéro
 
-        // Normaliser le temps sur un cycle de 24 heures
-        const normalizedTime = (cycleTime % dayDurationMs) / dayDurationMs; // 0 à 1
-        const totalMinutesInDay = 24 * 60;
-        const currentMinute = Math.floor(normalizedTime * totalMinutesInDay);
+        // 1. Normaliser le temps du cycle (0 à 1)
+        const normalizedTime = (cycleTime % dayDurationMs) / dayDurationMs;
 
+        // 2. Appliquer un décalage pour aligner l'heure sur le cycle visuel
+        //    On veut que normalizedTime = 0.25 (midi visuel) corresponde à 0.5 (12:00).
+        //    Un décalage de +0.25 fait l'affaire.
+        //    (0.25 + 0.25) % 1.0 = 0.5  (Midi)
+        //    (0.75 + 0.25) % 1.0 = 0.0  (Minuit)
+        //    (0.0 + 0.25) % 1.0 = 0.25 (6h du matin)
+        const timeOffset = 0.25; // Décalage de 6 heures
+        const adjustedNormalizedTime = (normalizedTime + timeOffset) % 1.0;
+
+        // 3. Convertir le temps normalisé ajusté en minutes totales
+        const totalMinutesInDay = 24 * 60;
+        const currentMinute = Math.floor(adjustedNormalizedTime * totalMinutesInDay);
+
+        // 4. Extraire les heures et les minutes
         const hours = Math.floor(currentMinute / 60);
         const minutes = currentMinute % 60;
 
-        // Formatage avec zéro devant si nécessaire
+        // 5. Formatage avec zéro devant si nécessaire
         const formattedHours = String(hours).padStart(2, '0');
         const formattedMinutes = String(minutes).padStart(2, '0');
 
