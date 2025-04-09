@@ -13,7 +13,7 @@ export default class Environment {
         this.debug = this.experience.debug;
         // Récupérer mapSize (important pour le centre plat)
 		console.log(this.world.cityManager.config.mapSize);
-        this.mapSize = this.world.cityManager.config.mapSize;
+        this.mapSize = this.world.cityManager.config.mapSize + 550;
 
         this.outerGroundDisplayRadius = 0; // Sera défini après renderSkybox
 
@@ -121,13 +121,26 @@ export default class Environment {
         const segments = 150; // Plus de segments pour un meilleur détail
 
         // Paramètres pour la zone plate et le relief (inspirés de TerrainRenderer)
-        const flatRadius = this.mapSize / 2 + this.mapSize / 6.36; // Rayon de la zone plate (ville)
+        /* const flatRadius = this.mapSize / 2 + this.mapSize / 6.36; // Rayon de la zone plate (ville)
         const transitionWidth = this.mapSize * 0.25; // Zone de transition plus large ?
         const noiseScale1 = 0.006; // Fréquence du bruit (plus petit = plus large)
         const noiseScale2 = 0.015; // Deuxième octave pour plus de détails
         const octave1Weight = 0.7; // Poids de la première octave
         const octave2Weight = 0.3; // Poids de la deuxième octave
-        const hillAmplitude = 50; // Hauteur max des collines
+        const hillAmplitude = 50; // Hauteur max des collines */
+
+		// Rayon de la zone plate réduit pour démarrer la montée plus tôt
+		const flatRadius = this.mapSize * 0.4; 
+		// Zone de transition élargie pour permettre une montée plus progressive sur une plus grande distance
+		const transitionWidth = this.mapSize * 0.4; 
+		// Fréquence du bruit réduite pour étaler les détails sur une plus grande échelle (montagnes plus larges)
+		const noiseScale1 = 0.002; 
+		const noiseScale2 = 0.005; 
+		// Ajustement des poids pour donner plus de détails dans la formation des reliefs
+		const octave1Weight = 0.6; 
+		const octave2Weight = 0.4; 
+		// Amplitude augmentée pour obtenir des montagnes nettement plus hautes
+		const hillAmplitude = 150; 
 
         // Rayon final du terrain visible (doit correspondre à outerGroundDisplayRadius)
         const terrainVisibleRadius = this.outerGroundDisplayRadius;
