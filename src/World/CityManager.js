@@ -41,28 +41,36 @@ export default class CityManager {
             districtProbabilities: {
 				// Paramètres pour les quartiers d'affaires (Business/Skyscraper)
 				business: {
-					// Augmenter 'max' pour plus de dominance au centre (peut être > 1 avant normalisation)
-					max: 3,  // Était 1.0 dans votre code, essayons plus pour vraiment dominer
-					// Garder une décroissance assez rapide pour laisser place aux autres types plus loin
-					decay: 11 // Était 10. Une valeur légèrement plus élevée = décroissance plus rapide.
+					// Augmenter ENCORE PLUS 'max' pour assurer la dominance au centre.
+					// Une valeur très élevée rendra quasi certain qu'un district au centre soit 'business'.
+					max: 10, // Était ~1-3. Essayons une valeur très forte.
+					// Garder une décroissance rapide pour que la probabilité devienne quasi nulle loin du centre.
+					decay: 12 // Était ~10-11. Un peu plus rapide.
 				},
 				// Paramètres pour les quartiers industriels
 				industrial: {
-					// Seuil à partir duquel la probabilité augmente (distance normalisée)
-					threshold: 0.9, // Était 0.85. Commencer l'augmentation un peu plus tôt.
-					// Facteur contrôlant la rapidité de la montée après le seuil
-					factor: 2,     // Était 5. Augmenter pour une montée plus rapide.
-					// Facteur multiplicateur pour la partie croissante (probabilité max en périphérie)
-					multiplier: 0.1, // Était 0.2. Augmenter SIGNIFICATIVEMENT pour plus d'industrie loin du centre.
-					// Probabilité de base en dessous du seuil (près du centre)
-					base: 0.001   // Était 0.01. Réduire pour avoir très peu d'industrie au centre.
+					// Seuil où la probabilité commence à augmenter (distance normalisée).
+					// On peut le garder assez haut pour éviter l'industrie trop proche.
+					threshold: 0.85, // Était 0.85-0.9. 0.85 semble raisonnable.
+					// Facteur contrôlant la rapidité de la montée après le seuil.
+					// Augmenter pour une montée très rapide.
+					factor: 10,     // Était ~2-5. Rend la montée très abrupte après le seuil.
+					// Facteur multiplicateur pour la probabilité max en périphérie.
+					// Augmenter ENCORE PLUS pour forcer l'industrie loin du centre.
+					multiplier: 2.0, // Était ~0.1-0.2. Augmenter FORTEMENT.
+					// Probabilité de base TRÈS FAIBLE près du centre.
+					base: 0.0001   // Était ~0.01-0.001. Rend quasi impossible l'industrie au centre.
 				},
-				// Paramètres pour les quartiers résidentiels (Ajustés pour remplir l'espace restant)
+				// Paramètres pour les quartiers résidentiels (Remplissent l'espace restant)
 				residential: {
-					peakCenter: 0.45, // Centrer le pic résidentiel entre le centre et la périphérie. Était 0.5.
-					peakWidth: 0.28,  // Largeur du pic. Était 0.2. Un peu plus large peut-être.
-					// Probabilité de base réduite car business/industrial prennent plus de place aux extrêmes.
-					base: 0.05        // Était 0.8. Réduire pour laisser la place aux autres types.
+					// Centrer le pic résidentiel entre le centre (dominé par business)
+					// et la périphérie (dominée par industrial).
+					peakCenter: 0.5, // Était ~0.45-0.5. 0.5 est un bon milieu.
+					// Largeur du pic. Doit être assez large pour couvrir la zone médiane.
+					peakWidth: 0.3,  // Était ~0.2-0.28. Un peu plus large.
+					// Probabilité de base. Peut rester faible car les pics business/industriel
+					// domineront aux extrêmes. La normalisation ajustera.
+					base: 0.05        // Était ~0.05-0.8. Gardons une base faible.
 				}
 			},
              // Le reste deviendra 'building' (environ 0.30)
