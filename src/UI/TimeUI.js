@@ -24,7 +24,7 @@ export default class TimeUI {
     }
 
     /**
-     * Formate le temps du cycle en HH:MM, en tenant compte du décalage visuel.
+     * Formate le temps du cycle en HH:MM.
      * @param {number} cycleTime - Temps écoulé dans le cycle en ms.
      * @param {number} dayDurationMs - Durée totale du cycle en ms.
      * @returns {string} - L'heure formatée "HH:MM".
@@ -35,14 +35,12 @@ export default class TimeUI {
         // 1. Normaliser le temps du cycle (0 à 1)
         const normalizedTime = (cycleTime % dayDurationMs) / dayDurationMs;
 
-        // 2. Appliquer un décalage pour aligner l'heure sur le cycle visuel
-        //    On veut que normalizedTime = 0.25 (midi visuel) corresponde à 0.5 (12:00).
-        //    Un décalage de +0.25 fait l'affaire.
-        //    (0.25 + 0.25) % 1.0 = 0.5  (Midi)
-        //    (0.75 + 0.25) % 1.0 = 0.0  (Minuit)
-        //    (0.0 + 0.25) % 1.0 = 0.25 (6h du matin)
-        const timeOffset = 0.25; // Décalage de 6 heures
-        const adjustedNormalizedTime = (normalizedTime + timeOffset) % 1.0;
+        // 2. --- SUPPRESSION DU DÉCALAGE ---
+        // L'heure affichée correspondra directement au cycle visuel normalisé.
+        // normalizedTime = 0.25 -> 6h (lever)
+        // normalizedTime = 0.5  -> 12h (midi)
+        // normalizedTime = 0.75 -> 18h (coucher)
+        const adjustedNormalizedTime = normalizedTime; // Utiliser directement le temps normalisé
 
         // 3. Convertir le temps normalisé ajusté en minutes totales
         const totalMinutesInDay = 24 * 60;
