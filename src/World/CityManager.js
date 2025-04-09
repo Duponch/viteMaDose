@@ -62,7 +62,7 @@ export default class CityManager {
 					peakCenter: 0.45, // Centrer le pic résidentiel entre le centre et la périphérie. Était 0.5.
 					peakWidth: 0.28,  // Largeur du pic. Était 0.2. Un peu plus large peut-être.
 					// Probabilité de base réduite car business/industrial prennent plus de place aux extrêmes.
-					base: 0.1        // Était 0.8. Réduire pour laisser la place aux autres types.
+					base: 0.05        // Était 0.8. Réduire pour laisser la place aux autres types.
 				}
 			},
              // Le reste deviendra 'building' (environ 0.30)
@@ -374,7 +374,7 @@ export default class CityManager {
 						// Choisir entre 'house' et 'building' basé sur la taille de la parcelle
 						// (Vous pouvez ajuster le seuil de 150 m² si nécessaire)
 						const plotArea = plot.width * plot.depth;
-						targetType = (plotArea > 150) ? 'building' : 'house';
+						targetType = (plotArea > 550) ? 'building' : 'house';
 						// Compter comme conversion si ce n'était pas déjà le bon type résidentiel
 						if (initialType !== targetType) stats.forcedToResidential++; else stats.alreadyCorrect++;
 						break;
