@@ -106,12 +106,16 @@ export default class Environment {
 
 	setCloudMaterial() {
         this.cloudMaterial = new THREE.MeshStandardMaterial({
-            color: 0xffffff, // Blanc
-            roughness: 0.9,  // Peu brillant
+            color: 0xffffff,       // Blanc
+            roughness: 0.9,        // Peu brillant
             metalness: 0.1,
-            flatShading: true // <-- ESSENTIEL pour le style Low Poly !
+            flatShading: true,     // Style Low Poly
+            transparent: true,     // <-- AJOUTER : Activer la transparence
+            opacity: 0.5          // <-- AJOUTER : Niveau d'opacité (0.0 = invisible, 1.0 = opaque)
+            // Optionnel: si vous rencontrez des problèmes de rendu/tri avec la transparence:
+            // depthWrite: false
         });
-         console.log("Matériau Low Poly pour les nuages créé.");
+         console.log("Matériau Low Poly transparent pour les nuages créé.");
     }
 
 	createLowPolyCloudGeometry() {
@@ -166,43 +170,45 @@ export default class Environment {
          }
         if (this.cloudGroup.children.length > 0) {
              console.warn("Tentative de recréer les nuages alors qu'ils existent déjà.");
-             return; // Éviter de recréer si déjà fait
+             return;
          }
 
-        const numberOfClouds = 15; // Combien de nuages ?
-        const skyHeight = 150;     // Hauteur moyenne des nuages
-        const spreadRadius = this.config.mapSize * 0.8; // Rayon de dispersion
+        const numberOfClouds = 15;
+        const skyHeight = 150;
+        const spreadRadius = this.config.mapSize * 0.8;
 
-        console.log(`Création de ${numberOfClouds} nuages...`);
+        console.log(`Création de ${numberOfClouds} nuages (taille variable, transparents)...`);
 
         for (let i = 0; i < numberOfClouds; i++) {
-            const cloudGeometry = this.createLowPolyCloudGeometry(); // Génère une forme unique (ou non)
+            const cloudGeometry = this.createLowPolyCloudGeometry();
             const cloudMesh = new THREE.Mesh(cloudGeometry, this.cloudMaterial);
 
-            // Position aléatoire dans le ciel
+            // Position aléatoire
             const angle = Math.random() * Math.PI * 2;
             const radius = Math.random() * spreadRadius;
             const x = Math.cos(angle) * radius;
             const z = Math.sin(angle) * radius;
-            const y = skyHeight + (Math.random() - 0.5) * 40; // Variation de hauteur
-
+            const y = skyHeight + (Math.random() - 0.5) * 40;
             cloudMesh.position.set(x, y, z);
 
-            // Rotation et échelle aléatoires pour la variété
+            // Rotation aléatoire
             cloudMesh.rotation.y = Math.random() * Math.PI * 2;
-            const scale = 1.0 + (Math.random() - 0.5) * 0.8; // Échelle entre 0.6 et 1.4 env.
-            cloudMesh.scale.set(scale, scale, scale);
 
-            // Activer les ombres (optionnel, peut coûter en performance)
+            // --- MODIFIÉ : Échelle aléatoire avec une plus grande plage ---
+            // Exemple: échelle allant de 0.5 à 4.0 (0.5 + 3.5 * 1.0)
+            const scale = 0.5 + Math.random() * 10;
+            cloudMesh.scale.set(scale, scale, scale);
+            // -----------------------------------------------------------
+
+            // Ombres (inchangé)
             cloudMesh.castShadow = true;
-            // cloudMesh.receiveShadow = false; // Les nuages ne reçoivent généralement pas d'ombre
 
             cloudMesh.name = `Cloud_${i}`;
             this.cloudGroup.add(cloudMesh);
         }
 
-        this.scene.add(this.cloudGroup); // Ajouter le groupe à la scène
-        console.log("Groupe de nuages ajouté à la scène.");
+        this.scene.add(this.cloudGroup);
+        console.log("Groupe de nuages (taille variable, transparents) ajouté à la scène.");
     }
 
     setSunLight() {
