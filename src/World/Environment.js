@@ -8,102 +8,233 @@ import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 export default class Environment {
     constructor(experience, world) {
         this.experience = experience;
-		this.world = world;
+        this.world = world; // Conservez la référence au monde
         this.scene = this.experience.scene;
         this.debug = this.experience.debug;
-        // Récupérer mapSize (important pour le centre plat)
-		console.log(this.world.cityManager.config.mapSize);
-        this.mapSize = this.world.cityManager.config.mapSize + 550;
+        this.config = this.world.cityManager.config; // Accès facile à la config
 
+        this.mapSize = this.config.mapSize + 550;
         this.outerGroundDisplayRadius = 0; // Sera défini après renderSkybox
 
-        // Propriétés Skybox...
-        this.skyboxCanvas = null;
-        this.skyboxContext = null;
-        this.starsCanvas = null;
-        this.skyboxTexture = null;
-        this.skyBox = null;
-        this.moonMesh = null;
-        this.skyboxGreenProgress = 0;
-        this.targetSkyboxGreenProgress = 0;
-        this.skyboxRadius = 0;
+        // --- Propriétés Cycle Jour/Nuit ---
+        this.cycleEnabled = this.config.dayNightCycleEnabled;
+        this.dayDurationMs = this.config.dayDurationMinutes * 60 * 1000; // Durée en millisecondes
+        this.cycleTime = (this.dayDurationMs * this.config.startTimeOfDay) % this.dayDurationMs; // Temps actuel dans le cycle (ms)
+        this.sunDistance = 0; // Sera défini dans renderSkybox ou setSunLight
+        // Couleurs/Intensités (ajustez selon vos préférences)
+        this.sunColors = {
+            dawn: new THREE.Color(0xffa500), // Lever (Orange)
+            day: new THREE.Color(0xffffff),  // Journée (Blanc)
+            dusk: new THREE.Color(0xff4500), // Coucher (Rouge-Orange)
+            night: new THREE.Color(0x000033) // Nuit (Bleu très sombre) - Utilisé pour la teinte ambiante
+        };
+        this.sunIntensity = { day: 3.5, night: 0 };
+        this.ambientColors = { day: new THREE.Color(0xb0c4de), night: new THREE.Color(0x111133) }; // Acier clair -> Bleu nuit
+        this.ambientIntensity = { day: 0.6, night: 0.1 };
+        this.skyGradientColors = {
+             // [Top, Middle, Horizon]
+            dawn: ['#111133', '#ff8c00', '#ff4500'],
+            day: ['#87CEEB', '#B0E0E6', '#ADD8E6'], // SkyBlue, PowderBlue, LightBlue
+            dusk: ['#111133', '#ff4500', '#8B0000'], // DarkRed à l'horizon
+            night: ['#000000', '#00001a', '#000033'] // Noir -> Bleu très sombre
+        };
+        // --- Fin Propriétés Cycle ---
+
+        // Propriétés Skybox existantes...
+        this.skyboxCanvas = null; this.skyboxContext = null; this.starsCanvas = null; this.skyboxTexture = null; this.skyBox = null;
+        this.moonMesh = null; // Vous pourriez vouloir animer la lune aussi !
+        this.skyboxGreenProgress = 0; this.targetSkyboxGreenProgress = 0; this.skyboxRadius = 0;
         this.skyboxTransitionSpeed = 0.2;
         this.outerGroundMesh = null;
 
         this.setSunLight();
         this.setAmbientLight();
-        this.renderSkybox(); // Définit this.skyboxRadius
-		console.log(this.skyboxRadius);
-        this.outerGroundDisplayRadius = this.skyboxRadius + 10; // Lier le rayon visible à la skybox
-        this.createOuterGround(); // Appel de la fonction mise à jour
+        this.renderSkybox(); // Définit this.skyboxRadius et met à jour sunDistance
+        this.outerGroundDisplayRadius = this.skyboxRadius + 10;
+        this.createOuterGround();
+
+        // Appliquer l'état initial basé sur startTimeOfDay
+        this.updateDayNightCycle(0); // Appeler une première fois avec delta = 0
     }
 
-    // setSunLight() reste inchangé...
-	setSunLight() {
-        this.sunLight = new THREE.DirectionalLight(0xffffff, 3);
+    setSunLight() {
+        this.sunLight = new THREE.DirectionalLight(0xffffff, 1); // Couleur/Intensité seront gérées dans update
         this.sunLight.castShadow = true;
+        // Vos paramètres d'ombre existants
         this.sunLight.shadow.mapSize.set(4096, 4096);
         this.sunLight.shadow.normalBias = 0.05;
-        this.sunLight.position.set(200, 320, 200);
-        const shadowCamSize = 1000; // Taille de la ville
-        // Ajuster la caméra d'ombre pour couvrir un peu plus large à cause des collines
-        const shadowMargin = 200; // Marge supplémentaire
+        // La position sera gérée dynamiquement
+        // this.sunLight.position.set(200, 320, 200); // Position initiale gérée dans update
+        this.sunDistance = this.mapSize * 0.7; // Distance du soleil par rapport au centre (0,0,0)
+
+        const shadowCamSize = this.config.mapSize / 2; // Plus proche de la taille de la ville pour les ombres
+        const shadowMargin = 250; // Marge
         this.sunLight.shadow.camera.left = -shadowCamSize - shadowMargin;
         this.sunLight.shadow.camera.right = shadowCamSize + shadowMargin;
         this.sunLight.shadow.camera.top = shadowCamSize + shadowMargin;
         this.sunLight.shadow.camera.bottom = -shadowCamSize - shadowMargin;
-        this.sunLight.shadow.camera.near = 0.5;
-        // Augmenter far pour inclure les collines et la position de la lumière
-        this.sunLight.shadow.camera.far = 2000;
-        this.sunLight.shadow.camera.updateProjectionMatrix();
+        this.sunLight.shadow.camera.near = 10; // Ajusté
+        this.sunLight.shadow.camera.far = this.sunDistance * 2.5; // Doit englober la position max du soleil + la scène
+        // Ne pas appeler updateProjectionMatrix ici, car la position initiale n'est pas définie
         this.scene.add(this.sunLight);
-
-		/* const helper = new THREE.CameraHelper(this.sunLight.shadow.camera);
-		this.scene.add(helper); */
+        // Optionnel: Ajouter une cible si nécessaire, sinon elle cible (0,0,0)
+        // this.scene.add(this.sunLight.target);
     }
 
-    // setAmbientLight() reste inchangé...
     setAmbientLight() {
-        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, 0.1); // Couleur/Intensité seront gérées dans update
         this.scene.add(this.ambientLight);
     }
 
-    // renderSkybox() reste inchangé...
+    // Modifiez renderSkybox pour définir skyboxRadius et sunDistance correctement
     renderSkybox() {
-        this.skyboxCanvas = document.createElement('canvas');
-        this.skyboxCanvas.width = 10240;
-        this.skyboxCanvas.height = 5120;
-        this.skyboxContext = this.skyboxCanvas.getContext('2d');
-        this.starsCanvas = document.createElement('canvas');
-        this.starsCanvas.width = this.skyboxCanvas.width;
-        this.starsCanvas.height = this.skyboxCanvas.height;
-        const starsContext = this.starsCanvas.getContext('2d');
-        const numStars = 3000;
-        for (let i = 0; i < numStars; i++) {
-            const x = Math.random() * this.starsCanvas.width;
-            const y = Math.random() * this.starsCanvas.height;
-            const radius = Math.random() * 2.5 + 0.5;
-            starsContext.beginPath();
-            starsContext.arc(x, y, radius, 0, Math.PI * 2, false);
-            starsContext.fillStyle = '#ffffff';
-            starsContext.fill();
-        }
-        const gradient = this.skyboxContext.createLinearGradient(0, 0, 0, this.skyboxCanvas.height);
-        gradient.addColorStop(0, '#000000');
-        gradient.addColorStop(0.45, '#0b0322');
-        gradient.addColorStop(0.6, '#f73428');
-        this.skyboxContext.fillStyle = gradient;
-        this.skyboxContext.fillRect(0, 0, this.skyboxCanvas.width, this.skyboxCanvas.height);
-        this.skyboxContext.drawImage(this.starsCanvas, 0, 0);
-        this.skyboxTexture = new THREE.CanvasTexture(this.skyboxCanvas);
-        this.skyboxTexture.needsUpdate = true;
-        this.skyboxRadius = this.mapSize * 0.8;
+        // ... (début de renderSkybox: création canvas, étoiles etc.) ...
+        // Définir le rayon basé sur la taille de la carte
+        this.skyboxRadius = this.mapSize * 0.8; // Ou une autre valeur appropriée
+        this.sunDistance = this.skyboxRadius * 0.9; // Lier la distance du soleil au rayon de la skybox
+        console.log(`Rayon Skybox défini: ${this.skyboxRadius}, Distance Soleil: ${this.sunDistance}`);
+
         const skyGeometry = new THREE.SphereGeometry(this.skyboxRadius, 60, 40);
+        // Le matériau sera mis à jour dynamiquement
         const skyMaterial = new THREE.MeshBasicMaterial({ map: this.skyboxTexture, side: THREE.BackSide });
         this.skyBox = new THREE.Mesh(skyGeometry, skyMaterial);
-        this.skyBox.renderOrder = -1;
+        this.skyBox.renderOrder = -1; // Pour être sûr qu'il est dessiné en premier
         this.scene.add(this.skyBox);
-        console.log(`Skybox créée avec rayon: ${this.skyboxRadius}`);
+
+        // Créer le canvas des étoiles une seule fois
+        this.starsCanvas = document.createElement('canvas');
+        this.starsCanvas.width = 10240; // Utiliser une haute résolution
+        this.starsCanvas.height = 5120;
+        const starsContext = this.starsCanvas.getContext('2d');
+        starsContext.fillStyle = 'black'; // Fond noir pour le canvas des étoiles
+        starsContext.fillRect(0, 0, this.starsCanvas.width, this.starsCanvas.height);
+        starsContext.fillStyle = '#ffffff';
+        const numStars = 5000; // Plus d'étoiles
+        for (let i = 0; i < numStars; i++) {
+            const x = Math.random() * this.starsCanvas.width;
+            const y = Math.random() * this.starsCanvas.height * 0.6; // Étoiles principalement dans la partie supérieure
+            const radius = Math.random() * 1.5 + 0.5; // Petites étoiles
+            starsContext.beginPath();
+            starsContext.arc(x, y, radius, 0, Math.PI * 2);
+            starsContext.fill();
+        }
+
+        // Initialiser le canvas principal (sera redessiné dans update)
+        this.skyboxCanvas = document.createElement('canvas');
+        this.skyboxCanvas.width = this.starsCanvas.width;
+        this.skyboxCanvas.height = this.starsCanvas.height;
+        this.skyboxContext = this.skyboxCanvas.getContext('2d');
+        this.skyboxTexture = new THREE.CanvasTexture(this.skyboxCanvas);
+        this.skyBox.material.map = this.skyboxTexture; // Assigner la texture au matériau
+
+        console.log(`Skybox initialisée. Rayon: ${this.skyboxRadius}`);
+    }
+
+	updateDayNightCycle(deltaTime) {
+
+		console.log(this.cycleEnabled);
+
+        if (!this.cycleEnabled || this.dayDurationMs <= 0) return;
+
+        // 1. Mettre à jour le temps du cycle
+        this.cycleTime += deltaTime; // deltaTime est déjà en ms depuis Time.js
+        this.cycleTime %= this.dayDurationMs; // Boucler le temps
+
+        // 2. Calculer l'angle du cycle (0 à 2*PI)
+        // 0 = minuit, PI/2 = lever, PI = midi, 3*PI/2 = coucher
+        const angle = (this.cycleTime / this.dayDurationMs) * Math.PI * 2;
+
+        // 3. Calculer la position du soleil
+        // Rotation autour de l'axe Z (Est/Ouest sur X, Hauteur sur Y)
+        const sunX = Math.cos(angle) * this.sunDistance;
+        const sunY = Math.sin(angle) * this.sunDistance;
+        const sunZ = 100; // Légèrement décalé sur Z pour un effet moins plat si désiré, ou 0
+        this.sunLight.position.set(sunX, sunY, sunZ);
+        // Assurez-vous que la cible est correcte (normalement 0,0,0 par défaut)
+        // this.sunLight.target.position.set(0, 0, 0); // Si vous avez ajouté une cible manuellement
+
+        // Mettre à jour la caméra d'ombre si nécessaire (si la cible ou la position change radicalement)
+        // this.sunLight.shadow.camera.updateProjectionMatrix(); // Peut impacter les perfs si fait à chaque frame
+
+        // 4. Déterminer la phase du cycle (pour transitions de couleur/intensité)
+        const normalizedTime = this.cycleTime / this.dayDurationMs; // 0 à 1
+        const dayFactor = Math.max(0, Math.sin(angle)); // 0 à 1 (intensité basée sur la hauteur du soleil)
+        const dawnDuskFactor = Math.max(0, Math.sin(angle * 2)); // Pic au lever/coucher (pour la couleur chaude)
+
+        // 5. Mettre à jour l'intensité des lumières
+        this.sunLight.intensity = THREE.MathUtils.lerp(this.sunIntensity.night, this.sunIntensity.day, dayFactor);
+        this.ambientLight.intensity = THREE.MathUtils.lerp(this.ambientIntensity.night, this.ambientIntensity.day, dayFactor);
+
+        // 6. Mettre à jour la couleur des lumières (transitions plus complexes)
+        let sunColorTarget = new THREE.Color();
+        // Mélange Jour -> Coucher -> Nuit -> Lever -> Jour
+        if (normalizedTime < 0.25) { // Nuit -> Lever (0 -> 0.25)
+            sunColorTarget.lerpColors(this.sunColors.night, this.sunColors.dawn, normalizedTime * 4);
+        } else if (normalizedTime < 0.5) { // Lever -> Jour (0.25 -> 0.5)
+            sunColorTarget.lerpColors(this.sunColors.dawn, this.sunColors.day, (normalizedTime - 0.25) * 4);
+        } else if (normalizedTime < 0.75) { // Jour -> Coucher (0.5 -> 0.75)
+            sunColorTarget.lerpColors(this.sunColors.day, this.sunColors.dusk, (normalizedTime - 0.5) * 4);
+        } else { // Coucher -> Nuit (0.75 -> 1)
+            sunColorTarget.lerpColors(this.sunColors.dusk, this.sunColors.night, (normalizedTime - 0.75) * 4);
+        }
+        // Application de la couleur (peut être combinée avec l'effet health si besoin)
+        this.sunLight.color.copy(sunColorTarget); // Utilisez .copy()
+
+        // Couleur ambiante simple jour/nuit
+        this.ambientLight.color.lerpColors(this.ambientColors.night, this.ambientColors.day, dayFactor);
+
+        // 7. Mettre à jour la Skybox
+        this.updateSkyboxAppearance(normalizedTime, dayFactor);
+
+        // 8. Mettre à jour l'effet de santé (Optionnel: superposer à l'état jour/nuit)
+        // Vous pouvez garder votre logique updateSkyboxTransition ou l'intégrer ici
+        // en appliquant la teinte *après* avoir défini les couleurs jour/nuit.
+        // Exemple simple : Teinter légèrement le soleil basé sur la santé
+        const healthFactor = 1.0; // Remplacez par votre vraie valeur de santé normalisée (0-1)
+        const baseSunColor = this.sunLight.color.clone(); // Copie de la couleur jour/nuit actuelle
+        const healthTargetColor = new THREE.Color(0x5b0000); // Couleur cible pour faible santé
+        this.sunLight.color.lerpColors(baseSunColor, healthTargetColor, 1 - healthFactor);
+        // Faites de même pour ambientLight et skybox si nécessaire
+    }
+
+	updateSkyboxAppearance(normalizedTime, dayFactor) {
+        if (!this.skyboxContext || !this.skyboxTexture || !this.skyboxCanvas || !this.starsCanvas) return;
+
+        const ctx = this.skyboxContext;
+        const w = this.skyboxCanvas.width;
+        const h = this.skyboxCanvas.height;
+
+        // Déterminer les couleurs de gradient cibles
+        let gradientColorsTarget;
+        if (normalizedTime < 0.25) { gradientColorsTarget = this.skyGradientColors.night; } // Nuit
+        else if (normalizedTime < 0.35) { gradientColorsTarget = this.skyGradientColors.dawn; } // Lever
+        else if (normalizedTime < 0.65) { gradientColorsTarget = this.skyGradientColors.day; } // Jour
+        else if (normalizedTime < 0.75) { gradientColorsTarget = this.skyGradientColors.dusk; } // Coucher
+        else { gradientColorsTarget = this.skyGradientColors.night; } // Retour nuit
+
+       // Créer le gradient
+       const gradient = ctx.createLinearGradient(0, 0, 0, h);
+       // TODO: Implémenter une interpolation plus douce entre les ensembles de couleurs (dawn, day, dusk, night)
+       // Pour l'instant, utilise les couleurs cibles directement
+       gradient.addColorStop(0, gradientColorsTarget[0]);    // Couleur du haut (Zénith)
+       gradient.addColorStop(0.6, gradientColorsTarget[1]);  // Couleur du milieu
+       gradient.addColorStop(1, gradientColorsTarget[2]);    // Couleur de l'horizon
+
+        // Dessiner le fond avec le gradient
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, w, h);
+
+        // Dessiner les étoiles avec une opacité basée sur dayFactor
+        // Plus il fait jour (dayFactor -> 1), plus les étoiles sont transparentes
+        const starsOpacity = Math.max(0, Math.min(1, 1 - dayFactor * 2)); // Fade out plus rapide
+        if (starsOpacity > 0.01) {
+            ctx.globalAlpha = starsOpacity;
+            ctx.drawImage(this.starsCanvas, 0, 0);
+            ctx.globalAlpha = 1.0; // Réinitialiser l'alpha global
+        }
+
+        // Indiquer que la texture doit être mise à jour sur le GPU
+        this.skyboxTexture.needsUpdate = true;
     }
 
     // ----- createOuterGround MODIFIÉ -----
@@ -227,53 +358,6 @@ export default class Environment {
     }
     // ------------------------------------
 
-    // updateSkyboxTransition() reste inchangé...
-    updateSkyboxTransition(delta, normalizedHealth) {
-         if (!this.skyboxContext || !this.skyboxTexture || !this.skyboxCanvas || !this.starsCanvas) return;
-        this.targetSkyboxGreenProgress = 1 - normalizedHealth;
-        if (this.skyboxGreenProgress !== this.targetSkyboxGreenProgress) {
-            const diff = this.targetSkyboxGreenProgress - this.skyboxGreenProgress;
-            const change = this.skyboxTransitionSpeed * delta;
-            if (Math.abs(change) >= Math.abs(diff)) {
-                this.skyboxGreenProgress = this.targetSkyboxGreenProgress;
-            } else {
-                this.skyboxGreenProgress += Math.sign(diff) * change;
-            }
-            const context = this.skyboxContext;
-            context.clearRect(0, 0, this.skyboxCanvas.width, this.skyboxCanvas.height);
-            const gradient = context.createLinearGradient(0, 0, 0, this.skyboxCanvas.height);
-            gradient.addColorStop(0, '#000000');
-            const baseColor1 = new THREE.Color(0x0b0322);
-            const targetColor1 = new THREE.Color(0x0c0100);
-            const currentColor1 = baseColor1.clone().lerp(targetColor1, this.skyboxGreenProgress);
-            gradient.addColorStop(0.45, '#' + currentColor1.getHexString());
-            const baseColor2 = new THREE.Color(0xf73428);
-            const targetColor2 = new THREE.Color(0x950900);
-            const currentColor2 = baseColor2.clone().lerp(targetColor2, this.skyboxGreenProgress);
-            gradient.addColorStop(0.6, '#' + currentColor2.getHexString());
-            context.fillStyle = gradient;
-            context.fillRect(0, 0, this.skyboxCanvas.width, this.skyboxCanvas.height);
-            context.drawImage(this.starsCanvas, 0, 0);
-            this.skyboxTexture.needsUpdate = true;
-            const initialSunColor = new THREE.Color(0xffffff);
-            const targetSunColor = new THREE.Color(0x5b0000);
-            const currentSunColor = initialSunColor.clone().lerp(targetSunColor, this.skyboxGreenProgress);
-             if (this.sunLight) {
-                 this.sunLight.color.copy(currentSunColor);
-             }
-            if (this.moonMesh) {
-                const initialMoonColor = new THREE.Color(0xffffff);
-                const targetMoonColor  = new THREE.Color(0xff3325);
-                const currentMoonColor = initialMoonColor.clone().lerp(targetMoonColor, this.skyboxGreenProgress);
-                this.moonMesh.traverse((child) => {
-                    if (child.isMesh && child.material && child.material.emissive) {
-                        child.material.emissive.copy(currentMoonColor);
-                    }
-                });
-            }
-        }
-    }
-
     // destroy() reste inchangé...
     destroy() {
         console.log("Nettoyage de l'environnement...");
@@ -296,7 +380,7 @@ export default class Environment {
     }
 
     // update() reste inchangé...
-    update(deltaTime, healthFactor = 1) {
-        this.updateSkyboxTransition(deltaTime, healthFactor);
+    update(deltaTime) {
+		this.updateDayNightCycle(deltaTime);
     }
 }

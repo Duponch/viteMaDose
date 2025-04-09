@@ -132,6 +132,10 @@ export default class CityManager {
 			// --- Debug ---
 			showDistrictBoundaries: false,
 
+			dayNightCycleEnabled: true,
+			dayDurationMinutes: 1,
+			startTimeOfDay: 0.25, // <- AJOUTER CECI (0.25 = lever du soleil)
+
 			// --- Fusion des configurations externes ---
 			...config
 		};
