@@ -15,80 +15,116 @@ export default class CityManager {
         // (La configuration reste inchangée pour cette stratégie,
         // mais vous pourriez aussi ajuster les probabilités initiales
         // et de conversion en complément si désiré)
-        this.config = {
-            // Map & Layout
-            mapSize: 700,
-            roadWidth: 10,
-            minPlotSize: 13,
-            maxPlotSize: 40,
-            maxRecursionDepth: 7,
+        // Dans le constructeur de CityManager (src/World/CityManager.js)
 
-            // ... (District Formation comme avant) ...
-            minDistrictSize: 5,
-            maxDistrictSize: 10,
+		this.config = {
+			// Map & Layout
+			mapSize: 700,
+			roadWidth: 10,
+			minPlotSize: 13,
+			maxPlotSize: 40, // N'affecte pas la taille du district directement, mais la taille des parcelles initiales
+			maxRecursionDepth: 7, // Profondeur de subdivision des parcelles
 
-            // ... (Plot Type Adjustment Probabilities comme avant) ...
-            businessConversionProbability: 0,
-            industrialConversionProbability: 0,
+			// District Formation
+			minDistrictSize: 5,  // Nombre minimum de parcelles pour former un district
+			maxDistrictSize: 10, // Nombre maximum de parcelles lors de la croissance initiale d'un district
 
-            // ... (Initial Plot Type Probabilities comme avant) ...
-            parkProbability: 0.10,
-            industrialZoneProbability: 0.05,
-            houseZoneProbability: 0.50,
-            skyscraperZoneProbability: 0.1,
+			// Probabilités initiales de type de parcelle (AVANT la logique de district)
+			// Ces probabilités sont utilisées par CityLayoutGenerator
+			parkProbability: 0.10,
+			industrialZoneProbability: 0.05,
+			houseZoneProbability: 0.50,
+			skyscraperZoneProbability: 0.10, // Probabilité initiale qu'une parcelle soit 'skyscraper'
+			// La probabilité 'building' est implicitement 1 - (somme des autres)
 
-            // **** NOUVELLE SECTION POUR LES PROBABILITÉS DE TYPE DE DISTRICT ****
-			forceBusinessMaxDistance: 0.15, // Distance normalisée max pour FORCER 'business'
-			forceIndustrialMinDistance: 0.85, // Distance normalisée min pour FORCER 'industrial'
-			// **** FIN SEUILS ****
-		
-			districtProbabilities: {
-				// ... vos probabilités actuelles ...
-				 business: { max: 10, decay: 12 },
-				 industrial: { threshold: 0.85, factor: 10, multiplier: 0.05, base: 0.0001 },
-				 residential: { peakCenter: 0.5, peakWidth: 0.3, base: 0.05 }
+			// Paramètres pour la détermination du type de DISTRICT basé sur la distance
+			forceBusinessMaxDistance: 0.15, // Distance normalisée max pour FORCER 'business' près du centre
+			// forceIndustrialMinDistance: 0.85, // N'est plus utilisé car remplacé par la logique probabiliste + validation
+			districtProbabilities: { // Paramètres pour getDistrictTypeProbabilities
+				business: { max: 10, decay: 12 }, // Influence la probabilité 'business' (décroit avec la distance)
+				industrial: { threshold: 0.85, factor: 10, multiplier: 0.05, base: 0.0001 }, // Influence probabilité 'industrial' (augmente loin du centre)
+				residential: { peakCenter: 0.5, peakWidth: 0.3, base: 0.05 } // Influence probabilité 'residential' (pic au milieu)
 			},
 
-			validationZoneCenterMaxDist: 0.20, // Zone "Centre" pour la validation
-			validationZoneEdgeMinDist: 0.80, // Zone "Périphérie" pour la validation
-			minBusinessInCenter: 2,        // Nombre minimum de districts 'business' requis au centre
-			minIndustrialInEdge: 2,        // Nombre minimum de districts 'industrial' requis en périphérie
-			maxDistrictRegenAttempts: 5,   // Nombre max de tentatives de régénération
+			// --- VALIDATION ET RÈGLES STRICTES ---
+			// Zones pour les minimums LOCAUX (optionnel si les min globaux suffisent)
+			validationZoneCenterMaxDist: 0.20, // Zone "Centre" = 20% du rayon depuis le centre
+			validationZoneEdgeMinDist: 0.80,   // Zone "Périphérie" = au-delà de 80% du rayon
+			minBusinessInCenter: 1,            // Minimum de districts business DANS la zone centrale (peut être 0 si minTotalBusinessDistricts >= 1)
+			minIndustrialInEdge: 1,            // Minimum de districts industriels DANS la zone périphérie (peut être 0 si minTotalIndustrialDistricts >= 1)
 
-            // Roads/Sidewalks & Plot Content (Inchangé)
-            sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
-            minHouseSubZoneSize: 7, minBuildingSubZoneSize: 10, minIndustrialSubZoneSize: 13,
-            minParkSubZoneSize: 10, minSkyscraperSubZoneSize: 13, buildingSubZoneMargin: 1.5,
+			// Placement Strict par Distance (Règles fondamentales)
+			// ÉCHEC si un district industriel est PLUS PROCHE que cette distance normalisée du centre
+			strictMinIndustrialDist: 0.35,     // Ex: Pas d'industrie dans les 35% les plus proches du centre (0=centre, 1=bord)
+			// ÉCHEC si un district business (gratte-ciel) est PLUS LOIN que cette distance normalisée du centre
+			strictMaxBusinessDist: 0.60,       // Ex: Pas de gratte-ciels au-delà de 60% de la distance vers le bord
 
-            // Asset Config (Inchangé)
-             houseModelDir: "Public/Assets/Models/Houses/",
-             houseModelFiles: [ { file: "House1.fbx" }, /* ... autres maisons ... */ { file: "House24.fbx" }, ],
-             houseBaseWidth: 6, houseBaseHeight: 6, houseBaseDepth: 6,
-             buildingModelDir: "Public/Assets/Models/Buildings/",
-             buildingModelFiles: [ { file: "Building1.fbx", scale: 1.0 }, /* ... autres immeubles ... */ { file: "Building10.glb", scale: 1 }, ],
-             buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
-             industrialModelDir: "Public/Assets/Models/Industrials/",
-             industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 4 }/* , { file: "Factory2_glb.glb", scale: 4 }, { file: "Factory3_glb.glb", scale: 4 } */ ],
-             industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
-             parkModelDir: "Public/Assets/Models/Parks/",
-             parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
-             parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
-             treeModelDir: "Public/Assets/Models/Trees/",
-             treeModelFiles: [ { file: "Tree.glb", scale: 0.9 }, /* ... autres arbres ... */ { file: "Tree7.glb", scale: 0.9 }, ],
-             treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
-             skyscraperModelDir: "Public/Assets/Models/Skyscrapers/",
-             skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 }, ],
-             skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
+			// Comptes Globaux Minimum/Maximum (Vos X et Y)
+			// ÉCHEC si le nombre TOTAL de districts industriels n'est pas dans cette fourchette
+			minTotalIndustrialDistricts: 1,    // X: Doit y avoir AU MOINS CE NOMBRE de districts industriels (mettre >= 1 pour en avoir toujours)
+			maxTotalIndustrialDistricts: 5,    // Y: Ne doit pas y avoir PLUS QUE CE NOMBRE de districts industriels
+			// ÉCHEC si le nombre TOTAL de districts d'affaires (gratte-ciels) n'est pas dans cette fourchette
+			minTotalBusinessDistricts: 1,      // X: Doit y avoir AU MOINS CE NOMBRE de districts d'affaires
+			maxTotalBusinessDistricts: 4,      // Y: Ne doit pas y avoir PLUS QUE CE NOMBRE de districts d'affaires
 
-            // Tree Placement (Inchangé)
-            treePlacementProbabilitySidewalk: 0.3, treePlacementProbabilityPark: 0.04, treePlacementProbabilityMargin: 0.008,
+			// Tentatives de Régénération
+			maxDistrictRegenAttempts: 15,      // Nombre max de tentatives pour générer une disposition VALIDE (augmenté car règles plus strictes)
 
-            // Debug (Inchangé)
-             showDistrictBoundaries: false,
+			// --- Contenu des Parcelles ---
+			// Routes/Trottoirs
+			sidewalkWidth: 2,
+			sidewalkHeight: 0.2,
+			centerlineWidth: 0.15,
+			centerlineHeight: 0.02,
 
-            // Fusion (Inchangé)
-            ...config
-        };
+			// Subdivision des parcelles pour placer les bâtiments/assets
+			minHouseSubZoneSize: 7,
+			minBuildingSubZoneSize: 10,
+			minIndustrialSubZoneSize: 13,
+			minParkSubZoneSize: 10,
+			minSkyscraperSubZoneSize: 13, // Taille minimale pour placer un gratte-ciel (affecte la subdivision)
+			buildingSubZoneMargin: 1.5,   // Marge autour des assets dans leur sous-zone
+
+			// --- Configuration des Assets ---
+			// (Les chemins et dimensions de base restent les mêmes, assurez-vous qu'ils sont corrects)
+			houseModelDir: "Public/Assets/Models/Houses/",
+			houseModelFiles: [ { file: "House1.fbx" }, /* ... */ { file: "House24.fbx" }, ],
+			houseBaseWidth: 6, houseBaseHeight: 6, houseBaseDepth: 6,
+
+			buildingModelDir: "Public/Assets/Models/Buildings/",
+			buildingModelFiles: [ { file: "Building1.fbx", scale: 1.0 }, /* ... */ { file: "Building10.glb", scale: 1 }, ],
+			buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
+
+			industrialModelDir: "Public/Assets/Models/Industrials/",
+			industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 4 }/* , { file: "Factory2_glb.glb", scale: 4 }, { file: "Factory3_glb.glb", scale: 4 } */ ],
+			industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
+
+			parkModelDir: "Public/Assets/Models/Parks/",
+			parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
+			parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
+
+			treeModelDir: "Public/Assets/Models/Trees/",
+			treeModelFiles: [ { file: "Tree.glb", scale: 0.9 }, /* ... */ { file: "Tree7.glb", scale: 0.9 }, ],
+			treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
+
+			skyscraperModelDir: "Public/Assets/Models/Skyscrapers/",
+			skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 }, ],
+			skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
+
+			// --- Placement des Arbres ---
+			treePlacementProbabilitySidewalk: 0.3, // Probabilité d'avoir un arbre à un coin de trottoir
+			treePlacementProbabilityPark: 0.04,    // Densité d'arbres dans les parcs (par m²)
+			treePlacementProbabilityMargin: 0.008, // Densité d'arbres dans les marges des autres zones (par m²)
+
+			// --- Debug ---
+			showDistrictBoundaries: true, // Mettre à true pour voir les zones de district colorées
+
+			// --- Fusion des configurations externes ---
+			// !! Important: Laissez cette ligne à la fin !!
+			// Elle permet de surcharger les valeurs par défaut ci-dessus avec
+			// un objet de configuration optionnel passé au constructeur de CityManager.
+			...config
+		};
 
 		if (config.districtProbabilities) {
             this.config.districtProbabilities.business = { ...this.config.districtProbabilities.business, ...config.districtProbabilities.business };
@@ -146,7 +182,7 @@ export default class CityManager {
             this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
             console.timeEnd("LayoutGeneration");
             console.log(`Layout généré avec ${this.leafPlots.length} parcelles.`);
-            this.logInitialZoneTypes(); // Log avant ajustement district
+            this.logInitialZoneTypes();
 
             if (!this.leafPlots || this.leafPlots.length === 0) throw new Error("Layout n'a produit aucune parcelle.");
 
@@ -158,46 +194,63 @@ export default class CityManager {
                 attempts++;
                 console.log(`\nTentative de formation/validation des districts #${attempts}...`);
 
-                // Réinitialiser l'état des districts pour la nouvelle tentative
-                this.districts = [];
-                // NOTE: createDistricts_V2 utilise son propre 'assignedPlotIds' localement,
-                // donc pas besoin de le réinitialiser ici explicitement.
-                // Les parcelles sont filtrées à chaque appel basé sur this.districts (qui est vide).
+                this.districts = []; // Réinitialiser l'état des districts
 
-                this.createDistricts_V2(); // Utilise maintenant le forçage par distance
-                this.logDistrictStats(); // Log après formation initiale
+                this.createDistricts_V2();
+                this.logDistrictStats();
 
                 districtLayoutValid = this.validateDistrictLayout(); // Valider la disposition
 
                 if (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
                     console.log(`Disposition invalide, nouvelle tentative (max ${this.config.maxDistrictRegenAttempts})...`);
-                    // Pas besoin de clearCity ici, juste les districts
                 } else if (!districtLayoutValid) {
-                    console.error(`ERREUR: Impossible d'obtenir une disposition de districts valide après ${attempts} tentatives.`);
-                    // Que faire ici ? Arrêter ? Continuer avec une disposition invalide ?
-                    // Pour l'instant, on continue mais on log l'erreur.
-                    // throw new Error("Disposition de districts invalide persistante."); // Option plus stricte
+                    // Ce message est loggué, mais la boucle va se terminer
+                    console.error(`ERREUR DANS LA BOUCLE: Impossible d'obtenir une disposition de districts valide après ${attempts} tentatives.`);
                 }
             }
-             console.timeEnd("DistrictFormationAndValidation");
-             console.log(`Formation districts terminée après ${attempts} tentative(s). Etat final: ${districtLayoutValid ? 'Valide' : 'Invalide (max tentatives atteint)'}`);
+            console.timeEnd("DistrictFormationAndValidation");
+            console.log(`Formation districts terminée après ${attempts} tentative(s). Etat final: ${districtLayoutValid ? 'Valide' : 'Invalide (max tentatives atteint)'}`);
             // --- FIN BOUCLE ---
 
+
+            // ******** AJOUT DE LA VÉRIFICATION CRUCIALE ********
+            if (!districtLayoutValid) {
+                // Si on est sorti de la boucle SANS une disposition valide
+                const errorMessage = `Échec critique: Impossible de générer une disposition de districts valide respectant toutes les règles après ${this.config.maxDistrictRegenAttempts} tentatives. Arrêt de la génération de la ville. Veuillez vérifier/assouplir les règles dans la configuration (strictMin/Max, min/max Total...).`;
+                console.error(errorMessage);
+                this.clearCity(); // Optionnel: nettoyer ce qui a été généré jusqu'ici
+                throw new Error(errorMessage); // Lance une erreur pour arrêter net l'exécution de generateCity
+                // Alternativement, vous pourriez juste faire 'return;' si vous ne voulez pas d'erreur,
+                // mais lancer une erreur est plus explicite pour un échec critique.
+                // return;
+            }
+            // ******** FIN DE L'AJOUT ********
+
+
+            // Le code suivant ne s'exécutera QUE si districtLayoutValid est true
+            console.log("Disposition des districts validée. Poursuite de la génération...");
 
             console.time("PlotTypeAdjustment");
             this.adjustPlotTypesWithinDistricts(); // Appliquer les types stricts aux parcelles
             console.timeEnd("PlotTypeAdjustment");
-            this.logAdjustedZoneTypes(); // Log final après ajustement
+            this.logAdjustedZoneTypes();
 
-            // Générer le reste (routes, contenu) basé sur la disposition finale des districts/parcelles
             console.time("RoadGeneration"); this.roadGroup = this.roadGenerator.generateRoads(this.leafPlots); this.cityContainer.add(this.roadGroup); console.timeEnd("RoadGeneration");
             console.time("ContentGeneration"); const { sidewalkGroup, buildingGroup } = this.contentGenerator.generateContent(this.leafPlots, this.assetLoader); this.sidewalkGroup = sidewalkGroup; this.contentGroup = buildingGroup; this.cityContainer.add(this.sidewalkGroup); this.cityContainer.add(this.contentGroup); console.timeEnd("ContentGeneration");
 
             if (this.config.showDistrictBoundaries) { console.time("DebugVisualsGeneration"); this.createDistrictDebugVisuals(); console.timeEnd("DebugVisualsGeneration"); }
 
-            console.log("--- Génération ville terminée ---");
+            console.log("--- Génération ville terminée (avec succès) ---");
 
-        } catch (error) { console.error("Erreur majeure pendant la génération:", error); this.clearCity(); } finally { console.timeEnd("CityGeneration"); }
+        } catch (error) {
+            // Le catch attrapera l'erreur lancée si la validation finale échoue
+            console.error("Erreur majeure pendant la génération:", error);
+            // S'assurer que tout est nettoyé en cas d'erreur
+            this.clearCity();
+            // Vous pourriez vouloir afficher un message à l'utilisateur ici
+        } finally {
+            console.timeEnd("CityGeneration");
+        }
     }
 
     // ----- NOUVELLE MÉTHODE: createDistricts_V2 (Fonction appelante) -----
@@ -267,27 +320,62 @@ export default class CityManager {
             // Continuer tant qu'il y a des parcelles dans la file et que la taille max n'est pas atteinte
             while (head < queue.length && newDistrict.plots.length < this.config.maxDistrictSize) {
                 const currentPlot = queue[head++]; // Récupérer la parcelle suivante
-                // Trouver ses voisins parmi TOUTES les parcelles (y compris déjà assignées à d'autres districts)
+                // Trouver ses voisins parmi TOUTES les parcelles
                 const neighbors = this.findNeighbors(currentPlot, allPlots);
 
                 for (const neighbor of neighbors) {
                     // Vérifier si le voisin est valide et pas déjà pris par CE district ou un autre
                      if (neighbor.zoneType !== 'unbuildable' &&
-                         !assignedPlotIds.has(neighbor.id) &&   // Non assigné globalement DANS CETTE TENTATIVE
-                         !currentDistrictAssigned.has(neighbor.id)) // Non déjà dans CE district
+                         !assignedPlotIds.has(neighbor.id) &&
+                         !currentDistrictAssigned.has(neighbor.id))
                      {
-                         // Si on n'a pas atteint la taille max, ajouter le voisin
-                        if (newDistrict.plots.length < this.config.maxDistrictSize) {
+                        // ******** NOUVELLE VÉRIFICATION DE DISTANCE STRICTE ICI ********
+                        let canAddNeighbor = true; // Supposons qu'on peut l'ajouter par défaut
+
+                        // Calculer la distance normalisée du *voisin* potentiel
+                        const neighborDistToCenter = neighbor.center.length();
+                        const neighborNormalizedDistance = Math.max(0, Math.min(1, neighborDistToCenter / mapRadius));
+
+                        // Si le district en cours est de type industriel...
+                        if (newDistrict.type === 'industrial') {
+                            // ... vérifier si le voisin est TROP PROCHE du centre.
+                            if (neighborNormalizedDistance < this.config.strictMinIndustrialDist) {
+                                canAddNeighbor = false; // Ne pas ajouter ce voisin
+                                // console.log(`(Debug) Blocage ajout plot ${neighbor.id} (dist ${neighborNormalizedDistance.toFixed(2)}) au district industriel ${newDistrict.id} car < ${this.config.strictMinIndustrialDist}`);
+                            }
+                        }
+                        // Sinon si le district en cours est de type business...
+                        else if (newDistrict.type === 'business') {
+                            // ... vérifier si le voisin est TROP LOIN du centre.
+                            if (neighborNormalizedDistance > this.config.strictMaxBusinessDist) {
+                                canAddNeighbor = false; // Ne pas ajouter ce voisin
+                                // console.log(`(Debug) Blocage ajout plot ${neighbor.id} (dist ${neighborNormalizedDistance.toFixed(2)}) au district business ${newDistrict.id} car > ${this.config.strictMaxBusinessDist}`);
+                            }
+                        }
+                        // (Pas de règle de distance stricte pour les districts résidentiels dans ce scénario)
+
+                        // ******** FIN DE LA NOUVELLE VÉRIFICATION ********
+
+
+                        // Si la taille max n'est pas atteinte ET si le voisin respecte les règles de distance
+                        if (newDistrict.plots.length < this.config.maxDistrictSize && canAddNeighbor) {
                             newDistrict.addPlot(neighbor);
-                            assignedPlotIds.add(neighbor.id); // Marquer globalement
-                            currentDistrictAssigned.add(neighbor.id); // Marquer pour ce district
+                            assignedPlotIds.add(neighbor.id);
+                            currentDistrictAssigned.add(neighbor.id);
                             queue.push(neighbor); // Ajouter à la file pour explorer ses voisins
                         } else {
-                            break; // Sortir de la boucle des voisins si la taille max est atteinte
+                             // Si la taille max est atteinte OU si le voisin ne peut pas être ajouté (règle distance),
+                             // on ne l'ajoute pas et on arrête potentiellement de chercher des voisins pour CE currentPlot
+                             // si la taille max est la raison.
+                             if (newDistrict.plots.length >= this.config.maxDistrictSize) {
+                                break; // Sortir de la boucle des voisins si la taille max est atteinte
+                             }
+                             // Si c'est 'canAddNeighbor' qui est false, on continue juste la boucle 'for'
+                             // pour tester les autres voisins du 'currentPlot'.
                         }
                     }
-                }
-            } // Fin BFS pour ce district
+                } // Fin boucle for (neighbors)
+            }
 
             // Vérifier si le district formé a atteint la taille minimale requise
             if (newDistrict.plots.length >= this.config.minDistrictSize) {
@@ -312,70 +400,124 @@ export default class CityManager {
     }
 
 	validateDistrictLayout() {
-        console.log("Validation de la disposition des districts...");
-        if (!this.districts || this.districts.length === 0) {
-            console.warn("Validation échouée: Aucun district à valider.");
-            return false; // Pas de districts, c'est invalide
-        }
-
-        const mapRadius = this.config.mapSize / 2;
-        if (mapRadius <= 0) {
-             console.error("Validation échouée: mapRadius invalide.");
-             return false; // Ne peut pas valider sans rayon
-        }
-
-        let businessInCenterCount = 0;
-        let industrialInEdgeCount = 0;
-        let misplacedIndustrial = 0;
-        let misplacedBusiness = 0;
-
-        this.districts.forEach(district => {
-            const distToCenter = district.center.length();
-            const normalizedDistance = Math.max(0, Math.min(1, distToCenter / mapRadius));
-
-            // Compter les districts corrects aux bons endroits
-            if (district.type === 'business' && normalizedDistance <= this.config.validationZoneCenterMaxDist) {
-                businessInCenterCount++;
-            }
-            if (district.type === 'industrial' && normalizedDistance >= this.config.validationZoneEdgeMinDist) {
-                industrialInEdgeCount++;
-            }
-
-            // Vérifier les types clairement mal placés (devrait être prévenu par l'étape 1, mais double sécurité)
-            if (district.type === 'industrial' && normalizedDistance < this.config.validationZoneCenterMaxDist) { // Zone centre élargie pour la détection d'erreur
-                misplacedIndustrial++;
-            }
-            if (district.type === 'business' && normalizedDistance > this.config.validationZoneEdgeMinDist) { // Zone périphérie élargie
-                misplacedBusiness++;
-            }
-        });
-
-        // Vérifier les conditions
-        const hasEnoughBusiness = businessInCenterCount >= this.config.minBusinessInCenter;
-        const hasEnoughIndustrial = industrialInEdgeCount >= this.config.minIndustrialInEdge;
-        const noMisplacedDistricts = misplacedIndustrial === 0 && misplacedBusiness === 0;
-
-        console.log(` - Business au centre: ${businessInCenterCount} (requis min ${this.config.minBusinessInCenter}) -> ${hasEnoughBusiness}`);
-        console.log(` - Industriel en périphérie: ${industrialInEdgeCount} (requis min ${this.config.minIndustrialInEdge}) -> ${hasEnoughIndustrial}`);
-        console.log(` - Districts mal placés: Industriel=${misplacedIndustrial}, Business=${misplacedBusiness} -> ${noMisplacedDistricts}`);
-
-        if (!noMisplacedDistricts) {
-             console.warn("Validation échouée: Districts mal placés détectés.");
-             return false;
-        }
-         if (!hasEnoughBusiness) {
-             console.warn(`Validation échouée: Pas assez de districts business au centre.`);
-             return false;
-         }
-        if (!hasEnoughIndustrial) {
-             console.warn(`Validation échouée: Pas assez de districts industriels en périphérie.`);
-             return false;
-        }
-
-
-        console.log("Validation réussie.");
-        return true; // Tout est OK
-    }
+		console.log("Validation de la disposition des districts (avec règles strictes et comptes min/max)...");
+		if (!this.districts || this.districts.length === 0) {
+			console.warn("Validation échouée: Aucun district à valider.");
+			return false;
+		}
+	
+		const mapRadius = this.config.mapSize / 2;
+		if (mapRadius <= 0) {
+			console.error("Validation échouée: mapRadius invalide.");
+			return false;
+		}
+	
+		// Compteurs pour les minimums requis dans les zones spécifiques (existants)
+		let businessInCoreCenterCount = 0;
+		let industrialInCoreEdgeCount = 0;
+	
+		// Indicateurs pour les types strictement mal placés (existants)
+		let strictlyMisplacedIndustrial = 0;
+		let strictlyMisplacedBusiness = 0;
+	
+		// *** NOUVEAU: Compteurs pour le nombre total de chaque type ***
+		let totalIndustrialCount = 0;
+		let totalBusinessCount = 0;
+	
+		this.districts.forEach(district => {
+			const distToCenter = district.center.length();
+			const normalizedDistance = Math.max(0, Math.min(1, distToCenter / mapRadius));
+	
+			// Incrémenter les compteurs totaux
+			if (district.type === 'industrial') {
+				totalIndustrialCount++;
+			} else if (district.type === 'business') {
+				totalBusinessCount++;
+			}
+	
+			// 1. Compter pour les minimums dans les zones spécifiques (validationZone...)
+			if (district.type === 'business' && normalizedDistance <= this.config.validationZoneCenterMaxDist) {
+				businessInCoreCenterCount++;
+			}
+			if (district.type === 'industrial' && normalizedDistance >= this.config.validationZoneEdgeMinDist) {
+				industrialInCoreEdgeCount++;
+			}
+	
+			// 2. Vérifier les placements strictement interdits (strict...)
+			if (district.type === 'industrial' && normalizedDistance < this.config.strictMinIndustrialDist) {
+				strictlyMisplacedIndustrial++;
+				console.warn(`District industriel ${district.id} trouvé à une distance ${normalizedDistance.toFixed(2)} (strictement interdit < ${this.config.strictMinIndustrialDist})`);
+			}
+			if (district.type === 'business' && normalizedDistance > this.config.strictMaxBusinessDist) {
+				strictlyMisplacedBusiness++;
+				 console.warn(`District business ${district.id} trouvé à une distance ${normalizedDistance.toFixed(2)} (strictement interdit > ${this.config.strictMaxBusinessDist})`);
+			}
+		});
+	
+		// --- Vérification des conditions ---
+	
+		// Conditions existantes
+		const hasEnoughBusinessInCoreZone = businessInCoreCenterCount >= this.config.minBusinessInCenter;
+		const hasEnoughIndustrialInEdgeZone = industrialInCoreEdgeCount >= this.config.minIndustrialInEdge;
+		const noStrictlyMisplaced = strictlyMisplacedIndustrial === 0 && strictlyMisplacedBusiness === 0;
+	
+		// *** NOUVEAU: Conditions sur les comptes totaux ***
+		const meetsMinTotalIndustrial = totalIndustrialCount >= this.config.minTotalIndustrialDistricts;
+		const meetsMaxTotalIndustrial = totalIndustrialCount <= this.config.maxTotalIndustrialDistricts;
+		const meetsMinTotalBusiness = totalBusinessCount >= this.config.minTotalBusinessDistricts;
+		const meetsMaxTotalBusiness = totalBusinessCount <= this.config.maxTotalBusinessDistricts;
+	
+		// --- Log détaillé ---
+		console.log(`RESULTATS VALIDATION:`);
+		console.log(` - Placement Strict: Industriel (<${this.config.strictMinIndustrialDist}): ${strictlyMisplacedIndustrial} (OK si 0) -> ${strictlyMisplacedIndustrial === 0}`);
+		console.log(` - Placement Strict: Business (>${this.config.strictMaxBusinessDist}): ${strictlyMisplacedBusiness} (OK si 0) -> ${strictlyMisplacedBusiness === 0}`);
+		// Optionnel: vous pouvez garder ou enlever les checks de zone si les checks globaux suffisent
+		console.log(` - Minimum Zone Centre: Business (<${this.config.validationZoneCenterMaxDist}): ${businessInCoreCenterCount} (requis min ${this.config.minBusinessInCenter}) -> ${hasEnoughBusinessInCoreZone}`);
+		console.log(` - Minimum Zone Périphérie: Industriel (>${this.config.validationZoneEdgeMinDist}): ${industrialInCoreEdgeCount} (requis min ${this.config.minIndustrialInEdge}) -> ${hasEnoughIndustrialInEdgeZone}`);
+		// Nouveaux logs pour les comptes globaux
+		console.log(` - Compte Total Industriel: ${totalIndustrialCount} (Min: ${this.config.minTotalIndustrialDistricts}, Max: ${this.config.maxTotalIndustrialDistricts}) -> Min OK: ${meetsMinTotalIndustrial}, Max OK: ${meetsMaxTotalIndustrial}`);
+		console.log(` - Compte Total Business: ${totalBusinessCount} (Min: ${this.config.minTotalBusinessDistricts}, Max: ${this.config.maxTotalBusinessDistricts}) -> Min OK: ${meetsMinTotalBusiness}, Max OK: ${meetsMaxTotalBusiness}`);
+	
+		// --- Décision finale de validation ---
+		// La validation réussit SEULEMENT SI TOUTES les conditions sont remplies
+	
+		if (!noStrictlyMisplaced) {
+			console.warn("Validation échouée: Au moins un district est strictement mal placé (trop proche/loin du centre).");
+			return false;
+		}
+		// Enlevez ou commentez les lignes suivantes si les minimums de zone ne sont plus nécessaires
+		/*
+		if (!hasEnoughBusinessInCoreZone) {
+			console.warn(`Validation échouée: Pas assez de districts business DANS LA ZONE centrale.`);
+			return false;
+		}
+		if (!hasEnoughIndustrialInEdgeZone) {
+			console.warn(`Validation échouée: Pas assez de districts industriels DANS LA ZONE périphérique.`);
+			return false;
+		}
+		*/
+		// Vérification des comptes globaux
+		if (!meetsMinTotalIndustrial) {
+			console.warn(`Validation échouée: Nombre total de districts industriels (<span class="math-inline">\{totalIndustrialCount\}\) est inférieur au minimum requis \(</span>{this.config.minTotalIndustrialDistricts}).`);
+			return false;
+		}
+		if (!meetsMaxTotalIndustrial) {
+			console.warn(`Validation échouée: Nombre total de districts industriels (<span class="math-inline">\{totalIndustrialCount\}\) est supérieur au maximum autorisé \(</span>{this.config.maxTotalIndustrialDistricts}).`);
+			return false;
+		}
+		if (!meetsMinTotalBusiness) {
+			console.warn(`Validation échouée: Nombre total de districts d'affaires (<span class="math-inline">\{totalBusinessCount\}\) est inférieur au minimum requis \(</span>{this.config.minTotalBusinessDistricts}).`);
+			return false;
+		}
+		if (!meetsMaxTotalBusiness) {
+			console.warn(`Validation échouée: Nombre total de districts d'affaires (<span class="math-inline">\{totalBusinessCount\}\) est supérieur au maximum autorisé \(</span>{this.config.maxTotalBusinessDistricts}).`);
+			return false;
+		}
+	
+		// Si toutes les vérifications passent
+		console.log("Validation Réussie: Toutes les règles de placement et de comptage sont respectées.");
+		return true;
+	}
 
     // ----- getDistrictTypeProbabilities (Fonction MODIFIÉE selon Stratégie 1) -----
     getDistrictTypeProbabilities(distanceToCenter) {
