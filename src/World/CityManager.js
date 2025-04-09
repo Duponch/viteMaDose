@@ -38,42 +38,22 @@ export default class CityManager {
             skyscraperZoneProbability: 0.1,
 
             // **** NOUVELLE SECTION POUR LES PROBABILITÉS DE TYPE DE DISTRICT ****
-            districtProbabilities: {
-				// Paramètres pour les quartiers d'affaires (Business/Skyscraper)
-				business: {
-					// Augmenter ENCORE PLUS 'max' pour assurer la dominance au centre.
-					// Une valeur très élevée rendra quasi certain qu'un district au centre soit 'business'.
-					max: 10, // Était ~1-3. Essayons une valeur très forte.
-					// Garder une décroissance rapide pour que la probabilité devienne quasi nulle loin du centre.
-					decay: 12 // Était ~10-11. Un peu plus rapide.
-				},
-				// Paramètres pour les quartiers industriels
-				industrial: {
-					// Seuil où la probabilité commence à augmenter (distance normalisée).
-					// On peut le garder assez haut pour éviter l'industrie trop proche.
-					threshold: 0.85, // Était 0.85-0.9. 0.85 semble raisonnable.
-					// Facteur contrôlant la rapidité de la montée après le seuil.
-					// Augmenter pour une montée très rapide.
-					factor: 10,     // Était ~2-5. Rend la montée très abrupte après le seuil.
-					// Facteur multiplicateur pour la probabilité max en périphérie.
-					// Augmenter ENCORE PLUS pour forcer l'industrie loin du centre.
-					multiplier: 2.0, // Était ~0.1-0.2. Augmenter FORTEMENT.
-					// Probabilité de base TRÈS FAIBLE près du centre.
-					base: 0.0001   // Était ~0.01-0.001. Rend quasi impossible l'industrie au centre.
-				},
-				// Paramètres pour les quartiers résidentiels (Remplissent l'espace restant)
-				residential: {
-					// Centrer le pic résidentiel entre le centre (dominé par business)
-					// et la périphérie (dominée par industrial).
-					peakCenter: 0.5, // Était ~0.45-0.5. 0.5 est un bon milieu.
-					// Largeur du pic. Doit être assez large pour couvrir la zone médiane.
-					peakWidth: 0.3,  // Était ~0.2-0.28. Un peu plus large.
-					// Probabilité de base. Peut rester faible car les pics business/industriel
-					// domineront aux extrêmes. La normalisation ajustera.
-					base: 0.05        // Était ~0.05-0.8. Gardons une base faible.
-				}
+			forceBusinessMaxDistance: 0.15, // Distance normalisée max pour FORCER 'business'
+			forceIndustrialMinDistance: 0.85, // Distance normalisée min pour FORCER 'industrial'
+			// **** FIN SEUILS ****
+		
+			districtProbabilities: {
+				// ... vos probabilités actuelles ...
+				 business: { max: 10, decay: 12 },
+				 industrial: { threshold: 0.85, factor: 10, multiplier: 0.05, base: 0.0001 },
+				 residential: { peakCenter: 0.5, peakWidth: 0.3, base: 0.05 }
 			},
-             // Le reste deviendra 'building' (environ 0.30)
+
+			validationZoneCenterMaxDist: 0.20, // Zone "Centre" pour la validation
+			validationZoneEdgeMinDist: 0.80, // Zone "Périphérie" pour la validation
+			minBusinessInCenter: 2,        // Nombre minimum de districts 'business' requis au centre
+			minIndustrialInEdge: 2,        // Nombre minimum de districts 'industrial' requis en périphérie
+			maxDistrictRegenAttempts: 5,   // Nombre max de tentatives de régénération
 
             // Roads/Sidewalks & Plot Content (Inchangé)
             sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
@@ -154,7 +134,7 @@ export default class CityManager {
 
     async generateCity() {
         console.time("CityGeneration");
-        this.clearCity();
+        this.clearCity(); // Nettoyage initial
 
         try {
             console.log("--- Démarrage génération ville ---");
@@ -166,21 +146,50 @@ export default class CityManager {
             this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
             console.timeEnd("LayoutGeneration");
             console.log(`Layout généré avec ${this.leafPlots.length} parcelles.`);
-            this.logInitialZoneTypes();
+            this.logInitialZoneTypes(); // Log avant ajustement district
 
             if (!this.leafPlots || this.leafPlots.length === 0) throw new Error("Layout n'a produit aucune parcelle.");
 
-            console.time("DistrictFormation");
-            this.createDistricts_V2(); // Appel de la fonction qui utilise les probabilités modifiées
-            console.timeEnd("DistrictFormation");
-            console.log(`Districts formés: ${this.districts.length}`);
+            // --- BOUCLE DE FORMATION/VALIDATION DISTRICT ---
+            let districtLayoutValid = false;
+            let attempts = 0;
+            console.time("DistrictFormationAndValidation");
+            while (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
+                attempts++;
+                console.log(`\nTentative de formation/validation des districts #${attempts}...`);
+
+                // Réinitialiser l'état des districts pour la nouvelle tentative
+                this.districts = [];
+                // NOTE: createDistricts_V2 utilise son propre 'assignedPlotIds' localement,
+                // donc pas besoin de le réinitialiser ici explicitement.
+                // Les parcelles sont filtrées à chaque appel basé sur this.districts (qui est vide).
+
+                this.createDistricts_V2(); // Utilise maintenant le forçage par distance
+                this.logDistrictStats(); // Log après formation initiale
+
+                districtLayoutValid = this.validateDistrictLayout(); // Valider la disposition
+
+                if (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
+                    console.log(`Disposition invalide, nouvelle tentative (max ${this.config.maxDistrictRegenAttempts})...`);
+                    // Pas besoin de clearCity ici, juste les districts
+                } else if (!districtLayoutValid) {
+                    console.error(`ERREUR: Impossible d'obtenir une disposition de districts valide après ${attempts} tentatives.`);
+                    // Que faire ici ? Arrêter ? Continuer avec une disposition invalide ?
+                    // Pour l'instant, on continue mais on log l'erreur.
+                    // throw new Error("Disposition de districts invalide persistante."); // Option plus stricte
+                }
+            }
+             console.timeEnd("DistrictFormationAndValidation");
+             console.log(`Formation districts terminée après ${attempts} tentative(s). Etat final: ${districtLayoutValid ? 'Valide' : 'Invalide (max tentatives atteint)'}`);
+            // --- FIN BOUCLE ---
+
 
             console.time("PlotTypeAdjustment");
-            this.adjustPlotTypesWithinDistricts();
+            this.adjustPlotTypesWithinDistricts(); // Appliquer les types stricts aux parcelles
             console.timeEnd("PlotTypeAdjustment");
-            this.logAdjustedZoneTypes();
-            this.logDistrictStats();
+            this.logAdjustedZoneTypes(); // Log final après ajustement
 
+            // Générer le reste (routes, contenu) basé sur la disposition finale des districts/parcelles
             console.time("RoadGeneration"); this.roadGroup = this.roadGenerator.generateRoads(this.leafPlots); this.cityContainer.add(this.roadGroup); console.timeEnd("RoadGeneration");
             console.time("ContentGeneration"); const { sidewalkGroup, buildingGroup } = this.contentGenerator.generateContent(this.leafPlots, this.assetLoader); this.sidewalkGroup = sidewalkGroup; this.contentGroup = buildingGroup; this.cityContainer.add(this.sidewalkGroup); this.cityContainer.add(this.contentGroup); console.timeEnd("ContentGeneration");
 
@@ -188,71 +197,185 @@ export default class CityManager {
 
             console.log("--- Génération ville terminée ---");
 
-        } catch (error) { console.error("Erreur majeure:", error); this.clearCity(); } finally { console.timeEnd("CityGeneration"); }
+        } catch (error) { console.error("Erreur majeure pendant la génération:", error); this.clearCity(); } finally { console.timeEnd("CityGeneration"); }
     }
 
     // ----- NOUVELLE MÉTHODE: createDistricts_V2 (Fonction appelante) -----
     createDistricts_V2() {
-        if (!this.leafPlots || this.leafPlots.length === 0) return;
+        if (!this.leafPlots || this.leafPlots.length === 0) {
+            console.warn("createDistricts_V2: Aucune parcelle disponible pour former des districts.");
+            return; // Sortir si pas de parcelles
+        }
 
         const allPlots = [...this.leafPlots];
+        // Note: assignedPlotIds est utilisé pour s'assurer qu'une parcelle n'est
+        // assignée qu'à UN SEUL district pendant UNE tentative de formation.
+        // Il est implicitement réinitialisé car la fonction est rappelée
+        // depuis la boucle de régénération si nécessaire, et this.districts est vidé.
         const assignedPlotIds = new Set();
-        this.districts = [];
+        // this.districts a déjà été réinitialisé dans la boucle de generateCity avant cet appel
 
-        let availablePlots = allPlots.filter(p => p.zoneType !== 'unbuildable');
+        // Filtrer les parcelles non constructibles et celles déjà assignées (ne devrait pas arriver au premier appel)
+        let availablePlots = allPlots.filter(p => p.zoneType !== 'unbuildable' && !assignedPlotIds.has(p.id));
 
+        const mapRadius = this.config.mapSize / 2; // Calculer le rayon une seule fois
+        if (mapRadius <= 0) {
+             console.error("createDistricts_V2: mapRadius invalide, impossible de normaliser la distance.");
+             return; // Sortir si mapRadius est invalide
+        }
+
+        // Boucle tant qu'il y a assez de parcelles pour potentiellement former un district minimal
         while (availablePlots.length >= this.config.minDistrictSize) {
+            // Choisir une parcelle de départ aléatoire parmi celles disponibles
             const seedIndex = Math.floor(Math.random() * availablePlots.length);
             const seedPlot = availablePlots[seedIndex];
 
-            // *** APPEL à getDistrictTypeProbabilities (qui est maintenant modifiée) ***
+            // Calculer la distance normalisée de la parcelle de départ
             const distToCenter = seedPlot.center.length();
-            const probabilities = this.getDistrictTypeProbabilities(distToCenter);
-            const districtType = this.chooseDistrictType(probabilities);
-            // *** FIN APPEL ***
+            const normalizedDistance = Math.max(0, Math.min(1, distToCenter / mapRadius));
 
+            let districtType; // Variable pour stocker le type choisi
+
+            // --- Logique de choix de type MODIFIÉE ---
+            // Forcer 'business' si très proche du centre
+            if (normalizedDistance < this.config.forceBusinessMaxDistance) {
+                districtType = 'business';
+                // console.log(`(Debug) Forcing business at dist ${normalizedDistance.toFixed(2)} for plot ${seedPlot.id}`); // Optionnel
+            }
+            // SINON (pour toutes les autres distances, y compris la périphérie)
+            else {
+                // Utiliser la logique probabiliste
+                const probabilities = this.getDistrictTypeProbabilities(distToCenter); // Récupérer les probabilités pour cette distance
+                districtType = this.chooseDistrictType(probabilities); // Choisir selon les probabilités
+                // console.log(`(Debug) Probabilistic choice at dist ${normalizedDistance.toFixed(2)} -> ${districtType} for plot ${seedPlot.id}`); // Optionnel
+            }
+            // --- Fin Logique de choix ---
+
+            // Créer le nouveau district avec le type déterminé
             const newDistrict = new District(districtType);
-            const queue = [seedPlot];
-            const currentDistrictAssigned = new Set();
 
+            // Utiliser une recherche en largeur (BFS) pour agréger les voisins
+            const queue = [seedPlot]; // File d'attente pour le BFS
+            const currentDistrictAssigned = new Set(); // Garde trace des parcelles DANS ce district potentiel
+
+            // Ajouter la parcelle de départ
             newDistrict.addPlot(seedPlot);
-            assignedPlotIds.add(seedPlot.id);
-            currentDistrictAssigned.add(seedPlot.id);
+            assignedPlotIds.add(seedPlot.id); // Marquer comme assignée globalement pour cette tentative
+            currentDistrictAssigned.add(seedPlot.id); // Marquer comme assignée à ce district en cours
 
-            let head = 0;
+            let head = 0; // Index pour la file d'attente BFS
+            // Continuer tant qu'il y a des parcelles dans la file et que la taille max n'est pas atteinte
             while (head < queue.length && newDistrict.plots.length < this.config.maxDistrictSize) {
-                const currentPlot = queue[head++];
+                const currentPlot = queue[head++]; // Récupérer la parcelle suivante
+                // Trouver ses voisins parmi TOUTES les parcelles (y compris déjà assignées à d'autres districts)
                 const neighbors = this.findNeighbors(currentPlot, allPlots);
+
                 for (const neighbor of neighbors) {
+                    // Vérifier si le voisin est valide et pas déjà pris par CE district ou un autre
                      if (neighbor.zoneType !== 'unbuildable' &&
-                         !assignedPlotIds.has(neighbor.id) &&
-                         !currentDistrictAssigned.has(neighbor.id))
+                         !assignedPlotIds.has(neighbor.id) &&   // Non assigné globalement DANS CETTE TENTATIVE
+                         !currentDistrictAssigned.has(neighbor.id)) // Non déjà dans CE district
                      {
+                         // Si on n'a pas atteint la taille max, ajouter le voisin
                         if (newDistrict.plots.length < this.config.maxDistrictSize) {
                             newDistrict.addPlot(neighbor);
-                            assignedPlotIds.add(neighbor.id);
-                            currentDistrictAssigned.add(neighbor.id);
-                            queue.push(neighbor);
+                            assignedPlotIds.add(neighbor.id); // Marquer globalement
+                            currentDistrictAssigned.add(neighbor.id); // Marquer pour ce district
+                            queue.push(neighbor); // Ajouter à la file pour explorer ses voisins
                         } else {
-                            break;
+                            break; // Sortir de la boucle des voisins si la taille max est atteinte
                         }
                     }
                 }
-            }
+            } // Fin BFS pour ce district
 
+            // Vérifier si le district formé a atteint la taille minimale requise
             if (newDistrict.plots.length >= this.config.minDistrictSize) {
-                this.districts.push(newDistrict);
+                this.districts.push(newDistrict); // Ajouter le district valide à la liste
             } else {
-                console.warn(`District potentiel (type ${districtType}) démarré à ${seedPlot.id} n'a pas atteint la taille min (${newDistrict.plots.length}). Ces ${newDistrict.plots.length} parcelles resteront assignées mais hors district.`);
-                // Les parcelles restent dans assignedPlotIds et ne sont pas réutilisées
+                // Si trop petit, on ne le garde pas comme district valide.
+                // IMPORTANT: Les parcelles assignées (dans assignedPlotIds) ne sont PAS
+                // remises dans availablePlots pour cette tentative, pour éviter de
+                // potentiellement re-sélectionner la même petite grappe immédiatement.
+                // Elles deviendront disponibles lors de la prochaine tentative (régénération).
+                console.warn(`District potentiel (type ${districtType}) démarré à plot ${seedPlot.id} n'a pas atteint la taille min (${newDistrict.plots.length}/${this.config.minDistrictSize}). Parcelles ignorées pour cette tentative.`);
             }
 
+            // Mettre à jour la liste des parcelles disponibles pour la prochaine itération de la boucle while
+            // en retirant toutes celles qui ont été assignées DANS CETTE TENTATIVE.
             availablePlots = availablePlots.filter(p => !assignedPlotIds.has(p.id));
-        }
 
-        console.log(`Formation districts terminée. ${this.districts.length} districts créés. ${availablePlots.length} parcelles restantes non assignées.`);
+        } // Fin de la boucle while (availablePlots >= minDistrictSize)
+
+        console.log(`Formation districts (tentative actuelle) terminée. ${this.districts.length} districts créés. ${availablePlots.length} parcelles constructibles restantes non assignées.`);
+        // Note: Le nombre total de districts est celui de CETTE tentative. La validation décidera si c'est acceptable.
     }
 
+	validateDistrictLayout() {
+        console.log("Validation de la disposition des districts...");
+        if (!this.districts || this.districts.length === 0) {
+            console.warn("Validation échouée: Aucun district à valider.");
+            return false; // Pas de districts, c'est invalide
+        }
+
+        const mapRadius = this.config.mapSize / 2;
+        if (mapRadius <= 0) {
+             console.error("Validation échouée: mapRadius invalide.");
+             return false; // Ne peut pas valider sans rayon
+        }
+
+        let businessInCenterCount = 0;
+        let industrialInEdgeCount = 0;
+        let misplacedIndustrial = 0;
+        let misplacedBusiness = 0;
+
+        this.districts.forEach(district => {
+            const distToCenter = district.center.length();
+            const normalizedDistance = Math.max(0, Math.min(1, distToCenter / mapRadius));
+
+            // Compter les districts corrects aux bons endroits
+            if (district.type === 'business' && normalizedDistance <= this.config.validationZoneCenterMaxDist) {
+                businessInCenterCount++;
+            }
+            if (district.type === 'industrial' && normalizedDistance >= this.config.validationZoneEdgeMinDist) {
+                industrialInEdgeCount++;
+            }
+
+            // Vérifier les types clairement mal placés (devrait être prévenu par l'étape 1, mais double sécurité)
+            if (district.type === 'industrial' && normalizedDistance < this.config.validationZoneCenterMaxDist) { // Zone centre élargie pour la détection d'erreur
+                misplacedIndustrial++;
+            }
+            if (district.type === 'business' && normalizedDistance > this.config.validationZoneEdgeMinDist) { // Zone périphérie élargie
+                misplacedBusiness++;
+            }
+        });
+
+        // Vérifier les conditions
+        const hasEnoughBusiness = businessInCenterCount >= this.config.minBusinessInCenter;
+        const hasEnoughIndustrial = industrialInEdgeCount >= this.config.minIndustrialInEdge;
+        const noMisplacedDistricts = misplacedIndustrial === 0 && misplacedBusiness === 0;
+
+        console.log(` - Business au centre: ${businessInCenterCount} (requis min ${this.config.minBusinessInCenter}) -> ${hasEnoughBusiness}`);
+        console.log(` - Industriel en périphérie: ${industrialInEdgeCount} (requis min ${this.config.minIndustrialInEdge}) -> ${hasEnoughIndustrial}`);
+        console.log(` - Districts mal placés: Industriel=${misplacedIndustrial}, Business=${misplacedBusiness} -> ${noMisplacedDistricts}`);
+
+        if (!noMisplacedDistricts) {
+             console.warn("Validation échouée: Districts mal placés détectés.");
+             return false;
+        }
+         if (!hasEnoughBusiness) {
+             console.warn(`Validation échouée: Pas assez de districts business au centre.`);
+             return false;
+         }
+        if (!hasEnoughIndustrial) {
+             console.warn(`Validation échouée: Pas assez de districts industriels en périphérie.`);
+             return false;
+        }
+
+
+        console.log("Validation réussie.");
+        return true; // Tout est OK
+    }
 
     // ----- getDistrictTypeProbabilities (Fonction MODIFIÉE selon Stratégie 1) -----
     getDistrictTypeProbabilities(distanceToCenter) {
