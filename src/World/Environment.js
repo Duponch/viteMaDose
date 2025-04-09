@@ -135,7 +135,7 @@ export default class Environment {
 
         const outerGroundGeometry = new THREE.CircleGeometry(outerGroundRadius, segments);
         const outerGroundMaterial = new THREE.MeshStandardMaterial({
-            color: 0x003300, // Vert très foncé
+            color: 0x465e39, // Vert très foncé
             metalness: 0.1,
             roughness: 0.9,
             side: THREE.DoubleSide // Au cas où on le verrait de dessous

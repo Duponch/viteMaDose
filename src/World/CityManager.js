@@ -130,7 +130,7 @@ export default class CityManager {
 			treePlacementProbabilityMargin: 0.008,
 
 			// --- Debug ---
-			showDistrictBoundaries: true,
+			showDistrictBoundaries: false,
 
 			// --- Fusion des configurations externes ---
 			...config
@@ -778,17 +778,36 @@ export default class CityManager {
     }
 
     createGlobalGround() {
-        if (this.groundMesh && this.groundMesh.parent) return;
-        if (this.groundMesh && !this.groundMesh.parent) { this.scene.add(this.groundMesh); return; }
-
-        const groundGeometry = new THREE.PlaneGeometry(this.config.mapSize * 1.2, this.config.mapSize * 1.2);
-        this.groundMesh = new THREE.Mesh(groundGeometry, this.materials.groundMaterial);
-        this.groundMesh.rotation.x = -Math.PI / 2;
-        this.groundMesh.position.y = -0.01;
-        this.groundMesh.receiveShadow = true;
-        this.groundMesh.name = "GlobalGround";
-        this.scene.add(this.groundMesh);
-    }
+		// Vérifie si le sol existe déjà
+		if (this.groundMesh && this.groundMesh.parent) return;
+		if (this.groundMesh && !this.groundMesh.parent) { this.scene.add(this.groundMesh); return; }
+	
+		// Récupérer la largeur du trottoir depuis la config
+		const sidewalkWidth = this.config.sidewalkWidth || 0; // Mettre 0 si non défini
+	
+		// === POINT CLÉ : Calcul de la nouvelle taille ===
+		const groundWidth = this.config.mapSize + (2 * sidewalkWidth);
+		const groundDepth = this.config.mapSize + (2 * sidewalkWidth);
+		// ==============================================
+	
+		console.log(`Création CityGround avec marge trottoir : ${groundWidth.toFixed(1)}x${groundDepth.toFixed(1)} (mapSize=${this.config.mapSize}, sidewalkWidth=${sidewalkWidth})`);
+	
+		const groundGeometry = new THREE.PlaneGeometry(
+			groundWidth, // Nouvelle largeur calculée
+			groundDepth  // Nouvelle profondeur calculée
+		);
+	
+		this.groundMesh = new THREE.Mesh(groundGeometry, this.materials.groundMaterial);
+		this.groundMesh.rotation.x = -Math.PI / 2;
+		this.groundMesh.position.y = -0.01; // Garder légèrement en dessous de y=0
+		this.groundMesh.receiveShadow = true;
+		this.groundMesh.name = "CityGround";
+		this.scene.add(this.groundMesh);
+	
+		// Optionnel : Garder le helper pour vérifier la nouvelle taille pendant le développement
+		// const helper = new THREE.BoxHelper(this.groundMesh, 0xffff00);
+		// this.scene.add(helper);
+	}
 
     destroy() {
         console.log("Destruction du CityManager...");
