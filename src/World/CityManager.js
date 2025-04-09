@@ -60,7 +60,7 @@ export default class CityManager {
             buildingModelFiles: [
 				{ file: "Building1.fbx", scale: 1.0 }, { file: "Building2.fbx" }, { file: "Building3.fbx", scale: 1 },
                 { file: "Building4.fbx" }, { file: "Building5.fbx", scale: 0.95 }, { file: "Building6.fbx" },
-                { file: "Building7.fbx" }, { file: "Building8.fbx" },
+                { file: "Building7.fbx" }, { file: "Building8.fbx" }, { file: "Building9.glb", scale: 1.2 }, { file: "Building10.glb", scale: 1 },
 			],
             buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
             // Industrials
@@ -89,7 +89,8 @@ export default class CityManager {
             skyscraperModelDir: "Public/Assets/Models/Skyscrapers/",
             skyscraperModelFiles: [
                 { file: "Skyscraper1.glb", scale: 0.8 }, // Assurez-vous que ces fichiers existent
-                { file: "Skyscraper1.glb", scale: 0.8 },
+                { file: "Skyscraper2.glb", scale: 1 },
+				{ file: "Skyscraper3.glb", scale: 1 },
                 // Ajoutez d'autres fichiers .glb ici
                 // { file: "Skyscraper3.glb", scale: 1.1 }, // Exemple avec scale
             ],
