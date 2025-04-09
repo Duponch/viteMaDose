@@ -6,14 +6,14 @@ import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 // ========================
 
 export default class Environment {
-    constructor(experience) {
+    constructor(experience, world) {
         this.experience = experience;
+		this.world = world;
         this.scene = this.experience.scene;
         this.debug = this.experience.debug;
-        // === Supprimé : this.noiseMaker ici, il sera créé dans createOuterGround ===
-
         // Récupérer mapSize (important pour le centre plat)
-        this.mapSize = this.experience.world?.cityManager?.config?.mapSize || 700;
+		console.log(this.world.cityManager.config.mapSize);
+        this.mapSize = this.world.cityManager.config.mapSize;
 
         this.outerGroundDisplayRadius = 0; // Sera défini après renderSkybox
 

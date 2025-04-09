@@ -15,11 +15,12 @@ export default class World {
         // this.floor = new Floor(this.experience);
         // this.scene.add(this.floor.mesh);
 
-        this.environment = new Environment(this.experience);
+		this.cityManager = new CityManager(this.experience);
+
+        this.environment = new Environment(this.experience, this);
 
         // --- Instancier CityManager ---
         // Passez la configuration spécifique si nécessaire
-        this.cityManager = new CityManager(this.experience);
 
         // --- Lancer la génération (maintenant asynchrone) ---
         this.generateCityAsync();
