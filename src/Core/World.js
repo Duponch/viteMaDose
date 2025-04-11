@@ -106,11 +106,11 @@ export default class World {
 			this.agents = [];
 		}
 
-		const numAgents = 50;
+		const numAgents = 1;
 		const sidewalkHeight = this.cityManager.navigationGraph.sidewalkHeight;
 
 		// --- NOUVEAU : Définir le facteur d'échelle ici ---
-		const desiredScale = 0.004; // <-- AJUSTEZ CETTE VALEUR ! Essayez 0.1, 0.05, 0.02 etc.
+		const desiredScale = 0.002; // <-- AJUSTEZ CETTE VALEUR ! Essayez 0.1, 0.05, 0.02 etc.
 		// ----------------------------------------------------
 
 		for (let i = 0; i < numAgents; i++) {
