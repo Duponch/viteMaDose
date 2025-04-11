@@ -76,7 +76,7 @@ export default class World {
 
         if (pathPoints && pathPoints.length > 1) {
              const lineGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
-             const lineMaterial = new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 2 }); // Magenta
+             const lineMaterial = new THREE.LineBasicMaterial({ color: 0xFF0000, linewidth: 4 }); // Magenta
              const pathLine = new THREE.Line(lineGeometry, lineMaterial);
              pathLine.name = "AgentPathLine";
              pathLine.position.y = 0.02; // Légèrement au-dessus de la grille debug

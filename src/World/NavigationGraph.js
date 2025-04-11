@@ -4,17 +4,16 @@ import * as PF from 'pathfinding';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export default class NavigationGraph {
-    constructor(config) {
-        this.config = config;
+	constructor(config) {
+        this.config = config; // Assure-toi que config contient bien sidewalkWidth, crosswalkStripe*, roadWidth etc.
         this.grid = null;
-        this.gridScale = 1.0; // 1 cellule / mètre. Augmenter pour plus de précision (ex: 2 ou 4)
+        this.gridScale = 1.0;
         this.gridWidth = 0;
         this.gridHeight = 0;
         this.offsetX = 0;
         this.offsetZ = 0;
-        this.sidewalkHeight = config.sidewalkHeight !== undefined ? config.sidewalkHeight : 0.2; // Utiliser || peut causer des pbs si 0 est voulu
-        // Matériaux pour le debug
-        this.debugMaterialWalkable = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true }); // Vert clair en wireframe pour voir la grille
+        this.sidewalkHeight = config.sidewalkHeight !== undefined ? config.sidewalkHeight : 0.2;
+        this.debugMaterialWalkable = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
         this.debugMaterialPath = new THREE.MeshBasicMaterial({ color: 0xff00ff, side: THREE.DoubleSide });
         console.log("NavigationGraph: Initialisé.");
     }
@@ -38,24 +37,108 @@ export default class NavigationGraph {
         this.grid = new PF.Grid(this.gridWidth, this.gridHeight);
         console.log(`NavigationGraph: Grille créée (${this.gridWidth}x${this.gridHeight})`);
 
-        // --- *** CORRECTION CRUCIALE *** ---
         // 2. Initialiser TOUTE la grille comme NON MARCHABLE
         console.log("NavigationGraph: Initialisation de la grille comme non marchable...");
         for (let y = 0; y < this.gridHeight; y++) {
             for (let x = 0; x < this.gridWidth; x++) {
-                this.grid.setWalkableAt(x, y, false); // <- False par défaut
+                this.grid.setWalkableAt(x, y, false);
             }
         }
         console.log("NavigationGraph: Initialisation non marchable terminée.");
-        // --- *** FIN CORRECTION *** ---
 
         // 3. Marquer les trottoirs comme marchables (true)
-        this.markSidewalks(plots, sidewalkWidth);
+        this.markSidewalksArea(plots, sidewalkWidth); // <--- Utilisation de la nouvelle méthode
 
         // 4. Marquer les passages piétons comme marchables (true)
-        this.markCrosswalks(crosswalkInfos);
+        this.markCrosswalksCorrected(crosswalkInfos); // <--- Utilisation de la nouvelle méthode
 
         console.log("NavigationGraph: Grille construite (avec zones marchables définies).");
+    }
+
+	markCrosswalksCorrected(crosswalkInfos) {
+        console.log("NavigationGraph: Marquage des passages piétons (largeur corrigée)...");
+        let markedCells = 0;
+
+        // Calculer la largeur visuelle réelle basée sur la config
+        const stripeCount = this.config.crosswalkStripeCount || 5;
+        const stripeWidth = this.config.crosswalkStripeWidth || 0.6;
+        const stripeGap = this.config.crosswalkStripeGap || 0.5;
+        const crosswalkVisualWidth = (stripeCount * stripeWidth) + Math.max(0, stripeCount - 1) * stripeGap; // Largeur monde (ex: 5.0)
+
+        // Convertir cette largeur monde en épaisseur de grille
+        const crosswalkGridThickness = Math.max(1, Math.round(crosswalkVisualWidth * this.gridScale)); // Utiliser round pour un meilleur arrondi
+        console.log(` -> Largeur passage piéton calculée: ${crosswalkVisualWidth.toFixed(1)} unités monde -> ${crosswalkGridThickness} cellules grille.`);
+
+       crosswalkInfos.forEach(info => {
+           const pos = info.position;
+           const angle = info.angle;
+           const length = info.length; // Longueur monde (ex: 9.0)
+
+           const halfLength = length / 2;
+           let dx = 0, dz = 0;
+           if (Math.abs(angle) < 0.1) { dz = halfLength; } else { dx = halfLength; }
+
+           const startWorld = new THREE.Vector3(pos.x - dx, this.sidewalkHeight, pos.z - dz);
+           const endWorld = new THREE.Vector3(pos.x + dx, this.sidewalkHeight, pos.z + dz);
+
+           const startGrid = this.worldToGrid(startWorld.x, startWorld.z);
+           const endGrid = this.worldToGrid(endWorld.x, endWorld.z);
+
+           // Utiliser l'épaisseur calculée (ex: 5 ou 6 cellules si scale=1)
+           markedCells += this.drawLineOnGrid(startGrid, endGrid, crosswalkGridThickness);
+       });
+        console.log(`NavigationGraph: ${markedCells} cellules de passage piéton marquées.`);
+    }
+
+	markSidewalksArea(plots, sidewalkW) {
+        console.log("NavigationGraph: Marquage de la ZONE des trottoirs...");
+        let markedCells = 0;
+
+        plots.forEach(plot => {
+            const pX = plot.x; const pZ = plot.z;
+            const pW = plot.width; const pD = plot.depth;
+
+            // Limites du monde pour le trottoir EXTERIEUR
+            const outerMinWorldX = pX - sidewalkW;
+            const outerMaxWorldX = pX + pW + sidewalkW;
+            const outerMinWorldZ = pZ - sidewalkW;
+            const outerMaxWorldZ = pZ + pD + sidewalkW;
+
+            // Limites du monde pour la parcelle INTERIEURE
+            const innerMinWorldX = pX;
+            const innerMaxWorldX = pX + pW;
+            const innerMinWorldZ = pZ;
+            const innerMaxWorldZ = pZ + pD;
+
+            // Convertir les limites du monde en limites de GRILLE (indices de cellules)
+            // Pour les minimums, on prend le worldToGrid direct (floor)
+            // Pour les maximums, on prend le worldToGrid pour s'assurer d'inclure la dernière cellule
+            const outerMinGridX = this.worldToGrid(outerMinWorldX, 0).x; // Z non pertinent pour worldToGrid
+            const outerMaxGridX = this.worldToGrid(outerMaxWorldX, 0).x;
+            const outerMinGridY = this.worldToGrid(0, outerMinWorldZ).y; // X non pertinent
+            const outerMaxGridY = this.worldToGrid(0, outerMaxWorldZ).y;
+
+            const innerMinGridX = this.worldToGrid(innerMinWorldX, 0).x;
+            const innerMaxGridX = this.worldToGrid(innerMaxWorldX, 0).x;
+            const innerMinGridY = this.worldToGrid(0, innerMinWorldZ).y;
+            const innerMaxGridY = this.worldToGrid(0, innerMaxWorldZ).y;
+
+            // Parcourir toutes les cellules de la grille potentiellement concernées par ce trottoir
+            for (let gx = outerMinGridX; gx < outerMaxGridX; gx++) {
+                for (let gy = outerMinGridY; gy < outerMaxGridY; gy++) {
+                    // Vérifier si la cellule est DANS la zone extérieure mais HORS de la zone intérieure
+                    const isOutsideInner = (gx < innerMinGridX || gx >= innerMaxGridX || gy < innerMinGridY || gy >= innerMaxGridY);
+
+                    if (isOutsideInner) {
+                        // Marquer comme marchable (la fonction markCell gère les doublons et les limites)
+                        if (this.markCell(gx, gy)) {
+                            markedCells++;
+                        }
+                    }
+                }
+            }
+        });
+        console.log(`NavigationGraph: ${markedCells} cellules de ZONE de trottoir marquées.`);
     }
 
     // ... worldToGrid, gridToWorld (inchangés) ...
@@ -120,20 +203,30 @@ export default class NavigationGraph {
         console.log(`NavigationGraph: ${markedCells} cellules de passage piéton marquées.`);
     }
 
-    drawLineOnGrid(start, end, thickness) { /* ... code précédent inchangé ... */
+    drawLineOnGrid(start, end, thickness) {
         let markedCount = 0;
         let x0 = Math.floor(start.x); let y0 = Math.floor(start.y);
         let x1 = Math.floor(end.x); let y1 = Math.floor(end.y);
         let dx = Math.abs(x1 - x0); let sx = x0 < x1 ? 1 : -1;
         let dy = -Math.abs(y1 - y0); let sy = y0 < y1 ? 1 : -1;
         let err = dx + dy;
-        let halfThickness = Math.max(0, Math.floor((thickness -1) / 2));
+        // Recalcul de halfThickness pour centrer la ligne (important si thickness est impaire)
+        let halfThicknessFloor = Math.max(0, Math.floor((thickness - 1) / 2));
+        let halfThicknessCeil = Math.max(0, Math.ceil((thickness - 1) / 2));
+
         while (true) {
+             // Appliquer l'épaisseur perpendiculairement
              if (dx > -dy) { // Pente < 1 (plus horizontal)
-                 for (let i = -halfThickness; i <= halfThickness; i++) { if (this.markCell(x0, y0 + i)) markedCount++; }
+                 // Boucle de -floor à +ceil pour bien gérer épaisseurs paires/impaires
+                 for (let i = -halfThicknessFloor; i <= halfThicknessCeil; i++) {
+                     if (this.markCell(x0, y0 + i)) markedCount++;
+                 }
              } else { // Pente >= 1 (plus vertical)
-                 for (let i = -halfThickness; i <= halfThickness; i++) { if (this.markCell(x0 + i, y0)) markedCount++; }
+                 for (let i = -halfThicknessFloor; i <= halfThicknessCeil; i++) {
+                    if (this.markCell(x0 + i, y0)) markedCount++;
+                }
             }
+
             if (x0 == x1 && y0 == y1) break;
             let e2 = 2 * err;
             if (e2 >= dy) { err += dy; x0 += sx; }
@@ -150,16 +243,18 @@ export default class NavigationGraph {
         } return markedCount;
     }
 
-    markCell(x, y) {
-        // Cette fonction marque maintenant une cellule comme TRUE sur une grille initialement FALSE
-        if (this.isValidGridCoord(x, y) /* && !this.grid.isWalkableAt(x, y) <- Plus nécessaire */) {
-            this.grid.setWalkableAt(x, y, true); // <- Marquer comme marchable
-            return true;
+	markCell(x, y) {
+        if (this.isValidGridCoord(x, y)) {
+             // Si on ne l'a pas déjà marqué, on le fait
+            if (!this.grid.isWalkableAt(x,y)){
+                 this.grid.setWalkableAt(x, y, true);
+                 return true;
+             }
         }
         return false;
     }
 
-    isValidGridCoord(x, y) {
+	isValidGridCoord(x, y) {
         return this.grid && x >= 0 && x < this.gridWidth && y >= 0 && y < this.gridHeight;
     }
 
