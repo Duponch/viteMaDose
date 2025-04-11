@@ -301,52 +301,53 @@ export default class CityManager {
     }
 
 	initiateAgentPathfinding() {
-        console.log("CityManager: Lancement du pathfinding initial de l'agent...");
-        if (!this.pathfinder || !this.leafPlots || !this.experience.world || !this.experience.world.agent) {
-            console.warn("CityManager: Impossible de lancer le pathfinding initial (pathfinder, plots ou agent manquant).");
-            return;
-        }
-
-        // 1. Trouver les maisons
-        const houses = this.leafPlots.filter(plot => plot.zoneType === 'house');
-        if (houses.length < 2) {
-            console.warn("CityManager: Pas assez de maisons (< 2) pour un chemin A -> B.");
-            return;
-        }
-
-        // 2. Choisir deux maisons différentes aléatoirement
-        let plotA = null, plotB = null;
-        plotA = houses[Math.floor(Math.random() * houses.length)];
-        do {
-            plotB = houses[Math.floor(Math.random() * houses.length)];
-        } while (plotA.id === plotB.id);
-
-        console.log(`CityManager: Chemin demandé de Maison ${plotA.id} à Maison ${plotB.id}`);
-
-        // 3. Déterminer les points de départ/arrivée (simplifié: centre de la parcelle)
-        // TODO: Améliorer pour trouver un point sur le trottoir devant la maison
-        const startPos = plotA.center.clone(); // Utilise le getter de Plot
-        startPos.y = this.navigationGraph.sidewalkHeight; // S'assurer qu'on est à la bonne hauteur
-        const endPos = plotB.center.clone();
-        endPos.y = this.navigationGraph.sidewalkHeight;
-
-         // Positionner l'agent au départ immédiatement
-        this.experience.world.agent.mesh.position.copy(startPos);
-
-
-        // 4. Demander le chemin au Pathfinder
-        console.time("InitialPathfinding");
-        const path = this.pathfinder.findPath(startPos, endPos);
-        console.timeEnd("InitialPathfinding");
-
-        // 5. Donner le chemin à l'agent dans World
-        if (path && path.length > 0) {
-            this.experience.world.setAgentPath(path);
-            console.log("CityManager: Chemin initial envoyé à l'agent.");
-        } else {
-            console.warn("CityManager: Aucun chemin initial trouvé entre les maisons.");
-        }
-    }
+		console.log("CityManager: Lancement du pathfinding initial pour tous les agents...");
+		if (!this.pathfinder || !this.leafPlots || !this.experience.world || !this.experience.world.agents || this.experience.world.agents.length === 0) {
+			console.warn("CityManager: Impossible de lancer le pathfinding initial (pathfinder, plots ou agents manquants).");
+			return;
+		}
+	
+		// 1. Récupérer la liste des maisons
+		const houses = this.leafPlots.filter(plot => plot.zoneType === 'house');
+		if (houses.length < 2) {
+			console.warn("CityManager: Pas assez de maisons (< 2) pour un chemin A -> B.");
+			return;
+		}
+	
+		// Pour chaque agent, choisir deux maisons différentes aléatoirement et lancer le pathfinding
+		this.experience.world.agents.forEach(agent => {
+			let plotA = houses[Math.floor(Math.random() * houses.length)];
+			let plotB;
+			do {
+				plotB = houses[Math.floor(Math.random() * houses.length)];
+			} while (plotA.id === plotB.id);
+	
+			console.log(`CityManager: Chemin demandé pour Agent ${agent.id} de Maison ${plotA.id} à Maison ${plotB.id}`);
+	
+			// 3. Déterminer les points de départ/arrivée (en utilisant le centre de la parcelle)
+			const startPos = plotA.center.clone();
+			startPos.y = this.navigationGraph.sidewalkHeight;
+			const endPos = plotB.center.clone();
+			endPos.y = this.navigationGraph.sidewalkHeight;
+	
+			// Positionner l'agent au point de départ
+			agent.mesh.position.copy(startPos);
+	
+			// 4. Demander le chemin via le Pathfinder
+			console.time(`InitialPathfinding_Agent${agent.id}`);
+			const path = this.pathfinder.findPath(startPos, endPos);
+			console.timeEnd(`InitialPathfinding_Agent${agent.id}`);
+	
+			// 5. Transmettre le chemin à l'agent en le visualisant (on utilise ici la même couleur que l'agent)
+			if (path && path.length > 0) {
+				const agentColor = agent.mesh.material.color.getHex();
+				this.experience.world.setAgentPathForAgent(agent, path, agentColor);
+				console.log(`CityManager: Chemin initial envoyé pour Agent ${agent.id}.`);
+			} else {
+				console.warn(`CityManager: Aucun chemin initial trouvé pour Agent ${agent.id} entre les maisons.`);
+			}
+		});
+	}	
 
 	createGlobalGround() {
         if (this.groundMesh && this.groundMesh.parent) return;

@@ -1,4 +1,3 @@
-// src/Core/World.js
 import * as THREE from 'three';
 import Environment from '../World/Environment.js';
 import CityManager from '../World/CityManager.js';
@@ -11,7 +10,7 @@ export default class World {
         this.resources = this.experience.resources;
         this.cityManager = new CityManager(this.experience);
         this.environment = new Environment(this.experience, this);
-        this.agent = null;
+        this.agents = []; // Passage de l'agent unique à un tableau d'agents
 
         // --- Groupes pour les visualisations de débogage ---
         this.debugNavGridGroup = new THREE.Group();
@@ -37,96 +36,92 @@ export default class World {
             console.log("World: Ville générée (incluant nav graph).");
 
             // Créer la visualisation de la grille APRES sa construction
-            if (this.cityManager.navigationGraph) { // Vérifier si navGraph existe bien
+            if (this.cityManager.navigationGraph) {
                  console.log("World: Génération de la visualisation de la grille de navigation...");
-                 // Appel de la méthode sur l'instance correcte
                  this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
             } else {
                  console.warn("World: navigationGraph non trouvé dans cityManager après generateCity.");
             }
 
-            // Créer l'agent après la génération de la ville et du graphe
-            this.createAgent();
+            // Créer les agents après la génération de la ville et du graphe
+            this.createAgents();
 
-            // Lancer le pathfinding initial (qui a besoin de l'agent)
+            // Lancer le pathfinding initial (qui a besoin des agents)
             this.cityManager.initiateAgentPathfinding();
 
             console.log("World: Initialisation complète.");
 
         } catch (error) {
-            // Afficher l'erreur spécifique qui a causé le problème
             console.error("World: Erreur lors de l'initialisation asynchrone:", error);
         }
     }
 
-    createAgent() {
-        if (this.agent) { this.agent.destroy(); }
-        const startPos = new THREE.Vector3(0, 1, 0); // Position temporaire
-        this.agent = new Agent(this.scene, startPos, 0xffff00, 5); // Cube jaune taille 2
-        console.log("Agent créé dans le monde.");
+    // --- Création d'un tableau de 10 agents, chacun avec une couleur aléatoire
+    createAgents() {
+        // Si des agents existaient déjà, les supprimer
+        if (this.agents && this.agents.length > 0) {
+            this.agents.forEach(agent => agent.destroy());
+            this.agents = [];
+        }
+        const numAgents = 10;
+        for (let i = 0; i < numAgents; i++) {
+            const startPos = new THREE.Vector3(0, 1, 0); // Position temporaire
+            // Générer une couleur aléatoire pour cet agent
+            const agentColor = new THREE.Color(Math.random(), Math.random(), Math.random());
+            const hexColor = agentColor.getHex();
+            const size = 5; // Taille de l'agent (modifiable)
+            const agent = new Agent(this.scene, startPos, hexColor, size);
+            agent.id = i; // Affecter un identifiant unique
+            this.agents.push(agent);
+        }
+        console.log(`World: ${this.agents.length} agents créés.`);
     }
 
-	setAgentPath(pathPoints) {
-		// Nettoyer l'ancien chemin visualisé
-		while(this.debugAgentPathGroup.children.length > 0) {
-			 const child = this.debugAgentPathGroup.children[0];
-			 this.debugAgentPathGroup.remove(child);
-			 if (child.geometry) child.geometry.dispose();
-			 if (child.material) child.material.dispose();
-		}
-	
-		if (pathPoints && pathPoints.length > 1) {
-			 // Créer une courbe passant par les points du chemin
-			 const curve = new THREE.CatmullRomCurve3(pathPoints);
-			 
-			 // Paramètres de TubeGeometry :
-			 // - tubularSegments : nombre de segments le long du tube
-			 // - radius : rayon du tube (épaisseur)
-			 // - radialSegments : nombre de segments autour du tube
-			 // - closed : si le tube forme une boucle (false dans notre cas)
-			 const tubularSegments = 64;
-			 const radius = 1; // Ajustez cette valeur pour obtenir l'épaisseur désirée
-			 const radialSegments = 8;
-			 const closed = false;
-			 
-			 const tubeGeometry = new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, closed);
-			 
-			 // Création d'un matériau simple
-			 const tubeMaterial = new THREE.MeshBasicMaterial({ color: 0xFF0000 });
-			 
-			 // Création du maillage du tube
-			 const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
-			 tubeMesh.name = "AgentPathTube";
-			 tubeMesh.position.y = 0.02; // Légèrement au-dessus de la grille debug
-			 
-			 // Ajouter le tube dans le groupe de visualisation de chemin
-			 this.debugAgentPathGroup.add(tubeMesh);
-			 console.log("World: Chemin de l'agent visualisé (TubeGeometry).");
-		}
-	
-		// Donner le chemin à l'agent
-		if (this.agent) {
-			 if (pathPoints && pathPoints.length > 0 && this.agent.mesh) {
-				  // Positionner l'agent au premier point du chemin trouvé
-				  this.agent.mesh.position.copy(pathPoints[0]);
-				  // Mettre le cube légèrement au-dessus pour être sûr qu'il est visible
-				  this.agent.mesh.position.y = pathPoints[0].y + ((this.agent.mesh.geometry.parameters.height) || 1.0);
-			 }
-			 this.agent.setPath(pathPoints);
-		} else {
-			 console.warn("Tentative de définir un chemin mais l'agent n'existe pas.");
-		}
-	}	
+    // --- Définition du chemin pour un agent donné et visualisation avec sa couleur propre ---
+    setAgentPathForAgent(agent, pathPoints, pathColor) {
+        // Rechercher et supprimer l'ancien chemin visualisé de cet agent, s'il existe
+        const agentPathName = `AgentPath_${agent.id}`;
+        const existingPath = this.debugAgentPathGroup.getObjectByName(agentPathName);
+        if (existingPath) {
+            this.debugAgentPathGroup.remove(existingPath);
+            if (existingPath.geometry) existingPath.geometry.dispose();
+            if (existingPath.material) existingPath.material.dispose();
+        }
+        if (pathPoints && pathPoints.length > 1) {
+            // Créer une courbe passant par les points du chemin
+            const curve = new THREE.CatmullRomCurve3(pathPoints);
+            const tubularSegments = 64;
+            const radius = 1; // Épaisseur du tube
+            const radialSegments = 8;
+            const closed = false;
+            const tubeGeometry = new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, closed);
+            // Utiliser le paramètre color pour le matériau
+            const tubeMaterial = new THREE.MeshBasicMaterial({ color: pathColor });
+            const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+            tubeMesh.name = agentPathName;
+            tubeMesh.position.y = 0.02; // Légèrement au-dessus de la grille debug
+            this.debugAgentPathGroup.add(tubeMesh);
+            console.log(`World: Chemin de l'agent ${agent.id} visualisé.`);
+        }
+        // Donner le chemin à l'agent et positionner le cube sur le premier point
+        if (agent && agent.mesh) {
+            if (pathPoints && pathPoints.length > 0) {
+                agent.mesh.position.copy(pathPoints[0]);
+                agent.mesh.position.y = pathPoints[0].y + ((agent.mesh.geometry.parameters.height) || 1.0);
+            }
+            agent.setPath(pathPoints);
+        } else {
+            console.warn(`World: Tentative de définir un chemin mais l'agent ${agent.id} n'existe pas.`);
+        }
+    }
 
-    // generateCityAsync a été intégré dans initializeWorld via cityManager.generateCity
-    // async generateCityAsync() { ... }
-
+    // --- Mise à jour du monde : on met à jour chacun des agents ---
     update() {
         const deltaTime = this.experience.time.delta;
         const normalizedHealth = 0.8;
         this.cityManager?.update();
         this.environment?.update(deltaTime, normalizedHealth);
-        this.agent?.update(deltaTime);
+        this.agents.forEach(agent => agent.update(deltaTime));
     }
 
     destroy() {
@@ -138,8 +133,8 @@ export default class World {
         this.debugAgentPathGroup = null;
         this.cityManager?.destroy();
         this.environment?.destroy();
-        this.agent?.destroy();
-        this.agent = null;
+        this.agents.forEach(agent => agent.destroy());
+        this.agents = [];
         console.log("World détruit.");
     }
 }
