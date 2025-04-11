@@ -5,6 +5,8 @@ import RoadNetworkGenerator from './RoadNetworkGenerator.js';
 import PlotContentGenerator from './PlotContentGenerator.js';
 import CityAssetLoader from './CityAssetLoader.js';
 import District from './District.js';
+import NavigationGraph from './NavigationGraph.js'; // <-- AJOUTER IMPORT
+import Pathfinder from './Pathfinder.js';         // <-- AJOUTER IMPORT
 
 export default class CityManager {
     constructor(experience, config = {}) {
@@ -14,7 +16,7 @@ export default class CityManager {
 
 		this.config = {
 			// Map & Layout
-			mapSize: 1000,
+			mapSize: 400,
 			roadWidth: 10,
 			minPlotSize: 13,
 			maxPlotSize: 40,
@@ -176,6 +178,9 @@ export default class CityManager {
             debugBusinessMat: new THREE.MeshBasicMaterial({ color: 0xcc0000, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
              debugDefaultMat: new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
         };
+		this.navigationGraph = null;
+        this.pathfinder = null;
+
         this.assetLoader = new CityAssetLoader(this.config);
         this.layoutGenerator = new CityLayoutGenerator(this.config);
         this.roadGenerator = new RoadNetworkGenerator(this.config, this.materials);
@@ -187,6 +192,7 @@ export default class CityManager {
         this.contentGroup = null;
         this.groundMesh = null;
         this.debugGroup = new THREE.Group(); this.debugGroup.name = "DebugVisuals";
+
         this.scene.add(this.cityContainer);
         if (this.config.showDistrictBoundaries) { this.cityContainer.add(this.debugGroup); }
         console.log("CityManager initialisé (Nouvelle logique de Districts).");
@@ -247,6 +253,18 @@ export default class CityManager {
             console.log(`Réseau routier généré et ${crosswalkInfos.length} emplacements de passages piétons identifiés.`);
             // --- FIN CORRECTION ERREUR add ---
 
+			console.time("NavigationGraphBuilding");
+            this.navigationGraph = new NavigationGraph(this.config);
+            // Passez les parcelles feuilles et les infos des passages piétons
+            this.navigationGraph.buildGraph(this.leafPlots, crosswalkInfos);
+            console.timeEnd("NavigationGraphBuilding");
+            // --- FIN NOUVEAU ---
+
+            // --- NOUVEAU: Création du Pathfinder ---
+            console.time("PathfinderInitialization");
+            // Passez le graphe de navigation que vous venez de créer
+            this.pathfinder = new Pathfinder(this.navigationGraph);
+            console.timeEnd("PathfinderInitialization");
 
             // --- Génération Contenu (appel inchangé ici, mais crosswalkInfos est maintenant correct) ---
             console.time("ContentGeneration");
@@ -262,8 +280,15 @@ export default class CityManager {
             console.timeEnd("ContentGeneration");
             // --- Fin Génération Contenu ---
 
-
             if (this.config.showDistrictBoundaries) { console.time("DebugVisualsGeneration"); this.createDistrictDebugVisuals(); console.timeEnd("DebugVisualsGeneration"); }
+
+			// --- NOUVEAU: Lancer le premier pathfinding pour l'agent ---
+             // Fait ici car on a besoin du pathfinder et potentiellement de l'agent (créé dans World)
+             // Assurez-vous que World a déjà créé l'agent à ce stade, sinon déplacez cet appel.
+             // Pour l'instant, on suppose que l'agent est créé après dans World.initializeWorld
+             // On pourrait ajouter une méthode getAgent() à World ou passer le World au CityManager.
+             // Solution simple: appeler une méthode dans World APRES que l'agent soit créé.
+             // On le fera depuis World.initializeWorld après generateCityAsync.
 
             console.log("--- Génération ville terminée (avec passages piétons visuels corrigés) ---");
 
@@ -272,6 +297,54 @@ export default class CityManager {
             this.clearCity();
         } finally {
             console.timeEnd("CityGeneration");
+        }
+    }
+
+	initiateAgentPathfinding() {
+        console.log("CityManager: Lancement du pathfinding initial de l'agent...");
+        if (!this.pathfinder || !this.leafPlots || !this.experience.world || !this.experience.world.agent) {
+            console.warn("CityManager: Impossible de lancer le pathfinding initial (pathfinder, plots ou agent manquant).");
+            return;
+        }
+
+        // 1. Trouver les maisons
+        const houses = this.leafPlots.filter(plot => plot.zoneType === 'house');
+        if (houses.length < 2) {
+            console.warn("CityManager: Pas assez de maisons (< 2) pour un chemin A -> B.");
+            return;
+        }
+
+        // 2. Choisir deux maisons différentes aléatoirement
+        let plotA = null, plotB = null;
+        plotA = houses[Math.floor(Math.random() * houses.length)];
+        do {
+            plotB = houses[Math.floor(Math.random() * houses.length)];
+        } while (plotA.id === plotB.id);
+
+        console.log(`CityManager: Chemin demandé de Maison ${plotA.id} à Maison ${plotB.id}`);
+
+        // 3. Déterminer les points de départ/arrivée (simplifié: centre de la parcelle)
+        // TODO: Améliorer pour trouver un point sur le trottoir devant la maison
+        const startPos = plotA.center.clone(); // Utilise le getter de Plot
+        startPos.y = this.navigationGraph.sidewalkHeight; // S'assurer qu'on est à la bonne hauteur
+        const endPos = plotB.center.clone();
+        endPos.y = this.navigationGraph.sidewalkHeight;
+
+         // Positionner l'agent au départ immédiatement
+        this.experience.world.agent.mesh.position.copy(startPos);
+
+
+        // 4. Demander le chemin au Pathfinder
+        console.time("InitialPathfinding");
+        const path = this.pathfinder.findPath(startPos, endPos);
+        console.timeEnd("InitialPathfinding");
+
+        // 5. Donner le chemin à l'agent dans World
+        if (path && path.length > 0) {
+            this.experience.world.setAgentPath(path);
+            console.log("CityManager: Chemin initial envoyé à l'agent.");
+        } else {
+            console.warn("CityManager: Aucun chemin initial trouvé entre les maisons.");
         }
     }
 
@@ -796,17 +869,57 @@ export default class CityManager {
 		 console.log(`Visuels de débogage (Plans) pour ${this.debugGroup.children.length} districts créés.`);
 	}
 
-    clearCity() {
+	clearCity() {
         console.log("Nettoyage de la ville existante...");
-        // ... (début de clearCity) ...
+        // Retirer les groupes de la scène
+        if(this.roadGroup && this.roadGroup.parent) this.cityContainer.remove(this.roadGroup);
+        if(this.sidewalkGroup && this.sidewalkGroup.parent) this.cityContainer.remove(this.sidewalkGroup);
+        if(this.contentGroup && this.contentGroup.parent) this.cityContainer.remove(this.contentGroup);
+        if(this.debugGroup && this.debugGroup.parent) this.cityContainer.remove(this.debugGroup);
 
-        // Assurez-vous que ce sol est aussi nettoyé
+        // Nettoyer le contenu des groupes (géométries, matériaux si nécessaire)
+        const disposeGroup = (group) => {
+          if (!group) return;
+          while(group.children.length > 0){
+              const obj = group.children[0];
+              group.remove(obj);
+              if(obj.geometry) obj.geometry.dispose();
+              // Attention aux matériaux partagés, ne pas disposer ici si réutilisés
+              // if(obj.material) {
+              //     if(Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+              //     else obj.material.dispose();
+              // }
+          }
+        };
+        disposeGroup(this.roadGroup);
+        disposeGroup(this.sidewalkGroup);
+        disposeGroup(this.contentGroup);
+        disposeGroup(this.debugGroup);
+
+        // Nettoyer le sol global
         if (this.groundMesh) {
             if (this.groundMesh.parent) this.groundMesh.parent.remove(this.groundMesh);
             if (this.groundMesh.geometry) this.groundMesh.geometry.dispose();
-            // Le matériau est partagé, il sera disposé à la fin si nécessaire
+            // Matériau global (groundMaterial) est disposé dans destroy()
             this.groundMesh = null;
         }
+
+        // Réinitialiser les générateurs et listes si nécessaire
+        this.roadGenerator?.reset();
+        this.contentGenerator?.reset(this.assetLoader); // reset a besoin de l'asset loader
+        this.layoutGenerator?.reset();
+
+        // --- AJOUT: Nettoyer Graphe et Pathfinder ---
+        this.navigationGraph?.destroy();
+        this.navigationGraph = null;
+        this.pathfinder = null; // Pathfinder n'a pas de méthode destroy mais on libère la réf
+        // --------------------------------------------
+
+        this.leafPlots = [];
+        this.districts = [];
+        this.roadGroup = null;
+        this.sidewalkGroup = null;
+        this.contentGroup = null;
 
         console.log("Nettoyage terminé.");
     }
@@ -845,23 +958,31 @@ export default class CityManager {
 
     destroy() {
         console.log("Destruction du CityManager...");
-		this.clearCity(); // Appelle déjà le nettoyage du groundMesh
+        this.clearCity(); // Nettoie déjà la plupart des éléments
 
-		// Dispose des matériaux centraux s'ils ne sont plus utilisés ailleurs
-		Object.values(this.materials).forEach(material => {
-			if (material && typeof material.dispose === 'function') {
-				material.dispose();
-			}
-		});
-		this.materials = {};
+        // Dispose des matériaux centraux
+        Object.values(this.materials).forEach(material => {
+            if (material && typeof material.dispose === 'function') {
+                material.dispose();
+            }
+        });
+        this.materials = {};
+
+         // Détruire AssetLoader (qui dispose ses assets)
+        this.assetLoader?.disposeAssets();
+
+
+        // Retirer le conteneur principal
         if (this.cityContainer && this.cityContainer.parent) {
            this.cityContainer.parent.remove(this.cityContainer);
         }
-        // ... (nullifier les références) ...
+
+        // Nullifier les références
         this.assetLoader = null; this.layoutGenerator = null; this.roadGenerator = null;
         this.contentGenerator = null; this.experience = null; this.scene = null;
         this.districts = null; this.leafPlots = null;
         this.cityContainer = null; this.debugGroup = null;
+        this.navigationGraph = null; this.pathfinder = null; // Assurer la nullification
         console.log("CityManager détruit.");
     }
 
