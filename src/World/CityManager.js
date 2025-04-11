@@ -20,6 +20,12 @@ export default class CityManager {
 			maxPlotSize: 40,
 			maxRecursionDepth: 7,
 
+			crosswalkWidth: 4, // Largeur visuelle du passage piéton
+            crosswalkHeight: 0.03, // Légère hauteur pour éviter z-fighting
+			crosswalkStripeCount: 5,    // Nombre de bandes blanches
+            crosswalkStripeWidth: 0.6, // Largeur de chaque bande blanche
+            crosswalkStripeGap: 0.5,   // Espace entre les bandes blanches
+
 			// District Formation
 			minDistrictSize: 5,
 			maxDistrictSize: 10,
@@ -156,6 +162,13 @@ export default class CityManager {
 				// emissive: 0x111111,
 				// emissiveIntensity: 0.5
 			}),
+			crosswalkMaterial: new THREE.MeshStandardMaterial({
+                color: 0xE0E0E0, // Blanc cassé
+                roughness: 0.7,
+                metalness: 0.1,
+                // Optionnel: Ajouter une texture de zébrures ici si vous en avez une
+                // map: textureLoader.load('path/to/crosswalk_texture.png'),
+            }),
             parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
             buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x333333 }),
             debugResidentialMat: new THREE.MeshBasicMaterial({ color: 0x0077ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
@@ -197,52 +210,62 @@ export default class CityManager {
 
             if (!this.leafPlots || this.leafPlots.length === 0) throw new Error("Layout n'a produit aucune parcelle.");
 
+            // --- Logique Districts (inchangée) ---
             let districtLayoutValid = false;
             let attempts = 0;
             console.time("DistrictFormationAndValidation");
             while (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
                 attempts++;
                 console.log(`\nTentative de formation/validation des districts #${attempts}...`);
-
-                this.districts = []; // Réinitialiser l'état des districts
-                this.leafPlots.forEach(p => { p.districtId = null; }); // Réinitialiser l'ID district des parcelles
-
-                this.createDistricts_V2(); // Appel de la fonction modifiée
-                this.logDistrictStats();
-
+                this.districts = []; this.leafPlots.forEach(p => { p.districtId = null; });
+                this.createDistricts_V2(); this.logDistrictStats();
                 districtLayoutValid = this.validateDistrictLayout();
-
-                if (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
-                    console.log(`Disposition invalide, nouvelle tentative (max ${this.config.maxDistrictRegenAttempts})...`);
-                } else if (!districtLayoutValid) {
-                    console.error(`ERREUR DANS LA BOUCLE: Impossible d'obtenir une disposition de districts valide après ${attempts} tentatives.`);
-                }
+                if (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) { console.log(`Disposition invalide, nouvelle tentative...`); }
+                else if (!districtLayoutValid) { console.error(`ERREUR: Impossible d'obtenir une disposition de districts valide.`); }
             }
             console.timeEnd("DistrictFormationAndValidation");
-            console.log(`Formation districts terminée après ${attempts} tentative(s). Etat final: ${districtLayoutValid ? 'Valide' : 'Invalide (max tentatives atteint)'}`);
+            if (!districtLayoutValid) { throw new Error(`Échec critique: Disposition des districts invalide après ${attempts} tentatives.`); }
+            console.log("Disposition des districts validée...");
+            // --- Fin Logique Districts ---
 
-            if (!districtLayoutValid) {
-                const errorMessage = `Échec critique: Impossible de générer une disposition de districts valide respectant toutes les règles après ${this.config.maxDistrictRegenAttempts} tentatives. Arrêt de la génération de la ville. Veuillez vérifier/assouplir les règles dans la configuration.`;
-                console.error(errorMessage);
-                this.clearCity();
-                throw new Error(errorMessage);
-            }
-
-            console.log("Disposition des districts validée. Poursuite de la génération...");
 
             console.time("PlotTypeAdjustment");
-            this.adjustPlotTypesWithinDistricts(); // Appliquer les types stricts aux parcelles DANS les districts
+            this.adjustPlotTypesWithinDistricts();
             console.timeEnd("PlotTypeAdjustment");
-            // Optionnel : Ajouter ici la logique fallback (Option 2) si des parcelles sont encore non assignées
-            this.assignDefaultTypeToUnassigned(); // Appel de la nouvelle fonction fallback
-            this.logAdjustedZoneTypes(); // Log final après ajustement ET fallback
+            this.assignDefaultTypeToUnassigned();
+            this.logAdjustedZoneTypes();
 
-            console.time("RoadGeneration"); this.roadGroup = this.roadGenerator.generateRoads(this.leafPlots); this.cityContainer.add(this.roadGroup); console.timeEnd("RoadGeneration");
-            console.time("ContentGeneration"); const { sidewalkGroup, buildingGroup } = this.contentGenerator.generateContent(this.leafPlots, this.assetLoader); this.sidewalkGroup = sidewalkGroup; this.contentGroup = buildingGroup; this.cityContainer.add(this.sidewalkGroup); this.cityContainer.add(this.contentGroup); console.timeEnd("ContentGeneration");
+
+            // --- RÉCUPÉRATION roadGroup et crosswalkInfos ---
+            console.time("RoadAndCrosswalkInfoGeneration");
+            // Appel UNIQUE à generateRoads, récupération correcte des infos
+            const { roadGroup, crosswalkInfos } = this.roadGenerator.generateRoads(this.leafPlots);
+            this.roadGroup = roadGroup; // Assignation à la propriété de classe
+            // AJOUT CORRECT du roadGroup (qui est un Object3D) au conteneur
+            this.cityContainer.add(this.roadGroup);
+            console.timeEnd("RoadAndCrosswalkInfoGeneration");
+            console.log(`Réseau routier généré et ${crosswalkInfos.length} emplacements de passages piétons identifiés.`);
+            // --- FIN CORRECTION ERREUR add ---
+
+
+            // --- Génération Contenu (appel inchangé ici, mais crosswalkInfos est maintenant correct) ---
+            console.time("ContentGeneration");
+            const { sidewalkGroup, buildingGroup } = this.contentGenerator.generateContent(
+                this.leafPlots,
+                this.assetLoader,
+                crosswalkInfos // Passer les infos récupérées précédemment
+            );
+            this.sidewalkGroup = sidewalkGroup;
+            this.contentGroup = buildingGroup; // buildingGroup contient maintenant aussi les crosswalks
+            this.cityContainer.add(this.sidewalkGroup);
+            this.cityContainer.add(this.contentGroup);
+            console.timeEnd("ContentGeneration");
+            // --- Fin Génération Contenu ---
+
 
             if (this.config.showDistrictBoundaries) { console.time("DebugVisualsGeneration"); this.createDistrictDebugVisuals(); console.timeEnd("DebugVisualsGeneration"); }
 
-            console.log("--- Génération ville terminée (avec succès) ---");
+            console.log("--- Génération ville terminée (avec passages piétons visuels corrigés) ---");
 
         } catch (error) {
             console.error("Erreur majeure pendant la génération:", error);

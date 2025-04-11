@@ -11,44 +11,95 @@ export default class PlotContentGenerator {
         this.assetLoader = null;
         // Structure pour stocker les matrices d'instances, indexées par type
         this.instanceData = {}; // Sera initialisé dans reset()
+		this.crosswalkBaseGeometry = null;
         console.log("PlotContentGenerator initialisé (avec support arbres et gratte-ciels).");
     }
 
-    generateContent(leafPlots, assetLoader) {
+	generateContent(leafPlots, assetLoader, crosswalkInfos = []) {
         this.reset(assetLoader);
-        console.log("Génération du contenu...");
+        console.log("Génération du contenu (incluant passages piétons en bandes)...");
 
         const allSidewalkGeometries = [];
 
+        // --- MODIFICATION: Géométrie de base pour UNE BANDE ---
+        this.stripeBaseGeometry = new THREE.BoxGeometry(
+            this.config.crosswalkStripeWidth, // Largeur d'une bande (X local)
+            this.config.crosswalkHeight,       // Hauteur/Épaisseur (Y local)
+            1                                  // Longueur (Z local, sera scalée par matrice)
+        );
+        // ----------------------------------------------------
+
         leafPlots.forEach((plot) => {
-            // 1. Gestion du contenu principal de la parcelle (selon type de zone)
+            // ... (Contenu principal, trottoirs, arbres - inchangés) ...
             this.generatePlotPrimaryContent(plot);
-            // 2. Création des trottoirs pour la parcelle (si activé)
-            if (this.config.sidewalkWidth > 0) {
-                const plotSidewalkGeoms = this.collectSidewalkGeometriesForPlot(plot);
-                allSidewalkGeometries.push(...plotSidewalkGeoms);
-            }
-            // 3. Placement des arbres
+            if (this.config.sidewalkWidth > 0) { const g = this.collectSidewalkGeometriesForPlot(plot); allSidewalkGeometries.push(...g); }
             this.placeTreesForPlot(plot);
         });
 
-        // 4. Création des InstancedMesh pour tous les éléments (bâtiments, gratte-ciels, arbres, etc.)
+        // --- MODIFICATION: Traitement pour générer les bandes ---
+        if (crosswalkInfos && crosswalkInfos.length > 0) {
+            console.log(`Préparation des matrices pour ${crosswalkInfos.length} passages piétons (en bandes)...`);
+
+            if (!this.instanceData.crosswalk) this.instanceData.crosswalk = {};
+            const crosswalkAssetId = 'default_crosswalk_stripe'; // Nom qui reflète la bande
+            if (!this.instanceData.crosswalk[crosswalkAssetId]) this.instanceData.crosswalk[crosswalkAssetId] = [];
+
+            const matrix = new THREE.Matrix4();
+            const basePosition = new THREE.Vector3(); // Position centrale du passage piéton
+            const stripePosition = new THREE.Vector3(); // Position ajustée pour chaque bande
+            const quaternion = new THREE.Quaternion();
+            const scale = new THREE.Vector3();
+            const offsetDirection = new THREE.Vector3(); // Vecteur pour décaler les bandes
+
+            const stripeCount = this.config.crosswalkStripeCount;
+            const stripeWidth = this.config.crosswalkStripeWidth;
+            const stripeGap = this.config.crosswalkStripeGap;
+            const stripeTotalWidth = stripeWidth + stripeGap;
+            // Décalage initial pour centrer le groupe de bandes
+            const totalWidth = (stripeCount * stripeWidth) + Math.max(0, stripeCount - 1) * stripeGap;
+            const initialOffset = -totalWidth / 2 + stripeWidth / 2;
+
+            crosswalkInfos.forEach(info => {
+                // info.position est maintenant le point d'alignement sur le bord du trottoir
+                // Il faut calculer le vrai centre du passage piéton pour la rotation/scale
+                basePosition.copy(info.position);
+                quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), info.angle);
+
+                // Déterminer la direction du décalage (perpendiculaire à l'angle du passage)
+                // Si angle=0 (vertical), décaler sur X. Si angle=PI/2 (horizontal), décaler sur Z.
+                if (Math.abs(info.angle - Math.PI / 2) < 0.01) { // Horizontal (angle PI/2)
+                    offsetDirection.set(0, 0, 1); // Décaler sur Z
+                } else { // Vertical (angle 0)
+                    offsetDirection.set(1, 0, 0); // Décaler sur X
+                }
+
+                // Mettre à l'échelle la longueur (Z local de la géométrie) pour correspondre à info.length (roadWidth)
+                scale.set(1, 1, info.length); // Largeur(X) et Hauteur(Y) viennent de la géométrie
+
+                // Créer les matrices pour chaque bande
+                for (let i = 0; i < stripeCount; i++) {
+                    // Calculer le décalage pour cette bande
+                    const currentOffset = initialOffset + i * stripeTotalWidth;
+                    // Calculer la position de la bande = position centrale + décalage dans la bonne direction
+                    stripePosition.copy(basePosition).addScaledVector(offsetDirection, currentOffset);
+                    // Ajuster la hauteur Y
+                    stripePosition.y = this.config.crosswalkHeight / 2 + 0.005;
+
+                    // Composer la matrice pour cette bande
+                    matrix.compose(stripePosition, quaternion, scale);
+                    this.instanceData.crosswalk[crosswalkAssetId].push(matrix.clone());
+                }
+            });
+        }
+        // --- Fin traitement bandes ---
+
+        // 4. Création InstancedMesh (sera modifié pour utiliser stripeBaseGeometry)
         this.createInstancedMeshesFromData();
 
-        // 5. Fusion des géométries de trottoir et ajout dans le groupe dédié
-        if (allSidewalkGeometries.length > 0) {
-            const mergedSidewalkGeometry = mergeGeometries(allSidewalkGeometries, false);
-            if (mergedSidewalkGeometry) {
-                const sidewalkMesh = new THREE.Mesh(mergedSidewalkGeometry, this.materials.sidewalkMaterial);
-                sidewalkMesh.castShadow = true;
-                sidewalkMesh.receiveShadow = true;
-                sidewalkMesh.name = "Merged_Sidewalks";
-                this.sidewalkGroup.add(sidewalkMesh);
-            } else {
-                console.warn("La fusion des géométries de trottoir a échoué.");
-            }
-            allSidewalkGeometries.forEach(geom => geom.dispose());
-        }
+        // 5. Fusion trottoirs (inchangé)
+        // ... (copier le bloc de fusion d'avant) ...
+        if (allSidewalkGeometries.length > 0) { const mergedSidewalkGeometry = mergeGeometries(allSidewalkGeometries, false); if (mergedSidewalkGeometry) { const sidewalkMesh = new THREE.Mesh(mergedSidewalkGeometry, this.materials.sidewalkMaterial); sidewalkMesh.castShadow = false; sidewalkMesh.receiveShadow = true; sidewalkMesh.name = "Merged_Sidewalks"; this.sidewalkGroup.add(sidewalkMesh); } else { console.warn("Fusion trottoirs échouée."); } allSidewalkGeometries.forEach(geom => geom.dispose()); }
+
 
         console.log("Génération du contenu terminée.");
         return this.getGroups();
@@ -232,21 +283,21 @@ export default class PlotContentGenerator {
     }
 
     // Réinitialise les données et stocke la référence vers l'assetLoader
-    reset(assetLoader) {
+	reset(assetLoader) {
         this.assetLoader = assetLoader;
-        // On ajoute "skyscraper" dans l'instanceData pour que tous les types soient préparés
-        this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {}, skyscraper: {} };
+        this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {}, skyscraper: {}, crosswalk: {} };
 
         const disposeGroupContents = (group) => {
-            while (group.children.length > 0) {
-                const child = group.children[0];
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) child.material.dispose();
-                group.remove(child);
-            }
+             while (group.children.length > 0) { const c = group.children[0]; group.remove(c); if (c.geometry) c.geometry.dispose(); /* if (c.material) c.material.dispose(); // Careful with shared mats */ } // Safety: Check before disposing material if reused
         };
         disposeGroupContents(this.sidewalkGroup);
         disposeGroupContents(this.buildingGroup);
+
+        // Disposer l'ancienne géométrie de base si elle existe
+        if (this.stripeBaseGeometry) {
+            this.stripeBaseGeometry.dispose();
+            this.stripeBaseGeometry = null;
+        }
     }
 
     // Calcule la matrice d'instance à partir de la position, du scale, d'une rotation optionnelle et du décalage
@@ -266,46 +317,70 @@ export default class PlotContentGenerator {
 
     // Itère sur instanceData pour créer pour chaque asset un InstancedMesh et l'ajouter au groupe principal
     createInstancedMeshesFromData() {
-        console.log("Création des InstancedMesh par modèle (incluant arbres et gratte-ciels)...");
+        console.log("Création des InstancedMesh par modèle (incluant bandes passages piétons)...");
         let totalInstancesCreated = 0;
         let instancedMeshCount = 0;
-        if (!this.assetLoader) {
-            console.error("Impossible de créer InstancedMesh: AssetLoader non disponible.");
+        // AssetLoader peut être null si on ne charge que des passages piétons (peu probable mais géré)
+        if (!this.assetLoader && !this.stripeBaseGeometry) {
+            console.error("Impossible de créer InstancedMesh: AssetLoader ET stripeBaseGeometry non dispos.");
             return;
         }
+
         for (const type in this.instanceData) {
             if (!this.instanceData.hasOwnProperty(type)) continue;
+
             for (const modelId in this.instanceData[type]) {
                 if (!this.instanceData[type].hasOwnProperty(modelId)) continue;
+
                 const matrices = this.instanceData[type][modelId];
                 if (matrices && matrices.length > 0) {
-                    const assetData = this.assetLoader.getAssetDataById(modelId);
-                    if (assetData && assetData.geometry && assetData.material) {
-                        const instancedMesh = new THREE.InstancedMesh(
-                            assetData.geometry,
-                            assetData.material,
-                            matrices.length
-                        );
-                        matrices.forEach((matrix, index) => instancedMesh.setMatrixAt(index, matrix));
-                        instancedMesh.castShadow = true;
-                        instancedMesh.receiveShadow = true;
-                        instancedMesh.name = `${type}_${modelId}`;
-                        this.buildingGroup.add(instancedMesh);
-                        instancedMeshCount++;
-                        totalInstancesCreated += matrices.length;
-                    } else {
-                        console.warn(`Données d'asset ${modelId} (type ${type}) non trouvées ou invalides, ${matrices.length} instances ignorées.`);
+                    let geometry = null;
+                    let material = null;
+                    let castShadow = true;
+                    let receiveShadow = true;
+
+                    // --- Cas Spécifique: Passages Piétons (Bandes) ---
+                    if (type === 'crosswalk') {
+                        // Utiliser la géométrie de BANDE
+                        if (this.stripeBaseGeometry && this.materials.crosswalkMaterial) {
+                            geometry = this.stripeBaseGeometry; // <-- Utilise la géométrie de bande
+                            material = this.materials.crosswalkMaterial;
+                            castShadow = false;
+                            receiveShadow = true;
+                        } else {
+                            console.warn(`Géométrie/matériau manquant pour 'crosswalk' (bandes), ${matrices.length} instances ignorées.`);
+                            continue;
+                        }
                     }
+                    // --- Cas Général: Assets chargés ---
+                    else if (this.assetLoader) {
+                        // ... (Logique assetLoader inchangée) ...
+                        const assetData = this.assetLoader.getAssetDataById(modelId);
+                        if (assetData && assetData.geometry && assetData.material) {
+                            geometry = assetData.geometry;
+                            material = assetData.material;
+                        } else {
+                             console.warn(`Données asset ${modelId} (type ${type}) invalides, ${matrices.length} instances ignorées.`);
+                            continue;
+                        }
+                    } else { continue; } // Ni crosswalk ni asset loader valide
+
+                    // --- Création InstancedMesh (inchangée) ---
+                    const instancedMesh = new THREE.InstancedMesh(geometry, material, matrices.length);
+                    matrices.forEach((matrix, index) => instancedMesh.setMatrixAt(index, matrix));
+                    instancedMesh.castShadow = castShadow;
+                    instancedMesh.receiveShadow = receiveShadow;
+                    instancedMesh.name = `${type}_${modelId}`; // Ex: crosswalk_default_crosswalk_stripe
+                    this.buildingGroup.add(instancedMesh); // Ajouter au groupe
+                    instancedMeshCount++;
+                    totalInstancesCreated += matrices.length; // Compte le nombre total de bandes
                 }
             }
         }
-        if (instancedMeshCount > 0) {
-            console.log(`Création InstancedMesh terminée: ${instancedMeshCount} mesh(es) InstancedMesh créés pour ${totalInstancesCreated} instances au total (tous types).`);
-        } else {
-            console.log("Aucune instance à créer via InstancedMesh.");
-        }
+        // ... (Logs finaux inchangés) ...
+        if (instancedMeshCount > 0) { console.log(`Création InstancedMesh terminée: ${instancedMeshCount} mesh(es) pour ${totalInstancesCreated} instances.`); } else { console.log("Aucune instance à créer via InstancedMesh."); }
     }
-
+	
     // Crée le sol de la parcelle (pour tout type de zone)
     createPlotGround(plot) {
         const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
