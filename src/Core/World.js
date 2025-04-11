@@ -62,41 +62,61 @@ export default class World {
     createAgent() {
         if (this.agent) { this.agent.destroy(); }
         const startPos = new THREE.Vector3(0, 1, 0); // Position temporaire
-        this.agent = new Agent(this.scene, startPos, 0xffff00, 2); // Cube jaune taille 2
+        this.agent = new Agent(this.scene, startPos, 0xffff00, 5); // Cube jaune taille 2
         console.log("Agent créé dans le monde.");
     }
 
-    setAgentPath(pathPoints) {
-        // Nettoyer l'ancien chemin visualisé
-        while(this.debugAgentPathGroup.children.length > 0) {
-             const child = this.debugAgentPathGroup.children[0];
-             this.debugAgentPathGroup.remove(child);
-             if (child.geometry) child.geometry.dispose();
-         }
-
-        if (pathPoints && pathPoints.length > 1) {
-             const lineGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
-             const lineMaterial = new THREE.LineBasicMaterial({ color: 0xFF0000, linewidth: 4 }); // Magenta
-             const pathLine = new THREE.Line(lineGeometry, lineMaterial);
-             pathLine.name = "AgentPathLine";
-             pathLine.position.y = 0.02; // Légèrement au-dessus de la grille debug
-             this.debugAgentPathGroup.add(pathLine);
-             console.log("World: Chemin de l'agent visualisé.");
-        }
-
-        // Donner le chemin à l'agent
-        if (this.agent) {
-            if (pathPoints && pathPoints.length > 0 && this.agent.mesh) {
-                 // Positionner l'agent au premier point du chemin trouvé
-                 this.agent.mesh.position.copy(pathPoints[0]);
-                 // Mettre le cube légèrement au-dessus pour être sûr qu'il est visible
-                 this.agent.mesh.position.y = pathPoints[0].y + (this.agent.mesh.geometry.parameters.height / 2 || 1.0);
-            }
-            this.agent.setPath(pathPoints);
-        } else {
-            console.warn("Tentative de définir un chemin mais l'agent n'existe pas.");
-        }
-    }
+	setAgentPath(pathPoints) {
+		// Nettoyer l'ancien chemin visualisé
+		while(this.debugAgentPathGroup.children.length > 0) {
+			 const child = this.debugAgentPathGroup.children[0];
+			 this.debugAgentPathGroup.remove(child);
+			 if (child.geometry) child.geometry.dispose();
+			 if (child.material) child.material.dispose();
+		}
+	
+		if (pathPoints && pathPoints.length > 1) {
+			 // Créer une courbe passant par les points du chemin
+			 const curve = new THREE.CatmullRomCurve3(pathPoints);
+			 
+			 // Paramètres de TubeGeometry :
+			 // - tubularSegments : nombre de segments le long du tube
+			 // - radius : rayon du tube (épaisseur)
+			 // - radialSegments : nombre de segments autour du tube
+			 // - closed : si le tube forme une boucle (false dans notre cas)
+			 const tubularSegments = 64;
+			 const radius = 1; // Ajustez cette valeur pour obtenir l'épaisseur désirée
+			 const radialSegments = 8;
+			 const closed = false;
+			 
+			 const tubeGeometry = new THREE.TubeGeometry(curve, tubularSegments, radius, radialSegments, closed);
+			 
+			 // Création d'un matériau simple
+			 const tubeMaterial = new THREE.MeshBasicMaterial({ color: 0xFF0000 });
+			 
+			 // Création du maillage du tube
+			 const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+			 tubeMesh.name = "AgentPathTube";
+			 tubeMesh.position.y = 0.02; // Légèrement au-dessus de la grille debug
+			 
+			 // Ajouter le tube dans le groupe de visualisation de chemin
+			 this.debugAgentPathGroup.add(tubeMesh);
+			 console.log("World: Chemin de l'agent visualisé (TubeGeometry).");
+		}
+	
+		// Donner le chemin à l'agent
+		if (this.agent) {
+			 if (pathPoints && pathPoints.length > 0 && this.agent.mesh) {
+				  // Positionner l'agent au premier point du chemin trouvé
+				  this.agent.mesh.position.copy(pathPoints[0]);
+				  // Mettre le cube légèrement au-dessus pour être sûr qu'il est visible
+				  this.agent.mesh.position.y = pathPoints[0].y + ((this.agent.mesh.geometry.parameters.height) || 1.0);
+			 }
+			 this.agent.setPath(pathPoints);
+		} else {
+			 console.warn("Tentative de définir un chemin mais l'agent n'existe pas.");
+		}
+	}	
 
     // generateCityAsync a été intégré dans initializeWorld via cityManager.generateCity
     // async generateCityAsync() { ... }
