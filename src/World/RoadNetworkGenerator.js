@@ -13,28 +13,31 @@ export default class RoadNetworkGenerator {
 
     generateRoads(leafPlots) {
         this.reset();
-        console.log("Génération réseau routier et 1 passage piéton par segment à une intersection...");
+        console.log("Génération réseau routier et 1 passage piéton par segment, aligné bord trottoir (ajusté)...");
 
-        if (!leafPlots || leafPlots.length === 0) { /* ... (inchangé) ... */ }
+        if (!leafPlots || leafPlots.length === 0) { /* ... */ }
 
         const roadW = this.config.roadWidth;
-        const sidewalkW = this.config.sidewalkWidth;
         const tolerance = 0.1;
         const crosswalkActualLength = roadW * 0.9; // Longueur réduite
 
-        // Largeur totale effective du passage piéton (pour vérifier si l'espace est suffisant)
+        // Largeur d'une bande (pour le nouvel offset)
         const stripeWidth = this.config.crosswalkStripeWidth;
+        // --- Nouvel offset : Vise à placer le CENTRE de la PREMIERE bande sur le bord de la parcelle ---
+        const firstStripeCenterOffset = stripeWidth / 2;
+
+        // Calcul de la largeur totale juste pour vérifier l'espace minimum requis
         const stripeGap = this.config.crosswalkStripeGap;
         const stripeCount = this.config.crosswalkStripeCount;
         const totalCrosswalkVisualWidth = (stripeCount * stripeWidth) + Math.max(0, stripeCount - 1) * stripeGap;
-
+        const minRequiredGap = totalCrosswalkVisualWidth * 1.05; // Marge très légère
 
         for (let i = 0; i < leafPlots.length; i++) {
             const p1 = leafPlots[i];
             for (let j = i + 1; j < leafPlots.length; j++) {
                 const p2 = leafPlots[j];
                 let roadInfo = null;
-                let chosenCrosswalkInfo = null; // Stockera l'info du passage piéton choisi
+                let chosenCrosswalkInfo = null;
 
                 // --- Détection Gaps (inchangée) ---
                 const gapH = p2.x - (p1.x + p1.width);
@@ -45,32 +48,23 @@ export default class RoadNetworkGenerator {
 
                 if (Math.abs(gapH - roadW) < tolerance && zOverlapLength > tolerance) {
                     roadInfo = { type: "V", x: p1.x + p1.width + roadW / 2, z: zOverlapStart, length: zOverlapLength, p1Id: p1.id, p2Id: p2.id };
-                    // --- Calcul passages piétons potentiels pour route VERTICALE ---
-                    const zPosStart_V = zOverlapStart + sidewalkW / 2; // Alignée trottoir début
-                    const zPosEnd_V = zOverlapEnd - sidewalkW / 2;     // Alignée trottoir fin
-                    // Vérifier si l'espace est suffisant
-                    if (zPosEnd_V - zPosStart_V > totalCrosswalkVisualWidth * 0.8) {
-                        // Choisir la position avec Z minimal (zPosStart_V)
+                    if (zOverlapLength > minRequiredGap) {
+                        // Position Z = Bord parcelle + Décalage pour centrer la 1ere bande
+                        const zPos = zOverlapStart + firstStripeCenterOffset;
                         chosenCrosswalkInfo = {
-                           position: new THREE.Vector3(roadInfo.x, 0, zPosStart_V),
-                           angle: Math.PI / 2, // Horizontal (sera tourné par PlotContentGenerator)
-                           length: crosswalkActualLength,
+                           position: new THREE.Vector3(roadInfo.x, 0, zPos),
+                           angle: Math.PI / 2, length: crosswalkActualLength,
                         };
                     }
-                    // --- Fin V ---
                 } else if (Math.abs(gapHReverse - roadW) < tolerance && zOverlapLength > tolerance) {
                      roadInfo = { type: "V", x: p2.x + p2.width + roadW / 2, z: zOverlapStart, length: zOverlapLength, p1Id: p2.id, p2Id: p1.id };
-                    // --- Calcul passages piétons potentiels pour route VERTICALE ---
-                     const zPosStart_V_R = zOverlapStart + sidewalkW / 2;
-                     const zPosEnd_V_R = zOverlapEnd - sidewalkW / 2;
-                     if (zPosEnd_V_R - zPosStart_V_R > totalCrosswalkVisualWidth * 0.8) {
-                         // Choisir la position avec Z minimal (zPosStart_V_R)
+                     if (zOverlapLength > minRequiredGap) {
+                         const zPos = zOverlapStart + firstStripeCenterOffset;
                          chosenCrosswalkInfo = {
-                             position: new THREE.Vector3(roadInfo.x, 0, zPosStart_V_R),
+                             position: new THREE.Vector3(roadInfo.x, 0, zPos),
                              angle: Math.PI / 2, length: crosswalkActualLength,
                          };
                      }
-                    // --- Fin V ---
                 }
 
                 if (!roadInfo) {
@@ -82,31 +76,23 @@ export default class RoadNetworkGenerator {
 
                     if (Math.abs(gapV - roadW) < tolerance && xOverlapLength > tolerance) {
                         roadInfo = { type: "H", x: xOverlapStart, z: p1.z + p1.depth + roadW / 2, length: xOverlapLength, p1Id: p1.id, p2Id: p2.id };
-                        // --- Calcul passages piétons potentiels pour route HORIZONTALE ---
-                        const xPosStart_H = xOverlapStart + sidewalkW / 2; // Alignée trottoir début
-                        const xPosEnd_H = xOverlapEnd - sidewalkW / 2;     // Alignée trottoir fin
-                         if (xPosEnd_H - xPosStart_H > totalCrosswalkVisualWidth * 0.8) {
-                             // Choisir la position avec X minimal (xPosStart_H)
+                         if (xOverlapLength > minRequiredGap) {
+                             // Position X = Bord parcelle + Décalage pour centrer la 1ere bande
+                             const xPos = xOverlapStart + firstStripeCenterOffset;
                              chosenCrosswalkInfo = {
-                                 position: new THREE.Vector3(xPosStart_H, 0, roadInfo.z),
-                                 angle: 0, // Vertical (sera tourné par PlotContentGenerator)
-                                 length: crosswalkActualLength,
-                             };
-                         }
-                        // --- Fin H ---
-                    } else if (Math.abs(gapVReverse - roadW) < tolerance && xOverlapLength > tolerance) {
-                         roadInfo = { type: "H", x: xOverlapStart, z: p2.z + p2.depth + roadW / 2, length: xOverlapLength, p1Id: p2.id, p2Id: p1.id };
-                        // --- Calcul passages piétons potentiels pour route HORIZONTALE ---
-                         const xPosStart_H_R = xOverlapStart + sidewalkW / 2;
-                         const xPosEnd_H_R = xOverlapEnd - sidewalkW / 2;
-                         if (xPosEnd_H_R - xPosStart_H_R > totalCrosswalkVisualWidth * 0.8) {
-                              // Choisir la position avec X minimal (xPosStart_H_R)
-                             chosenCrosswalkInfo = {
-                                 position: new THREE.Vector3(xPosStart_H_R, 0, roadInfo.z),
+                                 position: new THREE.Vector3(xPos, 0, roadInfo.z),
                                  angle: 0, length: crosswalkActualLength,
                              };
                          }
-                        // --- Fin H ---
+                    } else if (Math.abs(gapVReverse - roadW) < tolerance && xOverlapLength > tolerance) {
+                         roadInfo = { type: "H", x: xOverlapStart, z: p2.z + p2.depth + roadW / 2, length: xOverlapLength, p1Id: p2.id, p2Id: p1.id };
+                         if (xOverlapLength > minRequiredGap) {
+                             const xPos = xOverlapStart + firstStripeCenterOffset;
+                             chosenCrosswalkInfo = {
+                                 position: new THREE.Vector3(xPos, 0, roadInfo.z),
+                                 angle: 0, length: crosswalkActualLength,
+                             };
+                         }
                     }
                 }
                 // --- Fin Détection ---
@@ -116,13 +102,9 @@ export default class RoadNetworkGenerator {
                     if (!this.drawnRoads.has(roadKey)) {
 						this.collectRoadSegmentGeometry(roadInfo); // Ligne centrale
 
-                        // --- AJOUT: Stocker l'info de l'unique passage piéton choisi ---
                         if (chosenCrosswalkInfo) {
-                            // Pas besoin de Set, la logique roadKey gère l'unicité du segment
                             this.crosswalkInfos.push(chosenCrosswalkInfo);
                         }
-                        // -------------------------------------------------------------
-
 						this.drawnRoads.add(roadKey);
                     }
                 }
@@ -132,7 +114,7 @@ export default class RoadNetworkGenerator {
 		// --- Fusion lignes centrales (inchangé) ---
 		if (this.centerlineGeometries.length > 0) { const mergedCenterlineGeometry = mergeGeometries(this.centerlineGeometries, false); if (mergedCenterlineGeometry) { const centerlineMesh = new THREE.Mesh(mergedCenterlineGeometry, this.materials.centerlineMaterial); centerlineMesh.castShadow = false; centerlineMesh.receiveShadow = true; centerlineMesh.name = "Merged_Road_Centerlines"; this.roadGroup.add(centerlineMesh); } else { console.warn("Fusion lignes centrales échouée."); } this.centerlineGeometries.forEach(geom => geom.dispose()); this.centerlineGeometries = []; }
 
-        console.log(`Réseau routier généré: ${this.drawnRoads.size} segments. ${this.crosswalkInfos.length} passages piétons positionnés aux intersections.`);
+        console.log(`Réseau routier généré: ${this.drawnRoads.size} segments. ${this.crosswalkInfos.length} passages piétons positionnés aux intersections (alignés + offset corrigé).`);
         return { roadGroup: this.roadGroup, crosswalkInfos: this.crosswalkInfos };
     }
 
