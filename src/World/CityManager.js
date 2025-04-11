@@ -302,52 +302,73 @@ export default class CityManager {
 
 	initiateAgentPathfinding() {
 		console.log("CityManager: Lancement du pathfinding initial pour tous les agents...");
+		// Vérifications initiales (inchangées)
 		if (!this.pathfinder || !this.leafPlots || !this.experience.world || !this.experience.world.agents || this.experience.world.agents.length === 0) {
 			console.warn("CityManager: Impossible de lancer le pathfinding initial (pathfinder, plots ou agents manquants).");
 			return;
 		}
-	
-		// 1. Récupérer la liste des maisons
+		if (!this.navigationGraph) {
+			 console.warn("CityManager: Impossible de lancer le pathfinding initial (navigationGraph manquant).");
+			 return;
+		}
+
+		// Récupérer les maisons (inchangé)
 		const houses = this.leafPlots.filter(plot => plot.zoneType === 'house');
 		if (houses.length < 2) {
 			console.warn("CityManager: Pas assez de maisons (< 2) pour un chemin A -> B.");
+			// Optionnel : donner un chemin par défaut ou laisser les agents immobiles
+			 this.experience.world.agents.forEach(agent => {
+				 if(agent.model) agent.model.position.set(0, this.navigationGraph.sidewalkHeight, 0); // Placer au centre par défaut
+			 });
 			return;
 		}
-	
-		// Pour chaque agent, choisir deux maisons différentes aléatoirement et lancer le pathfinding
+
+		// Pour chaque agent... (inchangé sauf pour l'accès au modèle)
 		this.experience.world.agents.forEach(agent => {
+			// --- Vérifier si l'agent et son modèle existent ---
+			if (!agent || !agent.model) {
+				console.warn(`CityManager: Agent ${agent?.id} ou son modèle est manquant, impossible de lancer le pathfinding.`);
+				return; // Passer à l'agent suivant
+			}
+			// ----------------------------------------------------
+
 			let plotA = houses[Math.floor(Math.random() * houses.length)];
 			let plotB;
 			do {
 				plotB = houses[Math.floor(Math.random() * houses.length)];
 			} while (plotA.id === plotB.id);
-	
+
 			console.log(`CityManager: Chemin demandé pour Agent ${agent.id} de Maison ${plotA.id} à Maison ${plotB.id}`);
-	
-			// 3. Déterminer les points de départ/arrivée (en utilisant le centre de la parcelle)
+
+			// Déterminer points départ/arrivée (inchangé)
 			const startPos = plotA.center.clone();
-			startPos.y = this.navigationGraph.sidewalkHeight;
+			startPos.y = this.navigationGraph.sidewalkHeight; // Utiliser la hauteur du navGraph
 			const endPos = plotB.center.clone();
-			endPos.y = this.navigationGraph.sidewalkHeight;
-	
-			// Positionner l'agent au point de départ
-			agent.mesh.position.copy(startPos);
-	
-			// 4. Demander le chemin via le Pathfinder
+			endPos.y = this.navigationGraph.sidewalkHeight;   // Utiliser la hauteur du navGraph
+
+			// --- CORRECTION: Positionner le MODÈLE de l'agent ---
+			// agent.mesh.position.copy(startPos); // <--- ANCIENNE LIGNE (ERREUR)
+			agent.model.position.copy(startPos);    // <--- NOUVELLE LIGNE
+			// -------------------------------------------------
+
+			// Demander le chemin (inchangé)
 			console.time(`InitialPathfinding_Agent${agent.id}`);
 			const path = this.pathfinder.findPath(startPos, endPos);
 			console.timeEnd(`InitialPathfinding_Agent${agent.id}`);
-	
-			// 5. Transmettre le chemin à l'agent en le visualisant (on utilise ici la même couleur que l'agent)
+
+			// Transmettre le chemin et la couleur debug (inchangé)
 			if (path && path.length > 0) {
-				const agentColor = agent.mesh.material.color.getHex();
-				this.experience.world.setAgentPathForAgent(agent, path, agentColor);
+				// Utiliser la couleur stockée dans l'agent (si besoin) ou générer une nouvelle
+				const agentDebugColor = agent.debugPathColor || 0xff00ff; // Fallback si non défini
+				this.experience.world.setAgentPathForAgent(agent, path, agentDebugColor);
 				console.log(`CityManager: Chemin initial envoyé pour Agent ${agent.id}.`);
 			} else {
 				console.warn(`CityManager: Aucun chemin initial trouvé pour Agent ${agent.id} entre les maisons.`);
+				// Laisser l'agent à sa position startPos sans chemin
+                 agent.setPath(null); // Assurer qu'il n'a pas de chemin actif
 			}
 		});
-	}	
+	}
 
 	createGlobalGround() {
         if (this.groundMesh && this.groundMesh.parent) return;
