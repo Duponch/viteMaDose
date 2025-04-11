@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 
 export default class Agent {
-    constructor(scene, startPosition, color = 0x0000ff, size = 2) { // Taille réduite
+    constructor(scene, startPosition, color = 0x0000ff, size = 10) { // Taille réduite
         this.scene = scene;
         this.speed = 5.0; // Unités par seconde (relativement rapide pour une ville)
         this.path = null;

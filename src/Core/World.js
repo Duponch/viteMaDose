@@ -1,10 +1,8 @@
 // src/Core/World.js
 import * as THREE from 'three';
 import Environment from '../World/Environment.js';
-// Supprimez Floor.js si CityManager gère le sol global
-// import Floor from '../World/Floor.js';
-import CityManager from '../World/CityManager.js'; // <- Changer l'import
-import Agent from '../World/Agent.js'; // Importer la classe Agent
+import CityManager from '../World/CityManager.js';
+import Agent from '../World/Agent.js';
 
 export default class World {
     constructor(experience) {
@@ -12,92 +10,115 @@ export default class World {
         this.scene = this.experience.scene;
         this.resources = this.experience.resources;
         this.cityManager = new CityManager(this.experience);
-
-        // Instancier Environment (le constructeur est maintenant synchrone)
         this.environment = new Environment(this.experience, this);
-        this.agent = null; // Ajouter une propriété pour l'agent
+        this.agent = null;
 
-        // Appeler l'initialisation asynchrone du monde
+        // --- Groupes pour les visualisations de débogage ---
+        this.debugNavGridGroup = new THREE.Group();
+        this.debugNavGridGroup.name = "DebugNavGrid";
+        this.scene.add(this.debugNavGridGroup);
+
+        this.debugAgentPathGroup = new THREE.Group();
+        this.debugAgentPathGroup.name = "DebugAgentPath";
+        this.scene.add(this.debugAgentPathGroup);
+        // -------------------------------------------------------
+
         this.initializeWorld();
     }
 
-    // NOUVELLE méthode pour gérer l'initialisation asynchrone
     async initializeWorld() {
         console.log("World: Initialisation asynchrone...");
         try {
-            // Démarrer l'initialisation asynchrone de l'environnement ET attendre qu'elle soit finie
             await this.environment.initialize();
             console.log("World: Environnement initialisé.");
 
-            // Démarrer la génération de la ville (peut aussi être fait en parallèle si besoin)
-            await this.generateCityAsync();
-			this.createAgent();
+            // generateCity crée le navigationGraph dans cityManager
+            await this.cityManager.generateCity();
+            console.log("World: Ville générée (incluant nav graph).");
+
+            // Créer la visualisation de la grille APRES sa construction
+            if (this.cityManager.navigationGraph) { // Vérifier si navGraph existe bien
+                 console.log("World: Génération de la visualisation de la grille de navigation...");
+                 // Appel de la méthode sur l'instance correcte
+                 this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
+            } else {
+                 console.warn("World: navigationGraph non trouvé dans cityManager après generateCity.");
+            }
+
+            // Créer l'agent après la génération de la ville et du graphe
+            this.createAgent();
+
+            // Lancer le pathfinding initial (qui a besoin de l'agent)
             this.cityManager.initiateAgentPathfinding();
 
             console.log("World: Initialisation complète.");
-            // Vous pouvez émettre un événement ou définir un flag si d'autres parties doivent savoir que le monde est prêt
 
         } catch (error) {
+            // Afficher l'erreur spécifique qui a causé le problème
             console.error("World: Erreur lors de l'initialisation asynchrone:", error);
         }
     }
 
-	createAgent() {
-        if (this.agent) {
-            this.agent.destroy();
-        }
-        // Position de départ temporaire (sera écrasée par initiateAgentPathfinding)
-        const startPos = new THREE.Vector3(0, 1, 0); // Hauteur 1 pour être visible au début
-        this.agent = new Agent(this.scene, startPos, 0xffff00, 2); // Agent jaune, taille 2
+    createAgent() {
+        if (this.agent) { this.agent.destroy(); }
+        const startPos = new THREE.Vector3(0, 1, 0); // Position temporaire
+        this.agent = new Agent(this.scene, startPos, 0xffff00, 2); // Cube jaune taille 2
         console.log("Agent créé dans le monde.");
     }
 
-	setAgentPath(pathPoints) {
+    setAgentPath(pathPoints) {
+        // Nettoyer l'ancien chemin visualisé
+        while(this.debugAgentPathGroup.children.length > 0) {
+             const child = this.debugAgentPathGroup.children[0];
+             this.debugAgentPathGroup.remove(child);
+             if (child.geometry) child.geometry.dispose();
+         }
+
+        if (pathPoints && pathPoints.length > 1) {
+             const lineGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+             const lineMaterial = new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 2 }); // Magenta
+             const pathLine = new THREE.Line(lineGeometry, lineMaterial);
+             pathLine.name = "AgentPathLine";
+             pathLine.position.y = 0.02; // Légèrement au-dessus de la grille debug
+             this.debugAgentPathGroup.add(pathLine);
+             console.log("World: Chemin de l'agent visualisé.");
+        }
+
+        // Donner le chemin à l'agent
         if (this.agent) {
-            // S'assurer que le premier point du chemin est la position actuelle (ou très proche)
-             if (pathPoints && pathPoints.length > 0 && this.agent.mesh) {
-                 // Optionnel : Forcer la position de départ de l'agent au premier point du chemin
-                 // this.agent.mesh.position.copy(pathPoints[0]);
-
-                 // S'assurer que la hauteur est correcte (celle du pathfinding)
-                  this.agent.mesh.position.y = pathPoints[0].y;
-             }
-
+            if (pathPoints && pathPoints.length > 0 && this.agent.mesh) {
+                 // Positionner l'agent au premier point du chemin trouvé
+                 this.agent.mesh.position.copy(pathPoints[0]);
+                 // Mettre le cube légèrement au-dessus pour être sûr qu'il est visible
+                 this.agent.mesh.position.y = pathPoints[0].y + (this.agent.mesh.geometry.parameters.height / 2 || 1.0);
+            }
             this.agent.setPath(pathPoints);
         } else {
             console.warn("Tentative de définir un chemin mais l'agent n'existe pas.");
         }
     }
 
-	async generateCityAsync() {
-        try {
-            // CityManager.generateCity() contient maintenant le code pour
-            // générer la ville, le graphe, le pathfinder ET lancer
-            // le premier pathfinding (initiateAgentPathfinding)
-            await this.cityManager.generateCity();
-            console.log("Ville chargée dans le monde (et pathfinding initial lancé).");
-        } catch (error) {
-            console.error("Impossible de générer la ville dans World:", error);
-        }
-    }
+    // generateCityAsync a été intégré dans initializeWorld via cityManager.generateCity
+    // async generateCityAsync() { ... }
 
-	update() {
-        const deltaTime = this.experience.time.delta; // Delta en ms
-        const normalizedHealth = 0.8; // Exemple
-
+    update() {
+        const deltaTime = this.experience.time.delta;
+        const normalizedHealth = 0.8;
         this.cityManager?.update();
         this.environment?.update(deltaTime, normalizedHealth);
-
-        // Mettre à jour l'agent
-        this.agent?.update(deltaTime); // Agent.update prend deltaTime en ms
+        this.agent?.update(deltaTime);
     }
 
-    // --- Ajouter une méthode destroy pour nettoyer ---
-	destroy() {
+    destroy() {
         console.log("Destruction du World...");
+        const cleanGroup = (group) => { /* ... (code de nettoyage du groupe) ... */ };
+        cleanGroup(this.debugNavGridGroup);
+        cleanGroup(this.debugAgentPathGroup);
+        this.debugNavGridGroup = null;
+        this.debugAgentPathGroup = null;
         this.cityManager?.destroy();
         this.environment?.destroy();
-        this.agent?.destroy(); // Détruire l'agent aussi
+        this.agent?.destroy();
         this.agent = null;
         console.log("World détruit.");
     }
