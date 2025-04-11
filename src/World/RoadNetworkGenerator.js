@@ -13,27 +13,21 @@ export default class RoadNetworkGenerator {
 
     generateRoads(leafPlots) {
         this.reset();
-        console.log("Génération réseau routier et identification passages piétons aux intersections (alignés trottoirs)...");
+        console.log("Génération réseau routier et 1 passage piéton centré par segment...");
 
         if (!leafPlots || leafPlots.length === 0) { /* ... (inchangé) ... */ }
 
         const roadW = this.config.roadWidth;
-        const sidewalkW = this.config.sidewalkWidth; // Récupérer la largeur du trottoir
         const tolerance = 0.1;
-
-        // Largeur totale d'une bande + un espace (pour calculer le décalage total)
-        const stripeTotalWidth = this.config.crosswalkStripeWidth + this.config.crosswalkStripeGap;
-        // Largeur totale effective du passage piéton
-        const totalCrosswalkVisualWidth = (this.config.crosswalkStripeCount * this.config.crosswalkStripeWidth) + Math.max(0, this.config.crosswalkStripeCount - 1) * this.config.crosswalkStripeGap;
-
-        const uniqueCrosswalkPositions = new Set();
+        // --- Nouvelle longueur, légèrement plus petite que la largeur de la route ---
+        const crosswalkActualLength = roadW * 0.9; // Ex: 90% de la largeur de la route
 
         for (let i = 0; i < leafPlots.length; i++) {
             const p1 = leafPlots[i];
             for (let j = i + 1; j < leafPlots.length; j++) {
                 const p2 = leafPlots[j];
                 let roadInfo = null;
-                let potentialCrosswalks = [];
+                let crosswalkInfo = null; // Info pour UN seul passage piéton
 
                 // --- Détection Gaps (inchangée) ---
                 const gapH = p2.x - (p1.x + p1.width);
@@ -44,39 +38,26 @@ export default class RoadNetworkGenerator {
 
                 if (Math.abs(gapH - roadW) < tolerance && zOverlapLength > tolerance) {
                     roadInfo = { type: "V", x: p1.x + p1.width + roadW / 2, z: zOverlapStart, length: zOverlapLength, p1Id: p1.id, p2Id: p2.id };
-                    // --- Passage piéton pour route VERTICALE (aligné sur X des trottoirs) ---
-                    // Position Z ajustée pour être alignée sur le BORD du trottoir parallèle
-                    const zPosStart = zOverlapStart + sidewalkW / 2;
-                    const zPosEnd = zOverlapEnd - sidewalkW / 2;
-                    // Vérifier si l'espace entre les bords de trottoir est suffisant
-                    if (zPosEnd - zPosStart > totalCrosswalkVisualWidth * 0.8) { // Assez de place ? (tolérance 0.8)
-                       potentialCrosswalks.push({
-                           // Position X = milieu route, Position Z = alignée bord trottoir début overlap
-                           position: new THREE.Vector3(roadInfo.x, 0, zPosStart),
-                           angle: Math.PI / 2, // Horizontal
-                           length: roadW, // Longueur = largeur route
-                           // Les infos de largeur/stripes sont gérées par PlotContentGenerator
-                           baseInfo: true // Marqueur pour savoir où placer les bandes
-                       });
-                       potentialCrosswalks.push({
-                           // Position X = milieu route, Position Z = alignée bord trottoir fin overlap
-                           position: new THREE.Vector3(roadInfo.x, 0, zPosEnd),
-                           angle: Math.PI / 2, // Horizontal
-                           length: roadW,
-                           baseInfo: true
-                       });
-                    }
-                    // --- Fin calcul V ---
+                    // --- Calcul passage piéton CENTRÉ pour route VERTICALE ---
+                    crosswalkInfo = {
+                        position: new THREE.Vector3(
+                            roadInfo.x,
+                            0,
+                            (zOverlapStart + zOverlapEnd) / 2 // Centre Z de l'overlap
+                        ),
+                        angle: Math.PI / 2, // Angle de base (sera tourné de +90° dans PlotContentGenerator)
+                        length: crosswalkActualLength, // Longueur réduite
+                        // width/height gérés par PlotContentGenerator via config
+                    };
+                    // --- Fin V ---
                 } else if (Math.abs(gapHReverse - roadW) < tolerance && zOverlapLength > tolerance) {
                      roadInfo = { type: "V", x: p2.x + p2.width + roadW / 2, z: zOverlapStart, length: zOverlapLength, p1Id: p2.id, p2Id: p1.id };
-                    // --- Passage piéton pour route VERTICALE (aligné sur X des trottoirs) ---
-                     const zPosStart = zOverlapStart + sidewalkW / 2;
-                     const zPosEnd = zOverlapEnd - sidewalkW / 2;
-                     if (zPosEnd - zPosStart > totalCrosswalkVisualWidth * 0.8) {
-                        potentialCrosswalks.push({ position: new THREE.Vector3(roadInfo.x, 0, zPosStart), angle: Math.PI / 2, length: roadW, baseInfo: true });
-                        potentialCrosswalks.push({ position: new THREE.Vector3(roadInfo.x, 0, zPosEnd), angle: Math.PI / 2, length: roadW, baseInfo: true });
-                     }
-                    // --- Fin calcul V ---
+                    // --- Calcul passage piéton CENTRÉ pour route VERTICALE ---
+                     crosswalkInfo = {
+                         position: new THREE.Vector3(roadInfo.x, 0, (zOverlapStart + zOverlapEnd) / 2),
+                         angle: Math.PI / 2, length: crosswalkActualLength,
+                     };
+                    // --- Fin V ---
                 }
 
                 if (!roadInfo) {
@@ -88,36 +69,25 @@ export default class RoadNetworkGenerator {
 
                     if (Math.abs(gapV - roadW) < tolerance && xOverlapLength > tolerance) {
                         roadInfo = { type: "H", x: xOverlapStart, z: p1.z + p1.depth + roadW / 2, length: xOverlapLength, p1Id: p1.id, p2Id: p2.id };
-                        // --- Passage piéton pour route HORIZONTALE (aligné sur Z des trottoirs) ---
-                        const xPosStart = xOverlapStart + sidewalkW / 2;
-                        const xPosEnd = xOverlapEnd - sidewalkW / 2;
-                         if (xPosEnd - xPosStart > totalCrosswalkVisualWidth * 0.8) {
-                            potentialCrosswalks.push({
-                                // Position Z = milieu route, Position X = alignée bord trottoir début overlap
-                                position: new THREE.Vector3(xPosStart, 0, roadInfo.z),
-                                angle: 0, // Vertical
-                                length: roadW, // Longueur = largeur route
-                                baseInfo: true
-                            });
-                            potentialCrosswalks.push({
-                                // Position Z = milieu route, Position X = alignée bord trottoir fin overlap
-                                position: new THREE.Vector3(xPosEnd, 0, roadInfo.z),
-                                angle: 0, // Vertical
-                                length: roadW,
-                                baseInfo: true
-                            });
-                         }
-                        // --- Fin calcul H ---
+                        // --- Calcul passage piéton CENTRÉ pour route HORIZONTALE ---
+                        crosswalkInfo = {
+                            position: new THREE.Vector3(
+                                (xOverlapStart + xOverlapEnd) / 2, // Centre X de l'overlap
+                                0,
+                                roadInfo.z
+                            ),
+                            angle: 0, // Angle de base
+                            length: crosswalkActualLength, // Longueur réduite
+                        };
+                        // --- Fin H ---
                     } else if (Math.abs(gapVReverse - roadW) < tolerance && xOverlapLength > tolerance) {
                          roadInfo = { type: "H", x: xOverlapStart, z: p2.z + p2.depth + roadW / 2, length: xOverlapLength, p1Id: p2.id, p2Id: p1.id };
-                        // --- Passage piéton pour route HORIZONTALE (aligné sur Z des trottoirs) ---
-                         const xPosStart = xOverlapStart + sidewalkW / 2;
-                         const xPosEnd = xOverlapEnd - sidewalkW / 2;
-                         if (xPosEnd - xPosStart > totalCrosswalkVisualWidth * 0.8) {
-                             potentialCrosswalks.push({ position: new THREE.Vector3(xPosStart, 0, roadInfo.z), angle: 0, length: roadW, baseInfo: true });
-                             potentialCrosswalks.push({ position: new THREE.Vector3(xPosEnd, 0, roadInfo.z), angle: 0, length: roadW, baseInfo: true });
-                         }
-                        // --- Fin calcul H ---
+                        // --- Calcul passage piéton CENTRÉ pour route HORIZONTALE ---
+                         crosswalkInfo = {
+                             position: new THREE.Vector3((xOverlapStart + xOverlapEnd) / 2, 0, roadInfo.z),
+                             angle: 0, length: crosswalkActualLength,
+                         };
+                        // --- Fin H ---
                     }
                 }
                 // --- Fin Détection ---
@@ -125,16 +95,15 @@ export default class RoadNetworkGenerator {
                 if (roadInfo) {
                     const roadKey = `${Math.min(roadInfo.p1Id, roadInfo.p2Id)}-${Math.max(roadInfo.p1Id, roadInfo.p2Id)}-${roadInfo.type}`;
                     if (!this.drawnRoads.has(roadKey)) {
-						this.collectRoadSegmentGeometry(roadInfo); // Ligne centrale (inchangé)
+						this.collectRoadSegmentGeometry(roadInfo); // Ligne centrale
 
-                        // Filtrer et stocker passages piétons uniques (inchangé)
-                        potentialCrosswalks.forEach(cwInfo => {
-                            const posKey = `${Math.round(cwInfo.position.x * 10)}_${Math.round(cwInfo.position.z * 10)}`;
-                            if (!uniqueCrosswalkPositions.has(posKey)) {
-                                this.crosswalkInfos.push(cwInfo);
-                                uniqueCrosswalkPositions.add(posKey);
-                            }
-                        });
+                        // --- AJOUT: Stocker l'info de l'unique passage piéton ---
+                        if (crosswalkInfo) {
+                            // On n'a plus besoin du Set car on génère un seul par segment
+                            this.crosswalkInfos.push(crosswalkInfo);
+                        }
+                        // -------------------------------------------------------
+
 						this.drawnRoads.add(roadKey);
                     }
                 }
@@ -142,18 +111,7 @@ export default class RoadNetworkGenerator {
         }
 
 		// --- Fusion lignes centrales (inchangé) ---
-		if (this.centerlineGeometries.length > 0) {
-            const mergedCenterlineGeometry = mergeGeometries(this.centerlineGeometries, false);
-            if (mergedCenterlineGeometry) {
-				const centerlineMesh = new THREE.Mesh(mergedCenterlineGeometry, this.materials.centerlineMaterial);
-				centerlineMesh.castShadow = false;
-				centerlineMesh.receiveShadow = true;
-				centerlineMesh.name = "Merged_Road_Centerlines";
-				this.roadGroup.add(centerlineMesh);
-			} else { console.warn("Fusion lignes centrales échouée."); }
-            this.centerlineGeometries.forEach(geom => geom.dispose()); this.centerlineGeometries = [];
-        }
-        // --- Fin Fusion ---
+		if (this.centerlineGeometries.length > 0) { const mergedCenterlineGeometry = mergeGeometries(this.centerlineGeometries, false); if (mergedCenterlineGeometry) { const centerlineMesh = new THREE.Mesh(mergedCenterlineGeometry, this.materials.centerlineMaterial); centerlineMesh.castShadow = false; centerlineMesh.receiveShadow = true; centerlineMesh.name = "Merged_Road_Centerlines"; this.roadGroup.add(centerlineMesh); } else { console.warn("Fusion lignes centrales échouée."); } this.centerlineGeometries.forEach(geom => geom.dispose()); this.centerlineGeometries = []; }
 
         console.log(`Réseau routier généré: ${this.drawnRoads.size} segments. ${this.crosswalkInfos.length} passages piétons uniques identifiés.`);
         return { roadGroup: this.roadGroup, crosswalkInfos: this.crosswalkInfos };

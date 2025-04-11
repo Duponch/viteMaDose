@@ -20,7 +20,7 @@ export default class CityManager {
 			maxPlotSize: 40,
 			maxRecursionDepth: 7,
 
-			crosswalkWidth: 4, // Largeur visuelle du passage piéton
+			crosswalkWidth: 0.1, // Largeur visuelle du passage piéton
             crosswalkHeight: 0.03, // Légère hauteur pour éviter z-fighting
 			crosswalkStripeCount: 5,    // Nombre de bandes blanches
             crosswalkStripeWidth: 0.6, // Largeur de chaque bande blanche
