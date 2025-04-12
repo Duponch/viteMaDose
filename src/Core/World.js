@@ -48,7 +48,7 @@ export default class World {
             }
 
             // --- NOUVEAU: Initialiser AgentManager ---
-            const maxAgents = 500; // Définir le nombre maximum
+            const maxAgents = 300; // Définir le nombre maximum
             this.agentManager = new AgentManager(
                 this.scene,
                 this.experience,
