@@ -46,7 +46,7 @@ export default class AgentManager {
         this.scene = scene;
         this.experience = experience; // Stocker la référence à l'expérience
         this.config = config; // Stocker la config (pour agentScale, yOffset, etc.)
-        this.maxAgents = maxAgents;
+        this.maxAgents = 1;
 
         this.agents = []; // Contiendra les instances logiques d'Agent
         this.instanceMeshes = {}; // Stockera les InstancedMesh par partie

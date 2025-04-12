@@ -28,7 +28,7 @@ export default class Agent {
              throw new Error(`Agent ${this.id}: Experience instance is required!`);
         }
         this.experience = experience; // Pour accéder au temps, pathfinder etc.
-        this.scale = config.scale ?? 0.1; // Utiliser config.agentScale si possible
+        this.scale = 2; // Utiliser config.agentScale si possible
         this.speed = config.speed ?? 1.5;
         this.rotationSpeed = config.rotationSpeed ?? 8.0;
         this.yOffset = config.yOffset ?? 0.3; // Stocker l'offset vertical

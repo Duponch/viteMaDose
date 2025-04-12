@@ -150,7 +150,9 @@ export default class CityManager {
         this.buildingInstances = new Map(); // Map<buildingInstanceId, BuildingInstanceInfo>
         this.citizens = new Map();         // Map<citizenId, CitizenInfo>
         this.nextBuildingInstanceId = 0;
+		this.maxAgents = 1;
         // --------------------------
+
 
         this.scene.add(this.cityContainer);
         if (this.config.showDistrictBoundaries) { this.cityContainer.add(this.debugGroup); }
