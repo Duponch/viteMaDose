@@ -3,98 +3,116 @@ import * as THREE from 'three';
 
 export default class Agent {
     /**
-     * Crée un agent avec un modèle FBX animé.
+     * Crée un agent avec un modèle simple (type Rayman).
      * @param {THREE.Scene} scene La scène Three.js.
-     * @param {THREE.Object3D} model Le modèle 3D CLONÉ (avec animations) à utiliser pour cet agent.
-     * @param {number} debugPathColor Couleur hexadécimale pour visualiser le chemin (optionnel).
+     * @param {Experience} experience L'instance de l'expérience (pour l'accès au temps).
+     * @param {number} agentId L'identifiant unique de l'agent.
+     * @param {number} bodyColor Couleur hexadécimale pour le corps.
      */
-    constructor(scene, model, debugPathColor = 0xff0000) {
+	constructor(scene, experience, agentId, bodyColor = 0xff0000, agentScale = 1.0) {
         this.scene = scene;
-        this.model = model; // Le modèle cloné spécifique à cet agent
-        this.speed = 1; // Unités par seconde
+        this.experience = experience;
+        this.id = agentId;
+        this.bodyColor = bodyColor;
+        this.scale = agentScale;
+
+        // --- CORRECTION : Vitesse et Tolérance ---
+        this.speed = 1.5; // Remettre une vitesse normale (unités/seconde)
+        this.reachTolerance = 0.15; // Petite tolérance FIXE, indépendante de l'échelle
+        // -----------------------------------------
+
         this.path = null;
         this.currentPathIndex = 0;
-        this.reachTolerance = 0.2; // Tolérance pour atteindre un point
-        this.debugPathColor = debugPathColor; // Utilisé par World.js pour la visualisation
+        this.debugPathColor = bodyColor;
 
-        // --- Animation Setup ---
-        this.mixer = null;
-        this.walkAction = null;
-        this.idleAction = null; // Optionnel: si vous avez une anim 'idle'
-        this.setupAnimation();
-        // -----------------------
+        // --- Création du modèle Rayman ---
+        this.model = this.createRaymanModel();
 
-        // Le modèle est déjà positionné par World.js lors du clonage
-        // this.model.position.copy(startPosition); // Pas nécessaire ici
-        // this.model.position.y = modelBaseHeight; // Assurer hauteur sol (géré par World.js via navGraph height)
+        // --- Appliquer l'échelle globale ---
+        this.model.scale.set(this.scale, this.scale, this.scale);
+        // ----------------------------------
 
-        // Assurez-vous que le modèle est ajouté à la scène (normalement fait dans World.js après clonage)
-        if (!this.model.parent) {
-            this.scene.add(this.model);
-        }
-        this.model.name = "AgentModel_" + this.id; // Donner un nom unique si besoin
+        this.scene.add(this.model);
     }
 
-    setupAnimation() {
-        if (!this.model || !this.model.animations || this.model.animations.length === 0) {
-            console.warn(`Agent ${this.id}: Modèle fourni n'a pas d'animations.`);
-            return;
-        }
+    /**
+     * Crée la géométrie et les materials pour le modèle simple.
+     * @returns {THREE.Group} Le groupe contenant toutes les parties du modèle.
+     */
+    createRaymanModel() {
+        const agentGroup = new THREE.Group();
+        agentGroup.name = `Agent_${this.id}`;
 
-        this.mixer = new THREE.AnimationMixer(this.model);
+        // --- Matériaux ---
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+            color: this.bodyColor,
+            roughness: 0.6,
+            metalness: 0.2
+        });
+        const limbMaterial = new THREE.MeshStandardMaterial({ // Mains et pieds
+            color: 0xffffff, // Blanc
+            roughness: 0.7,
+            metalness: 0.1
+        });
+        const headMaterial = new THREE.MeshStandardMaterial({ // Tête
+             color: 0xffdbac, // Couleur peau simple
+             roughness: 0.7,
+             metalness: 0.1
+         });
 
-        // Trouver le clip d'animation (inchangé)
-        const walkClipSource = THREE.AnimationClip.findByName(this.model.animations, 'walk') || this.model.animations[0];
+        // --- Géométries ---
+        const bodyRadius = 0.5;
+        const headRadius = 0.3;
+        const limbRadius = 0.2;
 
-        if (walkClipSource) {
-            // --- NOUVEAU : Filtrer les pistes pour enlever le root motion ---
-            console.log(`Agent ${this.id}: Analyse des pistes pour l'animation '${walkClipSource.name || '[0]'}'.`);
-            const originalTracks = walkClipSource.tracks;
-            const filteredTracks = [];
+        const bodyGeom = new THREE.SphereGeometry(bodyRadius, 16, 12);
+        const headGeom = new THREE.SphereGeometry(headRadius, 12, 10);
+        const limbGeom = new THREE.SphereGeometry(limbRadius, 8, 6);
 
-            // Identifiez le nom du nœud racine ou de l'os principal qui est déplacé.
-            // Cela peut nécessiter d'inspecter `originalTracks` dans la console.
-            // Exemples courants: "RootNode", "Hips", "mixamorigHips", ou le nom de l'objet racine lui-même.
-            // Si vous ne savez pas, vous pouvez essayer de filtrer toutes les pistes '.position'.
-            // const rootNodeName = "mixamorigHips"; // <-- METTEZ LE BON NOM ICI SI CONNU
+        // --- Meshes ---
+        // Corps (au centre du groupe)
+        this.bodyMesh = new THREE.Mesh(bodyGeom, bodyMaterial);
+        this.bodyMesh.castShadow = true;
+        this.bodyMesh.receiveShadow = false;
+        this.bodyMesh.position.y = bodyRadius; // Repose sur le sol (y=0)
+        agentGroup.add(this.bodyMesh);
 
-            originalTracks.forEach(track => {
-                 // console.log(` -> Piste trouvée: ${track.name}`); // Décommenter pour inspecter les noms
-                // On veut garder toutes les pistes SAUF celles qui animent la POSITION de la racine.
-                // Condition simple (peut être trop large) : ne pas inclure les pistes '.position'
-                if (!track.name.endsWith('.position')) {
-                     filteredTracks.push(track);
-                }
-                // Condition plus spécifique (si vous connaissez le nom du noeud racine/hanches):
-                // if (!(track.name === rootNodeName + '.position')) {
-                //     filteredTracks.push(track);
-                // }
-            });
+        // Tête (au-dessus du corps)
+        this.headMesh = new THREE.Mesh(headGeom, headMaterial);
+        this.headMesh.castShadow = true;
+        this.headMesh.position.y = bodyRadius * 2 + headRadius * 0.9; // Au dessus du corps
+        agentGroup.add(this.headMesh);
 
-			// Créer un nouveau clip SANS les pistes de position racine
-            const modifiedClip = new THREE.AnimationClip(
-                walkClipSource.name + "_NoRootPos", // Nouveau nom pour débogage
-                walkClipSource.duration,
-                filteredTracks // Utiliser les pistes filtrées
-            );
-            // --------------------------------------------------------
+        // Main Gauche
+        this.leftHandMesh = new THREE.Mesh(limbGeom.clone(), limbMaterial);
+        this.leftHandMesh.castShadow = true;
+        this.leftHandMesh.position.set(-(bodyRadius + limbRadius * 1.5), bodyRadius * 1.2, 0);
+        agentGroup.add(this.leftHandMesh);
 
-            // Utiliser le clip MODIFIÉ pour créer l'action
-            this.walkAction = this.mixer.clipAction(modifiedClip);
-            this.walkAction.setLoop(THREE.LoopRepeat);
-            console.log(`Agent ${this.id}: Animation '${modifiedClip.name || '[0]'}' configurée comme walkAction (sans root motion position).`);
+        // Main Droite
+        this.rightHandMesh = new THREE.Mesh(limbGeom.clone(), limbMaterial);
+        this.rightHandMesh.castShadow = true;
+        this.rightHandMesh.position.set(bodyRadius + limbRadius * 1.5, bodyRadius * 1.2, 0);
+        agentGroup.add(this.rightHandMesh);
 
-        } else {
-            console.error(`Agent ${this.id}: Impossible de trouver une animation valide pour la marche.`);
-        }
+        // Pied Gauche (Optionnel)
+        this.leftFootMesh = new THREE.Mesh(limbGeom.clone(), limbMaterial);
+        this.leftFootMesh.castShadow = true;
+        this.leftFootMesh.position.set(-bodyRadius * 0.6, limbRadius, bodyRadius * 0.2); // Légèrement en avant
+        agentGroup.add(this.leftFootMesh);
 
-        // Optionnel: Configurer une animation 'idle' si elle existe
-        // const idleClip = THREE.AnimationClip.findByName(this.model.animations, 'idle');
-        // if (idleClip) {
-        //     this.idleAction = this.mixer.clipAction(idleClip);
-        //     this.idleAction.setLoop(THREE.LoopRepeat);
-        //     this.idleAction.play(); // Jouer l'idle par défaut
-        // }
+        // Pied Droit (Optionnel)
+        this.rightFootMesh = new THREE.Mesh(limbGeom.clone(), limbMaterial);
+        this.rightFootMesh.castShadow = true;
+        this.rightFootMesh.position.set(bodyRadius * 0.6, limbRadius, bodyRadius * 0.2); // Légèrement en avant
+        agentGroup.add(this.rightFootMesh);
+
+        // Stocker les références pour animation et destruction
+        this.limbs = [this.leftHandMesh, this.rightHandMesh, this.leftFootMesh, this.rightFootMesh];
+        this.geometries = [bodyGeom, headGeom, limbGeom]; // Garder une réf à la géométrie non clonée des limbs
+        this.materials = [bodyMaterial, limbMaterial, headMaterial];
+
+        return agentGroup;
     }
 
     setPath(pathPoints) {
@@ -102,67 +120,72 @@ export default class Agent {
             this.path = pathPoints;
             this.currentPathIndex = 0;
 
-            // Assurer que le modèle est bien à la position Y du chemin
-            this.model.position.y = this.path[0].y;
+            // Positionner le modèle au début du chemin
+            this.model.position.copy(this.path[0]);
+            // La hauteur Y devrait déjà être correcte (définie par NavigationGraph),
+            // mais on s'assure que le bas du corps est à la bonne hauteur.
+            this.model.position.y = this.path[0].y; // Le groupe est à la hauteur du sol
 
             if (this.path.length > 1) {
-                // Orienter vers le premier waypoint (si chemin a plus d'un point)
+                // Orienter vers le premier waypoint
                 const nextPoint = this.path[1].clone();
-                nextPoint.y = this.model.position.y; // Regarder à la même hauteur
+                // Regarder à la hauteur du centre du corps pour éviter de pencher
+                nextPoint.y = this.model.position.y + this.bodyMesh.position.y;
+                const lookAtTarget = new THREE.Vector3();
+                this.model.getWorldPosition(lookAtTarget); // Point de départ du regard
+                lookAtTarget.y += this.bodyMesh.position.y; // Hauteur du centre du corps
                 this.model.lookAt(nextPoint);
 
-                // Démarrer l'animation de marche
-                if (this.walkAction) {
-                     // Optionnel : fade in
-                     // if(this.idleAction && this.idleAction.isRunning()) this.idleAction.fadeOut(0.2);
-                     // this.walkAction.reset().fadeIn(0.2).play();
-                     this.walkAction.reset().play();
-                }
-
             } else {
-                 // Si chemin d'un seul point, juste s'y mettre ? Ou considérer terminé.
+                 // Si chemin d'un seul point, juste s'y mettre et considérer terminé.
                  this.model.position.copy(this.path[0]);
+                 this.model.position.y = this.path[0].y;
                  this.path = null; // Chemin terminé
-                 if (this.walkAction && this.walkAction.isRunning()) {
-                     this.walkAction.fadeOut(0.5); // Fondu de sortie
-                     // Optionnel: jouer l'idle
-                     // if (this.idleAction) this.idleAction.reset().fadeIn(0.5).play();
-                 }
             }
         } else {
             // Pas de chemin ou chemin terminé
             this.path = null;
             this.currentPathIndex = 0;
-            // Arrêter l'animation de marche
-             if (this.walkAction && this.walkAction.isRunning()) {
-                 this.walkAction.fadeOut(0.5);
-                  // Optionnel: jouer l'idle
-                 // if (this.idleAction) this.idleAction.reset().fadeIn(0.5).play();
+        }
+    }
+
+    /**
+     * Applique une animation simple de flottement aux membres.
+     * @param {number} timeElapsed Temps total écoulé en millisecondes.
+     */
+    animateFloatingLimbs(timeElapsed) {
+        const bobbleSpeed = 3; // Vitesse du flottement
+        const bobbleAmount = 0.1; // Amplitude du flottement
+
+        const timeInSeconds = timeElapsed / 1000;
+
+        // Flottement vertical simple pour les mains et pieds
+        this.limbs.forEach((limb, index) => {
+            if (limb) {
+                // Décalage de phase pour ne pas qu'ils bougent tous en même temps
+                const phaseOffset = index * (Math.PI / 4);
+                limb.position.y = limb.userData.initialY + Math.sin(timeInSeconds * bobbleSpeed + phaseOffset) * bobbleAmount;
             }
+        });
+         // Flottement pour la tête
+         if (this.headMesh) {
+            this.headMesh.position.y = this.headMesh.userData.initialY + Math.sin(timeInSeconds * bobbleSpeed * 0.8) * bobbleAmount * 0.5; // Moins ample/rapide
         }
     }
 
     update(deltaTime) {
-        // Mettre à jour l'animation mixer (delta en secondes)
-        if (this.mixer) {
-            this.mixer.update(deltaTime / 1000);
+        // --- Animation procédurale simple ---
+        if (!this.headMesh.userData.initialY) { // Initialiser les positions Y de base une seule fois
+            this.headMesh.userData.initialY = this.headMesh.position.y;
+            this.limbs.forEach(limb => { if(limb) limb.userData.initialY = limb.position.y; });
         }
+        this.animateFloatingLimbs(this.experience.time.elapsed);
+        // ------------------------------------
 
         // Logique de déplacement (si un chemin est défini)
         if (!this.path || this.currentPathIndex >= this.path.length) {
-            // Si l'animation de marche tourne encore sans raison, l'arrêter
-             if (this.walkAction && this.walkAction.isRunning() && !this.path) {
-                this.walkAction.fadeOut(0.5);
-                 // if (this.idleAction) this.idleAction.reset().fadeIn(0.5).play();
-            }
             return; // Pas de chemin ou chemin terminé
         }
-
-        // --- Assurer que l'animation de marche joue ---
-        if (this.walkAction && !this.walkAction.isRunning()) {
-             this.walkAction.play(); // Relancer si arrêtée par erreur
-        }
-        // -------------------------------------------
 
         const targetPosition = this.path[this.currentPathIndex];
         const currentPosition = this.model.position;
@@ -178,22 +201,22 @@ export default class Agent {
 
         if (distanceToTargetXZ <= this.reachTolerance || distanceToTargetXZ < moveDistance) {
             // Atteint la cible : se positionner exactement et passer au point suivant
-            currentPosition.copy(targetPosition); // Assure la position exacte (Y inclus)
+            // Copier X et Z, garder Y courant (ou celui de la target, qui doit être le même)
+            currentPosition.x = targetPosition.x;
+            currentPosition.z = targetPosition.z;
+            currentPosition.y = targetPosition.y; // Assurer la hauteur exacte
             this.currentPathIndex++;
 
             if (this.currentPathIndex < this.path.length) {
                 // Regarder vers le point suivant
                 const nextPoint = this.path[this.currentPathIndex].clone();
-                nextPoint.y = this.model.position.y; // Regarder à la même hauteur
+                 // Regarder à la hauteur du centre du corps
+                nextPoint.y = this.model.position.y + this.bodyMesh.position.y;
                 this.model.lookAt(nextPoint);
+
             } else {
                 // Chemin terminé
-                // console.log(`Agent ${this.id}: Chemin terminé !`);
                 this.path = null; // Réinitialiser
-                if (this.walkAction && this.walkAction.isRunning()) {
-                    this.walkAction.fadeOut(0.5);
-                    // if (this.idleAction) this.idleAction.reset().fadeIn(0.5).play();
-                }
             }
         } else {
             // Se déplacer vers la cible
@@ -203,49 +226,38 @@ export default class Agent {
             this.model.position.addScaledVector(direction, moveDistance);
 
             // S'assurer que Y reste constant (hauteur du trottoir/chemin)
-            // C'est important car addScaledVector peut introduire des erreurs flottantes
             this.model.position.y = targetPosition.y;
 
-            // Réorienter si nécessaire (déjà fait lors du changement de point)
-             // const lookTarget = targetPosition.clone();
-             // lookTarget.y = this.model.position.y;
-             // this.model.lookAt(lookTarget); // Peut causer des saccades si appelé à chaque frame
+            // Orientation gérée lors du changement de point cible pour éviter saccades
         }
     }
 
     destroy() {
-        // Arrêter les animations
-        if(this.mixer) {
-            this.mixer.stopAllAction();
-        }
-
-        // Retirer le modèle de la scène
+        // Retirer le groupe modèle de la scène
         if (this.model && this.model.parent) {
             this.scene.remove(this.model);
         }
 
-        // Disposer géométrie/matériaux du modèle CLONÉ
-        // C'est important car SkeletonUtils.clone crée de nouvelles géométries/matériaux
-         if (this.model) {
-            this.model.traverse((child) => {
-                if (child.isMesh) {
-                    child.geometry?.dispose();
-                     if (Array.isArray(child.material)) {
-                         child.material.forEach(material => material?.dispose());
-                     } else {
-                         child.material?.dispose();
-                     }
-                }
-            });
-        }
+        // Disposer les géométries uniques créées
+        this.geometries.forEach(geom => geom.dispose());
+
+        // Disposer les matériaux uniques créés
+        this.materials.forEach(mat => mat.dispose());
 
         // Nullifier les références
         this.model = null;
         this.scene = null;
+        this.experience = null;
         this.path = null;
-        this.mixer = null;
-        this.walkAction = null;
-        this.idleAction = null;
-        // console.log(`Agent ${this.id} détruit.`);
+        this.bodyMesh = null;
+        this.headMesh = null;
+        this.leftHandMesh = null;
+        this.rightHandMesh = null;
+        this.leftFootMesh = null;
+        this.rightFootMesh = null;
+        this.limbs = [];
+        this.geometries = [];
+        this.materials = [];
+        // console.log(`Agent ${this.id} (Rayman) détruit.`);
     }
 }

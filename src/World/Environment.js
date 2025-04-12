@@ -19,7 +19,7 @@ export default class Environment {
 
         // Config spécifique aux nuages instanciés (peut être mise dans CityManager.config si besoin)
         this.numberOfCloudBaseShapes = 5; // Combien de formes de base différentes
-        this.totalNumberOfClouds = 50;   // Combien de nuages au total à afficher
+        this.totalNumberOfClouds = 0;   // Combien de nuages au total à afficher
         this.cloudAnimationSpeed = 0.00005; // Vitesse de base de l'animation
 
         this.mapSize = this.config.mapSize + 550;

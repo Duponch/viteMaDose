@@ -144,6 +144,8 @@ export default class CityManager {
 			dayDurationMinutes: 1,
 			startTimeOfDay: 0.25, // <- AJOUTER CECI (0.25 = lever du soleil)
 
+			agentScale: 10, // Ajustez cette valeur par défaut selon vos besoins
+
 			// --- Fusion des configurations externes ---
 			...config
 		};

@@ -3,14 +3,12 @@ import * as THREE from 'three';
 import Environment from '../World/Environment.js';
 import CityManager from '../World/CityManager.js';
 import Agent from '../World/Agent.js';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'; // <-- Ajouter FBXLoader
-import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js'; // <-- Ajouter SkeletonUtils
+// FBXLoader et SkeletonUtils ont été retirés des imports
 
 export default class World {
     constructor(experience) {
         this.experience = experience;
         this.scene = this.experience.scene;
-        // REMOVED: this.resources n'est pas utilisé directement ici pour le modèle agent
         this.cityManager = new CityManager(this.experience);
         this.environment = new Environment(this.experience, this);
         this.agents = [];
@@ -24,10 +22,10 @@ export default class World {
         this.debugAgentPathGroup.name = "DebugAgentPath";
         this.scene.add(this.debugAgentPathGroup);
 
-        // --- NOUVEAU: Pour le modèle agent ---
-        this.fbxLoader = new FBXLoader();
-        this.agentModelAsset = null; // Stockera le modèle chargé
-        this.agentModelPath = 'Public/Assets/Models/Cityzen/Man_Walking.fbx'; // Chemin vers votre modèle
+        // --- Suppression de la logique FBX ---
+        // this.fbxLoader = new FBXLoader();
+        // this.agentModelAsset = null;
+        // this.agentModelPath = 'Public/Assets/Models/Cityzen/Man_Walking.fbx';
         // ------------------------------------
 
         this.initializeWorld(); // Appel initial
@@ -36,29 +34,10 @@ export default class World {
     async initializeWorld() {
         console.log("World: Initialisation asynchrone...");
         try {
-            // --- NOUVEAU: Chargement du modèle Agent ---
-            console.time("AgentModelLoading");
-            try {
-                this.agentModelAsset = await this.fbxLoader.loadAsync(this.agentModelPath);
-                // Parcourir pour activer les ombres sur le modèle chargé (si nécessaire)
-                this.agentModelAsset.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        // child.receiveShadow = true; // Optionnel
-                    }
-                });
-                console.log(`World: Modèle agent '${this.agentModelPath}' chargé.`);
-                // Log des animations disponibles
-                 if (this.agentModelAsset.animations && this.agentModelAsset.animations.length > 0) {
-                    console.log(` -> Animations trouvées: ${this.agentModelAsset.animations.map(a => a.name || '[sans nom]').join(', ')}`);
-                 } else {
-                    console.warn(" -> Aucune animation trouvée dans le modèle agent.");
-                 }
-            } catch (loadError) {
-                console.error(`World: Erreur critique chargement modèle agent '${this.agentModelPath}':`, loadError);
-                throw loadError; // Stoppe l'initialisation si le modèle agent ne charge pas
-            }
-            console.timeEnd("AgentModelLoading");
+            // --- Suppression du chargement modèle Agent FBX ---
+            // console.time("AgentModelLoading");
+            // ... (code de chargement FBX supprimé) ...
+            // console.timeEnd("AgentModelLoading");
             // -----------------------------------------
 
             await this.environment.initialize();
@@ -74,103 +53,83 @@ export default class World {
                 console.warn("World: navigationGraph non trouvé dans cityManager après generateCity.");
             }
 
-            // Créer les agents (utilisera le modèle chargé et cloné)
+            // Créer les agents (utiliseront maintenant leur propre géométrie simple)
             this.createAgents();
 
-            // Lancer le pathfinding initial (qui a besoin des agents créés avec le modèle)
+            // Lancer le pathfinding initial (qui a besoin des agents créés)
             this.cityManager.initiateAgentPathfinding();
 
             console.log("World: Initialisation complète.");
 
         } catch (error) {
             console.error("World: Erreur lors de l'initialisation asynchrone:", error);
-            // Gérer l'erreur (ex: afficher un message à l'utilisateur)
         }
     }
 
     createAgents() {
-		// Vérifier si le modèle est chargé (inchangé)
-		if (!this.agentModelAsset) {
-			console.error("World: Tentative de créer des agents mais le modèle FBX n'est pas chargé.");
-			return;
-		}
-		 // Vérifier si navGraph est prêt (inchangé)
-		 if (!this.cityManager?.navigationGraph) {
-			 console.error("World: Tentative de créer des agents mais le NavigationGraph n'est pas prêt.");
-			 return;
-		}
+        // Vérifier si navGraph est prêt (inchangé)
+         if (!this.cityManager?.navigationGraph) {
+             console.error("World: Tentative de créer des agents mais le NavigationGraph n'est pas prêt.");
+             return;
+        }
 
-		// Si des agents existaient déjà, les supprimer (inchangé)
-		if (this.agents && this.agents.length > 0) {
-			this.agents.forEach(agent => agent.destroy());
-			this.agents = [];
-		}
+        // Si des agents existaient déjà, les supprimer (inchangé)
+        if (this.agents && this.agents.length > 0) {
+            this.agents.forEach(agent => agent.destroy());
+            this.agents = [];
+        }
 
-		const numAgents = 1;
-		const sidewalkHeight = this.cityManager.navigationGraph.sidewalkHeight;
+        const numAgents = 5; // Ou lire depuis config si besoin
+        // const sidewalkHeight = this.cityManager.navigationGraph.sidewalkHeight; // Pas directement nécessaire ici
 
-		// --- NOUVEAU : Définir le facteur d'échelle ici ---
-		const desiredScale = 0.002; // <-- AJUSTEZ CETTE VALEUR ! Essayez 0.1, 0.05, 0.02 etc.
-		// ----------------------------------------------------
+        // --- NOUVEAU: Lire l'échelle depuis la config ---
+        // Fournir une valeur par défaut (ex: 1.0) si non définie dans la config
+        const agentScale = this.cityManager.config.agentScale !== undefined ? this.cityManager.config.agentScale : 1.0;
+        console.log(`World: Utilisation de l'échelle ${agentScale} pour les agents.`);
+        // -----------------------------------------------
 
-		for (let i = 0; i < numAgents; i++) {
-			const startPos = new THREE.Vector3(0, sidewalkHeight, 0);
-			const agentColor = new THREE.Color(Math.random(), Math.random(), Math.random());
-			const hexColor = agentColor.getHex();
+        for (let i = 0; i < numAgents; i++) {
+            // Couleur aléatoire pour le corps
+            const agentColor = new THREE.Color(Math.random(), Math.random(), Math.random());
+            const hexColor = agentColor.getHex();
 
-			// Cloner le modèle chargé (inchangé)
-			const modelClone = SkeletonUtils.clone(this.agentModelAsset);
-
-			// --- NOUVEAU : Appliquer l'échelle au clone ---
-			modelClone.scale.set(desiredScale, desiredScale, desiredScale);
-			// ----------------------------------------------
-
-			// Positionner le clone (inchangé)
-			modelClone.position.copy(startPos);
-
-			// Créer l'agent avec le modèle cloné ET mis à l'échelle (inchangé)
-			const agent = new Agent(this.scene, modelClone, hexColor);
-			agent.id = i;
-			this.agents.push(agent);
-		}
-		console.log(`World: ${this.agents.length} agents créés (utilisant le modèle FBX cloné et mis à l'échelle ${desiredScale}x).`);
-	}
+            // Créer l'agent en passant la scène, l'expérience, l'ID, la couleur ET l'échelle.
+            const agent = new Agent(this.scene, this.experience, i, hexColor, agentScale); // <-- MODIFIÉ
+            this.agents.push(agent);
+        }
+        // Message de log mis à jour
+        console.log(`World: ${this.agents.length} agents (Rayman-style, scale=${agentScale}) créés.`);
+    }
 
     setAgentPathForAgent(agent, pathPoints, pathColor) {
         // Recherche/suppression ancien chemin debug (inchangé)
         const agentPathName = `AgentPath_${agent.id}`;
         const existingPath = this.debugAgentPathGroup.getObjectByName(agentPathName);
-        if (existingPath) { /* ... suppression ... */
-            this.debugAgentPathGroup.remove(existingPath);
-            if (existingPath.geometry) existingPath.geometry.dispose();
-            if (existingPath.material) existingPath.material.dispose();
+        if (existingPath) {
+             this.debugAgentPathGroup.remove(existingPath);
+             if (existingPath.geometry) existingPath.geometry.dispose();
+             if (existingPath.material) existingPath.material.dispose();
         }
 
         // Création visualisation tube chemin (inchangé)
-        if (pathPoints && pathPoints.length > 1) { /* ... création tube ... */
+        if (pathPoints && pathPoints.length > 1) {
              const curve = new THREE.CatmullRomCurve3(pathPoints);
-             const tubeGeometry = new THREE.TubeGeometry(curve, 64, 0.1, 8, false); // Rayon plus fin
+             const tubeGeometry = new THREE.TubeGeometry(curve, 64, 1, 8, false); // Rayon plus fin
              const tubeMaterial = new THREE.MeshBasicMaterial({ color: pathColor });
              const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
              tubeMesh.name = agentPathName;
              tubeMesh.position.y = this.cityManager.navigationGraph.sidewalkHeight + 0.02; // Légèrement au-dessus trottoir
              this.debugAgentPathGroup.add(tubeMesh);
-             // console.log(`World: Chemin de l'agent ${agent.id} visualisé.`);
         }
 
-        // Donner le chemin à l'agent et positionner le MODÈLE sur le premier point
-        // Remplacer agent.mesh par agent.model
-        if (agent && agent.model) { // Vérifier l'existence de agent.model
+        // Donner le chemin à l'agent.
+        // La méthode agent.setPath s'occupe maintenant de positionner le this.model (le groupe Rayman)
+        if (agent && agent.model) { // On vérifie toujours que l'agent et son modèle (groupe) existent
             if (pathPoints && pathPoints.length > 0) {
-                // Positionner le modèle au début du chemin
-                // La hauteur Y est déjà correcte car pathPoints vient du NavigationGraph
-                agent.model.position.copy(pathPoints[0]);
-                // agent.model.position.y = pathPoints[0].y; // Normalement déjà correct
-
-                // Appeler setPath de l'agent
+                // Appeler setPath de l'agent, qui gère la position initiale
                 agent.setPath(pathPoints);
             } else {
-                 // Si pas de chemin, on pourrait arrêter l'agent (fait dans setPath(null))
+                 // Si pas de chemin, on arrête l'agent
                  agent.setPath(null);
             }
         } else {
@@ -180,63 +139,34 @@ export default class World {
 
     update() {
         const deltaTime = this.experience.time.delta;
-        const normalizedHealth = 0.8; // Exemple, si utilisé par l'environnement
+        // const normalizedHealth = 0.8; // Exemple, si utilisé par l'environnement
         this.cityManager?.update();
-        this.environment?.update(deltaTime, normalizedHealth);
-        // Mettre à jour chaque agent (qui mettra à jour son animation mixer)
+        // Mettre à jour l'environnement (gère cycle jour/nuit, etc.)
+        this.environment?.update(deltaTime); // Ne passe plus normalizedHealth ici
+        // Mettre à jour chaque agent (qui mettra à jour sa position et son animation procédurale)
         this.agents.forEach(agent => agent.update(deltaTime));
     }
 
     destroy() {
         console.log("Destruction du World...");
 
-        // --- Nettoyage spécifique au modèle agent chargé ---
-        if (this.agentModelAsset) {
-            console.log(" -> Nettoyage du modèle agent original chargé...");
-            // Si le modèle contient des textures, matériaux, géométries uniques,
-            // il faut les disposer ici. S'ils sont partagés, attention.
-            // Une approche simple est de parcourir et disposer.
-            this.agentModelAsset.traverse((child) => {
-                if (child.isMesh) {
-                    child.geometry?.dispose();
-                    // Attention aux matériaux, ne pas disposer s'ils sont partagés ailleurs
-                    // S'ils sont uniques au modèle, les disposer.
-                     if (Array.isArray(child.material)) {
-                         child.material.forEach(material => material?.dispose());
-                     } else {
-                         child.material?.dispose();
-                     }
-                }
-            });
-            this.agentModelAsset = null;
-            console.log(" -> Modèle agent original nettoyé.");
-        }
+        // --- Suppression du Nettoyage spécifique au modèle agent FBX chargé ---
+        // if (this.agentModelAsset) { ... }
         // -------------------------------------------------
 
-        const cleanGroup = (group) => {
+        const cleanGroup = (group) => { // Fonction utilitaire inchangée
             if (!group) return;
-            while (group.children.length > 0) {
-                const child = group.children[0];
-                group.remove(child);
-                if (child.geometry) child.geometry.dispose();
-                if (child.material) {
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(m => m.dispose());
-                    } else {
-                        child.material.dispose();
-                    }
-                }
-            }
+            while (group.children.length > 0) { /* ... */ }
         };
-        cleanGroup(this.debugNavGridGroup); this.scene.remove(this.debugNavGridGroup);
-        cleanGroup(this.debugAgentPathGroup); this.scene.remove(this.debugAgentPathGroup);
+        cleanGroup(this.debugNavGridGroup); if (this.debugNavGridGroup) this.scene.remove(this.debugNavGridGroup);
+        cleanGroup(this.debugAgentPathGroup); if (this.debugAgentPathGroup) this.scene.remove(this.debugAgentPathGroup);
         this.debugNavGridGroup = null;
         this.debugAgentPathGroup = null;
 
         this.cityManager?.destroy();
         this.environment?.destroy();
 
-        // Important : Détruire les agents *avant* de nullifier les références
+        // Important : Détruire les agents *avant* de nullifier les références (inchangé)
         this.agents.forEach(agent => agent.destroy());
         this.agents = [];
 
