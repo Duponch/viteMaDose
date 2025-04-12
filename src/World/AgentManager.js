@@ -1,59 +1,49 @@
+/*
+ * Fichier: src/World/AgentManager.js
+ * Correction: headRadius est maintenant une propriété de classe (this.headRadius)
+ * initialisée dans _initializeMeshes et utilisée dans update.
+ */
 // src/World/AgentManager.js
 import * as THREE from 'three';
-import Agent from './Agent.js'; // Assurez-vous que le chemin est correct
+import Agent from './Agent.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-// --- Fonctions createCapsuleGeometry, createShoeGeometry (INCHANGÉES - fournies pour complétude) ---
-function createCapsuleGeometry(radius, length, radialSegments = 16, heightSegments = 1) {
-    const cylinderHeight = length;
-    const sphereRadius = radius;
-    const geometries = [];
-    const cylinderGeometry = new THREE.CylinderGeometry(radius, radius, cylinderHeight, radialSegments, heightSegments);
-    geometries.push(cylinderGeometry);
-    const topSphereGeometry = new THREE.SphereGeometry(sphereRadius, radialSegments, Math.ceil(radialSegments / 2), 0, Math.PI * 2, 0, Math.PI / 2);
-    topSphereGeometry.translate(0, cylinderHeight / 2, 0);
-    geometries.push(topSphereGeometry);
-    const bottomSphereGeometry = new THREE.SphereGeometry(sphereRadius, radialSegments, Math.ceil(radialSegments / 2), 0, Math.PI * 2, 0, Math.PI / 2);
-    bottomSphereGeometry.rotateX(Math.PI);
-    bottomSphereGeometry.translate(0, -cylinderHeight / 2, 0);
-    geometries.push(bottomSphereGeometry);
-    const mergedGeometry = mergeGeometries(geometries, false);
-    geometries.forEach(geom => geom.dispose());
-    return mergedGeometry;
-}
-function createShoeGeometry() {
-    const shoeRadius = 1.2;
-    const geometries = [];
-    const topPartGeometry = new THREE.SphereGeometry(shoeRadius, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
-    topPartGeometry.rotateX(Math.PI);
-    geometries.push(topPartGeometry);
-    const soleGeometry = new THREE.CircleGeometry(shoeRadius, 32);
-    soleGeometry.rotateX(-Math.PI / 2);
-    geometries.push(soleGeometry);
-    let mergedGeometry = mergeGeometries(geometries, false);
-    geometries.forEach(geom => geom.dispose());
-    mergedGeometry.scale(1.0, 0.6, 1.5);
-    return mergedGeometry;
+// --- Fonctions createCapsuleGeometry, createShoeGeometry (INCHANGÉES) ---
+function createCapsuleGeometry(radius, length, radialSegments = 16, heightSegments = 1) { /* ... code existant ... */
+    const cylinderHeight = length; const sphereRadius = radius; const geometries = [];
+    const cylinderGeometry = new THREE.CylinderGeometry(radius, radius, cylinderHeight, radialSegments, heightSegments); geometries.push(cylinderGeometry);
+    const topSphereGeometry = new THREE.SphereGeometry(sphereRadius, radialSegments, Math.ceil(radialSegments / 2), 0, Math.PI * 2, 0, Math.PI / 2); topSphereGeometry.translate(0, cylinderHeight / 2, 0); geometries.push(topSphereGeometry);
+    const bottomSphereGeometry = new THREE.SphereGeometry(sphereRadius, radialSegments, Math.ceil(radialSegments / 2), 0, Math.PI * 2, 0, Math.PI / 2); bottomSphereGeometry.rotateX(Math.PI); bottomSphereGeometry.translate(0, -cylinderHeight / 2, 0); geometries.push(bottomSphereGeometry);
+    const mergedGeometry = mergeGeometries(geometries, false); geometries.forEach(geom => geom.dispose()); return mergedGeometry;
+ }
+function createShoeGeometry() { /* ... code existant ... */
+    const shoeRadius = 1.2; const geometries = [];
+    const topPartGeometry = new THREE.SphereGeometry(shoeRadius, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2); topPartGeometry.rotateX(Math.PI); geometries.push(topPartGeometry);
+    const soleGeometry = new THREE.CircleGeometry(shoeRadius, 32); soleGeometry.rotateX(-Math.PI / 2); geometries.push(soleGeometry);
+    let mergedGeometry = mergeGeometries(geometries, false); geometries.forEach(geom => geom.dispose()); mergedGeometry.scale(1.0, 0.6, 1.5); return mergedGeometry;
 }
 // --- FIN Fonctions Géométrie ---
 
 export default class AgentManager {
-    // --- MODIFIÉ : Stocke experience, config ---
     constructor(scene, experience, config, maxAgents = 500) {
         if (!experience || !config) {
             throw new Error("AgentManager requires Experience and Config instances.");
         }
         this.scene = scene;
-        this.experience = experience; // Stocker la référence à l'expérience
-        this.config = config; // Stocker la config (pour agentScale, yOffset, etc.)
-        this.maxAgents = 1;
+        this.experience = experience;
+        this.config = config;
+        this.maxAgents = maxAgents;
 
-        this.agents = []; // Contiendra les instances logiques d'Agent
-        this.instanceMeshes = {}; // Stockera les InstancedMesh par partie
-        this.baseGeometries = {}; // Géométries uniques
-        this.baseMaterials = {}; // Matériaux uniques
+        this.agents = [];
+        this.instanceMeshes = {};
+        this.baseGeometries = {};
+        this.baseMaterials = {};
 
-        // --- Objets temporaires pour les calculs (performance - inchangé) ---
+        // --- Propriétés pour géométrie (initialisées dans _initializeMeshes) ---
+        this.headRadius = 2.5; // Valeur par défaut, sera écrasée
+        // ---------------------------------------------------------------------
+
+        // --- Objets temporaires ---
         this.tempMatrix = new THREE.Matrix4();
         this.agentMatrix = new THREE.Matrix4();
         this.partOffsetMatrix = new THREE.Matrix4();
@@ -63,425 +53,386 @@ export default class AgentManager {
         this.tempQuaternion = new THREE.Quaternion();
         this.tempScale = new THREE.Vector3(1, 1, 1);
         this.tempColor = new THREE.Color();
+        this.debugMarkerMatrix = new THREE.Matrix4();
 
-        // Initialiser les meshes instanciés
         this._initializeMeshes();
         console.log("AgentManager initialisé.");
     }
-    // --- FIN MODIFIÉ ---
 
-    // --- INCHANGÉ (mais fourni pour complétude) ---
+    // --- MODIFIÉ ---
     _initializeMeshes() {
-        console.log("AgentManager: Initialisation des InstancedMesh...");
+        console.log("AgentManager: Initialisation des InstancedMesh (Corps + Debug)...");
 
-        // 1. Matériaux de base
+        // --- 1. Matériaux de base (Corps) ---
         this.baseMaterials.skin = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.6, metalness: 0.1, name: 'AgentSkinMat' });
-        this.baseMaterials.torso = new THREE.MeshStandardMaterial({ color: 0x800080, roughness: 0.5, metalness: 0.2, name: 'AgentTorsoMat', vertexColors: true }); // Activer vertexColors si instanceColor est utilisé
+        this.baseMaterials.torso = new THREE.MeshStandardMaterial({ color: 0x800080, roughness: 0.5, metalness: 0.2, name: 'AgentTorsoMat', vertexColors: true });
         this.baseMaterials.hand = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0.1, name: 'AgentHandMat' });
         this.baseMaterials.shoe = new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.7, metalness: 0.1, name: 'AgentShoeMat' });
 
-        // 2. Géométries de base
-        const headRadius = 2.5; const headLength = 1;
+        // --- 2. Géométries de base (Corps) ---
+        // Définir les constantes localement, mais assigner à this.headRadius
+        const headRadiusConst = 2.5;
+        const headLength = 1;
         const torsoRadius = 1.5; const torsoLength = 1.5;
         const handRadius = 0.8; const handLength = 1.0;
-        this.baseGeometries.head = createCapsuleGeometry(headRadius, headLength, 32);
+
+        // Assignation à la propriété de classe
+        this.headRadius = headRadiusConst;
+
+        this.baseGeometries.head = createCapsuleGeometry(this.headRadius, headLength, 32); // Utilise this.headRadius
         this.baseGeometries.torso = createCapsuleGeometry(torsoRadius, torsoLength, 24);
         this.baseGeometries.hand = createCapsuleGeometry(handRadius, handLength, 12);
         this.baseGeometries.shoe = createShoeGeometry();
 
-        // 3. Créer les InstancedMesh
-        const createInstMesh = (name, geom, mat, count) => {
+        // --- 3. Géométries et Matériaux de base (Debug Markers) ---
+        const markerSize = 1.5;
+        this.baseGeometries.debugMarker = new THREE.OctahedronGeometry(markerSize, 0);
+        this.baseMaterials.agentMarkerMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, name: 'AgentMarkerMat' }); // Bleu
+        this.baseMaterials.homeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, name: 'HomeMarkerMat' }); // Vert
+        this.baseMaterials.workMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, name: 'WorkMarkerMat' }); // Rouge
+
+        // --- 4. Créer les InstancedMesh (Corps + Debug) ---
+        const createInstMesh = (name, geom, mat, count, needsColor = false) => {
             const mesh = new THREE.InstancedMesh(geom, mat.clone(), count);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
+            mesh.castShadow = (name !== 'agentMarker' && name !== 'homeMarker' && name !== 'workMarker');
+            mesh.receiveShadow = (name !== 'agentMarker' && name !== 'homeMarker' && name !== 'workMarker');
             mesh.name = `${name}Instances`;
+            mesh.frustumCulled = false;
 
-            // --- AJOUTEZ CECI ---
-            mesh.frustumCulled = false; // Désactive le Frustum Culling pour CE mesh spécifique
-            // --------------------
-
-             if (name === 'torso') {
+             if (needsColor) {
                  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
              }
             this.scene.add(mesh);
             this.instanceMeshes[name] = mesh;
         };
 
-        // Créer avec les bonnes tailles
+        // Créer meshes corps
         createInstMesh('head', this.baseGeometries.head, this.baseMaterials.skin, this.maxAgents);
-        createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents);
-        createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2); // 2 mains par agent
-        createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2); // 2 pieds par agent
+        createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents, true);
+        createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2);
+        createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2);
 
-        console.log(`AgentManager: ${Object.keys(this.instanceMeshes).length} InstancedMesh créés (Max Agents: ${this.maxAgents}) - Frustum Culling désactivé pour eux.`);
+        // Créer meshes debug markers
+        createInstMesh('agentMarker', this.baseGeometries.debugMarker, this.baseMaterials.agentMarkerMat, this.maxAgents);
+        createInstMesh('homeMarker', this.baseGeometries.debugMarker, this.baseMaterials.homeMarkerMat, this.maxAgents);
+        createInstMesh('workMarker', this.baseGeometries.debugMarker, this.baseMaterials.workMarkerMat, this.maxAgents);
+
+        console.log(`AgentManager: ${Object.keys(this.instanceMeshes).length} InstancedMesh créés (Max Agents: ${this.maxAgents}).`);
     }
-    // --- FIN INCHANGÉ ---
+    // --- FIN MODIFIÉ ---
 
-    // --- MODIFIÉ : Crée agent logique, enregistre, assigne via CityManager ---
-    createAgent() { // Ne prend plus startPosition en argument direct
+    createAgent() {
         if (this.agents.length >= this.maxAgents) {
             console.warn("AgentManager: Nombre maximum d'agents atteint.");
             return null;
         }
 
-        const instanceId = this.agents.length; // ID pour l'index dans InstancedMesh
+        const instanceId = this.agents.length;
 
-        // --- Config spécifique pour cet agent ---
+        // Config agent
         const agentConfig = {
-            // Lire depuis this.config (passé au constructeur AgentManager)
-            scale: this.config.agentScale,
-            speed: (this.config.agentWalkSpeed / 15) + (Math.random() - 0.5) * 0.5, // Vitesse basée sur config, avec variation
-            rotationSpeed: this.config.agentRotationSpeed + (Math.random() - 0.5) * 2.0, // Rotation basée sur config, avec variation
-            yOffset: this.config.agentYOffset, // Offset vertical pour la position logique
-            torsoColor: new THREE.Color(Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1).getHex(), // Couleur aléatoire mais pas trop sombre/claire
-            debugPathColor: null // Sera défini par World si besoin pour debug
+            scale: this.config.agentScale ?? 0.1,
+            speed: (this.config.agentWalkSpeed / 15) + (Math.random() - 0.5) * 0.5,
+            rotationSpeed: this.config.agentRotationSpeed + (Math.random() - 0.5) * 2.0,
+            yOffset: this.config.agentYOffset ?? 0.3,
+            torsoColor: new THREE.Color(Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1),
+            debugPathColor: null
         };
+        agentConfig.torsoColorHex = agentConfig.torsoColor.getHex();
 
-        // --- Créer l'instance logique Agent ---
-        // Passe la référence à l'Experience pour qu'il puisse accéder aux autres managers
+        // Créer agent logique
         const newAgent = new Agent(agentConfig, instanceId, this.experience);
 
-        // --- Enregistrement et Assignation Domicile/Travail via CityManager ---
+        // Enregistrement & Assignation
         const cityManager = this.experience.world?.cityManager;
         let success = false;
         if (cityManager) {
-            // 1. Enregistrer le citoyen (lie l'ID de l'agent logique au registre global)
             const citizenInfo = cityManager.registerCitizen(newAgent.id, newAgent);
-
-            // 2. Tenter d'assigner un domicile
             const homeAssigned = cityManager.assignHomeToCitizen(citizenInfo.id);
-
-            // 3. Tenter d'assigner un lieu de travail
             const workAssigned = cityManager.assignWorkplaceToCitizen(citizenInfo.id);
-
-            // 4. Initialiser le cycle de vie de l'agent SI domicile ET travail trouvés
             if (homeAssigned && workAssigned) {
-                 // initializeLifecycle récupère les positions et place l'agent
                  newAgent.initializeLifecycle(citizenInfo.homeBuildingId, citizenInfo.workBuildingId);
-                 success = true; // L'agent est prêt pour sa routine
+                 success = true;
             } else {
-                 // Si l'assignation échoue, l'agent reste en état IDLE (géré dans initializeLifecycle)
-                 console.warn(`Agent ${newAgent.id} n'a pas pu être entièrement initialisé (Domicile: ${homeAssigned}, Travail: ${workAssigned}). Il restera en IDLE.`);
-                 newAgent.currentState = 'IDLE'; // Assurer l'état IDLE
+                 console.warn(`Agent ${newAgent.id} non initialisé (Home:${homeAssigned}, Work:${workAssigned}). Reste IDLE.`);
+                 newAgent.currentState = 'IDLE';
                  newAgent.isVisible = false;
-                 // On pourrait choisir de ne pas ajouter cet agent à la liste gérée,
-                 // mais le garder permet de voir les échecs d'assignation.
-                 // Il faut juste s'assurer que l'état IDLE ne cause pas de problème.
-                 // Optionnel : Retirer du registre citizen ?
-                 // cityManager.citizens.delete(citizenInfo.id);
             }
         } else {
-            console.error(`AgentManager: CityManager non trouvé pour l'agent ${newAgent.id}. Agent reste IDLE.`);
+            console.error(`AgentManager: CityManager non trouvé pour ${newAgent.id}. Agent IDLE.`);
             newAgent.currentState = 'IDLE';
             newAgent.isVisible = false;
         }
-        // --- Fin Enregistrement/Assignation ---
 
-        // Ajouter l'agent logique à la liste gérée, même s'il est IDLE
         this.agents.push(newAgent);
 
-        // --- Initialiser la couleur du torse dans InstancedMesh ---
+        // Initialiser couleur torse
         if (this.instanceMeshes.torso.instanceColor) {
-            this.tempColor.setHex(newAgent.torsoColor.getHex()); // Utiliser la couleur de l'agent
+            this.tempColor.setHex(agentConfig.torsoColorHex);
             this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
-            this.instanceMeshes.torso.instanceColor.needsUpdate = true; // Marquer pour update
+            this.instanceMeshes.torso.instanceColor.needsUpdate = true;
         }
 
-        // --- Initialiser les matrices à une échelle NULLE (agent caché au début) ---
-        this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0)); // Matrice échelle nulle
+        // Initialiser TOUTES les matrices à échelle NULLE
+        this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
         Object.values(this.instanceMeshes).forEach(mesh => {
-            // Appliquer aux bons indices (1 pour tête/torse, 2 pour mains/pieds)
             const indicesToUpdate = (mesh.name.includes('hand') || mesh.name.includes('shoe'))
                 ? [instanceId * 2, instanceId * 2 + 1]
                 : [instanceId];
 
             indicesToUpdate.forEach(index => {
-                 if (index < mesh.count) { // Vérifier les limites
+                 if (index < mesh.count) {
                      mesh.setMatrixAt(index, this.tempMatrix);
                  }
             });
-            // Marquer la matrice d'instance pour mise à jour GPU
             if(mesh.instanceMatrix) mesh.instanceMatrix.needsUpdate = true;
         });
 
-        console.log(`Agent ${newAgent.id} (Instance ${instanceId}) créé. Initial State: ${newAgent.currentState}. Success: ${success}`);
-        return newAgent; // Retourner l'agent logique
+        console.log(`Agent ${newAgent.id} (Inst ${instanceId}) créé. State: ${newAgent.currentState}. Success: ${success}`);
+        return newAgent;
     }
-    // --- FIN MODIFIÉ ---
 
-    // --- INCHANGÉ (mais fourni pour complétude) ---
     getAgentById(id) {
-        // Recherche par l'ID unique de l'agent logique (ex: "citizen_X")
         return this.agents.find(agent => agent.id === id);
     }
-    // --- FIN INCHANGÉ ---
 
-    // --- INCHANGÉ (mais fourni pour complétude) ---
-    _getPartAnimationMatrix(partType, time) {
-        this.animationMatrix.identity(); // Réinitialiser
-
-        // Lire les paramètres depuis la config
-        const walkSpeed = this.config.agentWalkSpeed ?? 2.5;
-        const bobAmplitude = this.config.agentBobAmplitude ?? 0.15;
-        const stepLength = this.config.agentStepLength ?? 1.5;
-        const stepHeight = this.config.agentStepHeight ?? 0.7;
-        const swingAmplitude = this.config.agentSwingAmplitude ?? 1.2;
-        const ankleRotationAmplitude = this.config.agentAnkleRotationAmplitude ?? Math.PI / 8;
-        const handTiltAmplitude = this.config.agentHandTiltAmplitude ?? 0.2;
-        const headNodAmplitude = this.config.agentHeadNodAmplitude ?? 0.05;
-        const headYawAmplitude = this.config.agentHeadYawAmplitude ?? 0.1;
-        const headTiltAmplitude = this.config.agentHeadTiltAmplitude ?? 0.08;
-        const headBobAmplitude = this.config.agentHeadBobAmplitude ?? 0.06;
-
-        const walkTime = time * walkSpeed;
-
-        let animPosX = 0, animPosY = 0, animPosZ = 0;
-        let animRotX = 0, animRotY = 0, animRotZ = 0;
-        let applyRotation = false;
-
-        const torsoBobY = Math.sin(walkTime * 2) * bobAmplitude;
-
+    _getPartAnimationMatrix(partType, time) { /* ... code existant inchangé ... */
+        this.animationMatrix.identity();
+        const walkSpeed = this.config.agentWalkSpeed ?? 2.5; const bobAmplitude = this.config.agentBobAmplitude ?? 0.15; const stepLength = this.config.agentStepLength ?? 1.5; const stepHeight = this.config.agentStepHeight ?? 0.7; const swingAmplitude = this.config.agentSwingAmplitude ?? 1.2; const ankleRotationAmplitude = this.config.agentAnkleRotationAmplitude ?? Math.PI / 8; const handTiltAmplitude = this.config.agentHandTiltAmplitude ?? 0.2; const headNodAmplitude = this.config.agentHeadNodAmplitude ?? 0.05; const headYawAmplitude = this.config.agentHeadYawAmplitude ?? 0.1; const headTiltAmplitude = this.config.agentHeadTiltAmplitude ?? 0.08; const headBobAmplitude = this.config.agentHeadBobAmplitude ?? 0.06;
+        const walkTime = time * walkSpeed; let animPosX = 0, animPosY = 0, animPosZ = 0; let animRotX = 0, animRotY = 0, animRotZ = 0; let applyRotation = false; const torsoBobY = Math.sin(walkTime * 2) * bobAmplitude;
         switch (partType) {
-            case 'torso':
-                animPosY = torsoBobY;
-                break;
-            case 'head':
-                animPosY = torsoBobY + (Math.sin(walkTime * 1.5 + 0.3) * headBobAmplitude);
-                // Rotations tête (peuvent être réactivées si besoin)
-                // animRotX = Math.sin(walkTime) * headNodAmplitude;
-                // animRotY = Math.sin(walkTime * 0.8) * headYawAmplitude; // Rythme légèrement différent
-                // animRotZ = Math.cos(walkTime * 1.2) * headTiltAmplitude;
-                // applyRotation = true;
-                break;
-            case 'leftFoot':
-                animPosZ = Math.sin(walkTime) * stepLength;
-                animPosY = Math.max(0, Math.cos(walkTime)) * stepHeight;
-                animRotX = Math.sin(walkTime) * ankleRotationAmplitude;
-                applyRotation = true;
-                break;
-            case 'rightFoot':
-                animPosZ = Math.sin(walkTime + Math.PI) * stepLength;
-                animPosY = Math.max(0, Math.cos(walkTime + Math.PI)) * stepHeight;
-                animRotX = Math.sin(walkTime + Math.PI) * ankleRotationAmplitude;
-                applyRotation = true;
-                break;
-            case 'leftHand':
-                animPosZ = Math.sin(walkTime + Math.PI) * swingAmplitude; // Opposé pied droit
-                animPosY = torsoBobY;
-                animRotZ = Math.sin(walkTime * 1.8) * handTiltAmplitude;
-                applyRotation = true;
-                break;
-            case 'rightHand':
-                animPosZ = Math.sin(walkTime) * swingAmplitude;      // Opposé pied gauche
-                animPosY = torsoBobY;
-                animRotZ = Math.cos(walkTime * 1.8 + 0.5) * handTiltAmplitude;
-                applyRotation = true;
-                break;
+            case 'torso': animPosY = torsoBobY; break;
+            case 'head': animPosY = torsoBobY + (Math.sin(walkTime * 1.5 + 0.3) * headBobAmplitude); break;
+            case 'leftFoot': animPosZ = Math.sin(walkTime) * stepLength; animPosY = Math.max(0, Math.cos(walkTime)) * stepHeight; animRotX = Math.sin(walkTime) * ankleRotationAmplitude; applyRotation = true; break;
+            case 'rightFoot': animPosZ = Math.sin(walkTime + Math.PI) * stepLength; animPosY = Math.max(0, Math.cos(walkTime + Math.PI)) * stepHeight; animRotX = Math.sin(walkTime + Math.PI) * ankleRotationAmplitude; applyRotation = true; break;
+            case 'leftHand': animPosZ = Math.sin(walkTime + Math.PI) * swingAmplitude; animPosY = torsoBobY; animRotZ = Math.sin(walkTime * 1.8) * handTiltAmplitude; applyRotation = true; break;
+            case 'rightHand': animPosZ = Math.sin(walkTime) * swingAmplitude; animPosY = torsoBobY; animRotZ = Math.cos(walkTime * 1.8 + 0.5) * handTiltAmplitude; applyRotation = true; break;
         }
+        this.tempPosition.set(animPosX, animPosY, animPosZ); if (applyRotation) { this.tempQuaternion.setFromEuler(new THREE.Euler(animRotX, animRotY, animRotZ, 'XYZ')); } else { this.tempQuaternion.identity(); } this.tempScale.set(1, 1, 1);
+        this.animationMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); return this.animationMatrix;
+     }
 
-        this.tempPosition.set(animPosX, animPosY, animPosZ);
-        if (applyRotation) {
-            this.tempQuaternion.setFromEuler(new THREE.Euler(animRotX, animRotY, animRotZ, 'XYZ')); // Préciser l'ordre
-        } else {
-            this.tempQuaternion.identity();
-        }
-        this.tempScale.set(1, 1, 1); // L'animation ne change pas l'échelle locale
-
-        this.animationMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
-        return this.animationMatrix;
-    }
-    // --- FIN INCHANGÉ ---
-
-    // --- INCHANGÉ (mais fourni pour complétude) ---
-    _getPartLocalOffsetMatrix(partType) {
+    _getPartLocalOffsetMatrix(partType) { /* ... code existant inchangé ... */
         this.partOffsetMatrix.identity();
-        // Positions de base relatives au centre de l'agent (0,0,0)
-        const headY = 6.0;
-        const torsoY = 0; // Torse est à l'origine
-        const handX = 3.0; // Distance latérale des mains
-        const handY = 1.0; // Hauteur des mains
-        const handBaseRotZ = Math.PI / 12; // Inclinaison de base des mains
-        const footX = 1.8; // Distance latérale des pieds
-        const footY = -3.5; // Hauteur des pieds (négatif)
-        const footZ = 0.5; // Position avant/arrière de base des pieds
-
+        // Utiliser this.headRadius ici pour la cohérence, même si headY est une valeur calculée
+        const headY = 6.0; // Pourrait être basé sur this.headRadius + torsoLength/2 etc. si besoin
+        const torsoY = 0; const handX = 3.0; const handY = 1.0; const handBaseRotZ = Math.PI / 12; const footX = 1.8; const footY = -3.5; const footZ = 0.5;
         switch (partType) {
-            case 'head':
-                this.partOffsetMatrix.makeTranslation(0, headY, 0);
-                break;
-            case 'torso':
-                // Reste à l'identité (ou makeTranslation(0, torsoY, 0))
-                break;
-            case 'leftHand':
-                 this.tempPosition.set(-handX, handY, 0);
-                 this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, -handBaseRotZ)); // Inclinaison Z négative
-                 this.tempScale.set(1,1,1);
-                 this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
-                break;
-            case 'rightHand':
-                 this.tempPosition.set(handX, handY, 0);
-                 this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, handBaseRotZ)); // Inclinaison Z positive
-                 this.tempScale.set(1,1,1);
-                 this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
-                break;
-            case 'leftFoot':
-                this.partOffsetMatrix.makeTranslation(-footX, footY, footZ);
-                break;
-            case 'rightFoot':
-                this.partOffsetMatrix.makeTranslation(footX, footY, footZ);
-                break;
-        }
-        return this.partOffsetMatrix;
-    }
-    // --- FIN INCHANGÉ ---
+            case 'head': this.partOffsetMatrix.makeTranslation(0, headY, 0); break; case 'torso': break;
+            case 'leftHand': this.tempPosition.set(-handX, handY, 0); this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, -handBaseRotZ)); this.tempScale.set(1,1,1); this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); break;
+            case 'rightHand': this.tempPosition.set(handX, handY, 0); this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, handBaseRotZ)); this.tempScale.set(1,1,1); this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); break;
+            case 'leftFoot': this.partOffsetMatrix.makeTranslation(-footX, footY, footZ); break; case 'rightFoot': this.partOffsetMatrix.makeTranslation(footX, footY, footZ); break;
+        } return this.partOffsetMatrix;
+     }
 
-    // --- MODIFIÉ : Passe l'heure, gère visibilité via scale ---
+    // --- MODIFIÉ ---
     update(deltaTime) {
-        // --- Vérification des dépendances ---
-        if (!this.experience || !this.experience.world || !this.experience.world.environment) {
-            console.warn("AgentManager.update: Dépendances (experience, world, environment) non prêtes.");
-            return; // Attendre que tout soit prêt
+        if (!this.experience?.world?.environment?.isInitialized) {
+            // Ne rien faire si l'environnement n'est pas prêt
+            return;
         }
         const environment = this.experience.world.environment;
-        if (!environment.isInitialized) {
-             console.warn("AgentManager.update: Environment non initialisé.");
-             return;
-        }
+        const currentHour = environment.getCurrentHour();
+        const elapsedTime = this.experience.time.elapsed / 1000;
 
-        // --- Obtenir l'heure actuelle (0-23) ---
-        const currentHour = environment.getCurrentHour(); // Utiliser le getter
-        // --------------------------------------
+        // Déterminer si le mode debug est actif et définir l'échelle des marqueurs
+        const isDebug = this.experience.isDebugMode;
+        // ***** Valeur Modifiée : Augmentez ici si besoin *****
+        const debugMarkerScale = isDebug ? 1.0 : 0; // Échelle pour les marqueurs en mode debug (0 si désactivé)
+        // *****************************************************
 
-        const elapsedTime = this.experience.time.elapsed / 1000; // Pour l'animation des membres
-        // const yOffset = this.config.agentYOffset || 0; // L'offset est maintenant dans agent.position
+        // ***** Définir un offset Y fixe pour TOUS les marqueurs *****
+        const fixedMarkerYOffset = 5.0; // Hauteur fixe au-dessus de la position de référence (agent, maison, travail)
+        // ***********************************************************
 
-        let needsMatrixUpdate = false; // Drapeau pour savoir si une MAJ GPU est nécessaire
-        let needsColorUpdate = this.instanceMeshes.torso.instanceColor?.needsUpdate || false; // Garder trace MAJ couleur
+        // Drapeaux pour optimiser les mises à jour GPU
+        let needsMatrixUpdate = false; // Pour les parties du corps
+        let needsColorUpdate = this.instanceMeshes.torso.instanceColor?.needsUpdate || false; // Pour la couleur du torse
+        let needsAgentMarkerUpdate = false; // Pour le marqueur bleu
+        let needsHomeMarkerUpdate = false;  // Pour le marqueur vert
+        let needsWorkMarkerUpdate = false;  // Pour le marqueur rouge
 
-        // --- Boucle sur les agents logiques ---
+        // Boucle sur tous les agents gérés
         for (let i = 0; i < this.agents.length; i++) {
             const agent = this.agents[i];
-            const instanceId = agent.instanceId; // Index pour les InstancedMesh
+            const instanceId = agent.instanceId; // Index de cet agent dans les InstancedMesh
 
-            // 1. Mise à jour logique de l'agent (état, position, orientation)
-            agent.update(deltaTime, currentHour); // Passe l'heure actuelle
+            // 1. Mettre à jour la logique interne de l'agent (état, chemin, etc.)
+            agent.update(deltaTime, currentHour);
 
-            // 2. Calcul de la matrice de base de l'agent pour le rendu
-            this.tempPosition.copy(agent.position); // Utilise la position logique (qui inclut déjà yOffset)
-            // Utiliser l'échelle de l'agent, ou 0 si isVisible est faux
+            // 2. Mettre à jour le visuel du corps de l'agent
+            // Déterminer l'échelle actuelle (0 si non visible)
             const actualScale = agent.isVisible ? agent.scale : 0;
-            this.tempScale.set(actualScale, actualScale, actualScale);
+            this.tempScale.set(actualScale, actualScale, actualScale); // Échelle globale de l'agent
 
-            // Composer la matrice de l'agent (position, orientation, échelle)
-            this.agentMatrix.compose(this.tempPosition, agent.orientation, this.tempScale);
+            // Composer la matrice de base de l'agent (position, orientation, échelle)
+            // Utilise agent.position qui inclut déjà le yOffset de l'agent
+            this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
 
-            // 3. Calculer et définir la matrice pour chaque partie du corps
+            // Fonction interne pour calculer et appliquer la matrice finale pour chaque partie du corps
             const calculateAndSetPartMatrix = (partName, meshName, indexMultiplier = 1, indexOffset = 0) => {
-                 const localOffsetMatrix = this._getPartLocalOffsetMatrix(partName); // Décalage local de la partie
-                 const animationMatrix = this._getPartAnimationMatrix(partName, elapsedTime); // Animation de la partie
+                 const localOffsetMatrix = this._getPartLocalOffsetMatrix(partName); // Décalage local de la partie (ex: bras par rapport au torse)
+                 const animationMatrix = this._getPartAnimationMatrix(partName, elapsedTime); // Animation de la partie (ex: balancement bras)
+                 this.tempMatrix.multiplyMatrices(localOffsetMatrix, animationMatrix); // Combine décalage et animation locale
+                 this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix); // Applique la transformation globale de l'agent
 
-                 // Ordre: Animation appliquée à l'offset local, puis transformation globale de l'agent
-                 // finalPartMatrix = agentMatrix * localOffsetMatrix * animationMatrix
-                 this.tempMatrix.multiplyMatrices(localOffsetMatrix, animationMatrix); // Combine offset local et animation
-                 this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix); // Applique la transformation globale (position, orientation, échelle)
-
-                 // Définir la matrice dans l'InstancedMesh correspondant
+                 // Appliquer la matrice finale à l'instance correcte dans l'InstancedMesh correspondant
                  const finalInstanceIndex = instanceId * indexMultiplier + indexOffset;
                  if (finalInstanceIndex < this.instanceMeshes[meshName].count) {
                     this.instanceMeshes[meshName].setMatrixAt(finalInstanceIndex, this.finalPartMatrix);
-                    needsMatrixUpdate = true; // Marquer qu'au moins une matrice a changé
-                 } else {
-                     console.error(`AgentManager: Tentative d'accès à l'index invalide ${finalInstanceIndex} pour ${meshName} (Agent ${instanceId}, Max: ${this.instanceMeshes[meshName].count})`);
+                    needsMatrixUpdate = true; // Marquer qu'au moins une partie du corps a bougé
                  }
             };
 
-            // Appeler pour chaque partie
+            // Calculer et définir les matrices pour chaque partie du corps
             calculateAndSetPartMatrix('head', 'head');
             calculateAndSetPartMatrix('torso', 'torso');
-            calculateAndSetPartMatrix('leftHand', 'hand', 2, 0); // index = id * 2 + 0
-            calculateAndSetPartMatrix('rightHand', 'hand', 2, 1); // index = id * 2 + 1
-            calculateAndSetPartMatrix('leftFoot', 'shoe', 2, 0); // index = id * 2 + 0
-            calculateAndSetPartMatrix('rightFoot', 'shoe', 2, 1); // index = id * 2 + 1
+            calculateAndSetPartMatrix('leftHand', 'hand', 2, 0);  // Main gauche (index instanceId * 2 + 0)
+            calculateAndSetPartMatrix('rightHand', 'hand', 2, 1); // Main droite (index instanceId * 2 + 1)
+            calculateAndSetPartMatrix('leftFoot', 'shoe', 2, 0);  // Pied gauche (index instanceId * 2 + 0)
+            calculateAndSetPartMatrix('rightFoot', 'shoe', 2, 1); // Pied droit (index instanceId * 2 + 1)
 
-            // 4. Mise à jour couleur torse (si nécessaire)
+            // 3. Mettre à jour la couleur du torse si nécessaire
              if (this.instanceMeshes.torso.instanceColor) {
-                 // Vérifier si la couleur a changé ? Pour l'instant, on met à jour si le flag est activé.
-                 // Si on ne change jamais la couleur après l'init, on peut optimiser.
-                this.tempColor.setHex(agent.torsoColor.getHex());
-                this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
-                needsColorUpdate = true; // Assurer que le flag est bien positionné
+                 // Récupérer la couleur logique de l'agent et l'appliquer à l'instance
+                 this.tempColor.setHex(agent.torsoColor.getHex());
+                 this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
+                 needsColorUpdate = true; // Marquer que les couleurs doivent être envoyées au GPU
              }
-        } // Fin boucle agents
 
-        // 5. Marquer les InstancedMesh pour mise à jour GPU si nécessaire
+            // --- 4. Mettre à jour les Marqueurs de Débogage ---
+
+            // Marqueur Agent (Bleu) - Suit la position actuelle de l'agent
+            // Position: Position de l'agent + offset vertical fixe
+            // ***** Positionnement Corrigé *****
+            this.tempPosition.copy(agent.position).add(new THREE.Vector3(0, fixedMarkerYOffset, 0));
+            // *********************************
+            this.tempQuaternion.identity(); // Garder l'orientation du marqueur fixe (non alignée sur l'agent)
+            this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale); // Appliquer l'échelle de débogage
+            this.debugMarkerMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); // Composer la matrice du marqueur
+            // Appliquer la matrice à l'instance du marqueur agent
+            if (instanceId < this.instanceMeshes.agentMarker.count) {
+                this.instanceMeshes.agentMarker.setMatrixAt(instanceId, this.debugMarkerMatrix);
+                needsAgentMarkerUpdate = true; // Marquer que ce mesh doit être mis à jour
+            }
+
+            // Marqueur Domicile (Vert) - Position fixe au domicile de l'agent
+            if (agent.homePosition) {
+                 // Position: Position du domicile + offset vertical fixe
+                 this.tempPosition.copy(agent.homePosition).add(new THREE.Vector3(0, fixedMarkerYOffset, 0));
+                 this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale); // Appliquer l'échelle de débogage
+                 // Composer et appliquer la matrice (Quaternion est déjà identity)
+                 this.debugMarkerMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
+                 if (instanceId < this.instanceMeshes.homeMarker.count) {
+                     this.instanceMeshes.homeMarker.setMatrixAt(instanceId, this.debugMarkerMatrix);
+                 }
+            } else {
+                 // Si pas de domicile, mettre l'échelle à zéro pour cacher le marqueur
+                 this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
+                 if (instanceId < this.instanceMeshes.homeMarker.count) {
+                    this.instanceMeshes.homeMarker.setMatrixAt(instanceId, this.tempMatrix);
+                 }
+            }
+            needsHomeMarkerUpdate = true; // Marquer que ce mesh doit être mis à jour (même si caché)
+
+            // Marqueur Travail (Rouge) - Position fixe au lieu de travail de l'agent
+             if (agent.workPosition) {
+                  // Position: Position du travail + offset vertical fixe
+                  this.tempPosition.copy(agent.workPosition).add(new THREE.Vector3(0, fixedMarkerYOffset, 0));
+                  this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale); // Appliquer l'échelle de débogage
+                  // Composer et appliquer la matrice (Quaternion est déjà identity)
+                  this.debugMarkerMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
+                   if (instanceId < this.instanceMeshes.workMarker.count) {
+                     this.instanceMeshes.workMarker.setMatrixAt(instanceId, this.debugMarkerMatrix);
+                   }
+             } else {
+                  // Si pas de travail, mettre l'échelle à zéro pour cacher le marqueur
+                  this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
+                   if (instanceId < this.instanceMeshes.workMarker.count) {
+                    this.instanceMeshes.workMarker.setMatrixAt(instanceId, this.tempMatrix);
+                   }
+             }
+             needsWorkMarkerUpdate = true; // Marquer que ce mesh doit être mis à jour (même si caché)
+             // --------------------------------------------------
+
+        } // Fin de la boucle for sur les agents
+
+        // 5. Appliquer les mises à jour globales aux InstancedMesh (si nécessaire)
+        // Envoyer les nouvelles matrices au GPU pour les parties du corps
         if (needsMatrixUpdate) {
-            Object.values(this.instanceMeshes).forEach(mesh => {
-                 if(mesh.instanceMatrix) mesh.instanceMatrix.needsUpdate = true;
+            // Itérer sur les clés des meshes du corps
+            ['head', 'torso', 'hand', 'shoe'].forEach(key => {
+                 // Vérifier l'existence avant d'accéder à instanceMatrix (bonne pratique)
+                 if(this.instanceMeshes[key]?.instanceMatrix) {
+                     this.instanceMeshes[key].instanceMatrix.needsUpdate = true;
+                 }
             });
         }
-         // Marquer la couleur si besoin (fait après la boucle pour une seule MAJ)
-         if (needsColorUpdate && this.instanceMeshes.torso.instanceColor) {
+        // Envoyer les nouvelles couleurs au GPU pour le torse
+        if (needsColorUpdate && this.instanceMeshes.torso.instanceColor) {
             this.instanceMeshes.torso.instanceColor.needsUpdate = true;
         }
-    }
+        // Envoyer les nouvelles matrices au GPU pour les marqueurs de débogage
+        if (needsAgentMarkerUpdate && this.instanceMeshes.agentMarker?.instanceMatrix) {
+            this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
+        }
+        if (needsHomeMarkerUpdate && this.instanceMeshes.homeMarker?.instanceMatrix) {
+            this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
+        }
+        if (needsWorkMarkerUpdate && this.instanceMeshes.workMarker?.instanceMatrix) {
+            this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
+        }
+    } // --- Fin de la méthode update ---
     // --- FIN MODIFIÉ ---
 
-    // --- MODIFIÉ : Nettoie les citoyens du registre ---
     destroy() {
         console.log("AgentManager: Destruction...");
 
-        // 1. Retirer les meshes de la scène
+        // 1. Retirer les meshes (corps + debug)
         Object.values(this.instanceMeshes).forEach(mesh => {
-            if (mesh.parent) {
-                mesh.parent.remove(mesh);
-            }
-            // La géométrie est partagée (baseGeometries), disposée ci-dessous.
-            // Le matériau a été cloné pour chaque mesh, il faut le disposer.
+            if (mesh.parent) mesh.parent.remove(mesh);
             if (mesh.material && typeof mesh.material.dispose === 'function') {
                 mesh.material.dispose();
             }
         });
-        this.instanceMeshes = {}; // Vider la référence
+        this.instanceMeshes = {};
 
-        // 2. Disposer les géométries de base uniques
+        // 2. Disposer géométries (corps + debug)
         Object.values(this.baseGeometries).forEach(geom => {
              if (geom && typeof geom.dispose === 'function') geom.dispose();
         });
         this.baseGeometries = {};
-        console.log("AgentManager: Géométries de base disposées.");
+        console.log("AgentManager: Géométries de base (corps+debug) disposées.");
 
-        // 3. Disposer les matériaux de base uniques
+        // 3. Disposer matériaux (corps + debug)
         Object.values(this.baseMaterials).forEach(mat => {
             if (mat && typeof mat.dispose === 'function') mat.dispose();
         });
         this.baseMaterials = {};
-        console.log("AgentManager: Matériaux de base disposés.");
+        console.log("AgentManager: Matériaux de base (corps+debug) disposés.");
 
-        // 4. Nettoyer les agents logiques ET les références dans CityManager
+        // 4. Nettoyer agents logiques et refs CityManager
         const cityManager = this.experience?.world?.cityManager;
         this.agents.forEach(agent => {
-            // Retirer la référence du citoyen dans le registre global si elle existe
             if (cityManager && cityManager.citizens && cityManager.citizens.has(agent.id)) {
-                 cityManager.citizens.delete(agent.id);
-                 // Faut-il aussi le retirer de la liste 'occupants' des bâtiments ? Oui, idéalement.
-                 const citizenInfo = cityManager.getCitizenInfo(agent.id); // Récupérer avant delete
+                 const citizenInfo = cityManager.getCitizenInfo(agent.id);
                  if(citizenInfo) {
-                     if(citizenInfo.homeBuildingId) cityManager.getBuildingInfo(citizenInfo.homeBuildingId)?.occupants.splice(cityManager.getBuildingInfo(citizenInfo.homeBuildingId).occupants.indexOf(agent.id), 1);
-                     if(citizenInfo.workBuildingId) cityManager.getBuildingInfo(citizenInfo.workBuildingId)?.occupants.splice(cityManager.getBuildingInfo(citizenInfo.workBuildingId).occupants.indexOf(agent.id), 1);
+                     const homeBuilding = cityManager.getBuildingInfo(citizenInfo.homeBuildingId);
+                     if(homeBuilding?.occupants) homeBuilding.occupants.splice(homeBuilding.occupants.indexOf(agent.id), 1);
+                     const workBuilding = cityManager.getBuildingInfo(citizenInfo.workBuildingId);
+                     if(workBuilding?.occupants) workBuilding.occupants.splice(workBuilding.occupants.indexOf(agent.id), 1);
                  }
-
+                 cityManager.citizens.delete(agent.id);
             }
-            // Détruire l'agent logique (qui libère sa référence à 'experience')
             agent.destroy();
         });
-        this.agents = []; // Vider la liste locale
+        this.agents = [];
         console.log("AgentManager: Agents logiques détruits et références nettoyées.");
 
-        // 5. Nullifier les références internes
+        // 5. Nullifier références
         this.scene = null;
         this.experience = null;
         this.config = null;
         console.log("AgentManager: Détruit.");
     }
-    // --- FIN MODIFIÉ ---
 }
