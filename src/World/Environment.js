@@ -80,6 +80,19 @@ export default class Environment {
         this.setCloudMaterial(); // Crée le matériau partagé
     }
 
+	getCurrentHour() {
+        // Gérer le cas où le cycle est désactivé ou non initialisé
+        if (!this.isInitialized || !this.cycleEnabled || this.dayDurationMs <= 0) {
+             // Quelle heure retourner ? L'heure de départ ou midi ?
+             const initialNormalizedTime = this.config.startTimeOfDay ?? 0.25;
+             return Math.floor(initialNormalizedTime * 24); // Retourne l'heure de départ configurée
+             // return 12; // Ou retourner midi par défaut
+        }
+        // Calculer l'heure basée sur le temps de cycle actuel
+        const normalizedTime = (this.cycleTime % this.dayDurationMs) / this.dayDurationMs;
+        return Math.floor(normalizedTime * 24); // Heure entière de 0 à 23
+    }
+
     async initialize() {
         console.log("Environment: Initialisation asynchrone...");
         try {
@@ -573,43 +586,54 @@ export default class Environment {
 
     // --- MÉTHODE UPDATE MODIFIÉE ---
     update(deltaTime) {
-        // Appeler updateDayNightCycle seulement si initialisé
+        // Mettre à jour seulement si l'environnement est initialisé
         if (this.isInitialized) {
+
+            // 1. Mettre à jour le cycle Jour/Nuit (calcul couleurs, positions soleil/lune)
+            // Cette fonction utilise deltaTime pour faire avancer this.cycleTime
             this.updateDayNightCycle(deltaTime);
 
-            // --- Animation des nuages instanciés ---
-            const actualCloudSpeed = this.cloudAnimationSpeed * deltaTime;
-            const limit = this.config.mapSize * 1.2; // Limite avant de réapparaître
+            // 2. Animer les éléments (ex: nuages)
+            // Vérifier si des nuages instanciés existent
+            if (this.cloudInstancedMeshes.length > 0) {
+                const actualCloudSpeed = this.cloudAnimationSpeed * deltaTime; // Vitesse ajustée au delta time
+                // Utiliser une limite basée sur la taille de la skybox ou une valeur fixe grande
+                const limit = (this.skyboxRadius || this.config.mapSize * 1.5) * 1.1;
 
-            this.cloudInstancedMeshes.forEach(instancedMesh => {
-                let needsMatrixUpdate = false; // Drapeau pour ce mesh
+                // Boucler sur chaque InstancedMesh de nuages
+                this.cloudInstancedMeshes.forEach(instancedMesh => {
+                    let needsMatrixUpdate = false; // Drapeau pour ce mesh spécifique
 
-                for (let i = 0; i < instancedMesh.count; i++) {
-                    instancedMesh.getMatrixAt(i, _tempMatrix); // Récupérer la matrice actuelle
-                    _tempMatrix.decompose(_tempPosition, _tempQuaternion, _tempScale); // Décomposer
+                    // Boucler sur chaque instance DANS ce mesh
+                    for (let i = 0; i < instancedMesh.count; i++) {
+                        instancedMesh.getMatrixAt(i, _tempMatrix); // Récupérer la matrice actuelle
+                        _tempMatrix.decompose(_tempPosition, _tempQuaternion, _tempScale); // Décomposer
 
-                    // Appliquer le mouvement
-                    _tempPosition.x += actualCloudSpeed * (_tempScale.x * 10); // Vitesse dépend de l'échelle
+                        // Appliquer le mouvement (simple déplacement sur X)
+                        // La vitesse peut dépendre de l'échelle pour un effet de parallaxe
+                        _tempPosition.x += actualCloudSpeed * (_tempScale.x * 10 + 500); // Ajuster multiplicateur
 
-                    // Logique de wrap-around
-                    if (_tempPosition.x > limit) {
-                        _tempPosition.x = -limit;
-                        // Optionnel: changer Z aussi pour varier la trajectoire de retour
-                         _tempPosition.z = (Math.random() - 0.5) * (this.config.mapSize * 1.6);
+                        // Logique de "wrap-around" (réapparition de l'autre côté)
+                        if (_tempPosition.x > limit) {
+                            _tempPosition.x = -limit; // Réapparaît à gauche
+                            // Optionnel: changer Z ou Y pour varier la trajectoire de retour
+                             _tempPosition.z = (Math.random() - 0.5) * limit * 1.5; // Position Z aléatoire
+                             _tempPosition.y = 230 + (Math.random() - 0.5) * 90; // Hauteur aléatoire
+                             // Peut-être aussi changer l'échelle ou la rotation au retour ?
+                        }
+
+                        // Recomposer la matrice avec la nouvelle position
+                        _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+                        instancedMesh.setMatrixAt(i, _tempMatrix); // Remettre la matrice à jour
+                        needsMatrixUpdate = true; // Marquer que ce mesh a besoin d'une màj GPU
                     }
 
-                    // Recomposer la matrice avec la nouvelle position
-                    _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
-                    instancedMesh.setMatrixAt(i, _tempMatrix); // Remettre la matrice à jour
-                    needsMatrixUpdate = true; // Marquer que ce mesh a besoin d'une màj
-                }
-
-                // Mettre à jour instanceMatrix UNE SEULE FOIS par mesh, si des instances ont bougé
-                if (needsMatrixUpdate) {
-                    instancedMesh.instanceMatrix.needsUpdate = true;
-                }
-            });
-            // -----------------------------------
-        }
+                    // Mettre à jour instanceMatrix UNE SEULE FOIS par mesh, si des instances ont bougé
+                    if (needsMatrixUpdate) {
+                        instancedMesh.instanceMatrix.needsUpdate = true;
+                    }
+                }); // Fin boucle sur InstancedMeshes
+            } // Fin animation nuages
+        } // Fin if (isInitialized)
     }
 }

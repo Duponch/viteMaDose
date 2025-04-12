@@ -5,76 +5,36 @@ import RoadNetworkGenerator from './RoadNetworkGenerator.js';
 import PlotContentGenerator from './PlotContentGenerator.js';
 import CityAssetLoader from './CityAssetLoader.js';
 import District from './District.js';
-import NavigationGraph from './NavigationGraph.js'; // <-- AJOUTER IMPORT
-import Pathfinder from './Pathfinder.js';         // <-- AJOUTER IMPORT
+import NavigationGraph from './NavigationGraph.js';
+import Pathfinder from './Pathfinder.js';
 
 export default class CityManager {
     constructor(experience, config = {}) {
-        // ... (Le constructeur reste identique - collez votre constructeur ici) ...
         this.experience = experience;
         this.scene = this.experience.scene;
 
-		this.config = {
-			// Map & Layout
-			mapSize: 400,
-			roadWidth: 10,
-			minPlotSize: 13,
-			maxPlotSize: 40,
-			maxRecursionDepth: 7,
-
-			crosswalkWidth: 0.1, // Largeur visuelle du passage piéton
-            crosswalkHeight: 0.03, // Légère hauteur pour éviter z-fighting
-			crosswalkStripeCount: 5,    // Nombre de bandes blanches
-            crosswalkStripeWidth: 0.6, // Largeur de chaque bande blanche
-            crosswalkStripeGap: 0.5,   // Espace entre les bandes blanches
-
-			// District Formation
-			minDistrictSize: 5,
-			maxDistrictSize: 10,
-
-			// Probabilités initiales de type de parcelle (AVANT la logique de district)
-			parkProbability: 0.06,
-			industrialZoneProbability: 0.05,
-			houseZoneProbability: 0.50,
-			skyscraperZoneProbability: 0.10,
-
-			// Paramètres pour la détermination du type de DISTRICT basé sur la distance
-			forceBusinessMaxDistance: 0.15,
-			districtProbabilities: {
-				business: { max: 10, decay: 12 },
-				industrial: { threshold: 0.85, factor: 10, multiplier: 0.05, base: 0.0001 },
-				residential: { peakCenter: 0.5, peakWidth: 0.3, base: 0.05 }
-			},
-
-			// --- VALIDATION ET RÈGLES STRICTES ---
-			validationZoneCenterMaxDist: 0.20,
-			validationZoneEdgeMinDist: 0.80,
-			minBusinessInCenter: 1,
-			minIndustrialInEdge: 1,
-			strictMinIndustrialDist: 0.35,
-			strictMaxBusinessDist: 0.60,
-			minTotalIndustrialDistricts: 1,
-			maxTotalIndustrialDistricts: 5,
-			minTotalBusinessDistricts: 1,
-			maxTotalBusinessDistricts: 4,
-			maxDistrictRegenAttempts: 15,
-
-			// --- Contenu des Parcelles ---
-			sidewalkWidth: 2,
-			sidewalkHeight: 0.2,
-			centerlineWidth: 0.15,
-			centerlineHeight: 0.02,
-			minHouseSubZoneSize: 7,
-			minBuildingSubZoneSize: 10,
-			minIndustrialSubZoneSize: 13,
-			minParkSubZoneSize: 10,
-			minSkyscraperSubZoneSize: 13,
-			buildingSubZoneMargin: 1.5,
-
-			// --- Configuration des Assets ---
-            // Assurez-vous que ces chemins et configs sont corrects
-			houseModelDir: "Public/Assets/Models/Houses/",
-			houseModelFiles: [
+        // --- Configuration Initiale ---
+        // Mettez ici votre objet config *complet* par défaut
+        this.config = {
+            // Map & Layout
+            mapSize: 400, roadWidth: 10, minPlotSize: 13, maxPlotSize: 40, maxRecursionDepth: 7,
+            // Crosswalks
+            crosswalkWidth: 0.1, crosswalkHeight: 0.03, crosswalkStripeCount: 5, crosswalkStripeWidth: 0.6, crosswalkStripeGap: 0.5,
+            // Districts
+            minDistrictSize: 5, maxDistrictSize: 10, forceBusinessMaxDistance: 0.15,
+            districtProbabilities: { /* ... vos probas ... */ },
+            validationZoneCenterMaxDist: 0.20, validationZoneEdgeMinDist: 0.80,
+            minBusinessInCenter: 1, minIndustrialInEdge: 1,
+            strictMinIndustrialDist: 0.35, strictMaxBusinessDist: 0.60,
+            minTotalIndustrialDistricts: 1, maxTotalIndustrialDistricts: 5,
+            minTotalBusinessDistricts: 1, maxTotalBusinessDistricts: 4,
+            maxDistrictRegenAttempts: 15,
+            // Plot Content
+            sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
+            minHouseSubZoneSize: 7, minBuildingSubZoneSize: 10, minIndustrialSubZoneSize: 13,
+            minParkSubZoneSize: 10, minSkyscraperSubZoneSize: 13, buildingSubZoneMargin: 1.5,
+            // Assets (Chemins et configs - assurez-vous qu'ils sont corrects)
+            houseModelDir: "Public/Assets/Models/Houses/", houseModelFiles: [
 				{ file: "House1.fbx", scale: 1.3 },
 				{ file: "House2.fbx", scale: 1.3 },
 				{ file: "House3.fbx", scale: 1.3 },
@@ -100,10 +60,8 @@ export default class CityManager {
 				{ file: "House23.fbx", scale: 1.3 },
 				{ file: "House24.fbx", scale: 1.3 },
 			],
-			houseBaseWidth: 5, houseBaseHeight: 6, houseBaseDepth: 5,
-
-			buildingModelDir: "Public/Assets/Models/Buildings/",
-			buildingModelFiles: [
+            houseBaseWidth: 5, houseBaseHeight: 6, houseBaseDepth: 5,
+            buildingModelDir: "Public/Assets/Models/Buildings/", buildingModelFiles: [
 				{ file: "Building1.fbx", scale: 0.8 },
 				{ file: "Building2.fbx", scale: 0.8 },
 				{ file: "Building3.fbx", scale: 0.8 },
@@ -113,95 +71,74 @@ export default class CityManager {
 				{ file: "Building7.fbx", scale: 0.8 },
 				{ file: "Building8.fbx", scale: 0.8 },
 				{ file: "Building10.glb", scale: 0.8 },
-			],			
-			buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
+			],
+            buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
+            industrialModelDir: "Public/Assets/Models/Industrials/", industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 1 }, { file: "Factory2_glb.glb", scale: 1 }, { file: "Factory3_glb.glb", scale: 1 } ],
+            industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
+            parkModelDir: "Public/Assets/Models/Parks/", parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
+            parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
+            treeModelDir: "Public/Assets/Models/Trees/", treeModelFiles: [{ file: "Tree2.glb", scale: 0.9 }, { file: "Tree3.glb", scale: 0.9 }, { file: "Tree4.glb", scale: 0.9 }, { file: "Tree5.glb", scale: 0.9 }, { file: "Tree6.glb", scale: 0.9 } ],
+            treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
+            skyscraperModelDir: "Public/Assets/Models/Skyscrapers/", skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 }, ],
+            skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
+            // Tree Placement
+            treePlacementProbabilitySidewalk: 0.3, treePlacementProbabilityPark: 0.04, treePlacementProbabilityMargin: 0.008,
+            // Debug
+            showDistrictBoundaries: false,
+            // Time
+            dayNightCycleEnabled: true, dayDurationMinutes: 1, startTimeOfDay: 0.25,
+            // Agents
+            agentScale: 0.1, agentYOffset: 0.3, agentRotationSpeed: 8.0, agentWalkSpeed: 25,
+            agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7, agentSwingAmplitude: 1.2,
+            agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
+            agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
+        };
 
-			industrialModelDir: "Public/Assets/Models/Industrials/",
-			industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 1 }, { file: "Factory2_glb.glb", scale: 1 }, { file: "Factory3_glb.glb", scale: 1 } ],
-			industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
+        // --- Fusion Config Externe ---
+        // Utiliser une fusion profonde si nécessaire pour les objets imbriqués comme districtProbabilities
+        // Pour une simple fusion de premier niveau : Object.assign(this.config, config);
+        // Pour une fusion plus robuste (exemple simple, pourrait nécessiter une lib ou fonction récursive):
+        const deepMerge = (target, source) => {
+             for (const key in source) {
+                 if (source.hasOwnProperty(key)) {
+                     if (source[key] instanceof Object && key in target && target[key] instanceof Object) {
+                         deepMerge(target[key], source[key]);
+                     } else {
+                         target[key] = source[key];
+                     }
+                 }
+             }
+             return target;
+         };
+         deepMerge(this.config, config);
 
-			parkModelDir: "Public/Assets/Models/Parks/",
-			parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
-			parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
 
-			treeModelDir: "Public/Assets/Models/Trees/",
-			treeModelFiles: [{ file: "Tree2.glb", scale: 0.9 }, { file: "Tree3.glb", scale: 0.9 }, { file: "Tree4.glb", scale: 0.9 }, { file: "Tree5.glb", scale: 0.9 }, { file: "Tree6.glb", scale: 0.9 } ],
-			treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
-
-			skyscraperModelDir: "Public/Assets/Models/Skyscrapers/",
-			skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 }, ],
-			skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
-
-			// --- Placement des Arbres ---
-			treePlacementProbabilitySidewalk: 0.3,
-			treePlacementProbabilityPark: 0.04,
-			treePlacementProbabilityMargin: 0.008,
-
-			// --- Debug ---
-			showDistrictBoundaries: false,
-
-			dayNightCycleEnabled: true,
-			dayDurationMinutes: 1,
-			startTimeOfDay: 0.25, // <- AJOUTER CECI (0.25 = lever du soleil)
-
-			agentScale: 0.1,
-            agentYOffset: 0.3, // << NOUVEAU: Offset vertical pour surélever l'agent
-            // Nouveaux paramètres d'animation (basés sur l'HTML)
-			agentRotationSpeed: 8.0, // << NOUVEAU: Contrôle la fluidité/rapidité de rotation (plus haut = plus rapide)
-            agentWalkSpeed: 25,
-            agentBobAmplitude: 0.15,
-            agentStepLength: 1.5,
-            agentStepHeight: 0.7,
-            agentSwingAmplitude: 1.2,
-            agentAnkleRotationAmplitude: Math.PI / 8,
-            agentHandTiltAmplitude: 0.2,
-            agentHeadNodAmplitude: 0.05,
-            agentHeadYawAmplitude: 0.1,
-            agentHeadTiltAmplitude: 0.08,
-            agentHeadBobAmplitude: 0.06,
-
-			// --- Fusion des configurations externes ---
-			...config
-		};
-        // ... (fin du constructeur : materials, components, data, groups, etc.) ...
-        if (config.districtProbabilities) {
-            this.config.districtProbabilities.business = { ...this.config.districtProbabilities.business, ...config.districtProbabilities.business };
-            this.config.districtProbabilities.industrial = { ...this.config.districtProbabilities.industrial, ...config.districtProbabilities.industrial };
-            this.config.districtProbabilities.residential = { ...this.config.districtProbabilities.residential, ...config.districtProbabilities.residential };
-        }
+        // --- Matériaux ---
+        // Assurez-vous que tous vos matériaux sont définis ici
         this.materials = {
-            groundMaterial: new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.1, roughness: 0.8 }), // <-- MODIFIÉ
+            groundMaterial: new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.1, roughness: 0.8 }),
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
-			centerlineMaterial: new THREE.MeshStandardMaterial({
-				color: 0xffffff,    // Garder la couleur blanche de base
-				metalness: 0.1,     // Peu métallique (ajustable)
-				roughness: 0.8,     // Plutôt rugueux (ajustable)
-				// Pas besoin d'emissive, sauf si vous voulez qu'elles brillent légèrement la nuit
-				// emissive: 0x111111,
-				// emissiveIntensity: 0.5
-			}),
-			crosswalkMaterial: new THREE.MeshStandardMaterial({
-                color: 0xE0E0E0, // Blanc cassé
-                roughness: 0.7,
-                metalness: 0.1,
-                // Optionnel: Ajouter une texture de zébrures ici si vous en avez une
-                // map: textureLoader.load('path/to/crosswalk_texture.png'),
-            }),
+            centerlineMaterial: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.8 }),
+            crosswalkMaterial: new THREE.MeshStandardMaterial({ color: 0xE0E0E0, roughness: 0.7, metalness: 0.1 }),
             parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
             buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x333333 }),
             debugResidentialMat: new THREE.MeshBasicMaterial({ color: 0x0077ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugIndustrialMat: new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugBusinessMat: new THREE.MeshBasicMaterial({ color: 0xcc0000, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
-             debugDefaultMat: new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
+            debugDefaultMat: new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
         };
-		this.navigationGraph = null;
-        this.pathfinder = null;
 
+        // --- Composants ---
+        this.navigationGraph = null;
+        this.pathfinder = null;
         this.assetLoader = new CityAssetLoader(this.config);
         this.layoutGenerator = new CityLayoutGenerator(this.config);
         this.roadGenerator = new RoadNetworkGenerator(this.config, this.materials);
         this.contentGenerator = new PlotContentGenerator(this.config, this.materials);
-        this.districts = []; this.leafPlots = [];
+        this.districts = [];
+        this.leafPlots = [];
+
+        // --- Groupes Scène ---
         this.cityContainer = new THREE.Group(); this.cityContainer.name = "CityContainer";
         this.roadGroup = null;
         this.sidewalkGroup = null;
@@ -209,20 +146,154 @@ export default class CityManager {
         this.groundMesh = null;
         this.debugGroup = new THREE.Group(); this.debugGroup.name = "DebugVisuals";
 
+        // --- NOUVEAU: Registres ---
+        this.buildingInstances = new Map(); // Map<buildingInstanceId, BuildingInstanceInfo>
+        this.citizens = new Map();         // Map<citizenId, CitizenInfo>
+        this.nextBuildingInstanceId = 0;
+        // --------------------------
+
         this.scene.add(this.cityContainer);
         if (this.config.showDistrictBoundaries) { this.cityContainer.add(this.debugGroup); }
-        console.log("CityManager initialisé (Nouvelle logique de Districts).");
+        console.log("CityManager initialisé (avec registres Bâtiments & Citoyens).");
+    }
+
+	registerBuildingInstance(plotId, assetType, position, capacityOverride = null) {
+        const id = `bldg_${this.nextBuildingInstanceId++}`;
+        let capacity = 0;
+        let isWorkplace = false; // Pour déterminer si c'est un lieu de travail potentiel
+
+        switch (assetType) {
+            case 'house':
+                capacity = capacityOverride ?? this.config.maxCitizensPerHouse ?? 5;
+                break;
+            case 'building': // Supposons que 'building' soit résidentiel ici
+                capacity = capacityOverride ?? this.config.maxCitizensPerBuilding ?? 10;
+                break;
+            case 'skyscraper':
+                capacity = capacityOverride ?? this.config.maxWorkersPerSkyscraper ?? 100; // Capacité pour les travailleurs
+                isWorkplace = true;
+                break;
+             // Les autres types (industrial, park, tree) ont une capacité de 0 par défaut
+             case 'industrial':
+                 capacity = capacityOverride ?? this.config.maxWorkersPerIndustrial ?? 50; // Potentiellement lieu de travail
+                 isWorkplace = true;
+                 break;
+             case 'park':
+             default:
+                capacity = 0;
+                break;
+        }
+
+        const buildingInfo = {
+            id: id,
+            plotId: plotId,
+            type: assetType,
+            position: position.clone(), // Position de référence (entrée/centre)
+            capacity: capacity,
+            isWorkplace: isWorkplace,   // Indique si c'est un lieu de travail
+            occupants: [], // IDs des citoyens (résidents OU travailleurs)
+        };
+        this.buildingInstances.set(id, buildingInfo);
+        // console.log(`Building registered: ${id} (Type: ${assetType}, Plot: ${plotId}, Capacity: ${capacity}, Workplace: ${isWorkplace}) at`, position);
+        return buildingInfo; // Retourne l'info enregistrée, y compris l'ID généré
+    }
+
+	registerCitizen(citizenId, agentLogic) {
+        if (this.citizens.has(citizenId)) {
+            console.warn(`Citizen ${citizenId} déjà enregistré.`);
+            return this.citizens.get(citizenId);
+        }
+        const citizenInfo = {
+            id: citizenId,
+            agentLogic: agentLogic, // Référence à l'instance Agent logique
+            homeBuildingId: null,
+            workBuildingId: null,
+        };
+        this.citizens.set(citizenId, citizenInfo);
+        return citizenInfo;
+    }
+
+    assignHomeToCitizen(citizenId) {
+        const citizenInfo = this.citizens.get(citizenId);
+        if (!citizenInfo || citizenInfo.homeBuildingId) return false; // Déjà un domicile
+
+        // Trouver des maisons/immeubles résidentiels ('building') avec de la place
+        const potentialHomes = Array.from(this.buildingInstances.values()).filter(b =>
+            (b.type === 'house' || b.type === 'building') && // Uniquement maisons et immeubles (résidentiels)
+            b.occupants.length < b.capacity
+        );
+
+        if (potentialHomes.length === 0) {
+            console.warn(`Aucun domicile (maison/immeuble) disponible pour le citoyen ${citizenId}`);
+            return false;
+        }
+
+        // Choisir un domicile aléatoire parmi ceux disponibles
+        const home = potentialHomes[Math.floor(Math.random() * potentialHomes.length)];
+        home.occupants.push(citizenId); // Ajouter le citoyen aux occupants
+        citizenInfo.homeBuildingId = home.id; // Stocker l'ID du domicile
+
+        // Mettre à jour l'agent logique directement (meilleure pratique que de dépendre d'un autre appel)
+        if (citizenInfo.agentLogic) {
+            citizenInfo.agentLogic.homeBuildingId = home.id;
+        } else {
+             console.warn(`Agent logique manquant pour citoyen ${citizenId} lors de l'assignation du domicile.`);
+        }
+
+        console.log(`Citoyen ${citizenId} assigné au domicile ${home.id} (Type: ${home.type})`);
+        return true;
+    }
+
+	assignWorkplaceToCitizen(citizenId) {
+        const citizenInfo = this.citizens.get(citizenId);
+        if (!citizenInfo || citizenInfo.workBuildingId) return false; // Déjà un travail
+
+        // Trouver des bâtiments marqués comme 'isWorkplace' avec de la place
+        const potentialWorkplaces = Array.from(this.buildingInstances.values()).filter(b =>
+            b.isWorkplace && b.occupants.length < b.capacity
+        );
+
+        if (potentialWorkplaces.length === 0) {
+            console.warn(`Aucun lieu de travail (skyscraper/industrial) disponible pour le citoyen ${citizenId}`);
+            return false;
+        }
+
+        // Choisir un lieu de travail aléatoire
+        const workplace = potentialWorkplaces[Math.floor(Math.random() * potentialWorkplaces.length)];
+        workplace.occupants.push(citizenId); // Ajouter le citoyen aux 'occupants' (travailleurs)
+        citizenInfo.workBuildingId = workplace.id; // Stocker l'ID
+
+        // Mettre à jour l'agent logique directement
+        if (citizenInfo.agentLogic) {
+            citizenInfo.agentLogic.workBuildingId = workplace.id;
+        } else {
+             console.warn(`Agent logique manquant pour citoyen ${citizenId} lors de l'assignation du travail.`);
+        }
+
+        console.log(`Citoyen ${citizenId} assigné au lieu de travail ${workplace.id} (Type: ${workplace.type})`);
+        return true;
+    }
+
+    getBuildingInfo(buildingInstanceId) {
+        return this.buildingInstances.get(buildingInstanceId);
+    }
+
+    getCitizenInfo(citizenId) {
+        return this.citizens.get(citizenId);
     }
 
     async generateCity() {
         console.time("CityGeneration");
-        this.clearCity();
+        this.clearCity(); // Nettoie aussi les registres (voir clearCity modifié)
 
         try {
             console.log("--- Démarrage génération ville ---");
             this.createGlobalGround();
 
-            console.time("AssetLoading"); await this.assetLoader.loadAssets(); console.timeEnd("AssetLoading"); this.logLoadedAssets();
+            console.time("AssetLoading");
+            await this.assetLoader.loadAssets();
+            console.timeEnd("AssetLoading");
+            this.logLoadedAssets();
 
             console.time("LayoutGeneration");
             this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
@@ -232,150 +303,82 @@ export default class CityManager {
 
             if (!this.leafPlots || this.leafPlots.length === 0) throw new Error("Layout n'a produit aucune parcelle.");
 
-            // --- Logique Districts (inchangée) ---
+            // --- Logique Districts (inchangée en termes d'appel) ---
             let districtLayoutValid = false;
             let attempts = 0;
             console.time("DistrictFormationAndValidation");
             while (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
                 attempts++;
                 console.log(`\nTentative de formation/validation des districts #${attempts}...`);
-                this.districts = []; this.leafPlots.forEach(p => { p.districtId = null; });
-                this.createDistricts_V2(); this.logDistrictStats();
-                districtLayoutValid = this.validateDistrictLayout();
+                this.districts = []; this.leafPlots.forEach(p => { p.districtId = null; p.buildingInstances = []; }); // Réinit aussi buildingInstances sur les plots
+                this.createDistricts_V2(); // Fonction interne de création/assignation
+                this.logDistrictStats();
+                districtLayoutValid = this.validateDistrictLayout(); // Fonction interne de validation
                 if (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) { console.log(`Disposition invalide, nouvelle tentative...`); }
-                else if (!districtLayoutValid) { console.error(`ERREUR: Impossible d'obtenir une disposition de districts valide.`); }
+                else if (!districtLayoutValid) { console.error(`ERREUR: Impossible d'obtenir une disposition de districts valide après ${attempts} tentatives.`); }
             }
             console.timeEnd("DistrictFormationAndValidation");
             if (!districtLayoutValid) { throw new Error(`Échec critique: Disposition des districts invalide après ${attempts} tentatives.`); }
             console.log("Disposition des districts validée...");
             // --- Fin Logique Districts ---
 
-
             console.time("PlotTypeAdjustment");
-            this.adjustPlotTypesWithinDistricts();
+            this.adjustPlotTypesWithinDistricts(); // Fonction interne
             console.timeEnd("PlotTypeAdjustment");
-            this.assignDefaultTypeToUnassigned();
+            this.assignDefaultTypeToUnassigned(); // Fonction interne
             this.logAdjustedZoneTypes();
 
-
-            // --- RÉCUPÉRATION roadGroup et crosswalkInfos ---
             console.time("RoadAndCrosswalkInfoGeneration");
-            // Appel UNIQUE à generateRoads, récupération correcte des infos
             const { roadGroup, crosswalkInfos } = this.roadGenerator.generateRoads(this.leafPlots);
-            this.roadGroup = roadGroup; // Assignation à la propriété de classe
-            // AJOUT CORRECT du roadGroup (qui est un Object3D) au conteneur
+            this.roadGroup = roadGroup;
             this.cityContainer.add(this.roadGroup);
             console.timeEnd("RoadAndCrosswalkInfoGeneration");
             console.log(`Réseau routier généré et ${crosswalkInfos.length} emplacements de passages piétons identifiés.`);
-            // --- FIN CORRECTION ERREUR add ---
 
-			console.time("NavigationGraphBuilding");
+            console.time("NavigationGraphBuilding");
             this.navigationGraph = new NavigationGraph(this.config);
-            // Passez les parcelles feuilles et les infos des passages piétons
             this.navigationGraph.buildGraph(this.leafPlots, crosswalkInfos);
             console.timeEnd("NavigationGraphBuilding");
-            // --- FIN NOUVEAU ---
 
-            // --- NOUVEAU: Création du Pathfinder ---
             console.time("PathfinderInitialization");
-            // Passez le graphe de navigation que vous venez de créer
             this.pathfinder = new Pathfinder(this.navigationGraph);
             console.timeEnd("PathfinderInitialization");
 
-            // --- Génération Contenu (appel inchangé ici, mais crosswalkInfos est maintenant correct) ---
             console.time("ContentGeneration");
+            // --- MODIFIE : Passer CityManager à PlotContentGenerator ---
             const { sidewalkGroup, buildingGroup } = this.contentGenerator.generateContent(
                 this.leafPlots,
                 this.assetLoader,
-                crosswalkInfos // Passer les infos récupérées précédemment
+                crosswalkInfos,
+                this // <-- Passer la référence à CityManager
             );
+            // ----------------------------------------------------------
             this.sidewalkGroup = sidewalkGroup;
-            this.contentGroup = buildingGroup; // buildingGroup contient maintenant aussi les crosswalks
+            this.contentGroup = buildingGroup;
             this.cityContainer.add(this.sidewalkGroup);
             this.cityContainer.add(this.contentGroup);
             console.timeEnd("ContentGeneration");
-            // --- Fin Génération Contenu ---
 
-            if (this.config.showDistrictBoundaries) { console.time("DebugVisualsGeneration"); this.createDistrictDebugVisuals(); console.timeEnd("DebugVisualsGeneration"); }
+            // --- Vérification après génération de contenu ---
+            console.log(`Total Building Instances Registered: ${this.buildingInstances.size}`);
+            // -----------------------------------------------
 
-			// --- NOUVEAU: Lancer le premier pathfinding pour l'agent ---
-             // Fait ici car on a besoin du pathfinder et potentiellement de l'agent (créé dans World)
-             // Assurez-vous que World a déjà créé l'agent à ce stade, sinon déplacez cet appel.
-             // Pour l'instant, on suppose que l'agent est créé après dans World.initializeWorld
-             // On pourrait ajouter une méthode getAgent() à World ou passer le World au CityManager.
-             // Solution simple: appeler une méthode dans World APRES que l'agent soit créé.
-             // On le fera depuis World.initializeWorld après generateCityAsync.
+            if (this.config.showDistrictBoundaries) {
+                console.time("DebugVisualsGeneration");
+                this.createDistrictDebugVisuals(); // Fonction interne
+                console.timeEnd("DebugVisualsGeneration");
+            }
 
-            console.log("--- Génération ville terminée (avec passages piétons visuels corrigés) ---");
+            // L'appel à initiateAgentPathfinding a été supprimé ici.
+
+            console.log("--- Génération ville terminée ---");
 
         } catch (error) {
             console.error("Erreur majeure pendant la génération:", error);
-            this.clearCity();
+            this.clearCity(); // Assurer le nettoyage en cas d'erreur
         } finally {
             console.timeEnd("CityGeneration");
         }
-    }
-
-	initiateAgentPathfinding() {
-        console.log("CityManager: Lancement du pathfinding initial pour agents logiques...");
-
-        // --- Vérifier AgentManager ---
-        const agentManager = this.experience.world?.agentManager;
-        if (!agentManager || !agentManager.agents || agentManager.agents.length === 0) {
-             console.warn("CityManager: Impossible de lancer pathfinding (AgentManager ou agents logiques manquants).");
-             return;
-        }
-        const agents = agentManager.agents; // Obtenir la liste des agents logiques
-        // -----------------------------
-
-        if (!this.pathfinder || !this.leafPlots || !this.navigationGraph) {
-            console.warn("CityManager: Impossible de lancer pathfinding (pathfinder, plots ou navGraph manquants).");
-            return;
-        }
-
-        const houses = this.leafPlots.filter(plot => plot.zoneType === 'house');
-        if (houses.length < 2) {
-            console.warn("CityManager: Pas assez de maisons (< 2) pour un chemin A -> B.");
-             // Positionner les agents logiques au centre par défaut ?
-             const centerPos = new THREE.Vector3(0, this.navigationGraph.sidewalkHeight, 0);
-             agents.forEach(agent => { agent.position.copy(centerPos); agent.setPath(null); });
-            return;
-        }
-
-        agents.forEach(agent => { // Itérer sur les agents logiques
-            let plotA = houses[Math.floor(Math.random() * houses.length)];
-            let plotB;
-            do {
-                plotB = houses[Math.floor(Math.random() * houses.length)];
-            } while (plotA.id === plotB.id);
-
-            console.log(`CityManager: Chemin demandé pour Agent logique ${agent.id} de Maison ${plotA.id} à Maison ${plotB.id}`);
-
-            const startPos = plotA.center.clone();
-            startPos.y = this.navigationGraph.sidewalkHeight;
-            const endPos = plotB.center.clone();
-            endPos.y = this.navigationGraph.sidewalkHeight;
-
-            // --- Supprimer la manipulation directe de agent.model.position ---
-            // La position de départ sera définie par agent.setPath()
-            // --------------------------------------------------------------
-
-            console.time(`InitialPathfinding_Agent${agent.id}`);
-            const path = this.pathfinder.findPath(startPos, endPos);
-            console.timeEnd(`InitialPathfinding_Agent${agent.id}`);
-
-            if (path && path.length > 0) {
-                const agentDebugColor = agent.debugPathColor || 0xff00ff;
-                // Passer l'AGENT LOGIQUE à setAgentPathForAgent
-                this.experience.world.setAgentPathForAgent(agent, path, agentDebugColor);
-                console.log(`CityManager: Chemin initial envoyé pour Agent logique ${agent.id}.`);
-            } else {
-                console.warn(`CityManager: Aucun chemin initial trouvé pour Agent logique ${agent.id}.`);
-                 // Mettre l'agent logique à la position de départ et sans chemin
-                 agent.position.copy(startPos);
-                 agent.setPath(null);
-            }
-        });
     }
 
 	createGlobalGround() {
@@ -901,55 +904,50 @@ export default class CityManager {
 
 	clearCity() {
         console.log("Nettoyage de la ville existante...");
-        // Retirer les groupes de la scène
+        // Retirer les groupes de la scène et nettoyer leur contenu
         if(this.roadGroup && this.roadGroup.parent) this.cityContainer.remove(this.roadGroup);
-        if(this.sidewalkGroup && this.sidewalkGroup.parent) this.cityContainer.remove(this.sidewalkGroup);
-        if(this.contentGroup && this.contentGroup.parent) this.cityContainer.remove(this.contentGroup);
-        if(this.debugGroup && this.debugGroup.parent) this.cityContainer.remove(this.debugGroup);
-
-        // Nettoyer le contenu des groupes (géométries, matériaux si nécessaire)
-        const disposeGroup = (group) => {
-          if (!group) return;
-          while(group.children.length > 0){
-              const obj = group.children[0];
-              group.remove(obj);
-              if(obj.geometry) obj.geometry.dispose();
-              // Attention aux matériaux partagés, ne pas disposer ici si réutilisés
-              // if(obj.material) {
-              //     if(Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-              //     else obj.material.dispose();
-              // }
-          }
-        };
         disposeGroup(this.roadGroup);
+        if(this.sidewalkGroup && this.sidewalkGroup.parent) this.cityContainer.remove(this.sidewalkGroup);
         disposeGroup(this.sidewalkGroup);
-        disposeGroup(this.contentGroup);
+        if(this.contentGroup && this.contentGroup.parent) this.cityContainer.remove(this.contentGroup);
+        disposeGroup(this.contentGroup); // Dispose InstancedMesh géométries/matériaux internes si non partagés
+        if(this.debugGroup && this.debugGroup.parent) this.cityContainer.remove(this.debugGroup);
         disposeGroup(this.debugGroup);
 
         // Nettoyer le sol global
         if (this.groundMesh) {
-            if (this.groundMesh.parent) this.groundMesh.parent.remove(this.groundMesh);
+            if (this.groundMesh.parent) this.scene.remove(this.groundMesh); // Retirer de la scène globale
             if (this.groundMesh.geometry) this.groundMesh.geometry.dispose();
-            // Matériau global (groundMaterial) est disposé dans destroy()
+            // Le matériau groundMaterial sera disposé dans destroy()
             this.groundMesh = null;
         }
 
-        // Réinitialiser les générateurs et listes si nécessaire
+        // Réinitialiser les générateurs et composants
         this.roadGenerator?.reset();
-        this.contentGenerator?.reset(this.assetLoader); // reset a besoin de l'asset loader
+        // Reset de contentGenerator doit être fait AVANT disposeAssets si les assets sont utilisés dedans
+        this.contentGenerator?.reset(this.assetLoader);
         this.layoutGenerator?.reset();
 
-        // --- AJOUT: Nettoyer Graphe et Pathfinder ---
+        // --- NOUVEAU: Nettoyer Graphe et Pathfinder ---
         this.navigationGraph?.destroy();
         this.navigationGraph = null;
-        this.pathfinder = null; // Pathfinder n'a pas de méthode destroy mais on libère la réf
+        this.pathfinder = null; // Pas de méthode destroy, juste libérer la référence
         // --------------------------------------------
 
+        // Vider les listes
         this.leafPlots = [];
         this.districts = [];
         this.roadGroup = null;
         this.sidewalkGroup = null;
         this.contentGroup = null;
+
+        // --- NOUVEAU : Nettoyer les registres ---
+        // Pas besoin de boucler pour disposer, car les infos sont juste des données JS
+        // et les références aux agents/bâtiments seront gérées par leurs managers respectifs.
+        this.buildingInstances.clear();
+        this.citizens.clear();
+        this.nextBuildingInstanceId = 0; // Réinitialiser le compteur d'ID
+        // ---------------------------------------
 
         console.log("Nettoyage terminé.");
     }
@@ -988,9 +986,9 @@ export default class CityManager {
 
     destroy() {
         console.log("Destruction du CityManager...");
-        this.clearCity(); // Nettoie déjà la plupart des éléments
+        this.clearCity(); // Nettoie déjà la plupart des éléments et les registres
 
-        // Dispose des matériaux centraux
+        // Dispose des matériaux centraux (ceux créés dans le constructeur de CityManager)
         Object.values(this.materials).forEach(material => {
             if (material && typeof material.dispose === 'function') {
                 material.dispose();
@@ -998,26 +996,62 @@ export default class CityManager {
         });
         this.materials = {};
 
-         // Détruire AssetLoader (qui dispose ses assets)
+         // Détruire AssetLoader (qui dispose ses propres assets chargés)
         this.assetLoader?.disposeAssets();
 
 
-        // Retirer le conteneur principal
+        // Retirer le conteneur principal s'il est encore attaché (normalement fait dans clearCity)
         if (this.cityContainer && this.cityContainer.parent) {
            this.cityContainer.parent.remove(this.cityContainer);
         }
 
-        // Nullifier les références
-        this.assetLoader = null; this.layoutGenerator = null; this.roadGenerator = null;
-        this.contentGenerator = null; this.experience = null; this.scene = null;
-        this.districts = null; this.leafPlots = null;
-        this.cityContainer = null; this.debugGroup = null;
-        this.navigationGraph = null; this.pathfinder = null; // Assurer la nullification
+        // Nullifier toutes les références pour aider le garbage collector
+        this.experience = null;
+        this.scene = null;
+        this.assetLoader = null;
+        this.layoutGenerator = null;
+        this.roadGenerator = null;
+        this.contentGenerator = null;
+        this.navigationGraph = null; // Déjà nullifié dans clearCity mais répété pour sûreté
+        this.pathfinder = null;      // Déjà nullifié dans clearCity mais répété pour sûreté
+        this.districts = null;
+        this.leafPlots = null;
+        this.cityContainer = null;
+        this.debugGroup = null;
+        this.roadGroup = null;
+        this.sidewalkGroup = null;
+        this.contentGroup = null;
+        this.groundMesh = null;
+
+        // --- NOUVEAU : Nullifier les registres ---
+        this.buildingInstances = null; // Assurer la nullification
+        this.citizens = null;
+        // ----------------------------------------
+
         console.log("CityManager détruit.");
     }
 
     getPlots() { return this.leafPlots || []; }
     getDistricts() { return this.districts || []; }
+
+	getNavigationGraph() {
+        return this.navigationGraph; // Doit retourner la propriété 'navigationGraph'
+    }
+    // ---------------------------------
+
+    getPathfinder() {
+        return this.pathfinder;
+    }
+
+    /** @returns {Map<string, object>} Map des instances de bâtiments enregistrées. */
+    getBuildingInstances() {
+        return this.buildingInstances;
+    }
+
+     /** @returns {Map<string, object>} Map des citoyens enregistrés. */
+    getCitizens() {
+        return this.citizens;
+    }
 
     logLoadedAssets() { /* ... inchangé ... */
        if (!this.assetLoader || !this.assetLoader.assets) return;
@@ -1062,3 +1096,13 @@ export default class CityManager {
     update() { /* ... inchangé ... */ }
 
 } // Fin de la classe CityManager
+
+function disposeGroup(group) {
+	if (!group) return;
+	while(group.children.length > 0){
+		const obj = group.children[0];
+		group.remove(obj);
+		if(obj.geometry) obj.geometry.dispose();
+		// Ne pas disposer les matériaux ici s'ils sont partagés via CityManager.materials
+	}
+  }
