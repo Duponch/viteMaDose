@@ -88,7 +88,7 @@ export default class CityManager {
             // Time
             dayNightCycleEnabled: true, dayDurationMinutes: 1, startTimeOfDay: 0.25,
             // Agents
-            agentScale: 0.1, agentYOffset: 0.3, agentRotationSpeed: 8.0, agentWalkSpeed: 25,
+            agentScale: 0.1, agentYOffset: 0.3, agentRotationSpeed: 8.0, agentWalkSpeed: 700,
             agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7, agentSwingAmplitude: 1.2,
             agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
             agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
