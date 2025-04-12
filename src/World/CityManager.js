@@ -17,7 +17,7 @@ export default class CityManager {
         // Mettez ici votre objet config *complet* par défaut
         this.config = {
             // Map & Layout
-            mapSize: 400, roadWidth: 10, minPlotSize: 13, maxPlotSize: 40, maxRecursionDepth: 7,
+            mapSize: 800, roadWidth: 10, minPlotSize: 13, maxPlotSize: 40, maxRecursionDepth: 7,
             // Crosswalks
             crosswalkWidth: 0.1, crosswalkHeight: 0.03, crosswalkStripeCount: 5, crosswalkStripeWidth: 0.6, crosswalkStripeGap: 0.5,
             // Districts
@@ -93,6 +93,7 @@ export default class CityManager {
             agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
             agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
 			agentAnimationSpeedFactor: 8, // 1.0 = vitesse normale, <1.0 = plus lent, >1.0 = plus rapide
+			maxAgents: 500,
         };
 
         // --- Fusion Config Externe ---
@@ -151,7 +152,6 @@ export default class CityManager {
         this.buildingInstances = new Map(); // Map<buildingInstanceId, BuildingInstanceInfo>
         this.citizens = new Map();         // Map<citizenId, CitizenInfo>
         this.nextBuildingInstanceId = 0;
-		this.maxAgents = 1;
         // --------------------------
 
 
