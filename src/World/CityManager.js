@@ -144,7 +144,20 @@ export default class CityManager {
 			dayDurationMinutes: 1,
 			startTimeOfDay: 0.25, // <- AJOUTER CECI (0.25 = lever du soleil)
 
-			agentScale: 10, // Ajustez cette valeur par défaut selon vos besoins
+			agentScale: 0.1,
+            agentYOffset: 0.55, // << NOUVEAU: Offset vertical pour surélever l'agent
+            // Nouveaux paramètres d'animation (basés sur l'HTML)
+            agentWalkSpeed: 20,
+            agentBobAmplitude: 0.15,
+            agentStepLength: 1.5,
+            agentStepHeight: 0.7,
+            agentSwingAmplitude: 1.2,
+            agentAnkleRotationAmplitude: Math.PI / 8,
+            agentHandTiltAmplitude: 0.2,
+            agentHeadNodAmplitude: 0.05,
+            agentHeadYawAmplitude: 0.1,
+            agentHeadTiltAmplitude: 0.08,
+            agentHeadBobAmplitude: 0.06,
 
 			// --- Fusion des configurations externes ---
 			...config
@@ -303,74 +316,66 @@ export default class CityManager {
     }
 
 	initiateAgentPathfinding() {
-		console.log("CityManager: Lancement du pathfinding initial pour tous les agents...");
-		// Vérifications initiales (inchangées)
-		if (!this.pathfinder || !this.leafPlots || !this.experience.world || !this.experience.world.agents || this.experience.world.agents.length === 0) {
-			console.warn("CityManager: Impossible de lancer le pathfinding initial (pathfinder, plots ou agents manquants).");
-			return;
-		}
-		if (!this.navigationGraph) {
-			 console.warn("CityManager: Impossible de lancer le pathfinding initial (navigationGraph manquant).");
-			 return;
-		}
+        console.log("CityManager: Lancement du pathfinding initial pour agents logiques...");
 
-		// Récupérer les maisons (inchangé)
-		const houses = this.leafPlots.filter(plot => plot.zoneType === 'house');
-		if (houses.length < 2) {
-			console.warn("CityManager: Pas assez de maisons (< 2) pour un chemin A -> B.");
-			// Optionnel : donner un chemin par défaut ou laisser les agents immobiles
-			 this.experience.world.agents.forEach(agent => {
-				 if(agent.model) agent.model.position.set(0, this.navigationGraph.sidewalkHeight, 0); // Placer au centre par défaut
-			 });
-			return;
-		}
+        // --- Vérifier AgentManager ---
+        const agentManager = this.experience.world?.agentManager;
+        if (!agentManager || !agentManager.agents || agentManager.agents.length === 0) {
+             console.warn("CityManager: Impossible de lancer pathfinding (AgentManager ou agents logiques manquants).");
+             return;
+        }
+        const agents = agentManager.agents; // Obtenir la liste des agents logiques
+        // -----------------------------
 
-		// Pour chaque agent... (inchangé sauf pour l'accès au modèle)
-		this.experience.world.agents.forEach(agent => {
-			// --- Vérifier si l'agent et son modèle existent ---
-			if (!agent || !agent.model) {
-				console.warn(`CityManager: Agent ${agent?.id} ou son modèle est manquant, impossible de lancer le pathfinding.`);
-				return; // Passer à l'agent suivant
-			}
-			// ----------------------------------------------------
+        if (!this.pathfinder || !this.leafPlots || !this.navigationGraph) {
+            console.warn("CityManager: Impossible de lancer pathfinding (pathfinder, plots ou navGraph manquants).");
+            return;
+        }
 
-			let plotA = houses[Math.floor(Math.random() * houses.length)];
-			let plotB;
-			do {
-				plotB = houses[Math.floor(Math.random() * houses.length)];
-			} while (plotA.id === plotB.id);
+        const houses = this.leafPlots.filter(plot => plot.zoneType === 'house');
+        if (houses.length < 2) {
+            console.warn("CityManager: Pas assez de maisons (< 2) pour un chemin A -> B.");
+             // Positionner les agents logiques au centre par défaut ?
+             const centerPos = new THREE.Vector3(0, this.navigationGraph.sidewalkHeight, 0);
+             agents.forEach(agent => { agent.position.copy(centerPos); agent.setPath(null); });
+            return;
+        }
 
-			console.log(`CityManager: Chemin demandé pour Agent ${agent.id} de Maison ${plotA.id} à Maison ${plotB.id}`);
+        agents.forEach(agent => { // Itérer sur les agents logiques
+            let plotA = houses[Math.floor(Math.random() * houses.length)];
+            let plotB;
+            do {
+                plotB = houses[Math.floor(Math.random() * houses.length)];
+            } while (plotA.id === plotB.id);
 
-			// Déterminer points départ/arrivée (inchangé)
-			const startPos = plotA.center.clone();
-			startPos.y = this.navigationGraph.sidewalkHeight; // Utiliser la hauteur du navGraph
-			const endPos = plotB.center.clone();
-			endPos.y = this.navigationGraph.sidewalkHeight;   // Utiliser la hauteur du navGraph
+            console.log(`CityManager: Chemin demandé pour Agent logique ${agent.id} de Maison ${plotA.id} à Maison ${plotB.id}`);
 
-			// --- CORRECTION: Positionner le MODÈLE de l'agent ---
-			// agent.mesh.position.copy(startPos); // <--- ANCIENNE LIGNE (ERREUR)
-			agent.model.position.copy(startPos);    // <--- NOUVELLE LIGNE
-			// -------------------------------------------------
+            const startPos = plotA.center.clone();
+            startPos.y = this.navigationGraph.sidewalkHeight;
+            const endPos = plotB.center.clone();
+            endPos.y = this.navigationGraph.sidewalkHeight;
 
-			// Demander le chemin (inchangé)
-			console.time(`InitialPathfinding_Agent${agent.id}`);
-			const path = this.pathfinder.findPath(startPos, endPos);
-			console.timeEnd(`InitialPathfinding_Agent${agent.id}`);
+            // --- Supprimer la manipulation directe de agent.model.position ---
+            // La position de départ sera définie par agent.setPath()
+            // --------------------------------------------------------------
 
-			// Transmettre le chemin et la couleur debug (inchangé)
-			if (path && path.length > 0) {
-				// Utiliser la couleur stockée dans l'agent (si besoin) ou générer une nouvelle
-				const agentDebugColor = agent.debugPathColor || 0xff00ff; // Fallback si non défini
-				this.experience.world.setAgentPathForAgent(agent, path, agentDebugColor);
-				console.log(`CityManager: Chemin initial envoyé pour Agent ${agent.id}.`);
-			} else {
-				console.warn(`CityManager: Aucun chemin initial trouvé pour Agent ${agent.id} entre les maisons.`);
-				// Laisser l'agent à sa position startPos sans chemin
-                 agent.setPath(null); // Assurer qu'il n'a pas de chemin actif
-			}
-		});
-	}
+            console.time(`InitialPathfinding_Agent${agent.id}`);
+            const path = this.pathfinder.findPath(startPos, endPos);
+            console.timeEnd(`InitialPathfinding_Agent${agent.id}`);
+
+            if (path && path.length > 0) {
+                const agentDebugColor = agent.debugPathColor || 0xff00ff;
+                // Passer l'AGENT LOGIQUE à setAgentPathForAgent
+                this.experience.world.setAgentPathForAgent(agent, path, agentDebugColor);
+                console.log(`CityManager: Chemin initial envoyé pour Agent logique ${agent.id}.`);
+            } else {
+                console.warn(`CityManager: Aucun chemin initial trouvé pour Agent logique ${agent.id}.`);
+                 // Mettre l'agent logique à la position de départ et sans chemin
+                 agent.position.copy(startPos);
+                 agent.setPath(null);
+            }
+        });
+    }
 
 	createGlobalGround() {
         if (this.groundMesh && this.groundMesh.parent) return;

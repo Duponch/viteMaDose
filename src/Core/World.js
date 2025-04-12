@@ -2,8 +2,10 @@
 import * as THREE from 'three';
 import Environment from '../World/Environment.js';
 import CityManager from '../World/CityManager.js';
-import Agent from '../World/Agent.js';
-// FBXLoader et SkeletonUtils ont été retirés des imports
+// import Agent from '../World/Agent.js'; // Agent logique est utilisé par AgentManager
+import AgentManager from '../World/AgentManager.js'; // <-- IMPORTER AgentManager
+
+// FBXLoader et SkeletonUtils ne sont plus nécessaires
 
 export default class World {
     constructor(experience) {
@@ -11,7 +13,11 @@ export default class World {
         this.scene = this.experience.scene;
         this.cityManager = new CityManager(this.experience);
         this.environment = new Environment(this.experience, this);
-        this.agents = [];
+
+        // --- NOUVEAU: AgentManager gère les agents ---
+        this.agentManager = null; // Sera initialisé dans initializeWorld
+        this.agents = null; // La référence directe aux agents logiques est maintenant dans agentManager
+        // --------------------------------------------
 
         // --- Groupes pour les visualisations de débogage ---
         this.debugNavGridGroup = new THREE.Group();
@@ -22,24 +28,12 @@ export default class World {
         this.debugAgentPathGroup.name = "DebugAgentPath";
         this.scene.add(this.debugAgentPathGroup);
 
-        // --- Suppression de la logique FBX ---
-        // this.fbxLoader = new FBXLoader();
-        // this.agentModelAsset = null;
-        // this.agentModelPath = 'Public/Assets/Models/Cityzen/Man_Walking.fbx';
-        // ------------------------------------
-
         this.initializeWorld(); // Appel initial
     }
 
     async initializeWorld() {
-        console.log("World: Initialisation asynchrone...");
+        console.log("World: Initialisation asynchrone (avec AgentManager)...");
         try {
-            // --- Suppression du chargement modèle Agent FBX ---
-            // console.time("AgentModelLoading");
-            // ... (code de chargement FBX supprimé) ...
-            // console.timeEnd("AgentModelLoading");
-            // -----------------------------------------
-
             await this.environment.initialize();
             console.log("World: Environnement initialisé.");
 
@@ -53,57 +47,77 @@ export default class World {
                 console.warn("World: navigationGraph non trouvé dans cityManager après generateCity.");
             }
 
-            // Créer les agents (utiliseront maintenant leur propre géométrie simple)
-            this.createAgents();
+            // --- NOUVEAU: Initialiser AgentManager ---
+            const maxAgents = 500; // Définir le nombre maximum
+            this.agentManager = new AgentManager(
+                this.scene,
+                this.experience,
+                this.cityManager.config, // Passer la config (contient agentScale etc.)
+                maxAgents
+            );
+            console.log("World: AgentManager initialisé.");
+            // -----------------------------------------
 
-            // Lancer le pathfinding initial (qui a besoin des agents créés)
-            this.cityManager.initiateAgentPathfinding();
+            // Créer les agents logiques via AgentManager
+            this.createAgents(maxAgents); // Passer le nombre désiré
 
-            console.log("World: Initialisation complète.");
+            // Lancer le pathfinding initial (utilise maintenant les agents logiques)
+            this.cityManager.initiateAgentPathfinding(); // Cette méthode doit être adaptée ci-dessous
+
+            console.log("World: Initialisation complète (avec agents instanciés).");
 
         } catch (error) {
             console.error("World: Erreur lors de l'initialisation asynchrone:", error);
         }
     }
 
-    createAgents() {
-        // Vérifier si navGraph est prêt (inchangé)
-         if (!this.cityManager?.navigationGraph) {
+    // Modifié: Crée des agents logiques via AgentManager
+    createAgents(numberOfAgents) {
+         if (!this.agentManager) {
+             console.error("World: AgentManager non initialisé, impossible de créer des agents.");
+             return;
+         }
+          if (!this.cityManager?.navigationGraph) {
              console.error("World: Tentative de créer des agents mais le NavigationGraph n'est pas prêt.");
              return;
+         }
+
+         // Nettoyer les anciens agents logiques si nécessaire (dans AgentManager?)
+         // Pour l'instant, on suppose une création unique à l'initialisation
+
+        console.log(`World: Création de ${numberOfAgents} agents logiques via AgentManager...`);
+        const sidewalkHeight = this.cityManager.navigationGraph.sidewalkHeight;
+
+        for (let i = 0; i < numberOfAgents; i++) {
+            // Position de départ aléatoire simple pour l'exemple
+             const startPos = this.cityManager.navigationGraph.gridToWorld(
+                 Math.floor(Math.random() * this.cityManager.navigationGraph.gridWidth),
+                 Math.floor(Math.random() * this.cityManager.navigationGraph.gridHeight)
+             );
+             // S'assurer qu'elle est marchable ? Pour l'instant non, pathfinding corrigera.
+             if (startPos) {
+                 startPos.y = sidewalkHeight; // Assurer la bonne hauteur
+                 this.agentManager.createAgent(startPos); // Demander la création au manager
+             } else {
+                 this.agentManager.createAgent(new THREE.Vector3(0, sidewalkHeight, 0)); // Fallback
+             }
         }
-
-        // Si des agents existaient déjà, les supprimer (inchangé)
-        if (this.agents && this.agents.length > 0) {
-            this.agents.forEach(agent => agent.destroy());
-            this.agents = [];
-        }
-
-        const numAgents = 300; // Ou lire depuis config si besoin
-        // const sidewalkHeight = this.cityManager.navigationGraph.sidewalkHeight; // Pas directement nécessaire ici
-
-        // --- NOUVEAU: Lire l'échelle depuis la config ---
-        // Fournir une valeur par défaut (ex: 1.0) si non définie dans la config
-        const agentScale = this.cityManager.config.agentScale !== undefined ? this.cityManager.config.agentScale : 1.0;
-        console.log(`World: Utilisation de l'échelle ${agentScale} pour les agents.`);
-        // -----------------------------------------------
-
-        for (let i = 0; i < numAgents; i++) {
-            // Couleur aléatoire pour le corps
-            const agentColor = new THREE.Color(Math.random(), Math.random(), Math.random());
-            const hexColor = agentColor.getHex();
-
-            // Créer l'agent en passant la scène, l'expérience, l'ID, la couleur ET l'échelle.
-            const agent = new Agent(this.scene, this.experience, i, hexColor, agentScale); // <-- MODIFIÉ
-            this.agents.push(agent);
-        }
-        // Message de log mis à jour
-        console.log(`World: ${this.agents.length} agents (Rayman-style, scale=${agentScale}) créés.`);
+        console.log(`World: ${this.agentManager.agents.length} agents logiques créés.`);
     }
 
-    setAgentPathForAgent(agent, pathPoints, pathColor) {
-        // Recherche/suppression ancien chemin debug (inchangé)
-        const agentPathName = `AgentPath_${agent.id}`;
+    // Modifié: Met à jour le chemin de l'agent logique
+    setAgentPathForAgent(agentLogic, pathPoints, pathColor) {
+        // NOTE: 'agentLogic' ici est maintenant l'objet état retourné par AgentManager,
+        // ou l'objet état trouvé via agentManager.getAgentById(...)
+        if (!agentLogic) {
+            console.warn("World: Tentative de définir un chemin pour un agent logique invalide.");
+            return;
+        }
+
+        const agentId = agentLogic.id; // Utiliser l'ID stocké
+        const agentPathName = `AgentPath_${agentId}`;
+
+        // Recherche/suppression ancien chemin debug (INCHANGÉ)
         const existingPath = this.debugAgentPathGroup.getObjectByName(agentPathName);
         if (existingPath) {
              this.debugAgentPathGroup.remove(existingPath);
@@ -111,53 +125,49 @@ export default class World {
              if (existingPath.material) existingPath.material.dispose();
         }
 
-        // Création visualisation tube chemin (inchangé)
-        if (pathPoints && pathPoints.length > 1) {
+        // Création visualisation tube chemin (INCHANGÉ)
+        if (pathPoints && pathPoints.length > 1 && this.cityManager.navigationGraph) { // Ajout check navgraph
              const curve = new THREE.CatmullRomCurve3(pathPoints);
-             const tubeGeometry = new THREE.TubeGeometry(curve, 64, 1, 8, false); // Rayon plus fin
+             const tubeGeometry = new THREE.TubeGeometry(curve, 64, 0.1, 8, false);
              const tubeMaterial = new THREE.MeshBasicMaterial({ color: pathColor });
              const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
              tubeMesh.name = agentPathName;
-             tubeMesh.position.y = this.cityManager.navigationGraph.sidewalkHeight + 0.02; // Légèrement au-dessus trottoir
+             // Positionner le tube légèrement au-dessus du sol
+             tubeMesh.position.y = this.cityManager.navigationGraph.sidewalkHeight + 0.02;
              this.debugAgentPathGroup.add(tubeMesh);
         }
 
-        // Donner le chemin à l'agent.
-        // La méthode agent.setPath s'occupe maintenant de positionner le this.model (le groupe Rayman)
-        if (agent && agent.model) { // On vérifie toujours que l'agent et son modèle (groupe) existent
-            if (pathPoints && pathPoints.length > 0) {
-                // Appeler setPath de l'agent, qui gère la position initiale
-                agent.setPath(pathPoints);
-            } else {
-                 // Si pas de chemin, on arrête l'agent
-                 agent.setPath(null);
-            }
-        } else {
-            console.warn(`World: Tentative de définir un chemin mais l'agent ${agent?.id} ou son modèle n'existe pas.`);
-        }
+        // Donner le chemin à l'agent logique via sa méthode setPath
+        agentLogic.setPath(pathPoints);
+
+        // !! IMPORTANT: Ne plus toucher à agent.model.position ici !!
+        // La position initiale est gérée par agentLogic.setPath,
+        // et la position visuelle est gérée par AgentManager.update
     }
 
     update() {
         const deltaTime = this.experience.time.delta;
-        // const normalizedHealth = 0.8; // Exemple, si utilisé par l'environnement
         this.cityManager?.update();
-        // Mettre à jour l'environnement (gère cycle jour/nuit, etc.)
-        this.environment?.update(deltaTime); // Ne passe plus normalizedHealth ici
-        // Mettre à jour chaque agent (qui mettra à jour sa position et son animation procédurale)
-        this.agents.forEach(agent => agent.update(deltaTime));
+        this.environment?.update(deltaTime);
+
+        // --- NOUVEAU: Mettre à jour AgentManager ---
+        // C'est lui qui mettra à jour les agents logiques ET les InstancedMesh
+        this.agentManager?.update(deltaTime);
+        // -----------------------------------------
+
+        // L'ancienne boucle forEach(agent => agent.update()) est supprimée
     }
 
     destroy() {
-        console.log("Destruction du World...");
+        console.log("Destruction du World (avec AgentManager)...");
 
-        // --- Suppression du Nettoyage spécifique au modèle agent FBX chargé ---
-        // if (this.agentModelAsset) { ... }
-        // -------------------------------------------------
+        // --- NOUVEAU: Détruire AgentManager ---
+        this.agentManager?.destroy();
+        this.agentManager = null;
+        // ------------------------------------
 
-        const cleanGroup = (group) => { // Fonction utilitaire inchangée
-            if (!group) return;
-            while (group.children.length > 0) { /* ... */ }
-        };
+        // Le reste du nettoyage (groupes debug, cityManager, environment)
+        const cleanGroup = (group) => { /* ... */ }; // Fonction utilitaire inchangée
         cleanGroup(this.debugNavGridGroup); if (this.debugNavGridGroup) this.scene.remove(this.debugNavGridGroup);
         cleanGroup(this.debugAgentPathGroup); if (this.debugAgentPathGroup) this.scene.remove(this.debugAgentPathGroup);
         this.debugNavGridGroup = null;
@@ -166,10 +176,8 @@ export default class World {
         this.cityManager?.destroy();
         this.environment?.destroy();
 
-        // Important : Détruire les agents *avant* de nullifier les références (inchangé)
-        this.agents.forEach(agent => agent.destroy());
-        this.agents = [];
+        // La liste this.agents n'existe plus ici, elle est dans agentManager
 
         console.log("World détruit.");
     }
-}
+} // Fin classe World
