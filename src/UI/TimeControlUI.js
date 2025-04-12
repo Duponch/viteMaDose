@@ -31,11 +31,11 @@ export default class TimeControlUI {
 
         this.elements.decreaseButton = document.createElement('button');
         this.elements.decreaseButton.id = 'decrease-speed-button';
-        this.elements.decreaseButton.textContent = '-';
+        this.elements.decreaseButton.textContent = '⏮';
 
         this.elements.increaseButton = document.createElement('button');
         this.elements.increaseButton.id = 'increase-speed-button';
-        this.elements.increaseButton.textContent = '+';
+        this.elements.increaseButton.textContent = '⏭';
 
         this.elements.speedDisplay = document.createElement('span');
         this.elements.speedDisplay.id = 'speed-display';
@@ -44,10 +44,9 @@ export default class TimeControlUI {
         // --- Nouveau Bouton Debug ---
         this.elements.debugToggleButton = document.createElement('button');
         this.elements.debugToggleButton.id = 'debug-toggle-button';
-        this.elements.debugToggleButton.textContent = '🐞'; // Emoji insecte pour debug
+        this.elements.debugToggleButton.textContent = '〄'; // Emoji insecte pour debug
         this.elements.debugToggleButton.title = "Activer/Désactiver le mode Debug"; // Tooltip
         // Style initial (mode debug désactivé)
-        this.elements.debugToggleButton.style.opacity = '0.6';
         // --------------------------
 
         // --- Ajout au container (ordre peut être ajusté) ---
@@ -96,10 +95,10 @@ export default class TimeControlUI {
     updateButtonStates(currentScale = this.time.timeScale) {
         // --- Mise à jour boutons temps ---
         if (this.time.isPaused) {
-            this.elements.pausePlayButton.textContent = '▶️'; // Icône Play
+            this.elements.pausePlayButton.textContent = '▶'; // Icône Play
             this.elements.pausePlayButton.classList.add('paused');
         } else {
-            this.elements.pausePlayButton.textContent = '⏸️'; // Icône Pause
+            this.elements.pausePlayButton.textContent = '⏸'; // Icône Pause
             this.elements.pausePlayButton.classList.remove('paused');
         }
         this.elements.speedDisplay.textContent = `${currentScale}x`;
