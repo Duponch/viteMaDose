@@ -81,7 +81,7 @@ export default class World {
             console.log("World: Ville générée.");
 
             // 3. Init AgentManager
-            const maxAgents = this.cityManager.config.maxAgents ?? 300;
+            const maxAgents = this.cityManager.config.maxAgents ?? 1;
             this.agentManager = new AgentManager(
                 this.scene,
                 this.experience, // Passe l'instance Experience complète

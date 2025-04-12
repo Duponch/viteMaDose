@@ -25,7 +25,7 @@ function createShoeGeometry() { /* ... code existant ... */
 // --- FIN Fonctions Géométrie ---
 
 export default class AgentManager {
-    constructor(scene, experience, config, maxAgents = 500) {
+    constructor(scene, experience, config, maxAgents = 1) {
         if (!experience || !config) {
             throw new Error("AgentManager requires Experience and Config instances.");
         }
@@ -85,7 +85,7 @@ export default class AgentManager {
         this.baseGeometries.shoe = createShoeGeometry();
 
         // --- 3. Géométries et Matériaux de base (Debug Markers) ---
-        const markerSize = 1.5;
+        const markerSize = 7;
         this.baseGeometries.debugMarker = new THREE.OctahedronGeometry(markerSize, 0);
         this.baseMaterials.agentMarkerMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, name: 'AgentMarkerMat' }); // Bleu
         this.baseMaterials.homeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, name: 'HomeMarkerMat' }); // Vert
