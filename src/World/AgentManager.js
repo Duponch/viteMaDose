@@ -91,19 +91,17 @@ export default class AgentManager {
 
         // 3. Créer les InstancedMesh
         const createInstMesh = (name, geom, mat, count) => {
-            const mesh = new THREE.InstancedMesh(geom, mat.clone(), count); // Cloner le matériau pour chaque mesh
+            const mesh = new THREE.InstancedMesh(geom, mat.clone(), count);
             mesh.castShadow = true;
-            mesh.receiveShadow = true; // Les agents peuvent recevoir des ombres
+            mesh.receiveShadow = true;
             mesh.name = `${name}Instances`;
-             // Activer instanceColor SEULEMENT pour le torse
+
+            // --- AJOUTEZ CECI ---
+            mesh.frustumCulled = false; // Désactive le Frustum Culling pour CE mesh spécifique
+            // --------------------
+
              if (name === 'torso') {
-                 // Allouer le buffer pour les couleurs d'instance
                  mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
-                 // Initialiser toutes les couleurs (ex: blanc par défaut)
-                 /* for (let i = 0; i < count; i++) {
-                      mesh.setColorAt(i, new THREE.Color(1, 1, 1));
-                  }
-                  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true; */
              }
             this.scene.add(mesh);
             this.instanceMeshes[name] = mesh;
@@ -115,7 +113,7 @@ export default class AgentManager {
         createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2); // 2 mains par agent
         createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2); // 2 pieds par agent
 
-        console.log(`AgentManager: ${Object.keys(this.instanceMeshes).length} InstancedMesh créés (Max Agents: ${this.maxAgents}).`);
+        console.log(`AgentManager: ${Object.keys(this.instanceMeshes).length} InstancedMesh créés (Max Agents: ${this.maxAgents}) - Frustum Culling désactivé pour eux.`);
     }
     // --- FIN INCHANGÉ ---
 
