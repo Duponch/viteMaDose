@@ -1,116 +1,182 @@
 // src/World/Agent.js
 import * as THREE from 'three';
 
+// --- Fonctions d'aide intégrées (depuis l'HTML) ---
+
+// Fonction pour créer une forme de capsule avec Cylindre + Sphères
+function createCapsuleShape(radius, length, material, radialSegments = 16, heightSegments = 1) {
+    const group = new THREE.Group();
+    const cylinderHeight = length;
+    const sphereRadius = radius;
+
+    // Cylindre central
+    const cylinderGeometry = new THREE.CylinderGeometry(radius, radius, cylinderHeight, radialSegments, heightSegments);
+    const cylinder = new THREE.Mesh(cylinderGeometry, material);
+    cylinder.castShadow = true; // Ajouter ombres
+    group.add(cylinder);
+
+    // Sphère supérieure (demi-sphère)
+    const topSphereGeometry = new THREE.SphereGeometry(sphereRadius, radialSegments, Math.ceil(radialSegments / 2), 0, Math.PI * 2, 0, Math.PI / 2);
+    const topSphere = new THREE.Mesh(topSphereGeometry, material);
+    topSphere.position.y = cylinderHeight / 2;
+    topSphere.castShadow = true;
+    group.add(topSphere);
+
+    // Sphère inférieure (demi-sphère)
+    const bottomSphereGeometry = new THREE.SphereGeometry(sphereRadius, radialSegments, Math.ceil(radialSegments / 2), 0, Math.PI * 2, 0, Math.PI / 2);
+    const bottomSphere = new THREE.Mesh(bottomSphereGeometry, material);
+    bottomSphere.position.y = -cylinderHeight / 2;
+    bottomSphere.rotation.x = Math.PI; // Rotation pour orienter la demi-sphère vers le bas
+    bottomSphere.castShadow = true;
+    group.add(bottomSphere);
+
+    // Stocker les géométries pour nettoyage potentiel (optionnel, si on nettoie via traverse)
+    group.userData.geometries = [cylinderGeometry, topSphereGeometry, bottomSphereGeometry];
+
+    return group;
+}
+
+// Fonction pour créer la forme de chaussure
+function createShoe(material) {
+    const shoeGroup = new THREE.Group();
+    const shoeRadius = 1.2; // Gardé de l'HTML
+
+    // Partie supérieure bombée (Demi-sphère inférieure, tournée)
+    const topPartGeometry = new THREE.SphereGeometry(shoeRadius, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+    const topPart = new THREE.Mesh(topPartGeometry, material);
+    topPart.rotation.x = Math.PI; // Partie bombée vers le haut
+    topPart.castShadow = true;
+    shoeGroup.add(topPart);
+
+    // Semelle (Cercle plat)
+    const soleGeometry = new THREE.CircleGeometry(shoeRadius, 32);
+    const sole = new THREE.Mesh(soleGeometry, material);
+    sole.rotation.x = -Math.PI / 2; // Oriente le cercle horizontalement
+    sole.position.y = 0; // Au niveau du bas de la partie bombée
+    sole.castShadow = false; // La semelle ne projette pas vraiment d'ombre utile
+    sole.receiveShadow = true; // Peut recevoir des ombres
+    shoeGroup.add(sole);
+
+    // Appliquer la mise à l'échelle spécifique à la chaussure
+    shoeGroup.scale.y = 0.6;
+    shoeGroup.scale.z = 1.5;
+
+    // Stocker les géométries pour nettoyage potentiel
+    shoeGroup.userData.geometries = [topPartGeometry, soleGeometry];
+
+    return shoeGroup;
+}
+
+
+// --- Classe Agent ---
 export default class Agent {
     /**
-     * Crée un agent avec un modèle simple (type Rayman).
+     * Crée un agent avec un modèle type Rayman basé sur le code HTML.
      * @param {THREE.Scene} scene La scène Three.js.
      * @param {Experience} experience L'instance de l'expérience (pour l'accès au temps).
      * @param {number} agentId L'identifiant unique de l'agent.
-     * @param {number} bodyColor Couleur hexadécimale pour le corps.
+     * @param {number} bodyOverrideColor Couleur hexadécimale pour le torse (optionnel).
+     * @param {number} agentScale Échelle générale à appliquer au modèle.
      */
-	constructor(scene, experience, agentId, bodyColor = 0xff0000, agentScale = 1.0) {
+    constructor(scene, experience, agentId, bodyOverrideColor = null, agentScale = 1.0) {
         this.scene = scene;
         this.experience = experience;
         this.id = agentId;
-        this.bodyColor = bodyColor;
+        // Utiliser la couleur override pour le torse si fournie, sinon la couleur par défaut du HTML
+        this.torsoColor = bodyOverrideColor !== null ? bodyOverrideColor : 0x800080; // Violet par défaut
         this.scale = agentScale;
-
-        // --- CORRECTION : Vitesse et Tolérance ---
-        this.speed = 1.5; // Remettre une vitesse normale (unités/seconde)
-        this.reachTolerance = 0.15; // Petite tolérance FIXE, indépendante de l'échelle
-        // -----------------------------------------
-
+        this.speed = 1.5; // Vitesse par défaut (ajustée précédemment)
+        this.reachTolerance = 0.15; // Tolérance fixe (ajustée précédemment)
         this.path = null;
         this.currentPathIndex = 0;
-        this.debugPathColor = bodyColor;
+        // La couleur debug peut être différente de la couleur du torse maintenant
+        this.debugPathColor = bodyOverrideColor !== null ? bodyOverrideColor : 0xff0000; // Rouge si pas d'override
 
-        // --- Création du modèle Rayman ---
+        // --- Création du modèle Rayman (utilise la nouvelle logique) ---
         this.model = this.createRaymanModel();
 
         // --- Appliquer l'échelle globale ---
         this.model.scale.set(this.scale, this.scale, this.scale);
-        // ----------------------------------
 
         this.scene.add(this.model);
     }
 
     /**
-     * Crée la géométrie et les materials pour le modèle simple.
+     * Crée la géométrie et les materials pour le modèle basé sur l'HTML.
      * @returns {THREE.Group} Le groupe contenant toutes les parties du modèle.
      */
     createRaymanModel() {
         const agentGroup = new THREE.Group();
         agentGroup.name = `Agent_${this.id}`;
 
-        // --- Matériaux ---
-        const bodyMaterial = new THREE.MeshStandardMaterial({
-            color: this.bodyColor,
-            roughness: 0.6,
-            metalness: 0.2
-        });
-        const limbMaterial = new THREE.MeshStandardMaterial({ // Mains et pieds
-            color: 0xffffff, // Blanc
-            roughness: 0.7,
-            metalness: 0.1
-        });
-        const headMaterial = new THREE.MeshStandardMaterial({ // Tête
-             color: 0xffdbac, // Couleur peau simple
-             roughness: 0.7,
-             metalness: 0.1
-         });
+        // --- Matériaux (basés sur l'HTML) ---
+        this.skinMaterial = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.6, metalness: 0.1 });
+        this.torsoMaterial = new THREE.MeshStandardMaterial({ color: this.torsoColor, roughness: 0.5, metalness: 0.2 });
+        this.handMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0.1 });
+        this.shoeMaterial = new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.7, metalness: 0.1 });
 
-        // --- Géométries ---
-        const bodyRadius = 0.5;
-        const headRadius = 0.3;
-        const limbRadius = 0.2;
+        // Stocker les matériaux pour nettoyage
+        this.materials = [this.skinMaterial, this.torsoMaterial, this.handMaterial, this.shoeMaterial];
 
-        const bodyGeom = new THREE.SphereGeometry(bodyRadius, 16, 12);
-        const headGeom = new THREE.SphereGeometry(headRadius, 12, 10);
-        const limbGeom = new THREE.SphereGeometry(limbRadius, 8, 6);
+        // --- Création des parties du corps (basé sur l'HTML) ---
 
-        // --- Meshes ---
-        // Corps (au centre du groupe)
-        this.bodyMesh = new THREE.Mesh(bodyGeom, bodyMaterial);
-        this.bodyMesh.castShadow = true;
-        this.bodyMesh.receiveShadow = false;
-        this.bodyMesh.position.y = bodyRadius; // Repose sur le sol (y=0)
-        agentGroup.add(this.bodyMesh);
+        // 1. Tête (Capsule)
+        const headRadius = 2.5;
+        const headLength = 1;
+        this.head = createCapsuleShape(headRadius, headLength, this.skinMaterial, 32);
+        this.head.position.y = 6.0;
+        agentGroup.add(this.head);
 
-        // Tête (au-dessus du corps)
-        this.headMesh = new THREE.Mesh(headGeom, headMaterial);
-        this.headMesh.castShadow = true;
-        this.headMesh.position.y = bodyRadius * 2 + headRadius * 0.9; // Au dessus du corps
-        agentGroup.add(this.headMesh);
+        // 2. Torse (Capsule)
+        const torsoRadius = 1.5;
+        const torsoLength = 1.5;
+        this.torso = createCapsuleShape(torsoRadius, torsoLength, this.torsoMaterial, 24);
+        this.torso.position.y = 0; // Centre du groupe
+        agentGroup.add(this.torso);
 
-        // Main Gauche
-        this.leftHandMesh = new THREE.Mesh(limbGeom.clone(), limbMaterial);
-        this.leftHandMesh.castShadow = true;
-        this.leftHandMesh.position.set(-(bodyRadius + limbRadius * 1.5), bodyRadius * 1.2, 0);
-        agentGroup.add(this.leftHandMesh);
+        // 3. Mains (Capsules)
+        const handRadius = 0.8;
+        const handLength = 1.0;
 
-        // Main Droite
-        this.rightHandMesh = new THREE.Mesh(limbGeom.clone(), limbMaterial);
-        this.rightHandMesh.castShadow = true;
-        this.rightHandMesh.position.set(bodyRadius + limbRadius * 1.5, bodyRadius * 1.2, 0);
-        agentGroup.add(this.rightHandMesh);
+        this.leftHand = createCapsuleShape(handRadius, handLength, this.handMaterial, 12);
+        this.leftHand.position.set(-4.5, 1.0, 0);
+        this.leftHand.rotation.z = -Math.PI / 12;
+        agentGroup.add(this.leftHand);
 
-        // Pied Gauche (Optionnel)
-        this.leftFootMesh = new THREE.Mesh(limbGeom.clone(), limbMaterial);
-        this.leftFootMesh.castShadow = true;
-        this.leftFootMesh.position.set(-bodyRadius * 0.6, limbRadius, bodyRadius * 0.2); // Légèrement en avant
-        agentGroup.add(this.leftFootMesh);
+        this.rightHand = createCapsuleShape(handRadius, handLength, this.handMaterial, 12);
+        this.rightHand.position.set(4.5, 1.0, 0);
+        this.rightHand.rotation.z = Math.PI / 12;
+        agentGroup.add(this.rightHand);
 
-        // Pied Droit (Optionnel)
-        this.rightFootMesh = new THREE.Mesh(limbGeom.clone(), limbMaterial);
-        this.rightFootMesh.castShadow = true;
-        this.rightFootMesh.position.set(bodyRadius * 0.6, limbRadius, bodyRadius * 0.2); // Légèrement en avant
-        agentGroup.add(this.rightFootMesh);
+        // 4. Pieds/Chaussures (Forme spécifique)
+        this.leftFoot = createShoe(this.shoeMaterial);
+        this.leftFoot.position.set(-1.8, -3.5, 0.5);
+        agentGroup.add(this.leftFoot);
 
-        // Stocker les références pour animation et destruction
-        this.limbs = [this.leftHandMesh, this.rightHandMesh, this.leftFootMesh, this.rightFootMesh];
-        this.geometries = [bodyGeom, headGeom, limbGeom]; // Garder une réf à la géométrie non clonée des limbs
-        this.materials = [bodyMaterial, limbMaterial, headMaterial];
+        this.rightFoot = createShoe(this.shoeMaterial);
+        this.rightFoot.position.set(1.8, -3.5, 0.5);
+        agentGroup.add(this.rightFoot);
+
+        // Stocker les références pour l'animation (pas le torse ni la tête ?)
+        // L'animation HTML ne bouge que les mains et pieds.
+        this.animatedParts = [this.leftHand, this.rightHand, this.leftFoot, this.rightFoot];
+        // Stocker les positions Y de base pour l'animation
+        this.leftHandBaseY = this.leftHand.position.y;
+        this.rightHandBaseY = this.rightHand.position.y;
+        this.leftFootBaseY = this.leftFoot.position.y;
+        this.rightFootBaseY = this.rightFoot.position.y;
+
+        // Note : On ne stocke plus this.geometries car le nettoyage se fera par parcours
+
+        // Mettre le groupe principal légèrement au-dessus du sol pour que les pieds (à y=-3.5 relatif)
+        // touchent le sol (y=0 absolu) APRES application de l'échelle.
+        // La position Y exacte sera définie par setPath, mais on ajuste le "point zéro" interne.
+        // Le point le plus bas est à y = -3.5 (base des pieds). On veut que ce point soit à y=0 DANS LE GROUPE.
+        // Donc on translate tout le groupe vers le haut de 3.5.
+        // Attention: ceci est avant la mise à l'échelle globale !
+        // agentGroup.position.y = 3.5; // <- FAUSSE BONNE IDEE, car la position Y globale est gérée par le path.
+                                    // Laissons le centre du torse (y=0) comme origine locale du groupe.
+                                    // La position Y absolue sera gérée par this.model.position.y = path[...].y
 
         return agentGroup;
     }
@@ -120,24 +186,27 @@ export default class Agent {
             this.path = pathPoints;
             this.currentPathIndex = 0;
 
-            // Positionner le modèle au début du chemin
+            // Positionner le modèle AU SOL au début du chemin
             this.model.position.copy(this.path[0]);
-            // La hauteur Y devrait déjà être correcte (définie par NavigationGraph),
-            // mais on s'assure que le bas du corps est à la bonne hauteur.
-            this.model.position.y = this.path[0].y; // Le groupe est à la hauteur du sol
+            // pathPoints[0].y EST la hauteur du sol (trottoir).
+            // Notre modèle a son origine au niveau du torse (y=0 local).
+            // Il faut donc que this.model.position.y soit égal à pathPoints[0].y
+            // pour que l'origine locale soit au niveau du sol.
+            this.model.position.y = this.path[0].y;
 
             if (this.path.length > 1) {
                 // Orienter vers le premier waypoint
                 const nextPoint = this.path[1].clone();
-                // Regarder à la hauteur du centre du corps pour éviter de pencher
-                nextPoint.y = this.model.position.y + this.bodyMesh.position.y;
-                const lookAtTarget = new THREE.Vector3();
-                this.model.getWorldPosition(lookAtTarget); // Point de départ du regard
-                lookAtTarget.y += this.bodyMesh.position.y; // Hauteur du centre du corps
+                // Regarder à la hauteur du TORSE pour l'orientation (origine locale y=0)
+                // On calcule la position absolue du torse pour lookAt
+                const torsoWorldPos = new THREE.Vector3();
+                this.model.getWorldPosition(torsoWorldPos); // Donne la position du groupe (origine = torse)
+                nextPoint.y = torsoWorldPos.y; // Orienter horizontalement par rapport au torse
+
                 this.model.lookAt(nextPoint);
 
             } else {
-                 // Si chemin d'un seul point, juste s'y mettre et considérer terminé.
+                 // Si chemin d'un seul point
                  this.model.position.copy(this.path[0]);
                  this.model.position.y = this.path[0].y;
                  this.path = null; // Chemin terminé
@@ -150,37 +219,27 @@ export default class Agent {
     }
 
     /**
-     * Applique une animation simple de flottement aux membres.
+     * Applique l'animation de lévitation de l'HTML.
      * @param {number} timeElapsed Temps total écoulé en millisecondes.
      */
-    animateFloatingLimbs(timeElapsed) {
-        const bobbleSpeed = 3; // Vitesse du flottement
-        const bobbleAmount = 0.1; // Amplitude du flottement
+    animateLevitation(timeElapsed) {
+        const time = timeElapsed / 1000; // Convertir en secondes
 
-        const timeInSeconds = timeElapsed / 1000;
+        // Mettre à jour Y basé sur la position Y initiale stockée
+        this.leftHand.position.y = this.leftHandBaseY + Math.sin(time * 2) * 0.2;
+        this.rightHand.position.y = this.rightHandBaseY + Math.cos(time * 2 + 1) * 0.2;
+        this.leftFoot.position.y = this.leftFootBaseY + Math.sin(time * 1.5 + 2) * 0.15;
+        this.rightFoot.position.y = this.rightFootBaseY + Math.cos(time * 1.5 + 3) * 0.15;
 
-        // Flottement vertical simple pour les mains et pieds
-        this.limbs.forEach((limb, index) => {
-            if (limb) {
-                // Décalage de phase pour ne pas qu'ils bougent tous en même temps
-                const phaseOffset = index * (Math.PI / 4);
-                limb.position.y = limb.userData.initialY + Math.sin(timeInSeconds * bobbleSpeed + phaseOffset) * bobbleAmount;
-            }
-        });
-         // Flottement pour la tête
-         if (this.headMesh) {
-            this.headMesh.position.y = this.headMesh.userData.initialY + Math.sin(timeInSeconds * bobbleSpeed * 0.8) * bobbleAmount * 0.5; // Moins ample/rapide
-        }
+        // Optionnel: légère rotation des mains
+        this.leftHand.rotation.z = -Math.PI / 12 + Math.sin(time * 1.8) * 0.1;
+        this.rightHand.rotation.z = Math.PI / 12 + Math.cos(time * 1.8 + 0.5) * 0.1;
     }
 
     update(deltaTime) {
-        // --- Animation procédurale simple ---
-        if (!this.headMesh.userData.initialY) { // Initialiser les positions Y de base une seule fois
-            this.headMesh.userData.initialY = this.headMesh.position.y;
-            this.limbs.forEach(limb => { if(limb) limb.userData.initialY = limb.position.y; });
-        }
-        this.animateFloatingLimbs(this.experience.time.elapsed);
-        // ------------------------------------
+        // --- Animation procédurale (lévitation) ---
+        this.animateLevitation(this.experience.time.elapsed);
+        // -----------------------------------------
 
         // Logique de déplacement (si un chemin est défini)
         if (!this.path || this.currentPathIndex >= this.path.length) {
@@ -201,17 +260,16 @@ export default class Agent {
 
         if (distanceToTargetXZ <= this.reachTolerance || distanceToTargetXZ < moveDistance) {
             // Atteint la cible : se positionner exactement et passer au point suivant
-            // Copier X et Z, garder Y courant (ou celui de la target, qui doit être le même)
             currentPosition.x = targetPosition.x;
             currentPosition.z = targetPosition.z;
-            currentPosition.y = targetPosition.y; // Assurer la hauteur exacte
+            currentPosition.y = targetPosition.y; // Assurer la hauteur exacte du sol
             this.currentPathIndex++;
 
             if (this.currentPathIndex < this.path.length) {
                 // Regarder vers le point suivant
                 const nextPoint = this.path[this.currentPathIndex].clone();
-                 // Regarder à la hauteur du centre du corps
-                nextPoint.y = this.model.position.y + this.bodyMesh.position.y;
+                 // Regarder horizontalement depuis la position actuelle (au niveau du sol/torse)
+                nextPoint.y = currentPosition.y;
                 this.model.lookAt(nextPoint);
 
             } else {
@@ -225,10 +283,8 @@ export default class Agent {
             direction.normalize();
             this.model.position.addScaledVector(direction, moveDistance);
 
-            // S'assurer que Y reste constant (hauteur du trottoir/chemin)
+            // S'assurer que Y reste constant (hauteur du sol)
             this.model.position.y = targetPosition.y;
-
-            // Orientation gérée lors du changement de point cible pour éviter saccades
         }
     }
 
@@ -238,26 +294,55 @@ export default class Agent {
             this.scene.remove(this.model);
         }
 
-        // Disposer les géométries uniques créées
-        this.geometries.forEach(geom => geom.dispose());
-
-        // Disposer les matériaux uniques créés
+        // --- Nettoyage Robuste via Parcours ---
+        if (this.model) {
+            this.model.traverse((child) => {
+                if (child.isMesh) {
+                    if (child.geometry) {
+                        child.geometry.dispose();
+                    }
+                    // Nettoyer les matériaux si ce sont des instances uniques
+                    // Note: Si les matériaux de base (this.skinMaterial etc.) sont partagés
+                    // par plusieurs agents, il ne faut PAS les disposer ici mais plutôt
+                    // lors de la destruction globale de World ou Experience.
+                    // Pour l'instant, on suppose qu'ils ne sont pas partagés massivement.
+                    // Si les matériaux sont clonés implicitement par les helpers, c'est ok.
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(material => material.dispose());
+                        } else {
+                            child.material.dispose();
+                        }
+                    }
+                }
+                // Nettoyer les géométries stockées dans userData par les helpers
+                if (child.userData && child.userData.geometries) {
+                    child.userData.geometries.forEach(geom => geom.dispose());
+                }
+            });
+        }
+        // Disposer aussi les matériaux de base stockés explicitement
         this.materials.forEach(mat => mat.dispose());
+
 
         // Nullifier les références
         this.model = null;
         this.scene = null;
         this.experience = null;
         this.path = null;
-        this.bodyMesh = null;
-        this.headMesh = null;
-        this.leftHandMesh = null;
-        this.rightHandMesh = null;
-        this.leftFootMesh = null;
-        this.rightFootMesh = null;
-        this.limbs = [];
-        this.geometries = [];
         this.materials = [];
-        // console.log(`Agent ${this.id} (Rayman) détruit.`);
+        this.animatedParts = [];
+        this.head = null;
+        this.torso = null;
+        this.leftHand = null;
+        this.rightHand = null;
+        this.leftFoot = null;
+        this.rightFoot = null;
+        this.skinMaterial = null;
+        this.torsoMaterial = null;
+        this.handMaterial = null;
+        this.shoeMaterial = null;
+
+        // console.log(`Agent ${this.id} (Rayman HTML style) détruit.`);
     }
 }

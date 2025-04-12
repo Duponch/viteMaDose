@@ -79,7 +79,7 @@ export default class World {
             this.agents = [];
         }
 
-        const numAgents = 5; // Ou lire depuis config si besoin
+        const numAgents = 300; // Ou lire depuis config si besoin
         // const sidewalkHeight = this.cityManager.navigationGraph.sidewalkHeight; // Pas directement nécessaire ici
 
         // --- NOUVEAU: Lire l'échelle depuis la config ---
