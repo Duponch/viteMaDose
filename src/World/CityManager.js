@@ -88,10 +88,11 @@ export default class CityManager {
             // Time
             dayNightCycleEnabled: true, dayDurationMinutes: 1, startTimeOfDay: 0.25,
             // Agents
-            agentScale: 0.1, agentYOffset: 0.35, agentRotationSpeed: 8.0, agentWalkSpeed: 10,
+            agentScale: 0.1, agentYOffset: 0.35, agentRotationSpeed: 20, agentWalkSpeed: 10,
             agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7, agentSwingAmplitude: 1.2,
             agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
             agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
+			agentAnimationSpeedFactor: 11, // 1.0 = vitesse normale, <1.0 = plus lent, >1.0 = plus rapide
         };
 
         // --- Fusion Config Externe ---

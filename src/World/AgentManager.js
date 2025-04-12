@@ -72,7 +72,7 @@ export default class AgentManager {
         this.baseGeometries.hand = createCapsuleGeometry(handRadius, handLength, 12);
         this.baseGeometries.shoe = createShoeGeometry();
         // Debug Markers
-        const markerSize = 7; this.baseGeometries.debugMarker = new THREE.OctahedronGeometry(markerSize, 0);
+        const markerSize = 3; this.baseGeometries.debugMarker = new THREE.OctahedronGeometry(markerSize, 0);
         this.baseMaterials.agentMarkerMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, name: 'AgentMarkerMat' });
         this.baseMaterials.homeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, name: 'HomeMarkerMat' });
         this.baseMaterials.workMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, name: 'WorkMarkerMat' });
@@ -140,9 +140,30 @@ export default class AgentManager {
 
     _getPartAnimationMatrix(partType, time) {
         this.animationMatrix.identity();
-        const { agentWalkSpeed = 2.5, agentBobAmplitude = 0.15, agentStepLength = 1.5, agentStepHeight = 0.7, agentSwingAmplitude = 1.2, agentAnkleRotationAmplitude = Math.PI / 8, agentHandTiltAmplitude = 0.2, agentHeadBobAmplitude = 0.06 } = this.config;
-        const walkTime = time * agentWalkSpeed; let pos = { x: 0, y: 0, z: 0 }, rot = { x: 0, y: 0, z: 0 }; let applyRotation = false;
+
+        // Récupération des paramètres depuis la config. Utilisation de valeurs par défaut (??) pour la robustesse.
+        const agentBaseWalkSpeed = this.config.agentWalkSpeed ?? 2.5; // Vitesse de base servant de référence pour l'animation
+        const animationSpeedFactor = this.config.agentAnimationSpeedFactor ?? 1.0; // Le nouveau facteur configurable
+        const agentBobAmplitude = this.config.agentBobAmplitude ?? 0.15;
+        const agentStepLength = this.config.agentStepLength ?? 1.5;
+        const agentStepHeight = this.config.agentStepHeight ?? 0.7;
+        const agentSwingAmplitude = this.config.agentSwingAmplitude ?? 1.2;
+        const agentAnkleRotationAmplitude = this.config.agentAnkleRotationAmplitude ?? (Math.PI / 8);
+        const agentHandTiltAmplitude = this.config.agentHandTiltAmplitude ?? 0.2;
+        const agentHeadBobAmplitude = this.config.agentHeadBobAmplitude ?? 0.06;
+
+        // --- CALCUL TEMPS ANIMATION MODIFIÉ ---
+        // Utilise la vitesse de base de la config, multipliée par le facteur d'animation.
+        // L'animation n'est PAS directement liée à la vitesse de déplacement `agentSpeed` de l'agent ici,
+        // mais à une vitesse de base globale (`agentBaseWalkSpeed`) ajustée par `animationSpeedFactor`.
+        const effectiveAnimationSpeed = agentBaseWalkSpeed * animationSpeedFactor;
+        const walkTime = time * effectiveAnimationSpeed;
+        // --------------------------------------
+
+        let pos = { x: 0, y: 0, z: 0 }, rot = { x: 0, y: 0, z: 0 }; let applyRotation = false;
         const torsoBobY = Math.sin(walkTime * 2) * agentBobAmplitude;
+
+        // --- Logique d'animation (inchangée, utilise walkTime modifié) ---
         switch (partType) {
             case 'torso': pos.y = torsoBobY; break;
             case 'head': pos.y = torsoBobY + (Math.sin(walkTime * 1.5 + 0.3) * agentHeadBobAmplitude); break;
@@ -151,6 +172,8 @@ export default class AgentManager {
             case 'leftHand': pos.z = Math.sin(walkTime + Math.PI) * agentSwingAmplitude; pos.y = torsoBobY; rot.z = Math.sin(walkTime * 1.8) * agentHandTiltAmplitude; applyRotation = true; break;
             case 'rightHand': pos.z = Math.sin(walkTime) * agentSwingAmplitude; pos.y = torsoBobY; rot.z = Math.cos(walkTime * 1.8 + 0.5) * agentHandTiltAmplitude; applyRotation = true; break;
         }
+
+        // --- Composition matrice (inchangée) ---
         this.tempPosition.set(pos.x, pos.y, pos.z);
         if (applyRotation) { this.tempQuaternion.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')); } else { this.tempQuaternion.identity(); }
         this.tempScale.set(1, 1, 1); this.animationMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
