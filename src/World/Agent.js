@@ -8,8 +8,8 @@ const AgentState = {
     GOING_TO_WORK: 'GOING_TO_WORK',
     AT_WORK: 'AT_WORK',
     GOING_HOME: 'GOING_HOME',
-    IDLE: 'IDLE', // État initial ou si pas de domicile/travail
-    WAITING_FOR_PATH: 'WAITING_FOR_PATH', // Nouvel état pour la file d'attente
+    IDLE: 'IDLE',
+    WAITING_FOR_PATH: 'WAITING_FOR_PATH',
 };
 
 export default class Agent {
@@ -21,7 +21,7 @@ export default class Agent {
              throw new Error(`Agent ${this.id}: Experience instance is required!`);
         }
         this.experience = experience;
-        this.scale = config.scale ?? 0.1; // Correction: Utiliser config.scale
+        this.scale = config.scale ?? 0.1;
         this.speed = config.speed ?? 1.5;
         this.rotationSpeed = config.rotationSpeed ?? 8.0;
         this.yOffset = config.yOffset ?? 0.3;
@@ -39,10 +39,8 @@ export default class Agent {
         this.homePosition = null;
         this.workPosition = null;
 
-        // --- NOUVEAU : Cache pour les nœuds grille ---
         this.homeGridNode = null; // {x, y}
         this.workGridNode = null; // {x, y}
-        // -------------------------------------------
 
         this.path = null;
         this.currentPathIndex = 0;
@@ -73,26 +71,25 @@ export default class Agent {
         if (homeInfo) {
              const homePlot = cityManager.getPlots().find(p => p.id === homeInfo.plotId);
              let baseHomePos = homePlot ? homePlot.getEntryPoint(sidewalkHeight) : homeInfo.position.clone();
-             baseHomePos.y = sidewalkHeight; // Assurer la hauteur
+             baseHomePos.y = sidewalkHeight;
 
              if (navGraph) {
-                 // Calculer le nœud grille UNE FOIS
                  this.homeGridNode = navGraph.getClosestWalkableNode(baseHomePos);
                  if (this.homeGridNode) {
                     this.homePosition = navGraph.gridToWorld(this.homeGridNode.x, this.homeGridNode.y);
-                    console.log(`Agent ${this.id}: Domicile ${this.homeBuildingId} -> Node (${this.homeGridNode.x},${this.homeGridNode.y}) Pos:`, this.homePosition.toArray().map(n=>n.toFixed(1)).join(','));
+                    // console.log(`Agent ${this.id}: Domicile ${this.homeBuildingId} -> Node (${this.homeGridNode.x},${this.homeGridNode.y}) Pos:`, this.homePosition.toArray().map(n=>n.toFixed(1)).join(','));
                  } else {
                      console.warn(`Agent ${this.id}: Pas de nœud NavGraph proche trouvé pour domicile ${this.homeBuildingId}. Utilisation position plot/brute.`);
-                     this.homePosition = baseHomePos; // Garder la position de base
-                     this.homeGridNode = null; // Indiquer qu'on n'a pas de nœud précalculé
+                     this.homePosition = baseHomePos;
+                     this.homeGridNode = null;
                  }
              } else {
-                 this.homePosition = baseHomePos; // Pas de NavGraph, utiliser pos de base
+                 this.homePosition = baseHomePos;
                  this.homeGridNode = null;
              }
              this.position.copy(this.homePosition);
              this.currentState = AgentState.AT_HOME;
-             this.isVisible = false;
+             this.isVisible = false; // Commence caché à la maison
 
         } else {
             console.error(`Agent ${this.id}: Infos domicile ${this.homeBuildingId} non trouvées. Agent reste IDLE.`);
@@ -109,11 +106,10 @@ export default class Agent {
              baseWorkPos.y = sidewalkHeight;
 
               if (navGraph) {
-                  // Calculer le nœud grille UNE FOIS
                   this.workGridNode = navGraph.getClosestWalkableNode(baseWorkPos);
                   if (this.workGridNode) {
                      this.workPosition = navGraph.gridToWorld(this.workGridNode.x, this.workGridNode.y);
-                     console.log(`Agent ${this.id}: Travail ${this.workBuildingId} -> Node (${this.workGridNode.x},${this.workGridNode.y}) Pos:`, this.workPosition?.toArray().map(n=>n.toFixed(1)).join(','));
+                    //  console.log(`Agent ${this.id}: Travail ${this.workBuildingId} -> Node (${this.workGridNode.x},${this.workGridNode.y}) Pos:`, this.workPosition?.toArray().map(n=>n.toFixed(1)).join(','));
                   } else {
                       console.warn(`Agent ${this.id}: Pas de nœud NavGraph proche trouvé pour travail ${this.workBuildingId}.`);
                       this.workPosition = baseWorkPos;
@@ -131,45 +127,53 @@ export default class Agent {
     }
 
     // ==============================================================
-    // Méthode requestPath MODIFIÉE pour utiliser la file d'attente
+    // Méthode requestPath MODIFIÉE pour appeler le Worker via AgentManager
     // ==============================================================
     /**
-     * Demande à l'AgentManager de calculer un chemin pour cet agent.
+     * Demande à l'AgentManager d'envoyer une requête de pathfinding au Worker.
      * Utilise les nœuds de grille pré-calculés si disponibles.
-     * @param {THREE.Vector3} startPosWorld - Position de départ dans le monde (généralement this.position).
+     * @param {THREE.Vector3} startPosWorld - Position de départ dans le monde.
      * @param {THREE.Vector3} endPosWorld - Position d'arrivée cible dans le monde.
      * @param {{x: number, y: number} | null} startNodeOverride - Nœud de départ pré-calculé (optionnel).
      * @param {{x: number, y: number} | null} endNodeOverride - Nœud d'arrivée pré-calculé (optionnel).
      */
     requestPath(startPosWorld, endPosWorld, startNodeOverride = null, endNodeOverride = null) {
-        this.path = null; // Chemin actuel invalidé
+        this.path = null;
         this.currentPathIndex = 0;
-        this.currentState = AgentState.WAITING_FOR_PATH; // Indiquer qu'on attend
+        this.currentState = AgentState.WAITING_FOR_PATH;
         this.isVisible = true; // Devient visible en attendant/partant
 
         const agentManager = this.experience.world?.agentManager;
         const navGraph = this.experience.world?.cityManager?.navigationGraph;
 
-        if (!agentManager || !navGraph) {
-            console.error(`Agent ${this.id}: AgentManager ou NavGraph manquant pour la requête de chemin.`);
-            this.currentState = AgentState.IDLE; // Erreur critique, retour à IDLE
+        if (!agentManager) {
+            console.error(`Agent ${this.id}: AgentManager manquant pour la requête de chemin worker.`);
+            this.currentState = AgentState.IDLE;
             this.isVisible = false;
             return;
         }
+        if (!navGraph) {
+            console.error(`Agent ${this.id}: NavigationGraph manquant pour déterminer les nœuds.`);
+            this.currentState = AgentState.IDLE;
+            this.isVisible = false;
+             // Prévenir l'agent manager que le chemin a échoué ? Non, géré dans setPath(null)
+            return;
+        }
 
-        // Déterminer les nœuds de départ et d'arrivée
+        // Déterminer les nœuds de départ et d'arrivée (inchangé)
         const startNode = startNodeOverride || navGraph.getClosestWalkableNode(startPosWorld);
         const endNode = endNodeOverride || navGraph.getClosestWalkableNode(endPosWorld);
 
         if (startNode && endNode) {
-            // Ajouter la requête à la file d'attente de l'AgentManager
-            agentManager.queuePathRequest(this.id, startNode, endNode);
-            // console.log(`Agent ${this.id}: Path request queued from node (${startNode.x},${startNode.y}) to node (${endNode.x},${endNode.y}). State: WAITING_FOR_PATH`);
+            // --- MODIFIÉ : Appeler la méthode de AgentManager pour envoyer au Worker ---
+            agentManager.requestPathFromWorker(this.id, startNode, endNode);
+            // console.log(`Agent ${this.id}: Path request sent to worker from node (${startNode.x},${startNode.y}) to node (${endNode.x},${endNode.y}). State: WAITING_FOR_PATH`);
+            // -----------------------------------------------------------------------
         } else {
-            console.error(`Agent ${this.id}: Impossible de trouver les nœuds de départ/arrivée pour la requête de chemin. Start: ${!!startNode}, End: ${!!endNode}. Abandon.`);
-            // Gérer l'échec de la requête AVANT la mise en file d'attente
-             this.currentState = AgentState.IDLE; // Ou retourner à l'état précédent? IDLE est plus sûr.
-             this.isVisible = false;
+            console.error(`Agent ${this.id}: Impossible de trouver les nœuds de départ/arrivée pour la requête de chemin worker. Start: ${!!startNode}, End: ${!!endNode}. Abandon.`);
+            this.currentState = AgentState.IDLE;
+            this.isVisible = false;
+            // Pas besoin d'appeler setPath(null) ici, car la requête n'a jamais été envoyée au worker
         }
     }
     // ==============================================================
@@ -178,191 +182,192 @@ export default class Agent {
 
 
     // ==============================================================
-    // Méthode setPath (appelée par AgentManager lorsque le chemin est prêt)
+    // Méthode setPath (INCHANGÉE - appelée par AgentManager lorsque le worker répond)
     // ==============================================================
     /**
      * Définit le chemin à suivre par l'agent. Appelé par AgentManager.
-     * @param {Array<THREE.Vector3> | null} pathPoints - Liste des points du chemin ou null si échec.
+     * @param {Array<THREE.Vector3> | null} pathPoints - Liste des points du chemin (en coordonnées monde) ou null si échec.
      */
     setPath(pathPoints) {
         // Si le chemin reçu est valide
         if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 0) {
-            // Si on était en attente, on passe à l'état de déplacement approprié
-            // (On déduit l'état cible basé sur la destination du chemin, si possible)
-            // Note: Cette logique pourrait être affinée. On suppose que si on reçoit un chemin,
-            // c'est qu'on avait demandé à aller quelque part.
-            if (this.currentState === AgentState.WAITING_FOR_PATH) {
-                 // On regarde si la destination du chemin est proche de la maison ou du travail
+            // Logique de transition d'état (inchangée)
+             if (this.currentState === AgentState.WAITING_FOR_PATH) {
                  const destination = pathPoints[pathPoints.length - 1];
                  let goingToWork = false;
-                 if (this.workPosition && destination.distanceToSquared(this.workPosition) < this.reachTolerance * this.reachTolerance * 4) {
+                 // Utiliser une tolérance plus grande pour la comparaison de fin de chemin
+                 if (this.workPosition && destination.distanceToSquared(this.workPosition) < this.reachTolerance * this.reachTolerance * 9) { // x9 = 3x tolerance
                      goingToWork = true;
+                 } else if (!this.homePosition || destination.distanceToSquared(this.homePosition) >= this.reachTolerance * this.reachTolerance * 9) {
+                     // Si ce n'est pas proche du travail ET pas proche de la maison (ou si maison inconnue)
+                     // console.warn(`Agent ${this.id}: Path destination doesn't match known home/work. Destination:`, destination.toArray(), "Work:", this.workPosition?.toArray(), "Home:", this.homePosition?.toArray());
                  }
                  this.currentState = goingToWork ? AgentState.GOING_TO_WORK : AgentState.GOING_HOME;
-                 console.log(`Agent ${this.id}: Path received. State transition -> ${this.currentState}`);
+                 // console.log(`Agent ${this.id}: Path received. State transition -> ${this.currentState}`);
             } else {
-                // Si on reçoit un chemin alors qu'on n'était pas en WAITING_FOR_PATH,
-                // c'est peut-être une mise à jour de chemin? Log pour investigation.
-                console.warn(`Agent ${this.id}: Received path while in state ${this.currentState}.`);
-                // On pourrait décider de l'état basé sur la destination ici aussi.
+                console.warn(`Agent ${this.id}: Received path while in state ${this.currentState}. Overwriting path.`);
             }
 
-            this.path = pathPoints.map(p => p.clone()); // Cloner pour sécurité
+            this.path = pathPoints.map(p => p.clone());
             this.currentPathIndex = 0;
+            this.isVisible = true; // Assurer la visibilité
 
-            // Orienter vers le premier segment du chemin (si possible)
+            // Orienter vers le premier segment (inchangé)
             if (this.path.length > 1) {
                 this._lookTarget.copy(this.path[1]);
-                if (this.position.distanceToSquared(this._lookTarget) > 0.0001) {
-                    const lookMatrix = new THREE.Matrix4().lookAt(this.position, this._lookTarget, new THREE.Vector3(0, 1, 0));
-                    this.orientation.setFromRotationMatrix(lookMatrix);
-                    this._targetOrientation.copy(this.orientation);
-                }
-            } else {
-                // Chemin très court, on le termine presque immédiatement
-                 if (this.path.length === 1) {
-                    this.position.copy(this.path[0]);
+                // Vérifier distance avant lookAt pour éviter NaN si position == lookTarget
+                 if (this.position.distanceToSquared(this._lookTarget) > 0.0001) {
+                     // Utiliser lookAt pour obtenir la matrice, puis extraire la quaternion
+                     const lookMatrix = new THREE.Matrix4().lookAt(this.position, this._lookTarget, new THREE.Vector3(0, 1, 0));
+                     // Définir directement l'orientation actuelle et cible
+                     this.orientation.setFromRotationMatrix(lookMatrix);
+                     this._targetOrientation.copy(this.orientation);
                  }
+            } else {
+                // Chemin trop court (inchangé)
+                 if (this.path.length === 1) { this.position.copy(this.path[0]); }
                  this.path = null;
                  this.currentPathIndex = 0;
                  this.currentState = (this.currentState === AgentState.GOING_TO_WORK) ? AgentState.AT_WORK : AgentState.AT_HOME;
                  this.isVisible = false;
-                 console.log(`Agent ${this.id}: Path was too short, transition to ${this.currentState}`);
+                 // console.log(`Agent ${this.id}: Path was too short, transition to ${this.currentState}`);
             }
-             this.isVisible = true; // Assurer la visibilité si on a un chemin à suivre
 
         } else {
             // Chemin invalide ou échec du pathfinding
             console.warn(`Agent ${this.id}: setPath received null or empty path.`);
             this.path = null;
             this.currentPathIndex = 0;
-            // Si on attendait un chemin et qu'on reçoit null, retourner à l'état stable précédent.
+
+            // Si on attendait un chemin et qu'on reçoit null, retourner à un état stable
             if (this.currentState === AgentState.WAITING_FOR_PATH) {
-                // On ne sait pas où il voulait aller, on retourne à IDLE? Ou AT_HOME?
-                // Retourner à l'état stable d'où il venait est plus logique.
-                // Difficile à déterminer sans stocker l'état *avant* WAITING_FOR_PATH.
-                // Pour l'instant, retour à IDLE pour la sécurité.
-                this.currentState = AgentState.IDLE;
-                console.warn(`Agent ${this.id}: Pathfinding failed, returning to IDLE state.`);
+                // Retourner à la maison semble le plus sûr s'il en a une, sinon IDLE
+                 this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+                 console.warn(`Agent ${this.id}: Pathfinding failed or path invalid, returning to ${this.currentState} state.`);
+                 this.isVisible = (this.currentState !== AgentState.AT_HOME && this.currentState !== AgentState.AT_WORK); // Cacher si AT_HOME/AT_WORK
+            } else {
+                 // Si on reçoit null alors qu'on n'attendait pas, c'est étrange
+                 console.warn(`Agent ${this.id}: Received null path while not waiting. Current state: ${this.currentState}`);
+                 // Ne pas changer l'état ici, car il était peut-être déjà en IDLE ou autre
             }
-            this.isVisible = false; // Cacher l'agent
+             this.isVisible = (this.currentState !== AgentState.AT_HOME && this.currentState !== AgentState.AT_WORK); // Cacher si AT_HOME/AT_WORK
         }
     }
     // ==============================================================
     // FIN Méthode setPath
     // ==============================================================
+
 	update(deltaTime, currentHour) {
-        // États inactifs ou en attente
+        // États inactifs ou en attente (WAITING_FOR_PATH est maintenant géré passivement, l'agent attend setPath)
         if (this.currentState === 'IDLE' || this.currentState === 'WAITING_FOR_PATH') {
-            this.isVisible = (this.currentState === 'WAITING_FOR_PATH'); // Peut être utile de le voir s'il attend
+            // this.isVisible = (this.currentState === 'WAITING_FOR_PATH'); // Optionnel: le rendre visible en attendant ?
             return;
         }
 
-        // --- 1. Logique de changement d'état basée sur l'heure ---
+        // --- 1. Logique de changement d'état basée sur l'heure (Appelle requestPath si besoin) ---
         const previousState = this.currentState;
         switch (this.currentState) {
             case 'AT_HOME':
                 this.isVisible = false;
                 if (currentHour >= 8 && currentHour < 19 && this.workPosition && this.homeGridNode && this.workGridNode) {
+                   // console.log(`Agent ${this.id} leaving home for work.`);
                    this.requestPath(this.position, this.workPosition, this.homeGridNode, this.workGridNode);
                 }
                 break;
             case 'AT_WORK':
                 this.isVisible = false;
                 if ((currentHour >= 19 || currentHour < 8) && this.homePosition && this.workGridNode && this.homeGridNode) {
+                    // console.log(`Agent ${this.id} leaving work for home.`);
                     this.requestPath(this.position, this.homePosition, this.workGridNode, this.homeGridNode);
                 }
                 break;
         }
+         // Si l'état a changé suite à requestPath (vers WAITING_FOR_PATH), on arrête l'update ici pour cette frame.
+         if(this.currentState === AgentState.WAITING_FOR_PATH) {
+             return;
+         }
 
-        // --- 2. Logique de déplacement (si en mouvement) ---
+
+        // --- 2. Logique de déplacement (si en mouvement : GOING_TO_WORK ou GOING_HOME) ---
         if (this.currentState === 'GOING_TO_WORK' || this.currentState === 'GOING_HOME') {
 
+            // Vérification si le chemin est valide (pourrait devenir null entre-temps?)
             if (!this.path || this.currentPathIndex >= this.path.length) {
-                 console.warn(`Agent ${this.id}: In moving state ${this.currentState} but no valid path.`);
-                 this.currentState = (this.currentState === 'GOING_TO_WORK' && this.workPosition) ? 'AT_WORK' : 'AT_HOME';
+                 // console.warn(`Agent ${this.id}: In moving state ${this.currentState} but no valid path.`);
+                 // Tenter de revenir à un état stable basé sur la destination prévue
+                 this.currentState = (this.currentState === 'GOING_TO_WORK' && this.workPosition) ? 'AT_WORK' : (this.homePosition ? 'AT_HOME' : 'IDLE');
                  this.isVisible = false;
-                 this.path = null;
+                 this.path = null; // Assurer que le chemin est bien null
                  return;
             }
 
             this.isVisible = true;
 
-            // --- Déplacement & Orientation (Mouvement Continu Sans Snap) ---
+            // --- Déplacement & Orientation (Mouvement Continu) ---
             const targetPathPoint = this.path[this.currentPathIndex];
-            this._targetPosition.copy(targetPathPoint); // Cible pour CETTE frame
+            this._targetPosition.copy(targetPathPoint);
 
             const distanceToTargetSq = this.position.distanceToSquared(this._targetPosition);
             const distanceToTarget = Math.sqrt(distanceToTargetSq);
             const moveThisFrame = this.speed * (deltaTime / 1000);
 
-            let hasArrived = false;
+            let hasArrivedAtPathPoint = false;
 
             // --- Mouvement ---
-            if (distanceToTarget > 0.001) { // Se déplacer seulement si on n'est pas déjà exactement dessus
+            if (distanceToTarget > 0.001) {
                 this._direction.copy(this._targetPosition).sub(this.position).normalize();
-
-                // Calculer le déplacement réel : ne pas dépasser la cible
                 const actualMove = Math.min(moveThisFrame, distanceToTarget);
                 this.position.addScaledVector(this._direction, actualMove);
 
-                 // Mettre à jour la cible d'orientation vers la cible ACTUELLE
-                 // pendant qu'on se déplace vers elle.
+                // Mettre à jour la cible d'orientation vers le point actuel
                 this._lookTarget.copy(targetPathPoint);
-                 if (this.position.distanceToSquared(this._lookTarget) > 0.0001) {
-                    const lookMatrix = new THREE.Matrix4().lookAt(this.position, this._lookTarget, new THREE.Vector3(0, 1, 0));
-                    this._targetOrientation.setFromRotationMatrix(lookMatrix);
-                 }
+                if (this.position.distanceToSquared(this._lookTarget) > 0.0001) {
+                   const lookMatrix = new THREE.Matrix4().lookAt(this.position, this._lookTarget, new THREE.Vector3(0, 1, 0));
+                   this._targetOrientation.setFromRotationMatrix(lookMatrix);
+                }
 
-                 // Vérifier si ce mouvement nous a fait arriver (ou presque)
-                 // On utilise la distance *avant* le mouvement pour voir si on allait l'atteindre
-                 if (distanceToTarget <= actualMove + this.reachTolerance) {
-                     hasArrived = true;
-                 }
-
+                // Vérifier si on a atteint la cible (ou presque)
+                // Utiliser distance AVANT mouvement + tolerance
+                if (distanceToTarget <= actualMove + this.reachTolerance) {
+                    hasArrivedAtPathPoint = true;
+                }
             } else {
-                 // Si on était déjà sur la cible (ou très proche), on considère qu'on est arrivé.
-                 hasArrived = true;
+                 hasArrivedAtPathPoint = true; // Déjà sur la cible
             }
-            // --- Fin Mouvement ---
 
+            // --- Logique d'Arrivée au point de chemin ---
+            if (hasArrivedAtPathPoint) {
+                this.currentPathIndex++;
 
-            // --- Logique d'Arrivée et de Transition ---
-            if (hasArrived) {
-                // On est arrivé au point de chemin courant.
-                this.currentPathIndex++; // Passer au point suivant
-
-                // Vérifier si fin du chemin
+                // Vérifier si fin du chemin COMPLET
                 if (this.currentPathIndex >= this.path.length) {
-                    // --- Chemin Terminé ---
-                    // Placer exactement sur le dernier point pour la précision finale
-                    this.position.copy(targetPathPoint);
+                    this.position.copy(targetPathPoint); // Snap final
                     const finalState = (this.currentState === 'GOING_TO_WORK') ? 'AT_WORK' : 'AT_HOME';
+                    // console.log(`Agent ${this.id} reached destination. Transition to ${finalState}`);
                     this.currentState = finalState;
                     this.isVisible = false;
                     this.path = null;
-                    return; // Fin de l'update pour cet agent
+                    this.currentPathIndex = 0; // Réinitialiser
+                    return; // Fin de l'update
                 } else {
-                    // --- Pas la fin : Mettre à jour la cible d'orientation pour viser le PROCHAIN point ---
-                    // La position de l'agent est maintenant très proche de targetPathPoint.
+                    // Pas la fin : viser le PROCHAIN point pour la rotation
                     const nextTargetPathPoint = this.path[this.currentPathIndex];
                     this._lookTarget.copy(nextTargetPathPoint);
                     if (this.position.distanceToSquared(this._lookTarget) > 0.0001) {
                         const lookMatrix = new THREE.Matrix4().lookAt(this.position, this._lookTarget, new THREE.Vector3(0, 1, 0));
                         this._targetOrientation.setFromRotationMatrix(lookMatrix);
                     }
-                    // La rotation se fera progressivement via slerp dans les prochaines frames.
                 }
             }
-            // Si on n'est pas arrivé (hasArrived = false), _targetOrientation vise toujours
-            // le point courant (défini pendant la phase Mouvement).
-
+            // Si pas arrivé, _targetOrientation vise toujours le point courant
 
             // --- Interpolation d'Orientation (Slerp) ---
-            // Toujours appliquée si l'agent est visible et en mouvement.
-            if(this.isVisible) {
+            if(this.isVisible) { // Appliquer seulement si visible et en mouvement
                 const deltaSeconds = deltaTime / 1000;
-                const slerpAlpha = 1.0 - Math.exp(-this.rotationSpeed * deltaSeconds);
+                // Utiliser une constante pour le taux de Slerp pour une rotation plus fluide
+                // ou la formule basée sur l'exponentielle si vous préférez frame-rate independent
+                const slerpAlpha = Math.min(this.rotationSpeed * deltaSeconds, 1.0); // Simple, dépend du framerate
+                // const slerpAlpha = 1.0 - Math.exp(-this.rotationSpeed * deltaSeconds); // Indépendant du framerate
                 this.orientation.slerp(this._targetOrientation, slerpAlpha);
             }
             // ------------------------------------------
@@ -376,6 +381,6 @@ export default class Agent {
         this.workPosition = null;
         this.homeGridNode = null;
         this.workGridNode = null;
-        this.experience = null;
+        this.experience = null; // Libérer la référence à Experience
     }
 }
