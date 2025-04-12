@@ -92,7 +92,7 @@ export default class CityManager {
             agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7, agentSwingAmplitude: 1.2,
             agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
             agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
-			agentAnimationSpeedFactor: 11, // 1.0 = vitesse normale, <1.0 = plus lent, >1.0 = plus rapide
+			agentAnimationSpeedFactor: 8, // 1.0 = vitesse normale, <1.0 = plus lent, >1.0 = plus rapide
         };
 
         // --- Fusion Config Externe ---
