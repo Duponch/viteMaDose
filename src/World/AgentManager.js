@@ -213,10 +213,12 @@ export default class AgentManager {
                 break;
             case 'head':
                 animPosY = torsoBobY + (Math.sin(walkTime * 1.5 + 0.3) * headBobAmplitude); // Suit torse + bob propre
-                animRotX = Math.sin(walkTime) * headNodAmplitude;           // Hochement
-                animRotY = Math.sin(walkTime) * headYawAmplitude;           // Rotation latérale
-                animRotZ = Math.cos(walkTime * 2) * headTiltAmplitude;       // Inclinaison latérale
-                applyRotation = true;
+                // --- MODIFICATION : Rotations de la tête désactivées ---
+                // animRotX = Math.sin(walkTime) * headNodAmplitude;           // Hochement
+                // animRotY = Math.sin(walkTime) * headYawAmplitude;           // Rotation latérale
+                // animRotZ = Math.cos(walkTime * 2) * headTiltAmplitude;       // Inclinaison latérale
+                // applyRotation = true; // On n'applique plus de rotation spécifique à la tête pour le test
+                // -------------------------------------------------------
                 break;
             case 'leftFoot':
                 animPosZ = Math.sin(walkTime) * stepLength;                   // Mouvement Z
@@ -247,9 +249,11 @@ export default class AgentManager {
         // Composer la matrice d'animation finale (Position + Rotation)
         this.tempPosition.set(animPosX, animPosY, animPosZ);
         if (applyRotation) {
+            // Utilise les animRotX/Y/Z calculés pour les pieds/mains
             this.tempQuaternion.setFromEuler(new THREE.Euler(animRotX, animRotY, animRotZ));
         } else {
-            this.tempQuaternion.identity(); // Pas de rotation pour torse (ou autres si ajoutés)
+            // Pour tête (modifiée) et torse: pas de rotation d'animation ajoutée
+            this.tempQuaternion.identity();
         }
         this.tempScale.set(1, 1, 1); // L'animation ne change pas l'échelle locale de la partie
 

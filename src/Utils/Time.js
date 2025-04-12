@@ -22,7 +22,7 @@ export default class Time extends EventTarget {
         });
     }
 
-    tick() {
+    /* tick() {
         const currentTime = Date.now();
         const rawDelta = currentTime - this.current; // Temps réel écoulé depuis le dernier frame
         this.current = currentTime;
@@ -40,7 +40,40 @@ export default class Time extends EventTarget {
         window.requestAnimationFrame(() => {
             this.tick();
         });
-    }
+    } */
+
+	tick() {
+		const currentTime = Date.now();
+		let rawDelta = currentTime - this.current; // Temps réel écoulé
+		this.current = currentTime;
+
+		// --- Ajout : Brider le delta maximum ---
+		// Empêche les sauts énormes si l'application lag ou perd le focus
+		// 1000 / 30 = ~33ms (pour 30 FPS min). On peut prendre un peu plus large.
+		const maxDelta = 50; // Limite à 50ms (équiv. 20 FPS min)
+		if (rawDelta > maxDelta) {
+			rawDelta = maxDelta;
+			// console.warn(`Time.tick: Delta time capped at ${maxDelta}ms`); // Optionnel: pour débug
+		}
+		// --------------------------------------
+
+		// Calculer le delta utilisé par le jeu (prend en compte pause, échelle ET bridage)
+		this.delta = this._isPaused ? 0 : rawDelta * this.timeScale;
+
+		// Mettre à jour le temps total écoulé (avec le delta du jeu)
+		this.elapsed += this.delta;
+
+		// Émettre l'événement tick (les écouteurs recevront le delta ajusté)
+		// Vérifier si des écouteurs existent avant de créer l'événement (micro-optimisation)
+		// if (this.listenerCount('tick') > 0) { // Note: EventTarget n'a pas listenerCount
+			this.dispatchEvent(new Event('tick'));
+		// }
+
+		// Continue la boucle
+		window.requestAnimationFrame(() => {
+			this.tick();
+		});
+	}
 
     // --- Méthodes de contrôle du temps ---
 

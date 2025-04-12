@@ -42,7 +42,7 @@ export default class World {
 
             if (this.cityManager.navigationGraph) {
                 console.log("World: Génération de la visualisation de la grille de navigation...");
-                this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
+                //this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
             } else {
                 console.warn("World: navigationGraph non trouvé dans cityManager après generateCity.");
             }
@@ -126,7 +126,7 @@ export default class World {
         }
 
         // Création visualisation tube chemin (INCHANGÉ)
-        if (pathPoints && pathPoints.length > 1 && this.cityManager.navigationGraph) { // Ajout check navgraph
+        /* if (pathPoints && pathPoints.length > 1 && this.cityManager.navigationGraph) { // Ajout check navgraph
              const curve = new THREE.CatmullRomCurve3(pathPoints);
              const tubeGeometry = new THREE.TubeGeometry(curve, 64, 0.1, 8, false);
              const tubeMaterial = new THREE.MeshBasicMaterial({ color: pathColor });
@@ -135,7 +135,7 @@ export default class World {
              // Positionner le tube légèrement au-dessus du sol
              tubeMesh.position.y = this.cityManager.navigationGraph.sidewalkHeight + 0.02;
              this.debugAgentPathGroup.add(tubeMesh);
-        }
+        } */
 
         // Donner le chemin à l'agent logique via sa méthode setPath
         agentLogic.setPath(pathPoints);

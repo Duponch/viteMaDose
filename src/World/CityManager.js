@@ -145,9 +145,10 @@ export default class CityManager {
 			startTimeOfDay: 0.25, // <- AJOUTER CECI (0.25 = lever du soleil)
 
 			agentScale: 0.1,
-            agentYOffset: 0.55, // << NOUVEAU: Offset vertical pour surélever l'agent
+            agentYOffset: 0.3, // << NOUVEAU: Offset vertical pour surélever l'agent
             // Nouveaux paramètres d'animation (basés sur l'HTML)
-            agentWalkSpeed: 20,
+			agentRotationSpeed: 8.0, // << NOUVEAU: Contrôle la fluidité/rapidité de rotation (plus haut = plus rapide)
+            agentWalkSpeed: 25,
             agentBobAmplitude: 0.15,
             agentStepLength: 1.5,
             agentStepHeight: 0.7,
