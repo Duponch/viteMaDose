@@ -81,7 +81,7 @@ export default class World {
             console.log("World: Ville générée.");
 
             // 3. Init AgentManager
-            const maxAgents = this.cityManager.config.maxAgents ?? 1;
+            const maxAgents = this.cityManager.config.maxAgents ?? 300;
             this.agentManager = new AgentManager(
                 this.scene,
                 this.experience, // Passe l'instance Experience complète
@@ -130,58 +130,74 @@ export default class World {
         console.log(`World: ${this.agentManager.agents.length} agents logiques créés (demandé: ${numberOfAgents}).`);
     }
 
-    // --- MODIFIÉ : Code décommenté et conditionné ---
     /**
      * Affiche le chemin d'un agent pour le débogage SI le mode debug est actif.
      * @param {Agent} agentLogic - L'instance de l'agent logique.
-     * @param {THREE.Vector3[]} pathPoints - Les points du chemin.
+     * @param {THREE.Vector3[]} pathPoints - Les points du chemin (doit être le chemin final stocké dans l'agent).
      * @param {number|THREE.Color} pathColor - La couleur du chemin.
      */
     setAgentPathForAgent(agentLogic, pathPoints, pathColor = 0xff00ff) {
-         // Vérifications initiales
-         if (!agentLogic || !this.debugAgentPathGroup || !this.debugAgentPathGroup.visible) {
-             // Ne rien faire si l'agent est invalide ou le groupe debug est caché (mode debug off)
-             return;
-         }
+		// --- VÉRIFICATION INITIALE ---
+		// Ne rien faire si :
+		// - l'agent est invalide
+		// - le groupe de debug n'existe pas
+		// - le groupe de debug N'EST PAS VISIBLE (mode debug désactivé via setDebugMode)
+		if (!agentLogic || !this.debugAgentPathGroup || !this.debugAgentPathGroup.visible) {
+			return;
+		}
 
-         // --- Début Code Décommenté (Actif en mode Debug) ---
-         const agentId = agentLogic.id;
-         const agentPathName = `AgentPath_${agentId}`;
+		const agentId = agentLogic.id;
+		const agentPathName = `AgentPath_${agentId}`;
 
-         // Recherche/suppression ancien chemin debug
-         const existingPath = this.debugAgentPathGroup.getObjectByName(agentPathName);
-         if (existingPath) {
-              this.debugAgentPathGroup.remove(existingPath);
-              if (existingPath.geometry) existingPath.geometry.dispose();
-              if (existingPath.material) existingPath.material.dispose();
-         }
+		// --- Recherche/suppression ancien chemin debug ---
+		const existingPath = this.debugAgentPathGroup.getObjectByName(agentPathName);
+		if (existingPath) {
+			 // Retirer l'ancien mesh du groupe
+			 this.debugAgentPathGroup.remove(existingPath);
+			 // Disposer la géométrie et le matériau pour libérer la mémoire GPU
+			 if (existingPath.geometry) existingPath.geometry.dispose();
+			 if (existingPath.material) existingPath.material.dispose();
+		}
 
-         // Création visualisation tube chemin debug
-         if (pathPoints && pathPoints.length > 1) {
-              try {
-                  const curve = new THREE.CatmullRomCurve3(pathPoints);
-                  const tubeSegments = Math.min(64, pathPoints.length * 4);
-                  const tubeRadius = 0.1; // Rayon du tube
-                  const radialSegments = 4; // Simple section pour le tube
-                  const closed = false;
+		// --- Création visualisation tube chemin debug ---
+		// Vérifier si on a un chemin valide avec au moins 2 points pour former une courbe
+		if (pathPoints && pathPoints.length > 1) {
+			 try {
+				 // Créer une courbe passant par les points du chemin
+				 const curve = new THREE.CatmullRomCurve3(pathPoints);
 
-                  const tubeGeometry = new THREE.TubeGeometry(curve, tubeSegments, tubeRadius, radialSegments, closed);
-                  const tubeMaterial = new THREE.MeshBasicMaterial({ color: pathColor }); // Matériau simple
-                  const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
-                  tubeMesh.name = agentPathName; // Nom pour retrouver/supprimer
+				 // Définir les paramètres du tube
+				 const tubeSegments = Math.min(64, pathPoints.length * 4); // Nombre de segments le long du tube
+				 const tubeRadius = 0.1; // Rayon du tube (assez fin)
+				 const radialSegments = 4; // Nombre de segments autour du tube (simple)
+				 const closed = false; // Le chemin n'est pas fermé
 
-                  // Positionner légèrement au-dessus du sol
-                  const sidewalkHeight = this.cityManager?.config?.sidewalkHeight ?? 0.2;
-                  tubeMesh.position.y = sidewalkHeight + 0.05; // Ajuster si nécessaire
+				 // Créer la géométrie du tube
+				 const tubeGeometry = new THREE.TubeGeometry(curve, tubeSegments, tubeRadius, radialSegments, closed);
 
-                  this.debugAgentPathGroup.add(tubeMesh); // Ajouter au groupe debug
+				 // Créer un matériau simple pour le tube
+				 const tubeMaterial = new THREE.MeshBasicMaterial({ color: pathColor });
 
-              } catch (error) {
-                  console.error(`World: Erreur création tube debug pour Agent ${agentId}:`, error);
-              }
-         }
-         // --- Fin Code Décommenté ---
-    }
+				 // Créer le mesh du tube
+				 const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+				 tubeMesh.name = agentPathName; // Nommer pour pouvoir le retrouver et le supprimer plus tard
+
+				 // --- Positionner légèrement au-dessus du sol ---
+				 // Essayer de récupérer la hauteur du trottoir depuis la config via cityManager
+				 const sidewalkHeight = this.cityManager?.config?.sidewalkHeight ?? 0.2;
+				 tubeMesh.position.y = sidewalkHeight + 0.05; // Ajuster ce décalage si nécessaire
+
+				 // Ajouter le tube au groupe de debug des chemins d'agents
+				 this.debugAgentPathGroup.add(tubeMesh);
+
+			 } catch (error) {
+				 console.error(`World: Erreur création tube debug pour Agent ${agentId}:`, error);
+				 // Afficher les points du chemin en cas d'erreur peut aider au debug
+				 // console.error("Path points:", pathPoints);
+			 }
+		}
+		// Si pathPoints est null ou a moins de 2 points, on ne crée pas de tube (l'ancien a déjà été retiré).
+   }
     // --- FIN MODIFIÉ ---
 
     update() {
