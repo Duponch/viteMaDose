@@ -366,7 +366,7 @@ export default class PlotContentGenerator {
     }
 
 	// ==============================================================
-    // Fonction 3 : generatePlotPrimaryContent (MODIFIÉE - Logique de centrage corrigée)
+    // Fonction 3 : generatePlotPrimaryContent (MODIFIÉE - Centrage basé sur l'empreinte carrée)
     // ==============================================================
     generatePlotPrimaryContent(plot) {
         if (!this.cityManager || !this.navigationGraph) {
@@ -378,7 +378,6 @@ export default class PlotContentGenerator {
         if (plot.zoneType === 'house') {
             this.createPlotGround(plot);
 
-            // Vérifier si les géométries de base sont prêtes
             if (!this.baseHouseGeometries.base_part1?.userData) {
                 console.warn(`PlotContentGenerator: Composants maison (L-shape) non prêts pour plot ${plot.id}.`);
                 return;
@@ -390,45 +389,40 @@ export default class PlotContentGenerator {
             const spacing = this.config.fixedHouseGridSpacing ?? 8;
             const gridScale = this.navigationGraph.gridScale ?? 1.0;
             const gridCellSize = 1.0 / gridScale;
-
             const plotBounds = plot.getBounds();
             const minGridPoint = this.navigationGraph.worldToGrid(plotBounds.minX, plotBounds.minZ);
             const maxGridPoint = this.navigationGraph.worldToGrid(plotBounds.maxX, plotBounds.maxZ);
             const minGx = minGridPoint.x; const minGy = minGridPoint.y;
             const maxGx = maxGridPoint.x; const maxGy = maxGridPoint.y;
-            const plotGridW = maxGx - minGx + 1;
-            const plotGridD = maxGy - minGy + 1;
-
+            const plotGridW = maxGx - minGx + 1; const plotGridD = maxGy - minGy + 1;
             if (plotGridW <= 0 || plotGridD <= 0) return;
-
             const maxPossibleX = Math.max(0, Math.floor((plotGridW + spacing) / (houseGridW + spacing)));
             const maxPossibleY = Math.max(0, Math.floor((plotGridD + spacing) / (houseGridD + spacing)));
-            let numHousesX = maxPossibleX;
-            let numHousesY = maxPossibleY;
-
+            let numHousesX = maxPossibleX; let numHousesY = maxPossibleY;
             if (numHousesX <= 0 || numHousesY <= 0) return;
-
             const totalGridWidthNeeded = numHousesX * houseGridW + Math.max(0, numHousesX - 1) * spacing;
             const totalGridDepthNeeded = numHousesY * houseGridD + Math.max(0, numHousesY - 1) * spacing;
             const offsetX = Math.floor((plotGridW - totalGridWidthNeeded) / 2);
             const offsetY = Math.floor((plotGridD - totalGridDepthNeeded) / 2);
-            const startGx = minGx + offsetX;
-            const startGy = minGy + offsetY;
+            const startGx = minGx + offsetX; const startGy = minGy + offsetY;
             const groundLevel = 0.01;
             // --- Fin Configuration Grille ---
 
             // --- Dimensions modèle LOCAL L pour référence ---
-            const armLength = 2.0; // Correspond à la dimension X de base_part1 et Z de base_part2
-            const armWidth = 1.0;  // Correspond à la dimension Z de base_part1 et X de base_part2
-            const armDepth = 0.5;  // Hauteur locale des murs
-            const roofPitchHeight = 0.3; // Hauteur locale du pignon
-            const baseModelFootprintSize = armLength; // L'encombrement est ~ armLength x armLength
-            const houseModelCenterOffsetX = armWidth / 2; // Décalage du centre par rapport à l'origine locale (0,0)
-            const houseModelCenterOffsetZ = armWidth / 2; // car les pièces ont été translatées pour que l'origine soit le coin
+            const armLength = 2.0; // Dimension X/Z de l'empreinte carrée englobante
+            const armWidth = 1.0;
+            const armDepth = 0.5;  // Hauteur mur
+            const roofPitchHeight = 0.3;
+            const baseModelFootprintSize = armLength; // On utilise la dimension englobante pour l'échelle
+
+            // --- Centre de l'empreinte CARRÉE par rapport à l'origine locale (coin du L) ---
+            const modelSquareCenterOffsetX = armLength / 2;
+            const modelSquareCenterOffsetZ = armLength / 2;
+            const modelSquareCenterLocal = new THREE.Vector3(modelSquareCenterOffsetX, 0, modelSquareCenterOffsetZ); // Offset sur le plan XZ
 
             let housesPlacedOnPlot = 0;
 
-            // --- Boucle de placement (inchangée structurellement) ---
+            // --- Boucle de placement ---
             for (let rowIndex = 0; rowIndex < numHousesY; rowIndex++) {
                 for (let colIndex = 0; colIndex < numHousesX; colIndex++) {
 
@@ -437,7 +431,7 @@ export default class PlotContentGenerator {
                     const currentGy = startGy + rowIndex * (houseGridD + spacing);
                     const centerGx = currentGx + (houseGridW / 2.0);
                     const centerGy = currentGy + (houseGridD / 2.0);
-                    const worldCellCenterPos = this.navigationGraph.gridToWorld(centerGx, centerGy);
+                    const worldCellCenterPos = this.navigationGraph.gridToWorld(centerGx, centerGy); // Centre de la cellule cible
                     const targetWorldWidth = houseGridW * gridCellSize;
                     const targetWorldDepth = houseGridD * gridCellSize;
                     let scaleValue = Math.min(
@@ -452,35 +446,32 @@ export default class PlotContentGenerator {
                     // --- Rotation et Position Y (inchangé) ---
                     const rotationY = Math.floor(Math.random() * 4) * Math.PI / 2;
                     const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotationY);
-                    const baseYOffset = this.baseHouseGeometries.base_part1.userData.minY ?? 0; // Devrait être 0 maintenant
-                    const finalPosY = groundLevel - baseYOffset * scaleValue; // = groundLevel
+                    const baseYOffset = this.baseHouseGeometries.base_part1.userData.minY ?? 0;
+                    const finalPosY = groundLevel - baseYOffset * scaleValue;
                     // --- Fin Rotation et Position Y ---
 
-                    // --- Matrice GLOBALE (Point de Centrage) ---
-                    // **CORRECTION CENTRAGE** :
-                    // On translate la position de base par le décalage *scaled* du centre du modèle
-                    // pour que le centre du modèle coïncide avec le centre de la cellule.
-                    // L'offset local est (houseModelCenterOffsetX, 0, houseModelCenterOffsetZ).
-                    // On doit appliquer la rotation AVANT cette translation relative.
-                    const centerOffsetLocal = new THREE.Vector3(houseModelCenterOffsetX, 0, houseModelCenterOffsetZ);
-                    // Appliquer la rotation à l'offset pour savoir où se trouve le centre *après* rotation
-                    const centerOffsetRotated = centerOffsetLocal.clone().applyQuaternion(baseQuaternion);
-                    // Appliquer l'échelle à cet offset rotaté
+                    // --- **CORRECTION CENTRAGE V2 : Basé sur l'empreinte carrée** ---
+                    // 1. Appliquer la rotation à l'offset du CENTRE CARRÉ local
+                    const centerOffsetRotated = modelSquareCenterLocal.clone().applyQuaternion(baseQuaternion);
+                    // 2. Appliquer l'échelle à cet offset rotaté
                     const centerOffsetScaledRotated = centerOffsetRotated.multiplyScalar(scaleValue);
-                    // La position finale est le centre de la cellule MOINS ce décalage
+                    // 3. La position finale de la matrice globale (qui transforme l'origine (0,0,0) du modèle)
+                    //    est le centre de la cellule MOINS ce décalage calculé.
+                    //    Ceci place l'origine du modèle de telle sorte que son centre carré (après rot/scale) atterrisse au centre de la cellule.
                     const finalPosition = new THREE.Vector3(
                         worldCellCenterPos.x - centerOffsetScaledRotated.x,
-                        finalPosY, // Y reste le même
+                        finalPosY, // La hauteur reste basée sur le sol
                         worldCellCenterPos.z - centerOffsetScaledRotated.z
                     );
-                    // --- FIN CORRECTION CENTRAGE ---
+                    // --- **FIN CORRECTION CENTRAGE V2** ---
 
+                    // Création de la matrice GLOBALE pour cette instance de maison
                     const globalHouseMatrix = new THREE.Matrix4().compose(finalPosition, baseQuaternion, baseScale);
-
 
                     // --- Helper addPartInstance (inchangé) ---
                     const addPartInstance = (partName, localMatrix) => {
                          if (this.baseHouseGeometries[partName]) {
+                            // La matrice finale pour l'instance de la pièce est Global * Local
                             const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix);
                             const type = 'house'; const modelId = partName;
                             if (!this.instanceData[type]) this.instanceData[type] = {};
@@ -489,70 +480,72 @@ export default class PlotContentGenerator {
                          } else { console.warn(`Géométrie manquante: ${partName}`); }
                     };
 
-                    // --- Ajout des Parties (utilise les GÉOMÉTRIES LOCALEMENT CENTRÉES) ---
-                    // Les positions locales sont maintenant relatives à l'origine (0,0,0) qui est le coin intérieur du L.
-                    // Les géométries elles-mêmes ont été translatées, donc on utilise (0,0,0) comme base locale ici.
-                    const doorDepth = 0.05; const windowDepth = doorDepth; // Épaisseurs
-                    const window_Y_pos_Relative = armDepth * 0.1; // Position Y relative au bas du mur
+                    // --- Ajout des Parties (Utilise les positions locales RELATIVES AU COIN (0,0,0)) ---
+                    // La matrice globale gère le placement correct de l'origine (0,0,0).
+                    // Les matrices locales positionnent les pièces par rapport à cette origine.
+                    // Les géométries elles-mêmes ont été centrées dans defineHouseBaseGeometries.
+                    const doorHeight = this.baseHouseGeometries.door.parameters.height;
+                    const doorDepth = this.baseHouseGeometries.door.parameters.width; // Box(depth, height, width)
+                    const garageDoorHeight = this.baseHouseGeometries.garageDoor.parameters.height;
+                    const windowHeight = this.baseHouseGeometries.windowXY.parameters.height;
+                    const windowDepth = this.baseHouseGeometries.windowXY.parameters.depth;
+                    const window_Y_pos_Base = armDepth * 0.1; // Position Y du BAS de la fenêtre, relative au sol local (0)
 
                     let localMatrix;
-                    // Bases (déjà translatées lors de la création)
-                    localMatrix = new THREE.Matrix4(); // Identité car déjà centrées
+
+                    // Bases (Géométrie déjà translatée pour que le coin soit à 0,0,0)
+                    localMatrix = new THREE.Matrix4(); // Matrice Identité
                     addPartInstance('base_part1', localMatrix);
-                    localMatrix = new THREE.Matrix4(); // Identité
+                    localMatrix = new THREE.Matrix4(); // Matrice Identité
                     addPartInstance('base_part2', localMatrix);
 
-                    // Toits (centrés lors de la création, positionnés en Y)
-                    const roofPosY_Center = armDepth + roofPitchHeight / 2; // Position Y relative au sol (0)
-                    const roofPos1 = new THREE.Vector3(armLength/2, roofPosY_Center, armWidth/2); // Centre du toit 1
-                    const roofPos2 = new THREE.Vector3(armWidth/2, roofPosY_Center, armLength/2); // Centre du toit 2
-                    const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), Math.PI/2);
-                    const roofRot2 = new THREE.Quaternion(); // Pas de rotation pour le 2e toit
-                    localMatrix = new THREE.Matrix4().compose(roofPos1, roofRot1, new THREE.Vector3(1,1,1)); addPartInstance('roof', localMatrix);
-                    localMatrix = new THREE.Matrix4().compose(roofPos2, roofRot2, new THREE.Vector3(1,1,1)); addPartInstance('roof', localMatrix);
+                    // Toits (Géométrie centrée, besoin de translation + rotation locale)
+                    const roofPosY_Center = armDepth + roofPitchHeight / 2; // Position Y du CENTRE du toit
+                    const roofPos1 = new THREE.Vector3(armLength / 2, roofPosY_Center, armWidth / 2); // Centre relatif au coin 0,0,0
+                    const roofPos2 = new THREE.Vector3(armWidth / 2, roofPosY_Center, armLength / 2); // Centre relatif au coin 0,0,0
+                    const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+                    const roofRot2 = new THREE.Quaternion();
+                    localMatrix = new THREE.Matrix4().compose(roofPos1, roofRot1, new THREE.Vector3(1, 1, 1)); addPartInstance('roof', localMatrix);
+                    localMatrix = new THREE.Matrix4().compose(roofPos2, roofRot2, new THREE.Vector3(1, 1, 1)); addPartInstance('roof', localMatrix);
 
-                    // Porte principale (sur la face +X de base_part2)
-                    const doorHeight = this.baseHouseGeometries.door.parameters.height;
-                    const doorPos = new THREE.Vector3(armWidth + doorDepth/2, doorHeight/2, armLength * 0.75); // Position relative au coin (0,0,0)
+                    // Porte principale (sur face +X de base_part2)
+                    const doorPos = new THREE.Vector3(armWidth + doorDepth / 2, doorHeight / 2, armLength * 0.75); // Centre de la porte, relatif au coin 0,0,0
                     localMatrix = new THREE.Matrix4().makeTranslation(doorPos.x, doorPos.y, doorPos.z);
                     addPartInstance('door', localMatrix);
 
-                    // Porte Garage (sur la face +X de base_part1)
-                    const garageDoorHeight = this.baseHouseGeometries.garageDoor.parameters.height;
-                    const garagePos = new THREE.Vector3(armLength + doorDepth/2, garageDoorHeight/2, armWidth * 0.5); // Position relative au coin (0,0,0)
+                    // Porte Garage (sur face +X de base_part1)
+                    const garagePos = new THREE.Vector3(armLength + doorDepth / 2, garageDoorHeight / 2, armWidth * 0.5); // Centre, relatif au coin 0,0,0
                     localMatrix = new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z);
                     addPartInstance('garageDoor', localMatrix);
 
-                    // Fenêtres (méthode pour simplifier)
-                    // Les positions sont relatives au coin (0,0,0)
-                    const addWindowPart = (geomKey, x, y, z) => {
-                        // Prend la hauteur de la fenêtre depuis la géométrie
-                        const winHeight = (geomKey === 'windowXY') ? this.baseHouseGeometries.windowXY.parameters.height : this.baseHouseGeometries.windowYZ.parameters.height;
-                        localMatrix = new THREE.Matrix4().makeTranslation(x, y + winHeight / 2, z); // Ajuste Y pour positionner le *bas* de la fenêtre
+                    // Fenêtres (Helper pour positionner le CENTRE de la fenêtre relatif au coin 0,0,0)
+                    const addWindowPart = (geomKey, x, yBase, z) => {
+                        // yBase est la position du BAS de la fenêtre
+                        localMatrix = new THREE.Matrix4().makeTranslation(x, yBase + windowHeight / 2, z); // Positionne le CENTRE Y
                         addPartInstance(geomKey, localMatrix);
                     };
-
-                    // Face -Z de base_part1 (x de 0 à armLength, z = 0)
-                    addWindowPart('windowXY', 0.25, window_Y_pos_Relative, -windowDepth/2);
-                    addWindowPart('windowXY', 0.75, window_Y_pos_Relative, -windowDepth/2);
-                    addWindowPart('windowXY', 1.25, window_Y_pos_Relative, -windowDepth/2);
-                    addWindowPart('windowXY', 1.75, window_Y_pos_Relative, -windowDepth/2);
-                    // Face +Z de base_part1 (x de 0 à armLength, z = armWidth)
-                    addWindowPart('windowXY', 0.25, window_Y_pos_Relative, armWidth+windowDepth/2);
-                    addWindowPart('windowXY', 0.75, window_Y_pos_Relative, armWidth+windowDepth/2);
-                    addWindowPart('windowXY', 1.25, window_Y_pos_Relative, armWidth+windowDepth/2);
-                    addWindowPart('windowXY', 1.75, window_Y_pos_Relative, armWidth+windowDepth/2);
-                    // Face -X de base_part2 (z de 0 à armLength, x = 0)
-                    addWindowPart('windowYZ', -windowDepth/2, window_Y_pos_Relative, 0.25);
-                    addWindowPart('windowYZ', -windowDepth/2, window_Y_pos_Relative, 0.75);
-                    addWindowPart('windowYZ', -windowDepth/2, window_Y_pos_Relative, 1.25);
-                    addWindowPart('windowYZ', -windowDepth/2, window_Y_pos_Relative, 1.75);
-                     // Face +X de base_part2 (z de 0 à armLength, x = armWidth)
-                     // Porte déjà présente sur une partie de cette face
-                     addWindowPart('windowYZ', armWidth+windowDepth/2, window_Y_pos_Relative, 0.25);
-                     // Face +Z de base_part2 (x de 0 à armWidth, z = armLength)
-                     addWindowPart('windowXY', 0.25, window_Y_pos_Relative, armLength+windowDepth/2);
-                     addWindowPart('windowXY', 0.75, window_Y_pos_Relative, armLength+windowDepth/2);
+                    // Face -Z de base_part1 (x=0..L, z=0) -> Centre Z = -windowDepth/2
+                    addWindowPart('windowXY', 0.25, window_Y_pos_Base, -windowDepth / 2);
+                    addWindowPart('windowXY', 0.75, window_Y_pos_Base, -windowDepth / 2);
+                    addWindowPart('windowXY', 1.25, window_Y_pos_Base, -windowDepth / 2);
+                    addWindowPart('windowXY', 1.75, window_Y_pos_Base, -windowDepth / 2);
+                    // Face +Z de base_part1 (x=0..L, z=W) -> Centre Z = W + windowDepth/2
+                    addWindowPart('windowXY', 0.25, window_Y_pos_Base, armWidth + windowDepth / 2);
+                    addWindowPart('windowXY', 0.75, window_Y_pos_Base, armWidth + windowDepth / 2);
+                    addWindowPart('windowXY', 1.25, window_Y_pos_Base, armWidth + windowDepth / 2);
+                    addWindowPart('windowXY', 1.75, window_Y_pos_Base, armWidth + windowDepth / 2);
+                    // Face -X de base_part2 (z=0..L, x=0) -> Centre X = -windowDepth/2
+                    addWindowPart('windowYZ', -windowDepth / 2, window_Y_pos_Base, 0.25);
+                    addWindowPart('windowYZ', -windowDepth / 2, window_Y_pos_Base, 0.75);
+                    addWindowPart('windowYZ', -windowDepth / 2, window_Y_pos_Base, 1.25);
+                    addWindowPart('windowYZ', -windowDepth / 2, window_Y_pos_Base, 1.75);
+                     // Face +X de base_part2 (z=0..L, x=W) -> Centre X = W + windowDepth/2
+                     addWindowPart('windowYZ', armWidth + windowDepth / 2, window_Y_pos_Base, 0.25);
+                     // addWindowPart('windowYZ', armWidth + windowDepth / 2, window_Y_pos_Base, 0.75); // Porte ici
+                     addWindowPart('windowYZ', armWidth + windowDepth / 2, window_Y_pos_Base, 1.25);
+                     // Face +Z de base_part2 (x=0..W, z=L) -> Centre Z = L + windowDepth/2
+                     addWindowPart('windowXY', 0.25, window_Y_pos_Base, armLength + windowDepth / 2);
+                     addWindowPart('windowXY', 0.75, window_Y_pos_Base, armLength + windowDepth / 2);
                     // --- Fin Ajout Parties ---
 
                     // --- Enregistrement & Debug (inchangé) ---
@@ -562,8 +555,8 @@ export default class PlotContentGenerator {
                         const debugGridWorldWidth = houseGridW * gridCellSize; const debugGridWorldDepth = houseGridD * gridCellSize;
                         const debugGeom = new THREE.PlaneGeometry(debugGridWorldWidth, debugGridWorldDepth);
                         const debugMesh = new THREE.Mesh(debugGeom, this.debugPlotGridMaterial);
-                        debugMesh.position.copy(worldCellCenterPos).setY(groundLevel + 0.02); // Positionne la grille debug au centre de la cellule
-                        debugMesh.rotation.set(-Math.PI / 2, 0, 0); // Pas de rotation Y ici pour la grille debug
+                        debugMesh.position.copy(worldCellCenterPos).setY(groundLevel + 0.02);
+                        debugMesh.rotation.set(-Math.PI / 2, 0, 0);
                         this.debugPlotGridGroup.add(debugMesh);
                     }
                     plot.addPlacedHouseGrid({ gx: currentGx, gy: currentGy, gridWidth: houseGridW, gridDepth: houseGridD });
@@ -574,8 +567,6 @@ export default class PlotContentGenerator {
 
         // --- CAS AUTRES TYPES (Logique inchangée) ---
         } else if (plot.zoneType && ['building', 'industrial', 'park', 'skyscraper'].includes(plot.zoneType)) {
-            // La logique existante pour les autres types d'assets semble correcte
-            // et place déjà les assets au centre de leurs sous-zones.
              this.createPlotGround(plot);
              const subZones = this.subdivideForPlacement(plot);
              const margin = plot.zoneType === 'park' ? 0 : (this.config.buildingSubZoneMargin ?? 1.5);
@@ -587,15 +578,7 @@ export default class PlotContentGenerator {
                     const subZoneCenterZ = subZone.z + subZone.depth / 2;
                     const assetInfo = this.assetLoader.getRandomAssetData(plot.zoneType);
                     if (assetInfo) {
-                        // Utilise la hauteur *après* fitting pour le calcul Y
-                        const instanceMatrix = this.calculateInstanceMatrix(
-                            subZoneCenterX,
-                            subZoneCenterZ,
-                            assetInfo.sizeAfterFitting.y, // Hauteur après fitting scale
-                            assetInfo.fittingScaleFactor,
-                            assetInfo.centerOffset,
-                            assetInfo.userScale // Échelle utilisateur supplémentaire
-                        );
+                        const instanceMatrix = this.calculateInstanceMatrix( subZoneCenterX, subZoneCenterZ, assetInfo.sizeAfterFitting.y, assetInfo.fittingScaleFactor, assetInfo.centerOffset, assetInfo.userScale );
                         const modelId = assetInfo.id;
                         if (!this.instanceData[plot.zoneType]) this.instanceData[plot.zoneType] = {};
                         if (!this.instanceData[plot.zoneType][modelId]) this.instanceData[plot.zoneType][modelId] = [];
