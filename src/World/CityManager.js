@@ -42,7 +42,7 @@ export default class CityManager {
             // --- Configurations de GRILLE FIXE ---
             fixedHouseGridWidth: 10,
             fixedHouseGridDepth: 10,
-            fixedHouseGridSpacing: 5,
+            fixedHouseGridSpacing: 14,
             fixedBuildingGridWidth: 12,
             fixedBuildingGridDepth: 12,
             fixedBuildingGridSpacing: 6,
@@ -54,7 +54,7 @@ export default class CityManager {
             fixedSkyscraperGridSpacing: 10,
 
             // --- NOUVEAU : Échelles de Base pour la Grille ---
-            gridHouseBaseScale: 1.0,       // Échelle finale appliquée aux maisons sur grille
+            gridHouseBaseScale: 1.5,       // Échelle finale appliquée aux maisons sur grille
             gridBuildingBaseScale: 1.0,    // Échelle finale appliquée aux immeubles sur grille
             gridIndustrialBaseScale: 1.0,  // Échelle finale appliquée aux industries sur grille
             gridSkyscraperBaseScale: 1.0, // Échelle finale appliquée aux gratte-ciels sur grille

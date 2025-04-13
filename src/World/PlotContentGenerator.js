@@ -10,23 +10,26 @@ export default class PlotContentGenerator {
         this.sidewalkGroup = new THREE.Group(); this.sidewalkGroup.name = "Sidewalks";
         this.buildingGroup = new THREE.Group(); this.buildingGroup.name = "PlotContents";
         this.assetLoader = null;
-        this.instanceData = {}; // For non-house assets + crosswalks
+        this.instanceData = {}; // Pour non-house assets + crosswalks
         this.stripeBaseGeometry = null;
-        this.cityManager = null; // Will be set in generateContent
-        this.navigationGraph = null; // Will be set in generateContent
+        this.cityManager = null;
+        this.navigationGraph = null; // Peut encore être utile pour l'orientation mais pas pour le placement
         this.debugPlotGridGroup = null;
         this.debugPlotGridMaterial = debugPlotGridMaterial ?? new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
 
-        // Procedural House Section
+        // --- Section Maison Procédurale ---
         this.baseHouseGeometries = {};
         this.baseHouseMaterials = {};
         this.houseInstanceMatrices = {};
         this.houseInstancedMeshes = {};
+        // Appel des définitions inchangées
         this.defineHouseBaseMaterials();
         this.defineHouseBaseGeometries();
         this.initializeHouseMatrixArrays();
+        // --------------------------------
 
-        console.log("PlotContentGenerator initialized (grid logic for all buildable types, with scale & orientation).");
+        // Log mis à jour
+        console.log("PlotContentGenerator initialized (Dynamic World Coordinate Grid logic).");
     }
 
 	initializeHouseMatrixArrays() {
@@ -364,133 +367,130 @@ export default class PlotContentGenerator {
         return plotGeometries;
     }
 
-	// ==============================================================
-    // Fonction generatePlotPrimaryContent (MODIFIÉE LARGEMENT)
-    // ==============================================================
-    generatePlotPrimaryContent(plot) {
-        // Prérequis (inchangé)
-        if (!this.cityManager || !this.navigationGraph || !this.assetLoader) {
-            console.error(`PlotContentGenerator: Prérequis manquants pour plot ${plot.id}`);
+	generatePlotPrimaryContent(plot) {
+        // Prérequis
+        if (!this.cityManager || !this.assetLoader) {
+            console.error(`PlotContentGenerator: Prérequis manquants (CityManager/AssetLoader) pour plot ${plot.id}`);
             return;
         }
 
-        // Création sol et reset grille (inchangé)
-        this.createPlotGround(plot);
-        plot.placedGridCells = []; // Utilise le nom générique
+        // Création sol et reset instances sur le plot
+        this.createPlotGround(plot); // Méthode inchangée appelée
+        plot.buildingInstances = []; // Reset des instances de bâtiments sur CETTE parcelle
 
-        // Variables communes pour la grille
-        const gridScale = this.navigationGraph.gridScale ?? 1.0;
-        const gridCellSize = 1.0 / gridScale;
         const groundLevel = 0.01;
-        const plotBounds = plot.getBounds();
-        const minGridPoint = this.navigationGraph.worldToGrid(plotBounds.minX, plotBounds.minZ);
-        const maxGridPoint = this.navigationGraph.worldToGrid(plotBounds.maxX, plotBounds.maxZ);
-        const minGx = minGridPoint.x; const minGy = minGridPoint.y;
-        const maxGx = maxGridPoint.x; const maxGy = maxGridPoint.y;
-        const plotGridW = maxGx - minGx + 1; const plotGridD = maxGy - minGy + 1;
-
-        if (plotGridW <= 0 || plotGridD <= 0) {
-             console.warn(`Plot ${plot.id} (${plot.zoneType}) a des dimensions de grille invalides.`);
-             return;
-        }
-
         const zoneType = plot.zoneType;
 
-        // --- CAS 'house' (Logique adaptée pour scale et orientation) ---
-        if (zoneType === 'house') {
-            // Setup maison procédurale (inchangé)
-            if (!this.baseHouseGeometries.base_part1?.userData) { /* ... */ return; }
+        let targetBuildingWidth = 0;
+        let targetBuildingDepth = 0;
+        let baseScaleFactor = 1.0;
+        let assetInfo = null;
 
-            // Config Grille Maison
-            const gridW = this.config.fixedHouseGridWidth ?? 10;
-            const gridD = this.config.fixedHouseGridDepth ?? 10;
-            const spacing = this.config.fixedHouseGridSpacing ?? 8;
-            // --- NOUVEAU : Récupérer l'échelle de base ---
-            const gridItemBaseScale = this.config.gridHouseBaseScale ?? 1.0;
-            // -----------------------------------------
+        // --- Déterminer les dimensions cibles et l'échelle de base ---
+        switch(zoneType) {
+            case 'house':
+                 // *** Correction : Définir armLength ici pour la portée du switch ***
+                 const houseArmLength = 2.0; // Utiliser un nom différent pour éviter conflit potentiel
+                 targetBuildingWidth = houseArmLength;
+                 targetBuildingDepth = houseArmLength;
+                 baseScaleFactor = this.config.gridHouseBaseScale ?? 1.5;
+                 targetBuildingWidth *= baseScaleFactor;
+                 targetBuildingDepth *= baseScaleFactor;
+                 break;
+            case 'building':
+            case 'industrial':
+            case 'skyscraper':
+                assetInfo = this.assetLoader.getRandomAssetData(zoneType);
+                if (!assetInfo) {
+                     console.warn(`Aucun asset trouvé pour le type ${zoneType} sur la parcelle ${plot.id}.`);
+                     return;
+                }
+                if(zoneType === 'building') baseScaleFactor = this.config.gridBuildingBaseScale ?? 1.0;
+                else if(zoneType === 'industrial') baseScaleFactor = this.config.gridIndustrialBaseScale ?? 1.0;
+                else baseScaleFactor = this.config.gridSkyscraperBaseScale ?? 1.0;
+                targetBuildingWidth = assetInfo.sizeAfterFitting.x * baseScaleFactor;
+                targetBuildingDepth = assetInfo.sizeAfterFitting.z * baseScaleFactor;
+                break;
+            case 'park':
+                 const subZones = this.subdivideForPlacement(plot); // Méthode inchangée appelée
+                 subZones.forEach((subZone) => { /* ... (Logique parc inchangée) ... */ if (subZone.width > 0.1 && subZone.depth > 0.1) { const subZoneCenterX = subZone.x + subZone.width / 2; const subZoneCenterZ = subZone.z + subZone.depth / 2; const parkAssetInfo = this.assetLoader.getRandomAssetData(plot.zoneType); if (parkAssetInfo) { const instanceMatrix = this.calculateInstanceMatrix( subZoneCenterX, subZoneCenterZ, parkAssetInfo.sizeAfterFitting.y, parkAssetInfo.fittingScaleFactor, parkAssetInfo.centerOffset, parkAssetInfo.userScale, Math.random() * Math.PI * 2 ); const modelId = parkAssetInfo.id; if (!this.instanceData[plot.zoneType]) this.instanceData[plot.zoneType] = {}; if (!this.instanceData[plot.zoneType][modelId]) this.instanceData[plot.zoneType][modelId] = []; this.instanceData[plot.zoneType][modelId].push(instanceMatrix.clone()); } } });
+                 return;
+            default:
+                return;
+        }
 
-            // Calcul placement grille (inchangé)
-            const maxPossibleX = Math.max(0, Math.floor((plotGridW + spacing) / (gridW + spacing)));
-            const maxPossibleY = Math.max(0, Math.floor((plotGridD + spacing) / (gridD + spacing)));
-            let numItemsX = maxPossibleX; let numItemsY = maxPossibleY;
-            if (numItemsX <= 0 || numItemsY <= 0) return;
-            const totalGridWidthNeeded = numItemsX * gridW + Math.max(0, numItemsX - 1) * spacing;
-            const totalGridDepthNeeded = numItemsY * gridD + Math.max(0, numItemsY - 1) * spacing;
-            const offsetX = Math.floor((plotGridW - totalGridWidthNeeded) / 2);
-            const offsetY = Math.floor((plotGridD - totalGridDepthNeeded) / 2);
-            const startGx = minGx + offsetX; const startGy = minGy + offsetY;
+        // Vérifier dimensions cibles valides
+        if (targetBuildingWidth <= 0.1 || targetBuildingDepth <= 0.1) {
+            console.warn(`Dimensions cibles invalides pour ${zoneType} sur plot ${plot.id}. W: ${targetBuildingWidth.toFixed(1)}, D: ${targetBuildingDepth.toFixed(1)}.`);
+            return;
+        }
 
-            // Dimensions modèle & Centrage (inchangé)
-            const armLength = 2.0; const baseModelFootprintSize = armLength;
-            const modelSquareCenterOffsetX = armLength / 2; const modelSquareCenterOffsetZ = armLength / 2;
-            const modelSquareCenterLocal = new THREE.Vector3(modelSquareCenterOffsetX, 0, modelSquareCenterOffsetZ);
+        // --- Calcul Grille Dynamique ---
+        const numItemsX = Math.max(1, Math.floor(plot.width / targetBuildingWidth));
+        const numItemsY = Math.max(1, Math.floor(plot.depth / targetBuildingDepth));
+        const availableWidthPerItem = plot.width / numItemsX;
+        const availableDepthPerItem = plot.depth / numItemsY;
 
-            // --- Boucle de placement MAISON ---
-            for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
-                for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
-                    const currentGx = startGx + colIndex * (gridW + spacing);
-                    const currentGy = startGy + rowIndex * (gridD + spacing);
-                    const centerGx = currentGx + (gridW / 2.0);
-                    const centerGy = currentGy + (gridD / 2.0);
-                    const worldCellCenterPos = this.navigationGraph.gridToWorld(centerGx, centerGy);
-                    const targetWorldWidth = gridW * gridCellSize;
-                    const targetWorldDepth = gridD * gridCellSize;
+        // --- Boucle de placement ---
+        for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
+            for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
+                const cellCenterX = plot.x + (colIndex + 0.5) * availableWidthPerItem;
+                const cellCenterZ = plot.z + (rowIndex + 0.5) * availableDepthPerItem;
+                const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
 
-                    // Calcul échelle pour fitter + variation aléatoire (inchangé)
-                    let scaleValue = Math.min(targetWorldWidth / baseModelFootprintSize, targetWorldDepth / baseModelFootprintSize);
-                    scaleValue *= THREE.MathUtils.randFloat(0.9, 1.1);
+                // --- Orientation ---
+                const distToLeft = cellCenterX - plot.x;
+                const distToRight = (plot.x + plot.width) - cellCenterX;
+                const distToTop = cellCenterZ - plot.z;
+                const distToBottom = (plot.z + plot.depth) - cellCenterZ;
+                const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+                let targetRotationY = 0;
+                if (Math.abs(minDist - distToLeft) < 0.1) targetRotationY = -Math.PI / 2;
+                else if (Math.abs(minDist - distToRight) < 0.1) targetRotationY = Math.PI / 2;
+                else if (Math.abs(minDist - distToBottom) < 0.1) targetRotationY = Math.PI;
+                const finalQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotationY);
 
-                    // --- MODIFIÉ : Appliquer l'échelle de base ---
-                    scaleValue *= gridItemBaseScale;
-                    // Note: Le clamp utilisait `proceduralHouseBaseScale` implicitement via `scale`. Ajustons.
-                    // Clamp final pour éviter des tailles extrêmes
-                    scaleValue = THREE.MathUtils.clamp(scaleValue, 0.5 * gridItemBaseScale, 5.0 * gridItemBaseScale); // Exemple de clamp relatif
-                    const finalScaleVector = new THREE.Vector3(scaleValue, scaleValue, scaleValue);
-                    // --------------------------------------------
+                // --- Placement spécifique par type ---
 
-                    // --- MODIFIÉ : Calcul Orientation ---
-                    let targetRotationY = 0; // Default rotation (+Z)
-                    const neighborOffsets = [ { dx: 0, dy: 1, angle: 0 }, { dx: 1, dy: 0, angle: Math.PI / 2 }, { dx: 0, dy: -1, angle: Math.PI }, { dx: -1, dy: 0, angle: -Math.PI / 2 } ];
-                    for (const offset of neighborOffsets) {
-                        const nx = currentGx + offset.dx; const ny = currentGy + offset.dy;
-                        const isOutsidePlot = nx < minGx || nx > maxGx || ny < minGy || ny > maxGy;
-                        if (isOutsidePlot && this.navigationGraph.isValidGridCoord(nx, ny) && this.navigationGraph.grid.isWalkableAt(nx, ny)) {
-                            targetRotationY = offset.angle; break;
-                        }
-                    }
-                    const finalQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotationY);
-                    // ---------------------------------
-
-                    // Position Y (inchangé, mais utilise scaleValue final)
-                    const baseYOffset = this.baseHouseGeometries.base_part1.userData.minY ?? 0;
-                    const finalPosY = groundLevel - baseYOffset * scaleValue; // Utilise la scaleValue finale
-
-                    // Centrage (inchangé, mais utilise finalQuaternion et finalScaleVector)
-                    const centerOffsetRotated = modelSquareCenterLocal.clone().applyQuaternion(finalQuaternion);
-                    const centerOffsetScaledRotated = centerOffsetRotated.multiplyScalar(scaleValue); // Utilise la scaleValue finale
+                if (zoneType === 'house') {
+                    // L'échelle est déterminée par `baseScaleFactor`
+                    const finalScaleVector = new THREE.Vector3(baseScaleFactor, baseScaleFactor, baseScaleFactor);
+                    const baseYOffset = this.baseHouseGeometries.base_part1?.userData?.minY ?? 0;
+                    const finalPosY = groundLevel - baseYOffset * baseScaleFactor;
+                    const modelCenterLocal = new THREE.Vector3(1.0, 0, 1.0);
+                    const centerOffsetRotated = modelCenterLocal.clone().applyQuaternion(finalQuaternion);
+                    const centerOffsetScaledRotated = centerOffsetRotated.multiplyScalar(baseScaleFactor);
                     const finalPosition = new THREE.Vector3(
                         worldCellCenterPos.x - centerOffsetScaledRotated.x,
                         finalPosY,
                         worldCellCenterPos.z - centerOffsetScaledRotated.z
                     );
-                    // --- MODIFIÉ : Utilise finalPosition, finalQuaternion, finalScaleVector ---
                     const globalHouseMatrix = new THREE.Matrix4().compose(finalPosition, finalQuaternion, finalScaleVector);
-                    // -------------------------------------------------------------------
 
-                    // Ajout des parties (inchangé, utilise globalHouseMatrix mise à jour)
-					const addPartInstance = (partName, localMatrix) => {
-						if (this.baseHouseGeometries[partName]) {
-						   // La matrice finale pour l'instance de la pièce est Global * Local
-						   const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix);
-						   const type = 'house'; const modelId = partName;
-						   if (!this.instanceData[type]) this.instanceData[type] = {};
-						   if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
-						   // >>> LA LIGNE SUIVANTE EST CRUCIALE <<<
-						   this.instanceData[type][modelId].push(finalMatrix.clone()); // Assurez-vous de cloner la matrice!
-						} else { console.warn(`Géométrie maison manquante: ${partName}`); }
-				   };
-                    // ... (appels à addPartInstance inchangés) ...
-                    const armDepth = 0.5; const roofPitchHeight = 0.3; const doorHeight = this.baseHouseGeometries.door.parameters.height; const doorDepth = this.baseHouseGeometries.door.parameters.width; const garageDoorHeight = this.baseHouseGeometries.garageDoor.parameters.height; const windowHeight = this.baseHouseGeometries.windowXY.parameters.height; const windowDepth = this.baseHouseGeometries.windowXY.parameters.depth; const window_Y_pos_Base = armDepth * 0.1; let localMatrix;
+                    // --- Définition des constantes JUSTE AVANT leur utilisation dans addPartInstance/addWindowPart ---
+                    // Note: `armLength` est maintenant `houseArmLength` défini plus haut dans le switch
+                    const armLength = 2.0; // Redéfinir ici pour clarté de la portée locale si nécessaire, ou utiliser houseArmLength
+                    const armDepth = 0.5;
+                    const roofPitchHeight = 0.3;
+                    const doorHeight = this.baseHouseGeometries.door.parameters.height;
+                    const doorDepth = this.baseHouseGeometries.door.parameters.width; // C'était l'épaisseur
+                    const garageDoorHeight = this.baseHouseGeometries.garageDoor.parameters.height;
+                    const windowHeight = this.baseHouseGeometries.windowXY.parameters.height; // Hauteur de la géométrie de fenêtre
+                    const windowDepth = this.baseHouseGeometries.windowXY.parameters.depth;  // Épaisseur de la géométrie de fenêtre
+                    const window_Y_pos_Base = armDepth * 0.1; // Position Y de base pour les fenêtres
+                    let localMatrix; // Variable pour les matrices locales des parties
+                    // ------------------------------------------------------------------------------------------
+
+                    // Définition locale de addPartInstance
+					const addPartInstance = (partName, localMatrix) => { /* ... (code interne inchangé) ... */ if (this.baseHouseGeometries[partName]) { const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix); const type = 'house'; const modelId = partName; if (!this.instanceData[type]) this.instanceData[type] = {}; if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = []; this.instanceData[type][modelId].push(finalMatrix.clone()); } else { console.warn(`Géométrie maison manquante: ${partName}`); } };
+                    // Définition locale de addWindowPart
+                    const addWindowPart = (geomKey, x, yBase, z) => {
+                         // Utilise windowHeight défini juste au-dessus
+                         localMatrix = new THREE.Matrix4().makeTranslation(x, yBase + windowHeight / 2, z);
+                         addPartInstance(geomKey, localMatrix);
+                    };
+
+                    // --- Appels à addPartInstance / addWindowPart (inchangés, mais utilisent les constantes définies ci-dessus) ---
                     localMatrix = new THREE.Matrix4(); addPartInstance('base_part1', localMatrix);
                     localMatrix = new THREE.Matrix4(); addPartInstance('base_part2', localMatrix);
                     const roofPosY_Center = armDepth + roofPitchHeight / 2; const roofPos1 = new THREE.Vector3(armLength / 2, roofPosY_Center, 1.0 / 2); const roofPos2 = new THREE.Vector3(1.0 / 2, roofPosY_Center, armLength / 2); const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2); const roofRot2 = new THREE.Quaternion();
@@ -498,194 +498,76 @@ export default class PlotContentGenerator {
                     localMatrix = new THREE.Matrix4().compose(roofPos2, roofRot2, new THREE.Vector3(1, 1, 1)); addPartInstance('roof', localMatrix);
                     const doorPos = new THREE.Vector3(1.0 + doorDepth / 2, doorHeight / 2, armLength * 0.75); localMatrix = new THREE.Matrix4().makeTranslation(doorPos.x, doorPos.y, doorPos.z); addPartInstance('door', localMatrix);
                     const garagePos = new THREE.Vector3(armLength + doorDepth / 2, garageDoorHeight / 2, 1.0 * 0.5); localMatrix = new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z); addPartInstance('garageDoor', localMatrix);
-                    const addWindowPart = (geomKey, x, yBase, z) => { localMatrix = new THREE.Matrix4().makeTranslation(x, yBase + windowHeight / 2, z); addPartInstance(geomKey, localMatrix); };
+                    // Appels addWindowPart utilisent armLength, windowDepth, window_Y_pos_Base qui sont maintenant définis dans cette portée
                     addWindowPart('windowXY', 0.25, window_Y_pos_Base, -windowDepth / 2); addWindowPart('windowXY', 0.75, window_Y_pos_Base, -windowDepth / 2); addWindowPart('windowXY', 1.25, window_Y_pos_Base, -windowDepth / 2); addWindowPart('windowXY', 1.75, window_Y_pos_Base, -windowDepth / 2);
                     addWindowPart('windowXY', 0.25, window_Y_pos_Base, 1.0 + windowDepth / 2); addWindowPart('windowXY', 0.75, window_Y_pos_Base, 1.0 + windowDepth / 2); addWindowPart('windowXY', 1.25, window_Y_pos_Base, 1.0 + windowDepth / 2); addWindowPart('windowXY', 1.75, window_Y_pos_Base, 1.0 + windowDepth / 2);
                     addWindowPart('windowYZ', -windowDepth / 2, window_Y_pos_Base, 0.25); addWindowPart('windowYZ', -windowDepth / 2, window_Y_pos_Base, 0.75); addWindowPart('windowYZ', -windowDepth / 2, window_Y_pos_Base, 1.25); addWindowPart('windowYZ', -windowDepth / 2, window_Y_pos_Base, 1.75);
                     addWindowPart('windowYZ', 1.0 + windowDepth / 2, window_Y_pos_Base, 0.25); /* Porte */ addWindowPart('windowYZ', 1.0 + windowDepth / 2, window_Y_pos_Base, 1.25);
-                    addWindowPart('windowXY', 0.25, window_Y_pos_Base, armLength + windowDepth / 2); addWindowPart('windowXY', 0.75, window_Y_pos_Base, armLength + windowDepth / 2);
+                    // *** LA LIGNE QUI CAUSAIT L'ERREUR ***
+                    // Utilise maintenant armLength défini localement dans ce bloc if
+                    addWindowPart('windowXY', 0.25, window_Y_pos_Base, armLength + windowDepth / 2);
+                    addWindowPart('windowXY', 0.75, window_Y_pos_Base, armLength + windowDepth / 2);
+                    // -----------------------------------------
 
+                    // Enregistrement instance bâtiment (inchangé)
+                    const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
+                    const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'house', buildingPosition);
+                    if (registeredBuilding) { plot.addBuildingInstance({ id: registeredBuilding.id, type: 'house', position: buildingPosition.clone() }); }
 
-                    // Enregistrement & Debug (inchangé, utilise addPlacedGridCell)
-                    const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'house', worldCellCenterPos.clone().setY(this.config.sidewalkHeight));
-                    if (registeredBuilding) { plot.addBuildingInstance({ id: registeredBuilding.id, type: 'house', position: worldCellCenterPos.clone().setY(this.config.sidewalkHeight) }); }
-                    if (this.debugPlotGridGroup && this.debugPlotGridMaterial) { /* ... */ }
-                    plot.addPlacedGridCell({ gx: currentGx, gy: currentGy, gridWidth: gridW, gridDepth: gridD });
-                } // Fin boucle colonnes
-            } // Fin boucle lignes
-            // --- Fin Boucle Placement MAISON ---
+                } else if (assetInfo) {
+                    // CAS ASSETS (inchangé)
+                    const instanceMatrix = this.calculateInstanceMatrix( worldCellCenterPos.x, worldCellCenterPos.z, assetInfo.sizeAfterFitting.y, assetInfo.fittingScaleFactor, assetInfo.centerOffset, baseScaleFactor, targetRotationY );
+                    const modelId = assetInfo.id;
+                    if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
+                    if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
+                    this.instanceData[zoneType][modelId].push(instanceMatrix.clone());
+                    const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
+                    const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition);
+                    if (registeredBuilding) { plot.addBuildingInstance({ id: registeredBuilding.id, type: zoneType, position: buildingPosition.clone() }); }
+                    assetInfo = this.assetLoader.getRandomAssetData(zoneType); // Recharger pour la prochaine cellule
+                    if (!assetInfo) { console.warn(`Plus d'assets ${zoneType}...`); break; }
+                }
 
-        // --- CAS 'building', 'industrial', 'skyscraper' (Logique adaptée pour scale et orientation) ---
-        } else if (['building', 'industrial', 'skyscraper'].includes(zoneType)) {
+                 // Visualisation Debug (inchangée)
+                 if (this.debugPlotGridGroup && this.debugPlotGridMaterial) { /* ... (code inchangé) ... */ try { const debugGeom = new THREE.PlaneGeometry(availableWidthPerItem * 0.95, availableDepthPerItem * 0.95); const debugMesh = new THREE.Mesh(debugGeom, this.debugPlotGridMaterial); debugMesh.rotation.x = -Math.PI / 2; debugMesh.position.set(cellCenterX, groundLevel + 0.05, cellCenterZ); debugMesh.name = `DebugGrid_Plot_${plot.id}_${colIndex}_${rowIndex}`; this.debugPlotGridGroup.add(debugMesh); } catch (debugError) { console.error("Erreur création visualisation debug grille dynamique:", debugError); } }
 
-            // Config Grille Spécifique
-            let gridW, gridD, spacing, gridItemBaseScale; // <-- Ajout gridItemBaseScale
-            switch(zoneType) {
-                case 'building':
-                    gridW = this.config.fixedBuildingGridWidth ?? 12;
-                    gridD = this.config.fixedBuildingGridDepth ?? 12;
-                    spacing = this.config.fixedBuildingGridSpacing ?? 6;
-                    gridItemBaseScale = this.config.gridBuildingBaseScale ?? 1.0; // <-- Récupérer échelle
-                    break;
-                case 'industrial':
-                    gridW = this.config.fixedIndustrialGridWidth ?? 15;
-                    gridD = this.config.fixedIndustrialGridDepth ?? 20;
-                    spacing = this.config.fixedIndustrialGridSpacing ?? 8;
-                    gridItemBaseScale = this.config.gridIndustrialBaseScale ?? 1.0; // <-- Récupérer échelle
-                    break;
-                case 'skyscraper':
-                    gridW = this.config.fixedSkyscraperGridWidth ?? 15;
-                    gridD = this.config.fixedSkyscraperGridDepth ?? 15;
-                    spacing = this.config.fixedSkyscraperGridSpacing ?? 10;
-                    gridItemBaseScale = this.config.gridSkyscraperBaseScale ?? 1.0; // <-- Récupérer échelle
-                    break;
-                default: gridW = 10; gridD = 10; spacing = 5; gridItemBaseScale = 1.0;
-            }
-
-            // Calcul placement grille (inchangé)
-            const maxPossibleX = Math.max(0, Math.floor((plotGridW + spacing) / (gridW + spacing)));
-            const maxPossibleY = Math.max(0, Math.floor((plotGridD + spacing) / (gridD + spacing)));
-            let numItemsX = maxPossibleX; let numItemsY = maxPossibleY;
-            if (numItemsX <= 0 || numItemsY <= 0) { /* ... */ return; }
-            const totalGridWidthNeeded = numItemsX * gridW + Math.max(0, numItemsX - 1) * spacing;
-            const totalGridDepthNeeded = numItemsY * gridD + Math.max(0, numItemsY - 1) * spacing;
-            const offsetX = Math.floor((plotGridW - totalGridWidthNeeded) / 2);
-            const offsetY = Math.floor((plotGridD - totalGridDepthNeeded) / 2);
-            const startGx = minGx + offsetX; const startGy = minGy + offsetY;
-
-            // --- Boucle de placement pour ASSETS sur grille ---
-            for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
-                for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
-                    const currentGx = startGx + colIndex * (gridW + spacing);
-                    const currentGy = startGy + rowIndex * (gridD + spacing);
-
-                    const assetInfo = this.assetLoader.getRandomAssetData(zoneType);
-                    if (assetInfo) {
-                        const centerGx = currentGx + (gridW / 2.0);
-                        const centerGy = currentGy + (gridD / 2.0);
-                        const worldCellCenterPos = this.navigationGraph.gridToWorld(centerGx, centerGy);
-                        const targetWorldWidth = gridW * gridCellSize;
-                        const targetWorldDepth = gridD * gridCellSize;
-
-                        // Calcul échelle secondaire pour fitter dans cellule (inchangé)
-                        const assetSize = assetInfo.sizeAfterFitting.clone();
-                        assetSize.x = Math.max(assetSize.x, 0.1); assetSize.y = Math.max(assetSize.y, 0.1); assetSize.z = Math.max(assetSize.z, 0.1);
-                        const scaleX = targetWorldWidth / assetSize.x;
-                        const scaleZ = targetWorldDepth / assetSize.z;
-                        const secondaryScaleFactor = Math.min(scaleX, scaleZ) * THREE.MathUtils.randFloat(0.9, 1.05);
-
-                        // Échelle combinée (fitting * cellule) (inchangé)
-                        const combinedFittingScale = assetInfo.fittingScaleFactor * secondaryScaleFactor;
-
-                        // --- MODIFIÉ : Calcul Orientation ---
-                        let targetRotationY = 0; // Default rotation (+Z)
-                        const neighborOffsets = [ { dx: 0, dy: 1, angle: 0 }, { dx: 1, dy: 0, angle: Math.PI / 2 }, { dx: 0, dy: -1, angle: Math.PI }, { dx: -1, dy: 0, angle: -Math.PI / 2 } ];
-                        for (const offset of neighborOffsets) {
-                            const nx = currentGx + offset.dx; const ny = currentGy + offset.dy;
-                            const isOutsidePlot = nx < minGx || nx > maxGx || ny < minGy || ny > maxGy;
-                            if (isOutsidePlot && this.navigationGraph.isValidGridCoord(nx, ny) && this.navigationGraph.grid.isWalkableAt(nx, ny)) {
-                                targetRotationY = offset.angle; break;
-                            }
-                        }
-                        // ---------------------------------
-
-                        // --- MODIFIÉ : Création de la matrice d'instance ---
-                        // Utilise targetRotationY et passe gridItemBaseScale comme userScale
-                        const instanceMatrix = this.calculateInstanceMatrix(
-                            worldCellCenterPos.x,
-                            worldCellCenterPos.z,
-                            assetInfo.sizeAfterFitting.y,
-                            combinedFittingScale,    // Échelle pour fitter (fitting * cellule)
-                            assetInfo.centerOffset,
-                            gridItemBaseScale,       // <<< Utilise l'échelle de base configurée
-                            targetRotationY          // <<< Utilise l'orientation calculée
-                        );
-                        // ------------------------------------------------
-
-                        // Stockage, Enregistrement, Debug (inchangé, utilise addPlacedGridCell)
-                        const modelId = assetInfo.id;
-                        if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
-                        if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
-                        this.instanceData[zoneType][modelId].push(instanceMatrix.clone());
-                        const buildingPosition = new THREE.Vector3(worldCellCenterPos.x, this.config.sidewalkHeight, worldCellCenterPos.z);
-                        const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition);
-                        if (registeredBuilding) { plot.addBuildingInstance({ id: registeredBuilding.id, type: zoneType, position: buildingPosition.clone() }); }
-                        plot.addPlacedGridCell({ gx: currentGx, gy: currentGy, gridWidth: gridW, gridDepth: gridD });
-                        if (this.debugPlotGridGroup && this.debugPlotGridMaterial) { /* ... */ }
-
-                    } else { /* ... (warning inchangé) ... */ }
-                } // Fin boucle colonnes
-            } // Fin boucle lignes
-            // --- Fin Boucle Placement ASSETS ---
-
-        // --- CAS 'park' (Inchangé) ---
-        } else if (zoneType === 'park') {
-            // ... (logique inchangée utilisant subdivideForPlacement) ...
-            const subZones = this.subdivideForPlacement(plot); // Utilise minParkSubZoneSize
-             subZones.forEach((subZone) => {
-                 const buildableWidth = subZone.width;
-                 const buildableDepth = subZone.depth;
-                 if (buildableWidth > 0.1 && buildableDepth > 0.1) {
-                    const subZoneCenterX = subZone.x + subZone.width / 2;
-                    const subZoneCenterZ = subZone.z + subZone.depth / 2;
-                    const assetInfo = this.assetLoader.getRandomAssetData(plot.zoneType);
-                    if (assetInfo) {
-                        // Place les assets de parc comme avant (rotation aléatoire ici)
-                        const instanceMatrix = this.calculateInstanceMatrix( subZoneCenterX, subZoneCenterZ, assetInfo.sizeAfterFitting.y, assetInfo.fittingScaleFactor, assetInfo.centerOffset, assetInfo.userScale, Math.random() * Math.PI * 2 );
-                        const modelId = assetInfo.id;
-                        if (!this.instanceData[plot.zoneType]) this.instanceData[plot.zoneType] = {};
-                        if (!this.instanceData[plot.zoneType][modelId]) this.instanceData[plot.zoneType][modelId] = [];
-                        this.instanceData[plot.zoneType][modelId].push(instanceMatrix.clone());
-                    }
-                 }
-             });
-        }
-        // --- FIN GESTION PAR TYPE ---
+            } // Fin boucle colonnes
+             if (zoneType !== 'house' && !assetInfo) break; // Sortir boucle lignes si plus d'assets
+        } // Fin boucle lignes
     } // Fin generatePlotPrimaryContent
 
     // Place les arbres sur la parcelle selon le type de zone et des probabilités configurées
 	placeTreesForPlot(plot) {
-        if (!this.assetLoader || !this.assetLoader.assets.tree || this.assetLoader.assets.tree.length === 0) {
-            return; // Pas d'assets d'arbres à placer
-        }
-
+        if (!this.assetLoader || !this.assetLoader.assets.tree || this.assetLoader.assets.tree.length === 0) { return; }
         const probSidewalk = this.config.treePlacementProbabilitySidewalk ?? 0;
         const probPark = this.config.treePlacementProbabilityPark ?? 0;
         const sidewalkW = this.config.sidewalkWidth ?? 0;
 
-        // 1. Placement sur les trottoirs (inchangé)
+        // 1. Placement sur les trottoirs (inchangé, logique géométrique simple)
         if (sidewalkW > 0 && probSidewalk > 0) {
-            const corners = [
-                { x: plot.x - sidewalkW / 2, z: plot.z - sidewalkW / 2 },
-                { x: plot.x + plot.width + sidewalkW / 2, z: plot.z - sidewalkW / 2 },
-                { x: plot.x - sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 },
-                { x: plot.x + plot.width + sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 }
-            ];
-            corners.forEach(corner => {
-                if (Math.random() < probSidewalk) {
-                    this.addTreeInstance(corner.x, corner.z);
-                }
-            });
-            // TODO: Ajouter aussi des arbres le long des trottoirs, pas seulement aux coins ?
+            const corners = [ { x: plot.x - sidewalkW / 2, z: plot.z - sidewalkW / 2 }, { x: plot.x + plot.width + sidewalkW / 2, z: plot.z - sidewalkW / 2 }, { x: plot.x - sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 }, { x: plot.x + plot.width + sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 } ];
+            corners.forEach(corner => { if (Math.random() < probSidewalk) { this.addTreeInstance(corner.x, corner.z); } });
+            // TODO: Pourrait être amélioré pour placer le long des bords aussi.
         }
 
-        // 2. Placement dans les parcs (inchangé)
+        // 2. Placement dans les parcs (inchangé, logique simple de densité)
         const plotBounds = { minX: plot.x, maxX: plot.x + plot.width, minZ: plot.z, maxZ: plot.z + plot.depth, };
         if (plot.zoneType === 'park' && probPark > 0) {
             const area = plot.width * plot.depth;
-            const numTreesToTry = Math.ceil(area * probPark);
+            const numTreesToTry = Math.ceil(area * probPark); // Densité basée sur probPark
             for (let i = 0; i < numTreesToTry; i++) {
                 const treeX = THREE.MathUtils.randFloat(plotBounds.minX, plotBounds.maxX);
                 const treeZ = THREE.MathUtils.randFloat(plotBounds.minZ, plotBounds.maxZ);
-                // Dans un parc, on suppose qu'on peut planter partout
+                // Dans un parc, on suppose qu'on peut planter partout pour l'instant
                 this.addTreeInstance(treeX, treeZ);
             }
         }
+
         // 3. SUPPRESSION de la logique de placement dans les marges des autres zones
-        /* else if (['house', 'building', 'industrial', 'skyscraper'].includes(plot.zoneType) && probMargin > 0) {
-            // ... ancienne logique basée sur occupiedSubZones ...
-           // CETTE PARTIE EST SUPPRIMÉE
-        } */
+        // L'ancienne logique était basée sur `plot.placedGridCells`, qui n'est plus utilisée
+        // pour le placement dynamique. Une nouvelle logique de marge nécessiterait de vérifier
+        // la proximité des `plot.buildingInstances`, ce qui est plus complexe.
+        // console.log(`Placement arbres pour plot ${plot.id} (${plot.zoneType}) terminé (pas de placement en marge).`);
     }
 
     // Ajoute une instance d'arbre à partir d'un asset aléatoire
@@ -705,54 +587,27 @@ export default class PlotContentGenerator {
 	reset(assetLoader) {
         this.assetLoader = assetLoader;
         this.cityManager = null;
-        this.navigationGraph = null; // Reset NavGraph ref
-        this.debugPlotGridGroup = null; // <-- NEW: Reset debug group ref
-        this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {}, skyscraper: {}, crosswalk: {} };
+        this.navigationGraph = null; // Réinitialiser ref NavGraph
+        // this.debugPlotGridGroup = null; // La référence au groupe debug est externe maintenant, ne pas la nullifier ici
 
-        // Cleanup procedural houses
+        // --- Réinitialisation données d'instance (inchangé) ---
+        this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {}, skyscraper: {}, crosswalk: {} };
+        this.initializeHouseMatrixArrays(); // Spécifique maison procédurale
+        this.houseInstancedMeshes = {};     // Spécifique maison procédurale
+
+        // --- Nettoyage Géométries de Base (inchangé) ---
         Object.values(this.baseHouseGeometries).forEach(geom => geom?.dispose());
         this.baseHouseGeometries = {};
-        // Do not dispose base materials here as they are redefined
-        // this.baseHouseMaterials = {}; // Clear container
-        this.initializeHouseMatrixArrays(); // Clear matrices
-        this.houseInstancedMeshes = {}; // Clear mesh references
+        if (this.stripeBaseGeometry) { this.stripeBaseGeometry.dispose(); this.stripeBaseGeometry = null; }
 
-        // Cleanup scene groups (dynamically added geometries and meshes)
-        const disposeGroupContents = (group) => {
-            if (!group) return;
-            while (group.children.length > 0) {
-                const c = group.children[0];
-                group.remove(c);
-                // Dispose only if geometry is NOT one of the BASE geometries (house, stripe, loaded asset)
-                const isBaseHouseGeo = Object.values(this.baseHouseGeometries).includes(c.geometry);
-                const isBaseStripeGeo = c.geometry === this.stripeBaseGeometry;
-                let isLoadedAssetGeo = false;
-                if (this.assetLoader) {
-                    for (const type in this.assetLoader.assets) {
-                        if (this.assetLoader.assets[type].some(a => a.geometry === c.geometry)) {
-                            isLoadedAssetGeo = true;
-                            break;
-                        }
-                    }
-                }
-                if (c.geometry && !isBaseHouseGeo && !isBaseStripeGeo && !isLoadedAssetGeo) {
-                    c.geometry.dispose();
-                }
-                // Do not dispose materials here as they are either shared (this.materials), managed by AssetLoader, or base house materials (this.baseHouseMaterials)
-            }
-        };
+        // --- Nettoyage Groupes Scène (inchangé) ---
+        const disposeGroupContents = (group) => { /* ... (code interne inchangé) ... */ if (!group) return; while (group.children.length > 0) { const c = group.children[0]; group.remove(c); const isBaseHouseGeo = Object.values(this.baseHouseGeometries).includes(c.geometry); const isBaseStripeGeo = c.geometry === this.stripeBaseGeometry; let isLoadedAssetGeo = false; if (this.assetLoader) { for (const type in this.assetLoader.assets) { if (this.assetLoader.assets[type].some(a => a.geometry === c.geometry)) { isLoadedAssetGeo = true; break; } } } if (c.geometry && !isBaseHouseGeo && !isBaseStripeGeo && !isLoadedAssetGeo) { c.geometry.dispose(); } } };
         disposeGroupContents(this.sidewalkGroup);
         disposeGroupContents(this.buildingGroup);
 
-        // Dispose base geometry specific to this generator
-        if (this.stripeBaseGeometry) {
-            this.stripeBaseGeometry.dispose();
-            this.stripeBaseGeometry = null;
-        }
-
-        // Redefine base materials/geometries for the next generation
-        this.defineHouseBaseMaterials(); // Ensures materials exist for next time
-        this.defineHouseBaseGeometries();
+        // --- Redéfinition Géométries/Matériaux de Base (inchangé) ---
+        this.defineHouseBaseMaterials(); // Redéfinit les matériaux
+        this.defineHouseBaseGeometries(); // Recrée les géométries de base
     }
 
     // ==============================================================
