@@ -40,9 +40,9 @@ export default class CityManager {
             buildingSubZoneMargin: 1.5,
 
             // --- MODIFIED Configurations for Grid Houses ---
-            fixedHouseGridWidth: 8,     // Increased fixed width
-            fixedHouseGridDepth: 8,     // Increased fixed depth
-            fixedHouseGridSpacing: 2,   // Increased spacing
+            fixedHouseGridWidth: 10,     // Increased fixed width
+            fixedHouseGridDepth: 10,     // Increased fixed depth
+            fixedHouseGridSpacing: 5,   // Increased spacing
             // ------------------------------------------------------
 
             // Assets (Paths and configs - ensure they are correct)
