@@ -392,9 +392,9 @@ export default class PlotContentGenerator {
         return plotGeometries;
     }
 
-    // Regroupe la génération du contenu principal de la parcelle en distinguant le cas "skyscraper"
-
-	generatePlotPrimaryContent(plot) {
+   // MODIFIÉ: Logique de densité revue pour limiter à 1 maison max par plot
+	// MODIFIÉ: Logique de densité revue pour autoriser plusieurs maisons (max 2x2)
+    generatePlotPrimaryContent(plot) {
         // Vérifications essentielles
         if (!this.cityManager) {
            console.error("PlotContentGenerator.generatePlotPrimaryContent: CityManager non disponible.");
@@ -406,7 +406,7 @@ export default class PlotContentGenerator {
             return;
         }
 
-        // --- CAS 'house' (Logique de Centrage Revue) ---
+        // --- CAS 'house' (Logique de Densité Revue avec Plafond Max) ---
         if (plot.zoneType === 'house') {
             this.createPlotGround(plot); // Crée le sol spécifique à la parcelle
 
@@ -420,39 +420,50 @@ export default class PlotContentGenerator {
             const houseGridW = this.config.fixedHouseGridWidth;
             const houseGridD = this.config.fixedHouseGridDepth;
             const spacing = this.config.fixedHouseGridSpacing;
-            const gridScale = this.navigationGraph.gridScale || 1.0; // Sécurité
+            const gridScale = this.navigationGraph.gridScale || 1.0;
             const gridCellSize = 1.0 / gridScale;
 
             // 1. Obtenir les limites de la parcelle en coordonnées de grille
             const plotBounds = plot.getBounds();
-            // Utiliser floor/ceil pour s'assurer de capturer toute la plage de grille couvrant la parcelle
             const minGridPoint = this.navigationGraph.worldToGrid(plotBounds.minX, plotBounds.minZ);
             const maxGridPoint = this.navigationGraph.worldToGrid(plotBounds.maxX, plotBounds.maxZ);
-            // worldToGrid arrondit, donc les limites sont inclusives.
             const minGx = minGridPoint.x;
             const minGy = minGridPoint.y;
             const maxGx = maxGridPoint.x;
             const maxGy = maxGridPoint.y;
-            const plotGridW = maxGx - minGx + 1; // Nombre total de cellules de grille horizontalement
-            const plotGridD = maxGy - minGy + 1; // Nombre total de cellules de grille verticalement
+            const plotGridW = maxGx - minGx + 1;
+            const plotGridD = maxGy - minGy + 1;
 
             if (plotGridW <= 0 || plotGridD <= 0) {
                 console.warn(`Plot ${plot.id} a des dimensions de grille invalides (${plotGridW}x${plotGridD}). Placement des maisons impossible.`);
                 return;
             }
 
-            // 2. Calculer le nombre maximum de maisons possibles dans les dimensions de grille de la parcelle
-            // Formule: floor((Taille Totale + Espacement) / (Taille Item + Espacement))
+            // 2. Calculer le nombre maximum de maisons possibles
             const maxPossibleX = Math.max(0, Math.floor((plotGridW + spacing) / (houseGridW + spacing)));
             const maxPossibleY = Math.max(0, Math.floor((plotGridD + spacing) / (houseGridD + spacing)));
 
-            // 3. Déterminer le nombre réel à placer (on utilise le max possible pour l'instant)
-            const numHousesX = maxPossibleX;
-            const numHousesY = maxPossibleY;
+            // --- MODIFIÉ: Déterminer le nombre réel à placer (limité à 2x2 max) ---
+            const MAX_HOUSES_PER_AXIS = 2; // Définir le nombre max de maisons par axe
 
-            // 4. Si aucune maison ne peut tenir, sortir
+            let numHousesX = Math.min(maxPossibleX, MAX_HOUSES_PER_AXIS);
+            let numHousesY = Math.min(maxPossibleY, MAX_HOUSES_PER_AXIS);
+
+            // Assurer qu'au moins une dimension n'est pas zéro si le placement est possible
             if (numHousesX === 0 || numHousesY === 0) {
-                console.warn(`Plot ${plot.id} (grille ${plotGridW}x${plotGridD}) trop petite pour contenir même une maison (grille ${houseGridW}x${houseGridD}). Max possible: ${maxPossibleX}x${maxPossibleY}`);
+                 // Si l'une des dimensions est 0, aucun placement n'est possible avec le plafond actuel ou la taille de la parcelle
+                 numHousesX = 0;
+                 numHousesY = 0;
+             } else if (maxPossibleX === 0 || maxPossibleY === 0) {
+                 // Ce cas devrait être couvert ci-dessus, mais ajouté par sécurité
+                 numHousesX = 0;
+                 numHousesY = 0;
+             }
+            // --- FIN MODIFICATION ---
+
+            // 4. Si aucune maison ne doit être placée, sortir
+            if (numHousesX === 0 || numHousesY === 0) {
+                 // console.warn(`Plot ${plot.id} (${plotGridW}x${plotGridD} grid) ne peut pas contenir les maisons requises (demande ${numHousesX}x${numHousesY}, plafonné à ${MAX_HOUSES_PER_AXIS}). Max possible: ${maxPossibleX}x${maxPossibleY}`);
                 return;
             }
 
@@ -460,7 +471,7 @@ export default class PlotContentGenerator {
             const totalGridWidthNeeded = numHousesX * houseGridW + Math.max(0, numHousesX - 1) * spacing;
             const totalGridDepthNeeded = numHousesY * houseGridD + Math.max(0, numHousesY - 1) * spacing;
 
-            // 6. Calculer le décalage de centrage à l'intérieur de la plage de grille de la parcelle
+            // 6. Calculer le décalage de centrage dans la plage de grille de la parcelle
             const offsetX = Math.floor((plotGridW - totalGridWidthNeeded) / 2);
             const offsetY = Math.floor((plotGridD - totalGridDepthNeeded) / 2);
 
@@ -469,7 +480,7 @@ export default class PlotContentGenerator {
             const startGy = minGy + offsetY;
 
             let housesPlacedOnPlot = 0;
-            const groundLevel = 0.01; // Réutiliser ceci
+            const groundLevel = 0.01;
 
             // 8. Boucler et placer les maisons selon la disposition calculée
             for (let rowIndex = 0; rowIndex < numHousesY; rowIndex++) {
@@ -479,14 +490,11 @@ export default class PlotContentGenerator {
                     const currentGx = startGx + colIndex * (houseGridW + spacing);
                     const currentGy = startGy + rowIndex * (houseGridD + spacing);
 
-                    // --- Placer la Maison (logique adaptée de la version précédente) ---
-
-                    // Calculer la position monde du CENTRE de la zone de grille de cette maison
+                    // --- Placer la Maison (logique inchangée par rapport à l'étape précédente) ---
                     const centerGx = currentGx + (houseGridW / 2.0);
                     const centerGy = currentGy + (houseGridD / 2.0);
                     const worldCenterPos = this.navigationGraph.gridToWorld(centerGx, centerGy);
 
-                    // Calculer l'échelle (identique à avant)
                     const targetWorldWidth = houseGridW * gridCellSize;
                     const targetWorldDepth = houseGridD * gridCellSize;
                     const baseHouseWidth = 10;
@@ -494,7 +502,6 @@ export default class PlotContentGenerator {
                     let scaleValue = Math.min( targetWorldWidth / baseHouseWidth, targetWorldDepth / baseHouseDepth );
                     scaleValue = THREE.MathUtils.clamp(scaleValue, 0.3, 1.5);
 
-                    // Préparer la matrice de transformation (identique à avant)
                     const rotationY = Math.floor(Math.random() * 4) * Math.PI / 2;
                     const wallMinY = this.baseHouseGeometries.wall.userData.minY ?? 0;
                     const posY = groundLevel - (wallMinY * scaleValue);
@@ -503,10 +510,8 @@ export default class PlotContentGenerator {
                     const baseScale = new THREE.Vector3(scaleValue, scaleValue, scaleValue);
                     const mainHouseMatrix = new THREE.Matrix4().compose(basePosition, baseQuaternion, baseScale);
 
-                    // Ajouter les matrices pour les parties de la maison (identique à avant)
                     if (this.houseInstanceMatrices.wall) this.houseInstanceMatrices.wall.push(mainHouseMatrix.clone());
                     if (this.houseInstanceMatrices.roof) this.houseInstanceMatrices.roof.push(mainHouseMatrix.clone());
-                    // Ajouter les matrices fenêtres/portes (la logique est identique, juste appeler addPartInstance)
                     const addPartInstance = (partType, localMatrix) => { const finalMatrix = new THREE.Matrix4().multiplyMatrices(mainHouseMatrix, localMatrix); this.houseInstanceMatrices[partType]?.push(finalMatrix); };
                     const createLocalPartMatrix = (relX, relY, relZ, rotY = 0) => { const localPos = new THREE.Vector3(relX, relY, relZ); const localRot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY); const localScale = new THREE.Vector3(1, 1, 1); return new THREE.Matrix4().compose(localPos, localRot, localScale); };
                     const createLocalGlassMatrix = (frameLocalMatrix) => { const framePos = new THREE.Vector3(); const frameRot = new THREE.Quaternion(); const frameScale = new THREE.Vector3(); frameLocalMatrix.decompose(framePos, frameRot, frameScale); const baseWindowFrameD = 0.1; const baseWindowGlassD = 0.05; const glassOffset = (baseWindowFrameD / 2) - (baseWindowGlassD / 2) + 0.01; const zOffsetVector = new THREE.Vector3(0, 0, glassOffset); zOffsetVector.applyQuaternion(frameRot); const glassLocalPos = framePos.clone().add(zOffsetVector); return new THREE.Matrix4().compose(glassLocalPos, frameRot, frameScale); };
@@ -519,20 +524,15 @@ export default class PlotContentGenerator {
                     frameMatrix = createLocalPartMatrix(w2_rightX, windowRelY, wing2PosZ_Rel + wing2D_Base / 4, Math.PI / 2); addPartInstance('windowFrame', frameMatrix); addPartInstance('windowGlass', createLocalGlassMatrix(frameMatrix));
                     let doorMatrix = createLocalPartMatrix(doorX_W1_Rel, doorRelY, w1_frontZ + baseDoorD / 2, 0); addPartInstance('door', doorMatrix);
                     let garageDoorMatrix = createLocalPartMatrix(wing2PosX_Rel, garageDoorRelY, w2_frontZ + baseGarageDoorD / 2, 0); addPartInstance('garageDoor', garageDoorMatrix);
-                    // --- Fin Placement Fenêtres/Portes ---
 
-                    // Marquer la zone de grille comme occupée (utiliser currentGx, currentGy calculé)
-                    // Plus besoin d'appeler plot.isGridAreaFree
                     plot.addPlacedHouseGrid({ gx: currentGx, gy: currentGy, gridWidth: houseGridW, gridDepth: houseGridD });
                     housesPlacedOnPlot++;
 
-                    // Enregistrer l'instance logique (identique à avant)
                     const registeredBuilding = this.cityManager.registerBuildingInstance( plot.id, 'house', worldCenterPos.clone());
                     if (registeredBuilding) {
                         plot.addBuildingInstance({ id: registeredBuilding.id, type: 'house', position: worldCenterPos.clone() });
                     }
 
-                    // Ajouter le visuel de debug (identique à avant)
                     if (this.debugPlotGridGroup && this.debugPlotGridMaterial) {
                          const debugGridWorldWidth = houseGridW * gridCellSize;
                          const debugGridWorldDepth = houseGridD * gridCellSize;
@@ -548,14 +548,14 @@ export default class PlotContentGenerator {
             } // Fin boucle rowIndex
 
             if (housesPlacedOnPlot > 0) {
-               console.log(`PlotContentGenerator: Placé ${housesPlacedOnPlot} maisons (${numHousesX}x${numHousesY}) centrées sur la parcelle ${plot.id}.`);
+               // Log mis à jour pour refléter le changement
+               console.log(`PlotContentGenerator: Placé ${housesPlacedOnPlot} maisons (${numHousesX}x${numHousesY}, plafonné à ${MAX_HOUSES_PER_AXIS}) centrées sur la parcelle ${plot.id}.`);
             }
-             // L'avertissement si aucune maison n'a été placée est géré plus tôt si numHousesX/Y était 0
 
         // --- CAS AUTRES TYPES (Logique inchangée) ---
         } else if (plot.zoneType && ['building', 'industrial', 'park', 'skyscraper'].includes(plot.zoneType)) {
-             this.createPlotGround(plot); // Sol pour la parcelle
-             const subZones = this.subdivideForPlacement(plot); // Subdivision basée sur taille min
+             this.createPlotGround(plot);
+             const subZones = this.subdivideForPlacement(plot);
              const margin = plot.zoneType === 'park' ? 0 : (this.config.buildingSubZoneMargin ?? 1.5);
 
              subZones.forEach((subZone) => {
@@ -579,10 +579,9 @@ export default class PlotContentGenerator {
                     } else { console.warn(`Aucun asset trouvé pour le type ${plot.zoneType} dans la sous-zone de plot ${plot.id}`); }
                     if (!plot.occupiedSubZones) plot.occupiedSubZones = [];
                     plot.occupiedSubZones.push({ x: subZone.x + margin, z: subZone.z + margin, width: buildableWidth, depth: buildableDepth });
-                 } // Fin if buildableWidth/Depth > 0.1
-             }); // Fin subZones.forEach
+                 }
+             });
         }
-        // Ne rien faire pour les types 'unbuildable' ou si zoneType est null/inconnu
     }
 
     // Place les arbres sur la parcelle selon le type de zone et des probabilités configurées
