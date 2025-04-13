@@ -77,35 +77,35 @@ export default class AgentManager {
 
         try {
             console.log("AgentManager: Initialisation du Pathfinding Worker...");
-            // Utiliser new URL(...) pour la compatibilité module worker
             this.pathfindingWorker = new Worker(new URL('./PathfindingWorker.js', import.meta.url), { type: 'module' });
-
-            // Écouteur pour les messages venant du worker
             this.pathfindingWorker.onmessage = (event) => this._handleWorkerMessage(event);
+            this.pathfindingWorker.onerror = (error) => { /* ... gestion erreur worker ... */ };
 
-            // Écouteur pour les erreurs du worker
-            this.pathfindingWorker.onerror = (error) => {
-                console.error('AgentManager: Erreur du Pathfinding Worker:', error.message, error);
-                this.isWorkerInitialized = false; // Marquer comme non prêt en cas d'erreur
-                // Gérer l'erreur (ex: arrêter les requêtes, afficher un message)
-            };
-
-            // Préparer les données de la grille pour l'envoi
-            // Important : On envoie un tableau 2D de booléens indiquant la marchabilité.
-            // Le worker inversera (true -> 0, false -> 1) pour PF.Grid.
+            // Préparer les données de la grille (inchangé)
             const nodesWalkable = navigationGraph.grid.nodes.map(row =>
                 row.map(node => node.walkable)
             );
-
             const gridData = {
                 width: navigationGraph.gridWidth,
                 height: navigationGraph.gridHeight,
-                nodesWalkable: nodesWalkable // Envoie le tableau 2D de booléens
+                nodesWalkable: nodesWalkable
             };
 
-            // Envoyer le message d'initialisation au worker
-            this.pathfindingWorker.postMessage({ type: 'init', data: { gridData } });
-            console.log("AgentManager: Message d'initialisation envoyé au worker.");
+            // --- NOUVEAU : Préparer les paramètres de conversion ---
+            const conversionParams = {
+                gridScale: navigationGraph.gridScale,
+                offsetX: navigationGraph.offsetX,
+                offsetZ: navigationGraph.offsetZ,
+                sidewalkHeight: navigationGraph.sidewalkHeight
+            };
+            // ----------------------------------------------------
+
+            // Envoyer le message d'initialisation COMPLET
+            this.pathfindingWorker.postMessage({
+                type: 'init',
+                data: { gridData, conversionParams } // <-- Envoyer les deux objets
+            });
+            console.log("AgentManager: Message d'initialisation (grille + params) envoyé au worker.");
 
         } catch (error) {
             console.error("AgentManager: Échec de la création du Pathfinding Worker:", error);
@@ -121,55 +121,52 @@ export default class AgentManager {
         // console.log("AgentManager: Message reçu du worker:", type, data);
 
         if (type === 'initComplete') {
-            this.isWorkerInitialized = true;
-            console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
+             this.isWorkerInitialized = true;
+             console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
 
         } else if (type === 'pathResult') {
             if (data && data.agentId && data.path !== undefined) {
-                const { agentId, path: gridPath } = data; // gridPath est [[x,y], ...] ou null
+                // --- CORRECTION ICI ---
+                // Renommer la propriété 'path' reçue en 'worldPathData'
+                const { agentId, path: worldPathData } = data;
+                // --------------------
                 const agent = this.getAgentById(agentId);
 
                 if (agent) {
-                    let worldPath = null;
-                    // Convertir gridPath en worldPath UNIQUEMENT si le chemin est valide
-                    if (gridPath && gridPath.length > 0) {
-                        const navGraph = this.experience.world?.cityManager?.navigationGraph;
-                        if (navGraph) {
-                             try {
-                                 worldPath = gridPath.map(node => navGraph.gridToWorld(node[0], node[1]));
-                                 // console.log(`Agent ${agentId}: Chemin converti (${worldPath.length} points monde)`);
-                             } catch (conversionError) {
-                                 console.error(`Agent ${agentId}: Erreur conversion chemin grille vers monde:`, conversionError);
-                                 worldPath = null; // Échec conversion
-                             }
-                        } else {
-                            console.error(`Agent ${agentId}: NavigationGraph non trouvé pour convertir le chemin.`);
-                             worldPath = null;
-                        }
+                    let finalWorldPath = null;
+                    // Maintenant, 'worldPathData' est défini et contient [{x,y,z}, ...] ou null
+                    if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) { // <-- Cette ligne fonctionnera maintenant
+                         try {
+                            // Reconstruire les Vector3 sur le thread principal
+                            finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
+                            // console.log(`Agent ${agentId}: Chemin monde reçu et Vector3 reconstruits (${finalWorldPath.length} points).`);
+                         } catch(vecError) {
+                             console.error(`Agent ${agentId}: Erreur reconstruction Vector3 depuis données chemin:`, vecError);
+                             finalWorldPath = null;
+                         }
                     } else {
-                         // console.log(`Agent ${agentId}: Chemin vide ou null reçu du worker.`);
-                         worldPath = null; // Assure que c'est null si gridPath est vide/null
+                        // console.log(`Agent ${agentId}: Chemin vide ou null reçu du worker.`);
+                        finalWorldPath = null;
                     }
 
-                    // Envoyer le chemin (ou null) à l'agent
-                    agent.setPath(worldPath);
+                    // Envoyer le chemin Vector3 final (ou null) à l'agent
+                    agent.setPath(finalWorldPath);
 
-                    // Mettre à jour la visualisation debug si nécessaire
-                    if (worldPath && this.experience.isDebugMode) {
+                    // Mettre à jour la visualisation debug
+                    if (finalWorldPath && this.experience.isDebugMode) {
                         const world = this.experience.world;
                         if (world?.setAgentPathForAgent) {
                             world.setAgentPathForAgent(agent, agent.path, agent.debugPathColor);
                         }
                     }
                 } else {
-                    // console.warn(`AgentManager: Agent ${agentId} non trouvé pour le résultat du chemin.`);
+                     console.warn(`AgentManager: Agent ${agentId} non trouvé pour le résultat du chemin.`);
                 }
             } else {
                  console.warn("AgentManager: Message 'pathResult' incomplet reçu du worker:", event.data);
             }
         } else if (type === 'workerError') {
              console.error("AgentManager: Erreur rapportée par le worker:", error, "Data associée:", data);
-             // Gérer l'erreur (ex: informer l'agent concerné si possible ?)
         } else {
              console.warn("AgentManager: Type de message inconnu reçu du worker:", type);
         }
