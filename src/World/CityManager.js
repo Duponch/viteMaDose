@@ -55,12 +55,6 @@ export default class CityManager {
             fixedSkyscraperGridSpacing: 10, // Ancienne clé non utilisée pour placement dynamique
             */
 
-            // --- Échelles de Base pour la Grille Dynamique ---
-            gridHouseBaseScale: 9,       // Échelle finale appliquée aux maisons
-            gridBuildingBaseScale: 1.5,    // Échelle finale appliquée aux immeubles
-            gridIndustrialBaseScale: 1.6,  // Échelle finale appliquée aux industries
-            gridSkyscraperBaseScale: 1.0, // Échelle finale appliquée aux gratte-ciels
-
             // --- NOUVEAU : Espacements Minimum pour la Grille Dynamique ---
             minHouseSpacing: 5.0,       // Espacement minimum entre les maisons
             minBuildingSpacing: 3.0,    // Espacement minimum entre les immeubles (type 'building')
@@ -70,16 +64,16 @@ export default class CityManager {
             // ----------------------------------------------------------
 
             // --- Échelles de Base (inchangées) ---
-            gridHouseBaseScale: 8,
-            gridBuildingBaseScale: 1.5,
-            gridIndustrialBaseScale: 1.6,
-            gridSkyscraperBaseScale: 1.0,
+            gridHouseBaseScale: 6.5,
+            gridBuildingBaseScale: 1.3,
+            gridIndustrialBaseScale: 1.2,
+            gridSkyscraperBaseScale: 1.7,
 
             // ... (reste de la configuration inchangée : assets, tree placement, debug, time, agents etc.)
              // Map & Layout
              mapSize: 800,
              roadWidth: 10,
-             minPlotSize: 23,
+             minPlotSize: 25,
              maxPlotSize: 60,
              maxRecursionDepth: 7,
              // Crosswalks
