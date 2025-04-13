@@ -57,8 +57,8 @@ export default class CityManager {
 
             // --- Échelles de Base pour la Grille Dynamique ---
             gridHouseBaseScale: 8,       // Échelle finale appliquée aux maisons
-            gridBuildingBaseScale: 1.0,    // Échelle finale appliquée aux immeubles
-            gridIndustrialBaseScale: 1.0,  // Échelle finale appliquée aux industries
+            gridBuildingBaseScale: 1.5,    // Échelle finale appliquée aux immeubles
+            gridIndustrialBaseScale: 1.6,  // Échelle finale appliquée aux industries
             gridSkyscraperBaseScale: 1.0, // Échelle finale appliquée aux gratte-ciels
 
             // --- NOUVEAU : Espacements Minimum pour la Grille Dynamique ---
