@@ -650,17 +650,24 @@ export default class CityManager {
     // Cette fonction traite correctement les parcelles qui SONT dans des districts.
     // Elle n'a pas besoin d'être modifiée pour l'approche 1.
     adjustPlotTypesWithinDistricts() {
-		console.log("Ajustement des types de parcelles pour correspondre au type du district (SANS seuil superficie résidentiel)...");
+		console.log("Ajustement des types de parcelles (Alternance house/building résidentiel)...");
 		const stats = {
 			forcedToSkyscraper: 0,
 			forcedToIndustrial: 0,
-			forcedToResidential: 0, // Compte maintenant tous les changements vers 'house'
+			assignedHouse: 0,       // Compte les parcelles devenues 'house'
+			assignedBuilding: 0,    // Compte les parcelles devenues 'building'
+            changedResidentialType: 0, // Compte les changements H->B ou B->H
 			parksProtected: 0,
-			alreadyCorrect: 0,
+			alreadyCorrectResidential: 0, // Compte celles déjà H ou B et qui le restent
+            alreadyCorrectOther: 0,       // Compte les autres types déjà corrects
 			unbuildableSkipped: 0
 		};
 
 		this.districts.forEach(district => {
+            // --- NOUVEAU : Variable pour alterner dans ce district ---
+            let assignHouse = true;
+            // ---------------------------------------------------------
+
 			district.plots.forEach(plot => {
 				// Ignorer les parcs et non-constructibles (inchangé)
 				if (plot.zoneType === 'park') {
@@ -679,44 +686,57 @@ export default class CityManager {
 				switch (district.type) {
 					case 'business':
 						targetType = 'skyscraper';
-						if (initialType !== targetType) stats.forcedToSkyscraper++; else stats.alreadyCorrect++;
+						if (initialType !== targetType) stats.forcedToSkyscraper++; else stats.alreadyCorrectOther++;
 						break;
 
 					case 'industrial':
 						targetType = 'industrial';
-						if (initialType !== targetType) stats.forcedToIndustrial++; else stats.alreadyCorrect++;
+						if (initialType !== targetType) stats.forcedToIndustrial++; else stats.alreadyCorrectOther++;
 						break;
 
 					case 'residential':
                         // --- MODIFICATION ICI ---
-                        // Supprimer le test de superficie.
-                        // Assigner directement 'house' (ou 'building' si vous préférez les assets chargés).
-                        targetType = 'house';
+                        // Alterner entre 'house' et 'building'
+                        targetType = assignHouse ? 'house' : 'building';
+                        assignHouse = !assignHouse; // Inverser pour la prochaine parcelle
+
+                        // Mise à jour des stats pour résidentiel
+                        if (targetType === 'house') {
+                            stats.assignedHouse++;
+                            if(initialType !== 'house') stats.changedResidentialType++;
+                            else stats.alreadyCorrectResidential++;
+                        } else { // targetType === 'building'
+                            stats.assignedBuilding++;
+                             if(initialType !== 'building') stats.changedResidentialType++;
+                             else stats.alreadyCorrectResidential++;
+                        }
                         // --- FIN MODIFICATION ---
-						if (initialType !== targetType) stats.forcedToResidential++; else stats.alreadyCorrect++;
 						break;
 
 					default: // Ne devrait pas arriver si les districts ont un type valide
-						targetType = initialType; // Conserver le type initial
+						targetType = initialType;
 						console.warn(`District ${district.id} a un type inconnu: ${district.type}. Parcelle ${plot.id} inchangée.`);
-						stats.alreadyCorrect++;
+						stats.alreadyCorrectOther++;
 						break;
 				}
 
 				// Appliquer le type cible si défini (inchangé)
 				if (targetType !== null) {
 					 plot.zoneType = targetType;
-					 plot.isPark = (targetType === 'park'); // Devrait toujours être false ici
+					 plot.isPark = (targetType === 'park');
 				}
 			});
 		});
 
-		console.log(`Ajustement (sans seuil résidentiel) terminé:`);
+		console.log(`Ajustement (Alternance résidentiel) terminé:`);
 		console.log(`  - Forcés Gratte-ciel: ${stats.forcedToSkyscraper}`);
 		console.log(`  - Forcés Industriel: ${stats.forcedToIndustrial}`);
-		console.log(`  - Forcés Résidentiel ('house'): ${stats.forcedToResidential}`);
+		console.log(`  - Assignés Maison: ${stats.assignedHouse}`);
+		console.log(`  - Assignés Immeuble: ${stats.assignedBuilding}`);
+        console.log(`  - Changements type résidentiel: ${stats.changedResidentialType}`);
 		console.log(`  - Parcs Protégés: ${stats.parksProtected}`);
-		console.log(`  - Déjà Corrects / Inchangés: ${stats.alreadyCorrect}`);
+        console.log(`  - Déjà Corrects (Résidentiel): ${stats.alreadyCorrectResidential}`);
+		console.log(`  - Déjà Corrects (Autres types): ${stats.alreadyCorrectOther}`);
 		console.log(`  - Non-constructibles Ignorés: ${stats.unbuildableSkipped}`);
 	}
 
