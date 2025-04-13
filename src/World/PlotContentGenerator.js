@@ -83,53 +83,79 @@ export default class PlotContentGenerator {
     // Fonction 2 : defineHouseBaseGeometries (MODIFIÉE - Ajout computeVertexNormals)
     // ==============================================================
     defineHouseBaseGeometries() {
-        // console.log("Création des géométries de base pour la maison L-shape..."); // Log légèrement ajusté
+        // console.log("Création des géométries de base (BufferGeometry toit)...");
         this.baseHouseGeometries = {};
 
-        // --- Dimensions ---
-        // Note: Ces dimensions définissent le modèle LOCAL.
-        // Le scaling global sera appliqué plus tard.
-        const armLength = 2; const armWidth = 1; const armDepth = 0.5; // Hauteur mur = armDepth
+        // --- Dimensions (inchangées) ---
+        const armLength = 2; const armWidth = 1; const armDepth = 0.5;
         const roofPitchHeight = 0.3; const roofOverhang = 0.08;
-        const doorHeight = 0.7 * armDepth; const doorWidth = 0.3; const doorDepth = 0.05; // Épaisseur porte
+        const doorHeight = 0.7 * armDepth; const doorWidth = 0.3; const doorDepth = 0.05;
         const garageDoorHeight = 0.8 * armDepth; const garageDoorWidth = 0.55;
-        const windowHeight = 0.4 * armDepth; const windowWidth = 0.2; const windowDepth = doorDepth; // Épaisseur fenêtre
+        const windowHeight = 0.4 * armDepth; const windowWidth = 0.2; const windowDepth = doorDepth;
 
-        // --- Géométries Bases ---
-        // Origine locale est au coin intérieur du L.
-        // base_part1 s'étend le long de +X (length) et +Z (width)
-        // base_part2 s'étend le long de +Z (length) et +X (width)
+        // --- Géométries Bases (inchangées) ---
         this.baseHouseGeometries.base_part1 = new THREE.BoxGeometry(armLength, armDepth, armWidth);
-        this.baseHouseGeometries.base_part1.translate(armLength / 2, armDepth / 2, armWidth / 2); // Centre la pièce localement
+        this.baseHouseGeometries.base_part1.translate(armLength / 2, armDepth / 2, armWidth / 2);
         this.baseHouseGeometries.base_part2 = new THREE.BoxGeometry(armWidth, armDepth, armLength);
-        this.baseHouseGeometries.base_part2.translate(armWidth / 2, armDepth / 2, armLength / 2); // Centre la pièce localement
-        // Stocker la hauteur pour le calcul Y plus tard
-        this.baseHouseGeometries.base_part1.userData = { height: armDepth, minY: 0 }; // MinY = 0 après translation
-        this.baseHouseGeometries.base_part2.userData = { height: armDepth, minY: 0 }; // MinY = 0 après translation
-        // console.log(" -> Géométries bases créées et centrées localement.");
+        this.baseHouseGeometries.base_part2.translate(armWidth / 2, armDepth / 2, armLength / 2);
+        this.baseHouseGeometries.base_part1.userData = { height: armDepth, minY: 0 };
+        this.baseHouseGeometries.base_part2.userData = { height: armDepth, minY: 0 };
 
-        // --- Géométrie Toit ---
-        const roofShape = new THREE.Shape();
-        const triangleBase = armWidth + 2 * roofOverhang;
-        roofShape.moveTo(-triangleBase / 2, 0); roofShape.lineTo(triangleBase / 2, 0);
-        roofShape.lineTo(0, roofPitchHeight); roofShape.lineTo(-triangleBase / 2, 0);
-        const extrudeSettings = { depth: armLength + 2 * roofOverhang, bevelEnabled: false };
-        this.baseHouseGeometries.roof = new THREE.ExtrudeGeometry(roofShape, extrudeSettings);
-        this.baseHouseGeometries.roof.center(); // Centre la géométrie extrudée
-        this.baseHouseGeometries.roof.computeVertexNormals(); // Recalcul explicite des normales
-        // console.log(" -> Géométrie toit (Extrude) créée, centrée et normales recalculées.");
+        // --- Géométrie Toit (BufferGeometry) ---
+        const roofWidth = armWidth + 2 * roofOverhang;
+        const roofDepth = armLength + 2 * roofOverhang; // Profondeur de l'extrusion précédente
+        const roofHeight = roofPitchHeight;
+        const halfRoofWidth = roofWidth / 2;
+        const halfRoofDepth = roofDepth / 2;
 
-        // --- Géométries Portes (fines) ---
-        // Centrées localement
+        const roofGeometry = new THREE.BufferGeometry();
+
+        // Définir les 6 sommets du prisme triangulaire (centré à l'origine pour l'instant)
+        const vertices = new Float32Array([
+            // Base
+            -halfRoofWidth, 0, -halfRoofDepth, // 0: Arrière gauche
+             halfRoofWidth, 0, -halfRoofDepth, // 1: Arrière droit
+             halfRoofWidth, 0,  halfRoofDepth, // 2: Avant droit
+            -halfRoofWidth, 0,  halfRoofDepth, // 3: Avant gauche
+            // Faîte (ridge)
+                     0, roofHeight, -halfRoofDepth, // 4: Faîte arrière
+                     0, roofHeight,  halfRoofDepth  // 5: Faîte avant
+        ]);
+
+        // Définir les faces (triangles) par les indices des sommets
+        // 8 triangles au total: 2 pour chaque pignon, 2 pour chaque pan de toit
+        const indices = new Uint16Array([
+            // Pignon arrière (face vers -Z)
+            0, 1, 4,
+            // Pignon avant (face vers +Z)
+            2, 3, 5,
+            // Pan gauche (face vers -X)
+            0, 3, 5,    0, 5, 4,
+            // Pan droit (face vers +X)
+            1, 2, 5,    1, 5, 4,
+             // Base (optionnel, face vers -Y) - Décommentez si besoin
+             // 0, 2, 1,    0, 3, 2
+        ]);
+
+        roofGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        roofGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
+        roofGeometry.computeVertexNormals(); // Calculer les normales pour l'éclairage
+
+        // Centrer la géométrie (important pour la rotation et le positionnement ultérieurs)
+        // Note : BufferGeometry n'a pas de méthode .center() directe comme ExtrudeGeometry.
+        // Cependant, comme nous avons défini les sommets autour de (0,0,0), elle est déjà centrée.
+        // Si l'origine était différente, on utiliserait roofGeometry.center().
+
+        this.baseHouseGeometries.roof = roofGeometry;
+        // console.log(" -> Géométrie toit (BufferGeometry) créée et centrée.");
+
+        // --- Géométries Portes (inchangées) ---
         this.baseHouseGeometries.door = new THREE.BoxGeometry(doorDepth, doorHeight, doorWidth);
         this.baseHouseGeometries.garageDoor = new THREE.BoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth);
-        // console.log(" -> Géométries portes créées et centrées localement.");
 
-        // --- Géométries Fenêtres (fines) ---
-        // Centrées localement
-        this.baseHouseGeometries.windowYZ = new THREE.BoxGeometry(windowDepth, windowHeight, windowWidth); // Pour faces X+/-
-        this.baseHouseGeometries.windowXY = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth); // Pour faces Z+/-
-        // console.log(" -> Géométries fenêtres créées et centrées localement.");
+        // --- Géométries Fenêtres (inchangées) ---
+        this.baseHouseGeometries.windowYZ = new THREE.BoxGeometry(windowDepth, windowHeight, windowWidth);
+        this.baseHouseGeometries.windowXY = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth);
     }
 
     createProceduralHouseComponents() {
@@ -388,10 +414,10 @@ export default class PlotContentGenerator {
         // --- Déterminer dimensions cibles, échelle ET ESPACEMENT MINIMAL ---
         switch(zoneType) {
             case 'house':
-                 const houseArmLength = 2.0;
+                 const houseArmLength = 2.0; // Doit correspondre aux dimensions dans defineHouseBaseGeometries
                  baseScaleFactor = this.config.gridHouseBaseScale ?? 1.5;
-                 targetBuildingWidth = houseArmLength * baseScaleFactor;
-                 targetBuildingDepth = houseArmLength * baseScaleFactor;
+                 targetBuildingWidth = houseArmLength * baseScaleFactor; // Ou utiliser plot.width/numItemsX?
+                 targetBuildingDepth = houseArmLength * baseScaleFactor;// Ou utiliser plot.depth/numItemsY?
                  minSpacing = this.config.minHouseSpacing ?? 0; // Récupère l'espacement min config
                  break;
             case 'building':
@@ -421,9 +447,14 @@ export default class PlotContentGenerator {
                  // Logique parc inchangée (utilise subdivision)
                  minSpacing = this.config.minParkSpacing ?? 0; // Peut être utile pour la subdivision?
                  const subZones = this.subdivideForPlacement(plot);
-                 subZones.forEach((subZone) => { /* ... logique parc inchangée ... */ });
-                 return;
-            default: return;
+                 subZones.forEach((subZone) => {
+                    // Logique de placement des éléments de parc (arbres, bancs...)
+                    // Vous pouvez utiliser assetInfo = this.assetLoader.getRandomAssetData('park');
+                    // et placer les éléments aléatoirement dans la subZone.
+                    // Pour l'instant, cette partie est vide.
+                 });
+                 return; // Sortir après traitement parc
+            default: return; // Type inconnu
         }
 
         // --- Vérification Dimensions Cibles ---
@@ -434,24 +465,21 @@ export default class PlotContentGenerator {
         // S'assurer que minSpacing est positif ou nul
         minSpacing = Math.max(0, minSpacing);
 
-        // --- NOUVEAU: Calcul du nombre d'items basé sur la TAILLE et l'ESPACEMENT MINIMAL ---
-        // Formule: N <= (LargeurTotale + EspacementMin) / (LargeurItem + EspacementMin)
-        // N = floor((Wt + Sm) / (Wb + Sm))
+        // --- Calcul du nombre d'items basé sur la TAILLE et l'ESPACEMENT MINIMAL ---
         let numItemsX = 0;
         const itemPlusSpacingX = targetBuildingWidth + minSpacing;
-        if (plot.width >= targetBuildingWidth) { // Vérifie si au moins UN peut tenir en largeur
-             if (itemPlusSpacingX > 0.01) { // Évite division par zéro ou proche
+        if (plot.width >= targetBuildingWidth) {
+             if (itemPlusSpacingX > 0.01) {
                 numItemsX = Math.floor((plot.width + minSpacing) / itemPlusSpacingX);
-             } else { // Si espacement + largeur est nul (ne devrait pas arriver), on fit juste la largeur
+             } else {
                 numItemsX = Math.floor(plot.width / targetBuildingWidth);
              }
-             // Assurer qu'on place au moins 1 si la largeur le permet (cas où le 1er espacement le bloquerait)
              if (numItemsX === 0) numItemsX = 1;
         }
 
         let numItemsY = 0;
         const itemPlusSpacingY = targetBuildingDepth + minSpacing;
-        if (plot.depth >= targetBuildingDepth) { // Vérifie si au moins UN peut tenir en profondeur
+        if (plot.depth >= targetBuildingDepth) {
             if (itemPlusSpacingY > 0.01) {
                 numItemsY = Math.floor((plot.depth + minSpacing) / itemPlusSpacingY);
             } else {
@@ -460,29 +488,20 @@ export default class PlotContentGenerator {
             if (numItemsY === 0) numItemsY = 1;
         }
 
-        // Assurer que numItems est au moins 0
         numItemsX = Math.max(0, numItemsX);
         numItemsY = Math.max(0, numItemsY);
 
-        // Si on ne peut rien placer (parcelle trop petite même pour un seul item), on arrête
         if (numItemsX === 0 || numItemsY === 0) {
-            // Optionnel: log pour débogage
-            // console.log(`Plot ${plot.id} (${plot.zoneType}) trop petite (${plot.width.toFixed(1)}x${plot.depth.toFixed(1)}) pour placer ${targetBuildingWidth.toFixed(1)}x${targetBuildingDepth.toFixed(1)} avec espacement min ${minSpacing}.`);
             return;
         }
 
-        // --- Calcul de l'espacement final égal (basé sur le numItems calculé AVEC minSpacing) ---
-        // Cette partie est identique à la version précédente, mais utilise les numItemsX/Y qui respectent déjà minSpacing.
-        // Le gap résultant sera donc >= minSpacing.
+        // --- Calcul de l'espacement final égal ---
         const remainingWidth = plot.width - (numItemsX * targetBuildingWidth);
         const remainingDepth = plot.depth - (numItemsY * targetBuildingDepth);
         const gapX = (numItemsX > 0) ? Math.max(0, remainingWidth / (numItemsX + 1)) : 0;
         const gapZ = (numItemsY > 0) ? Math.max(0, remainingDepth / (numItemsY + 1)) : 0;
 
-        // console.log(`Plot ${plot.id} (${plot.zoneType}): Place ${numItemsX}x${numItemsY} items (${targetBuildingWidth.toFixed(1)}x${targetBuildingDepth.toFixed(1)}). MinSpace: ${minSpacing}, Final Gaps: X=${gapX.toFixed(2)}, Z=${gapZ.toFixed(2)}`);
-
-        // --- Boucle de placement (Identique à la version précédente) ---
-        // Utilise gapX et gapZ calculés pour un espacement égal.
+        // --- Boucle de placement ---
         for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
             for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
                 // Calcul Position Centre Cellule
@@ -490,50 +509,105 @@ export default class PlotContentGenerator {
                 const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + gapZ)) + targetBuildingDepth / 2;
                 const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
 
-                // Calcul Orientation (inchangé)
+                // Calcul Orientation (vers le bord le plus proche)
                 const distToLeft = cellCenterX - plot.x; const distToRight = (plot.x + plot.width) - cellCenterX;
                 const distToTop = cellCenterZ - plot.z; const distToBottom = (plot.z + plot.depth) - cellCenterZ;
                 const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
                 let targetRotationY = 0; const tolerance = 0.1;
-                if (Math.abs(minDist - distToLeft) < tolerance) targetRotationY = -Math.PI / 2;
-                else if (Math.abs(minDist - distToRight) < tolerance) targetRotationY = Math.PI / 2;
-                else if (Math.abs(minDist - distToBottom) < tolerance) targetRotationY = Math.PI;
+                if (Math.abs(minDist - distToLeft) < tolerance) targetRotationY = -Math.PI / 2;      // Face vers -X (gauche)
+                else if (Math.abs(minDist - distToRight) < tolerance) targetRotationY = Math.PI / 2; // Face vers +X (droite)
+                else if (Math.abs(minDist - distToBottom) < tolerance) targetRotationY = Math.PI;    // Face vers +Z (bas)
+                // else if (Math.abs(minDist - distToTop) < tolerance) targetRotationY = 0; // Face vers -Z (haut) - déjà 0 par défaut
                 const finalQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotationY);
 
-                // --- Placement Spécifique (Logique interne inchangée, mais utilise les positions/rotations calculées) ---
+                // --- Placement Spécifique ---
                 if (zoneType === 'house') {
-                    // --- Logique Maison Procédurale ---
+                    // Récupérer les dimensions de base (doivent correspondre à defineHouseBaseGeometries)
+                    const armLength = 2; const armWidth = 1; const armDepth = 0.5;
+                    const roofPitchHeight = 0.3; // Pas utilisé directement ici mais pour contexte
+                    const doorHeight = 0.7 * armDepth; const doorDepth = 0.05;
+                    // *** CORRECTION ICI : Déclarer doorWidth ***
+                    const doorWidth = 0.3; // Valeur de defineHouseBaseGeometries
+                    // *** FIN CORRECTION ***
+                    const garageDoorHeight = 0.8 * armDepth;
+                    const windowHeight = 0.4 * armDepth; const windowDepth = doorDepth;
+                    const window_Y_pos_Base = armDepth * 0.1; // Base des fenêtres
+
                     const finalScaleVector = new THREE.Vector3(baseScaleFactor, baseScaleFactor, baseScaleFactor);
+                    // La position Y de la base de la maison.
                     const baseYOffset = this.baseHouseGeometries.base_part1?.userData?.minY ?? 0;
-                    const finalPosY = groundLevel - (baseYOffset * baseScaleFactor);
-                    const armLength = 2.0; const armDepth = 0.5; const armWidth = 1.0; const roofPitchHeight = 0.3;
-                    const doorDepth = 0.05; const doorHeight = 0.7 * armDepth; const garageDoorHeight = 0.8 * armDepth;
-                    const windowHeight = 0.4 * armDepth; const windowDepth = doorDepth; const window_Y_pos_Base = armDepth * 0.1;
-                    let localMatrix;
-                    const modelCenterLocal = new THREE.Vector3(armLength/2, armDepth / 2, armLength/2);
+                    const finalPosY = groundLevel - (baseYOffset * baseScaleFactor); // Pour que le bas de la maison soit au sol
+
+                    // Centre local et offset global (inchangé)
+                    const modelCenterLocal = new THREE.Vector3(armLength / 2, armDepth / 2, armLength / 2);
                     const centerOffsetRotated = modelCenterLocal.clone().applyQuaternion(finalQuaternion);
                     const centerOffsetScaledRotated = centerOffsetRotated.multiplyScalar(baseScaleFactor);
-                    const finalPosition = new THREE.Vector3( worldCellCenterPos.x - centerOffsetScaledRotated.x, finalPosY, worldCellCenterPos.z - centerOffsetScaledRotated.z );
+                    const finalPosition = new THREE.Vector3(
+                         worldCellCenterPos.x - centerOffsetScaledRotated.x,
+                         finalPosY,
+                         worldCellCenterPos.z - centerOffsetScaledRotated.z
+                    );
+
+                    // Matrice globale pour la maison (inchangé)
                     const globalHouseMatrix = new THREE.Matrix4().compose(finalPosition, finalQuaternion, finalScaleVector);
-                    // Fonctions Helper
-                    const addPartInstance = (partName, localMatrix) => { /* ... comme avant ... */ if (this.baseHouseGeometries[partName]) { const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix); const type = 'house'; const modelId = partName; if (!this.instanceData[type]) this.instanceData[type] = {}; if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = []; this.instanceData[type][modelId].push(finalMatrix.clone()); } else { console.warn(`Géométrie maison manquante: ${partName}`); } };
-                    const addWindowPart = (geomKey, x, yBase, z) => { /* ... comme avant ... */ localMatrix = new THREE.Matrix4().makeTranslation(x, yBase + windowHeight / 2, z); addPartInstance(geomKey, localMatrix); };
-                    // Ajout des parties (code inchangé, utilise constantes locales définies plus haut)
+
+                    // Fonction Helper pour ajouter les parties (inchangées)
+                    let localMatrix;
+                    const addPartInstance = (partName, localMatrix) => {
+                        if (this.baseHouseGeometries[partName]) {
+                            const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix);
+                            const type = 'house';
+                            const modelId = partName;
+                            if (!this.instanceData[type]) this.instanceData[type] = {};
+                            if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
+                            this.instanceData[type][modelId].push(finalMatrix.clone());
+                        } else {
+                            console.warn(`Géométrie maison manquante: ${partName}`);
+                        }
+                    };
+                     const addWindowPart = (geomKey, x, yBase, z) => {
+                         localMatrix = new THREE.Matrix4().makeTranslation(x, yBase + windowHeight / 2, z); // Centrer la fenêtre verticalement
+                         addPartInstance(geomKey, localMatrix);
+                     };
+
+                    // --- Ajout des parties de la maison (inchangé) ---
                     localMatrix = new THREE.Matrix4(); addPartInstance('base_part1', localMatrix);
                     localMatrix = new THREE.Matrix4(); addPartInstance('base_part2', localMatrix);
-                    const roofPosY_Center = armDepth + roofPitchHeight / 2;
-                    const roofPos1 = new THREE.Vector3(armLength / 2, roofPosY_Center, armWidth / 2); const roofPos2 = new THREE.Vector3(armWidth / 2, roofPosY_Center, armLength / 2);
-                    const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2); const roofRot2 = new THREE.Quaternion();
+                    const roofBaseY = armDepth;
+                    const roofPos1 = new THREE.Vector3(armLength / 2, roofBaseY, armWidth / 2);
+                    const roofPos2 = new THREE.Vector3(armWidth / 2, roofBaseY, armLength / 2);
+                    const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+                    const roofRot2 = new THREE.Quaternion();
                     localMatrix = new THREE.Matrix4().compose(roofPos1, roofRot1, new THREE.Vector3(1, 1, 1)); addPartInstance('roof', localMatrix);
                     localMatrix = new THREE.Matrix4().compose(roofPos2, roofRot2, new THREE.Vector3(1, 1, 1)); addPartInstance('roof', localMatrix);
-                    const doorPos = new THREE.Vector3(armWidth + doorDepth / 2, doorHeight / 2, armLength * 0.75); localMatrix = new THREE.Matrix4().makeTranslation(doorPos.x, doorPos.y, doorPos.z); addPartInstance('door', localMatrix);
-                    const garagePos = new THREE.Vector3(armLength + doorDepth / 2, garageDoorHeight / 2, armWidth * 0.5); localMatrix = new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z); addPartInstance('garageDoor', localMatrix);
-                    // ... (autres addWindowPart comme avant) ...
-                    // Enregistrement Bâtiment
-                    const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
+                    const doorPos = new THREE.Vector3(armWidth / 2 + doorDepth / 2, doorHeight / 2, armLength * 0.75);
+                    localMatrix = new THREE.Matrix4().makeTranslation(doorPos.x, doorPos.y, doorPos.z); addPartInstance('door', localMatrix);
+                    const garagePos = new THREE.Vector3(armLength * 0.75, garageDoorHeight / 2, armWidth / 2 + doorDepth / 2);
+                    localMatrix = new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z); addPartInstance('garageDoor', localMatrix);
+
+                    // Fenêtres (inchangé - utilise maintenant doorWidth déclaré plus haut)
+                    const windowY = window_Y_pos_Base + windowHeight / 2;
+                    addWindowPart('windowXY', 0.25, window_Y_pos_Base, -windowDepth / 2);
+                    addWindowPart('windowXY', 0.75, window_Y_pos_Base, -windowDepth / 2);
+                    addWindowPart('windowXY', 1.25, window_Y_pos_Base, -windowDepth / 2);
+                    addWindowPart('windowXY', 1.75, window_Y_pos_Base, -windowDepth / 2);
+                    addWindowPart('windowXY', 0.25, window_Y_pos_Base, armWidth + windowDepth / 2);
+                    addWindowPart('windowXY', 0.75, window_Y_pos_Base, armWidth + windowDepth / 2);
+                    addWindowPart('windowXY', 1.25, window_Y_pos_Base, armWidth + windowDepth / 2);
+                    addWindowPart('windowXY', 1.75, window_Y_pos_Base, armWidth + windowDepth / 2);
+                    addWindowPart('windowYZ', -windowDepth/2, window_Y_pos_Base, 0.25);
+                    addWindowPart('windowYZ', -windowDepth/2, window_Y_pos_Base, 0.75);
+                    addWindowPart('windowYZ', armWidth + windowDepth / 2, window_Y_pos_Base, 0.25);
+                    addWindowPart('windowYZ', armWidth + windowDepth / 2, window_Y_pos_Base, 0.75);
+                    const doorEdgeLeft = armLength * 0.75 - doorWidth / 2; // doorWidth est défini maintenant
+                    const doorEdgeRight = armLength * 0.75 + doorWidth / 2; // doorWidth est défini maintenant
+                    addWindowPart('windowYZ', armWidth + windowDepth / 2, window_Y_pos_Base, (armWidth + doorEdgeLeft) / 2);
+                    addWindowPart('windowYZ', armWidth + windowDepth / 2, window_Y_pos_Base, (doorEdgeRight + armLength) / 2);
+
+                    // Enregistrement Bâtiment (inchangé)
+                    const buildingPosition = finalPosition.clone().setY(this.config.sidewalkHeight);
                     const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'house', buildingPosition);
                     if (registeredBuilding) { plot.addBuildingInstance({ id: registeredBuilding.id, type: 'house', position: buildingPosition.clone() }); }
-                    // --- Fin Logique Maison ---
 
                 } else if (assetInfo) {
                     // --- CAS ASSETS (Inchangé) ---
@@ -551,7 +625,14 @@ export default class PlotContentGenerator {
                 }
 
                 // --- Visualisation Debug (Inchangé) ---
-                if (this.debugPlotGridGroup && this.debugPlotGridMaterial) { /* ... */ }
+                if (this.debugPlotGridGroup && this.debugPlotGridMaterial) {
+                    const cellGeom = new THREE.PlaneGeometry(targetBuildingWidth, targetBuildingDepth);
+                    const cellMesh = new THREE.Mesh(cellGeom, this.debugPlotGridMaterial);
+                    cellMesh.rotation.x = -Math.PI / 2;
+                    cellMesh.position.set(worldCellCenterPos.x, groundLevel + 0.02, worldCellCenterPos.z);
+                    cellMesh.name = `DebugCell_Plot${plot.id}_${rowIndex}_${colIndex}`;
+                    this.debugPlotGridGroup.add(cellMesh);
+                }
                 // --- Fin Visualisation Debug ---
 
             } // Fin boucle colonnes
