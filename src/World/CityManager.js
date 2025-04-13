@@ -39,28 +39,36 @@ export default class CityManager {
             // Plot Content
             sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
 
-            // --- Configurations de GRILLE FIXE ---
+            // --- Configurations de GRILLE FIXE (Commentées ou à supprimer si non utilisées ailleurs) ---
+            /*
             fixedHouseGridWidth: 10,
             fixedHouseGridDepth: 10,
-            fixedHouseGridSpacing: 14,
+            fixedHouseGridSpacing: 14, // Ancienne clé non utilisée pour placement dynamique
             fixedBuildingGridWidth: 12,
             fixedBuildingGridDepth: 12,
-            fixedBuildingGridSpacing: 6,
+            fixedBuildingGridSpacing: 6, // Ancienne clé non utilisée pour placement dynamique
             fixedIndustrialGridWidth: 15,
             fixedIndustrialGridDepth: 20,
-            fixedIndustrialGridSpacing: 8,
+            fixedIndustrialGridSpacing: 8, // Ancienne clé non utilisée pour placement dynamique
             fixedSkyscraperGridWidth: 15,
             fixedSkyscraperGridDepth: 15,
-            fixedSkyscraperGridSpacing: 10,
+            fixedSkyscraperGridSpacing: 10, // Ancienne clé non utilisée pour placement dynamique
+            */
 
-            // --- NOUVEAU : Échelles de Base pour la Grille ---
-            gridHouseBaseScale: 1.5,       // Échelle finale appliquée aux maisons sur grille
-            gridBuildingBaseScale: 1.0,    // Échelle finale appliquée aux immeubles sur grille
-            gridIndustrialBaseScale: 1.0,  // Échelle finale appliquée aux industries sur grille
-            gridSkyscraperBaseScale: 1.0, // Échelle finale appliquée aux gratte-ciels sur grille
-            // -----------------------------------------------
+            // --- Échelles de Base pour la Grille Dynamique ---
+            gridHouseBaseScale: 8,       // Échelle finale appliquée aux maisons
+            gridBuildingBaseScale: 1.0,    // Échelle finale appliquée aux immeubles
+            gridIndustrialBaseScale: 1.0,  // Échelle finale appliquée aux industries
+            gridSkyscraperBaseScale: 1.0, // Échelle finale appliquée aux gratte-ciels
 
-            // Assets (Paths and base dimensions for initial fitting)
+            // --- NOUVEAU : Espacements Minimum pour la Grille Dynamique ---
+            minHouseSpacing: 5.0,       // Espacement minimum entre les maisons
+            minBuildingSpacing: 3.0,    // Espacement minimum entre les immeubles
+            minIndustrialSpacing: 8.0,  // Espacement minimum entre les industries
+            minSkyscraperSpacing: 10.0, // Espacement minimum entre les gratte-ciels
+            // ----------------------------------------------------------
+
+            // --- Assets (Chemins et dimensions de base pour l'ajustement initial) ---
             houseModelDir: "Public/Assets/Models/Houses/", houseModelFiles: [
                 { file: "House1.fbx", scale: 1.3 }, { file: "House2.fbx", scale: 1.3 }, { file: "House3.fbx", scale: 1.3 }, { file: "House4.fbx", scale: 1.3 }, { file: "House5.fbx", scale: 1.3 }, { file: "House6.fbx", scale: 1.3 }, { file: "House7.fbx", scale: 1.3 }, { file: "House8.fbx", scale: 1.3 }, { file: "House9.fbx", scale: 1.3 }, { file: "House10.fbx", scale: 1.3 }, { file: "House11.fbx", scale: 1.3 }, { file: "House12.fbx", scale: 1.3 }, { file: "House13.fbx", scale: 1.3 }, { file: "House14.fbx", scale: 1.3 }, { file: "House15.fbx", scale: 1.3 }, { file: "House16.fbx", scale: 1.3 }, { file: "House17.fbx", scale: 1.3 }, { file: "House18.fbx", scale: 1.3 }, { file: "House19.fbx", scale: 1.3 }, { file: "House20.fbx", scale: 1.3 }, { file: "House21.fbx", scale: 1.3 }, { file: "House22.fbx", scale: 1.3 }, { file: "House23.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 },
             ],
@@ -154,7 +162,7 @@ export default class CityManager {
 
         this.scene.add(this.cityContainer);
         if (this.config.showDistrictBoundaries) { this.cityContainer.add(this.debugGroup); }
-        console.log("CityManager initialized (with grid scales and registers).");
+        console.log("CityManager initialized (with min spacing config).");
     }
 
 	registerBuildingInstance(plotId, assetType, position, capacityOverride = null) {
