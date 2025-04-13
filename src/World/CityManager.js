@@ -18,7 +18,7 @@ export default class CityManager {
             // Map & Layout
             mapSize: 800,
             roadWidth: 10,
-            minPlotSize: 23,
+            minPlotSize: 30,
             maxPlotSize: 60,
             maxRecursionDepth: 7,
             // Crosswalks
