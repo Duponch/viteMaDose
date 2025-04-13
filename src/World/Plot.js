@@ -14,27 +14,27 @@ export default class Plot {
         this.isPark = false; // Peut être déprécié au profit de zoneType === 'park'
         this.zoneType = null; // Ex: 'house', 'building', 'industrial', 'skyscraper', 'park', 'unbuildable'
         this.districtId = null; // ID du quartier auquel appartient cette parcelle
-        this.occupiedSubZones = []; // Utilisé par PlotContentGenerator pour le placement (ex: arbres)
+        // this.occupiedSubZones = []; // <-- Non utilisé si tous les bâtiments sont sur grille
 
-        // --- NOUVEAU ---
-        // Stockera les infos des bâtiments *instances* placés sur cette parcelle
         this.buildingInstances = []; // { id: string, type: string, position: Vector3, capacity?: number, occupants?: number[] }
-        // Stockera les zones de grille occupées par les maisons {gx, gy, gridWidth, gridDepth}
-        this.placedHouseGrids = []; // Initialisé comme tableau vide
-        // -------------
+
+        // --- RENOMMÉ : placedHouseGrids -> placedGridCells ---
+        // Stockera les zones de grille occupées par les bâtiments {gx, gy, gridWidth, gridDepth}
+        this.placedGridCells = []; // Initialisé comme tableau vide
+        // ---------------------------------------------------
     }
 
-	addPlacedHouseGrid(gridArea) {
+	addPlacedGridCell(gridArea) {
         // gridArea devrait être { gx, gy, gridWidth, gridDepth }
-        if (!this.placedHouseGrids) {
-            this.placedHouseGrids = []; // Double sécurité
+        if (!this.placedGridCells) {
+            this.placedGridCells = []; // Double sécurité
         }
-        this.placedHouseGrids.push(gridArea);
+        this.placedGridCells.push(gridArea);
     }
 
 	isGridAreaFree(targetGx, targetGy, targetGridWidth, targetGridDepth, spacing) {
-        if (!this.placedHouseGrids) {
-            return true; // Initialisation tardive ou aucune maison placée
+        if (!this.placedGridCells) {
+            return true; // Initialisation tardive ou aucun bâtiment placé sur grille
         }
 
         // Calculer les limites de la zone cible AVEC l'espacement inclus
@@ -43,8 +43,8 @@ export default class Plot {
         const checkMaxX = targetGx + targetGridWidth + spacing;
         const checkMaxY = targetGy + targetGridDepth + spacing;
 
-        // Vérifier les chevauchements avec les maisons déjà placées sur cette parcelle
-        for (const placed of this.placedHouseGrids) {
+        // Vérifier les chevauchements avec les zones déjà placées sur cette parcelle
+        for (const placed of this.placedGridCells) {
             // Calculer les limites de la zone placée AVEC l'espacement inclus
             const placedMinX = placed.gx - spacing;
             const placedMinY = placed.gy - spacing;
@@ -52,8 +52,6 @@ export default class Plot {
             const placedMaxY = placed.gy + placed.gridDepth + spacing;
 
             // Vérification de chevauchement de rectangles (AABB)
-            // Il y a chevauchement si les intervalles [minX, maxX] ET [minY, maxY] se chevauchent.
-            // Ils NE se chevauchent PAS si l'un est complètement à gauche/droite OU complètement au-dessus/en-dessous de l'autre.
             const overlapsX = checkMinX < placedMaxX && checkMaxX > placedMinX;
             const overlapsY = checkMinY < placedMaxY && checkMaxY > placedMinY;
 

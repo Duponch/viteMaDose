@@ -15,14 +15,12 @@ export default class CityManager {
 
         // --- Configuration Initiale ---
         this.config = {
-            // ===== Map & Layout MODIFIÉ =====
+            // Map & Layout
             mapSize: 800,
             roadWidth: 10,
-            minPlotSize: 25, // Augmenté (ex: de 13 à 25)
-            maxPlotSize: 60, // Augmenté (ex: de 40 à 60)
-            maxRecursionDepth: 7, // Peut rester le même ou être réduit si les plots deviennent trop grands trop vite
-            // ================================
-
+            minPlotSize: 23,
+            maxPlotSize: 60,
+            maxRecursionDepth: 7,
             // Crosswalks
             crosswalkWidth: 0.1, crosswalkHeight: 0.03, crosswalkStripeCount: 5, crosswalkStripeWidth: 0.6, crosswalkStripeGap: 0.5,
             // Districts
@@ -40,26 +38,36 @@ export default class CityManager {
             maxDistrictRegenAttempts: 15,
             // Plot Content
             sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
-            minHouseSubZoneSize: 7, minBuildingSubZoneSize: 10, minIndustrialSubZoneSize: 13,
-            minParkSubZoneSize: 10, minSkyscraperSubZoneSize: 13,
-            houseSubZoneMargin: 2.0, // This margin is no longer relevant for grid houses
-            buildingSubZoneMargin: 1.5,
 
-            // --- Grid Houses (remis aux valeurs précédentes ou ajustez si besoin) ---
+            // --- Configurations de GRILLE FIXE ---
             fixedHouseGridWidth: 10,
             fixedHouseGridDepth: 10,
             fixedHouseGridSpacing: 5,
-			proceduralHouseBaseScale: 1.0, // <-- AJOUTEZ CETTE LIGNE (ou une valeur différente si vous voulez)
-            // ------------------------------------------------------
+            fixedBuildingGridWidth: 12,
+            fixedBuildingGridDepth: 12,
+            fixedBuildingGridSpacing: 6,
+            fixedIndustrialGridWidth: 15,
+            fixedIndustrialGridDepth: 20,
+            fixedIndustrialGridSpacing: 8,
+            fixedSkyscraperGridWidth: 15,
+            fixedSkyscraperGridDepth: 15,
+            fixedSkyscraperGridSpacing: 10,
 
-            // Assets (Paths and configs - ensure they are correct)
-             houseModelDir: "Public/Assets/Models/Houses/", houseModelFiles: [
-				{ file: "House1.fbx", scale: 1.3 }, { file: "House2.fbx", scale: 1.3 }, { file: "House3.fbx", scale: 1.3 }, { file: "House4.fbx", scale: 1.3 }, { file: "House5.fbx", scale: 1.3 }, { file: "House6.fbx", scale: 1.3 }, { file: "House7.fbx", scale: 1.3 }, { file: "House8.fbx", scale: 1.3 }, { file: "House9.fbx", scale: 1.3 }, { file: "House10.fbx", scale: 1.3 }, { file: "House11.fbx", scale: 1.3 }, { file: "House12.fbx", scale: 1.3 }, { file: "House13.fbx", scale: 1.3 }, { file: "House14.fbx", scale: 1.3 }, { file: "House15.fbx", scale: 1.3 }, { file: "House16.fbx", scale: 1.3 }, { file: "House17.fbx", scale: 1.3 }, { file: "House18.fbx", scale: 1.3 }, { file: "House19.fbx", scale: 1.3 }, { file: "House20.fbx", scale: 1.3 }, { file: "House21.fbx", scale: 1.3 }, { file: "House22.fbx", scale: 1.3 }, { file: "House23.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 },
-			],
+            // --- NOUVEAU : Échelles de Base pour la Grille ---
+            gridHouseBaseScale: 1.0,       // Échelle finale appliquée aux maisons sur grille
+            gridBuildingBaseScale: 1.0,    // Échelle finale appliquée aux immeubles sur grille
+            gridIndustrialBaseScale: 1.0,  // Échelle finale appliquée aux industries sur grille
+            gridSkyscraperBaseScale: 1.0, // Échelle finale appliquée aux gratte-ciels sur grille
+            // -----------------------------------------------
+
+            // Assets (Paths and base dimensions for initial fitting)
+            houseModelDir: "Public/Assets/Models/Houses/", houseModelFiles: [
+                { file: "House1.fbx", scale: 1.3 }, { file: "House2.fbx", scale: 1.3 }, { file: "House3.fbx", scale: 1.3 }, { file: "House4.fbx", scale: 1.3 }, { file: "House5.fbx", scale: 1.3 }, { file: "House6.fbx", scale: 1.3 }, { file: "House7.fbx", scale: 1.3 }, { file: "House8.fbx", scale: 1.3 }, { file: "House9.fbx", scale: 1.3 }, { file: "House10.fbx", scale: 1.3 }, { file: "House11.fbx", scale: 1.3 }, { file: "House12.fbx", scale: 1.3 }, { file: "House13.fbx", scale: 1.3 }, { file: "House14.fbx", scale: 1.3 }, { file: "House15.fbx", scale: 1.3 }, { file: "House16.fbx", scale: 1.3 }, { file: "House17.fbx", scale: 1.3 }, { file: "House18.fbx", scale: 1.3 }, { file: "House19.fbx", scale: 1.3 }, { file: "House20.fbx", scale: 1.3 }, { file: "House21.fbx", scale: 1.3 }, { file: "House22.fbx", scale: 1.3 }, { file: "House23.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 },
+            ],
             houseBaseWidth: 5, houseBaseHeight: 6, houseBaseDepth: 5,
             buildingModelDir: "Public/Assets/Models/Buildings/", buildingModelFiles: [
-				{ file: "Building1.fbx", scale: 0.8 }, { file: "Building2.fbx", scale: 0.8 }, { file: "Building3.fbx", scale: 0.8 }, { file: "Building4.fbx", scale: 0.8 }, { file: "Building5.fbx", scale: 0.8 }, { file: "Building6.fbx", scale: 0.8 }, { file: "Building7.fbx", scale: 0.8 }, { file: "Building8.fbx", scale: 0.8 }, { file: "Building10.glb", scale: 0.8 },
-			],
+                { file: "Building1.fbx", scale: 0.8 }, { file: "Building2.fbx", scale: 0.8 }, { file: "Building3.fbx", scale: 0.8 }, { file: "Building4.fbx", scale: 0.8 }, { file: "Building5.fbx", scale: 0.8 }, { file: "Building6.fbx", scale: 0.8 }, { file: "Building7.fbx", scale: 0.8 }, { file: "Building8.fbx", scale: 0.8 }, { file: "Building10.glb", scale: 0.8 },
+            ],
             buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
             industrialModelDir: "Public/Assets/Models/Industrials/", industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 1 }, { file: "Factory2_glb.glb", scale: 1 }, { file: "Factory3_glb.glb", scale: 1 } ],
             industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
@@ -70,7 +78,8 @@ export default class CityManager {
             skyscraperModelDir: "Public/Assets/Models/Skyscrapers/", skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 }, ],
             skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
             // Tree Placement
-            treePlacementProbabilitySidewalk: 0.3, treePlacementProbabilityPark: 0.04, treePlacementProbabilityMargin: 0.008,
+            treePlacementProbabilitySidewalk: 0.3,
+            treePlacementProbabilityPark: 0.04,
             // Debug
             showDistrictBoundaries: false,
             // Time
@@ -80,8 +89,8 @@ export default class CityManager {
             agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7, agentSwingAmplitude: 1.2,
             agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
             agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
-			agentAnimationSpeedFactor: 8,
-			maxAgents: 500,
+            agentAnimationSpeedFactor: 8,
+            maxAgents: 500,
              // Default Capacities
              maxCitizensPerHouse: 5,
              maxCitizensPerBuilding: 10,
@@ -117,7 +126,6 @@ export default class CityManager {
             debugIndustrialMat: new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugBusinessMat: new THREE.MeshBasicMaterial({ color: 0xcc0000, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugDefaultMat: new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
-            // NEW: Material for the debug grid
             debugPlotGridMaterial: new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true, side: THREE.DoubleSide })
         };
 
@@ -125,9 +133,8 @@ export default class CityManager {
         this.navigationGraph = null; // Will be created in generateCity
         this.pathfinder = null;
         this.assetLoader = new CityAssetLoader(this.config);
-        this.layoutGenerator = new CityLayoutGenerator(this.config); // Utilise la config mise à jour
+        this.layoutGenerator = new CityLayoutGenerator(this.config);
         this.roadGenerator = new RoadNetworkGenerator(this.config, this.materials);
-        // MODIFIED: Pass the new debug material to the constructor
         this.contentGenerator = new PlotContentGenerator(this.config, this.materials, this.materials.debugPlotGridMaterial);
         this.districts = [];
         this.leafPlots = [];
@@ -147,7 +154,7 @@ export default class CityManager {
 
         this.scene.add(this.cityContainer);
         if (this.config.showDistrictBoundaries) { this.cityContainer.add(this.debugGroup); }
-        console.log("CityManager initialized (with grid houses config and registers).");
+        console.log("CityManager initialized (with grid scales and registers).");
     }
 
 	registerBuildingInstance(plotId, assetType, position, capacityOverride = null) {
