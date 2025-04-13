@@ -42,120 +42,106 @@ export default class PlotContentGenerator {
         };
     }
 
-	defineHouseBaseMaterials() {
-        console.log("Définition des matériaux de base pour la maison procédurale...");
-        this.baseHouseMaterials.wall = new THREE.MeshStandardMaterial({
-            color: 0xD4A3A1, roughness: 0.8, name: "HouseWallMat",
-            polygonOffset: true, polygonOffsetFactor: 1.0, polygonOffsetUnits: 1.0 // Aide Z-Fighting
+	// ==============================================================
+    // Fonction 1 : defineHouseBaseMaterials (MODIFIÉE - side: DoubleSide pour toit)
+    // ==============================================================
+    defineHouseBaseMaterials() {
+        console.log("Définition des matériaux de base pour la nouvelle maison (L-shape)...");
+        const facadeColor = 0xF5F5DC;
+        const roofColor = 0x8B4513;
+        const doorColor = 0x4a2c2a;
+        const garageDoorColor = 0xd3d3d3;
+        const windowColor = 0xadd8e6;
+
+        this.baseHouseMaterials = {};
+
+        this.baseHouseMaterials.base_part1 = new THREE.MeshStandardMaterial({
+            color: facadeColor, roughness: 0.8, name: "HouseBase1Mat"
         });
+        this.baseHouseMaterials.base_part2 = new THREE.MeshStandardMaterial({
+            color: facadeColor, roughness: 0.8, name: "HouseBase2Mat"
+        });
+        // *** MODIFICATION ICI ***
         this.baseHouseMaterials.roof = new THREE.MeshStandardMaterial({
-            color: 0x90A497, roughness: 0.7, name: "HouseRoofMat"
+            color: roofColor, roughness: 0.7, name: "HouseRoofMat",
+            side: THREE.DoubleSide // Assure que l'intérieur du toit est visible si les normales sont inversées
         });
-        this.baseHouseMaterials.windowFrame = new THREE.MeshStandardMaterial({
-            color: 0xCCCCCC, roughness: 0.5, name: "HouseWindowFrameMat"
-        });
-        this.baseHouseMaterials.windowGlass = new THREE.MeshStandardMaterial({
-            color: 0xADD8E6, roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.6, name: "HouseWindowGlassMat" // Rendu opacité plus faible
-        });
+        // *** FIN MODIFICATION ***
         this.baseHouseMaterials.door = new THREE.MeshStandardMaterial({
-            color: 0x656565, roughness: 0.7, name: "HouseDoorMat"
+            color: doorColor, roughness: 0.7, name: "HouseDoorMat"
         });
         this.baseHouseMaterials.garageDoor = new THREE.MeshStandardMaterial({
-            color: 0x757575, roughness: 0.6, name: "HouseGarageDoorMat"
+            color: garageDoorColor, roughness: 0.6, name: "HouseGarageDoorMat"
         });
-        // Ajoutez d'autres matériaux si nécessaire
+        this.baseHouseMaterials.window = new THREE.MeshStandardMaterial({
+            color: windowColor, roughness: 0.1, metalness: 0.1,
+            transparent: true, opacity: 0.7, name: "HouseWindowMat",
+            // Optionnel: side: THREE.DoubleSide si les fenêtres semblent avoir des faces manquantes
+            // side: THREE.DoubleSide
+        });
     }
 
 	defineHouseBaseGeometries() {
-        console.log("Création des géométries de base pour la maison procédurale...");
-        const wallHeight = 4;
-        const roofHeight = 2;
-        const roofOverhang = 0.3;
-        const wing1Width = 10; const wing1Depth = 6;
-        const wing2Width = 6; const wing2Depth = 7;
-        const wing1PosX = -wing1Width / 4; const wing1PosZ = -wing1Depth / 4;
-        const wing2PosX = wing1PosX + wing1Width / 2; const wing2PosZ = wing1PosZ + wing1Depth / 2;
+        console.log("Création des géométries de base pour la nouvelle maison (L-shape)...");
+        this.baseHouseGeometries = {}; // Réinitialiser l'objet
 
-        // --- Géométrie des Murs (fusionnée) ---
-        const wallGeos = [];
-        const wing1Geo = new THREE.BoxGeometry(wing1Width, wallHeight, wing1Depth);
-        wing1Geo.translate(wing1PosX, wallHeight / 2, wing1PosZ); // Centre Y à wallHeight/2
-        wallGeos.push(wing1Geo);
-        const wing2Geo = new THREE.BoxGeometry(wing2Width, wallHeight, wing2Depth);
-        wing2Geo.translate(wing2PosX, wallHeight / 2, wing2PosZ); // Centre Y à wallHeight/2
-        wallGeos.push(wing2Geo);
+        // --- Dimensions basées sur le NOUVEAU code ---
+        const armLength = 2;
+        const armWidth = 1;
+        const armDepth = 0.5; // Hauteur murs
+        const roofPitchHeight = 0.3; // Hauteur pente toit
+        const roofOverhang = 0.08; // Petit débord
+        const doorHeight = 0.7 * armDepth;
+        const doorWidth = 0.3;
+        const garageDoorHeight = 0.8 * armDepth;
+        const garageDoorWidth = 0.55;
+        const doorDepth = 0.05; // Epaisseur portes/fenêtres
+        const windowHeight = 0.4 * armDepth;
+        const windowWidth = 0.2;
+        const windowDepth = doorDepth;
+        // --- Fin Dimensions ---
 
-        const mergedWallGeo = mergeGeometries(wallGeos, false);
-        if (mergedWallGeo) {
-            // Calculer BBox pour obtenir les vraies limites après translation et fusion
-            mergedWallGeo.computeBoundingBox();
-            const wallMinY = mergedWallGeo.boundingBox.min.y; // Devrait être 0
-            const calculatedWallHeight = mergedWallGeo.boundingBox.max.y - wallMinY; // Devrait être wallHeight
-            // Stocker minY et height dans userData pour le positionnement Y précis
-            mergedWallGeo.userData = { height: calculatedWallHeight, minY: wallMinY };
-            this.baseHouseGeometries.wall = mergedWallGeo;
-            console.log(` -> Géométrie murs créée (minY: ${wallMinY.toFixed(2)}, height: ${calculatedWallHeight.toFixed(2)}).`);
-        } else {
-            console.error("Échec fusion géométrie murs maison.");
-            this.baseHouseGeometries.wall = new THREE.BoxGeometry(1,1,1); // Fallback
-            this.baseHouseGeometries.wall.userData = { height: 1, minY: -0.5 }; // Fallback userData
-        }
-        wallGeos.forEach(g => g.dispose());
+        // --- Géométries des Bases (non fusionnées) ---
+        // Ces géométries sont simples, mais nous gardons des noms distincts
+        // car elles auront des positions différentes dans le modèle final.
+        // Leurs origines sont au centre de chaque boîte.
+        this.baseHouseGeometries.base_part1 = new THREE.BoxGeometry(armLength, armDepth, armWidth);
+        this.baseHouseGeometries.base_part2 = new THREE.BoxGeometry(armWidth, armDepth, armLength);
+        // Stocker la hauteur et minY pour le positionnement Y précis
+        this.baseHouseGeometries.base_part1.userData = { height: armDepth, minY: -armDepth / 2 };
+        this.baseHouseGeometries.base_part2.userData = { height: armDepth, minY: -armDepth / 2 };
+        console.log(" -> Géométries bases créées.");
 
+        // --- Géométrie du Toit (identique pour les deux, sera tournée/positionnée) ---
+        // Recréation de la logique ExtrudeGeometry du nouveau code
+        const roofShape = new THREE.Shape();
+        const triangleBase = armWidth + 2 * roofOverhang;
+        roofShape.moveTo(-triangleBase / 2, 0);
+        roofShape.lineTo(triangleBase / 2, 0);
+        roofShape.lineTo(0, roofPitchHeight);
+        roofShape.lineTo(-triangleBase / 2, 0);
 
-        // --- Géométrie des Toits (fusionnée) ---
-        // La fonction interne createGableRoofGeometry et la fusion restent identiques à la version précédente (avec indices corrigés)
-        const createGableRoofGeometry = (width, depth, baseH, roofH, overhang, posX, posY, posZ) => {
-            const roofBaseW = width / 2 + overhang; const roofBaseD = depth / 2 + overhang;
-            const roofYPos = 0; const ridgeY = roofYPos + roofH;
-            const roofGeometry = new THREE.BufferGeometry();
-            const verts = new Float32Array([-roofBaseW, roofYPos, -roofBaseD, roofBaseW, roofYPos, -roofBaseD, roofBaseW, roofYPos, roofBaseD, -roofBaseW, roofYPos, roofBaseD, 0, ridgeY, -roofBaseD, 0, ridgeY, roofBaseD]);
-            const uvs = new Float32Array([0, 0, 1, 0, 1, 1, 0, 1, 0.5, 1, 0.5, 0]);
-            const indices = [ 0, 4, 1, 2, 5, 3, 3, 5, 4, 3, 4, 0, 1, 4, 5, 1, 5, 2 ]; // Indices corrigés
-            roofGeometry.setIndex(indices);
-            roofGeometry.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-            roofGeometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-            roofGeometry.computeVertexNormals();
-            roofGeometry.translate(posX, posY + baseH, posZ); // Positionne la BASE du toit
-            return roofGeometry;
+        const extrudeSettings = {
+            depth: armLength + 2 * roofOverhang,
+            bevelEnabled: false
         };
-        const roofGeos = [];
-        roofGeos.push(createGableRoofGeometry(wing1Width, wing1Depth, wallHeight, roofHeight, roofOverhang, wing1PosX, 0, wing1PosZ));
-        roofGeos.push(createGableRoofGeometry(wing2Width, wing2Depth, wallHeight, roofHeight, roofOverhang, wing2PosX, 0, wing2PosZ));
-        const mergedRoofGeo = mergeGeometries(roofGeos, false);
-        if (mergedRoofGeo) {
-            this.baseHouseGeometries.roof = mergedRoofGeo;
-            console.log(" -> Géométrie toits créée (indices corrigés).");
-        } else {
-             console.error("Échec fusion géométrie toits maison.");
-             this.baseHouseGeometries.roof = new THREE.BoxGeometry(1,1,1); // Fallback
-        }
-        roofGeos.forEach(g => g.dispose());
+        this.baseHouseGeometries.roof = new THREE.ExtrudeGeometry(roofShape, extrudeSettings);
+        this.baseHouseGeometries.roof.center(); // Centrer la géométrie du toit
+        console.log(" -> Géométrie toit (Extrude) créée.");
 
+        // --- Géométries Portes ---
+        // L'origine est au centre de la boîte
+        this.baseHouseGeometries.door = new THREE.BoxGeometry(doorDepth, doorHeight, doorWidth);
+        this.baseHouseGeometries.garageDoor = new THREE.BoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth);
+        console.log(" -> Géométries portes créées.");
 
-        // --- Géométries Fenêtres/Portes ---
-        // Le code de création des BoxGeometry et leur centrage reste identique
-        const windowW = 1.5; const windowH = 1.2; const windowD = 0.1; const glassD = 0.05;
-        const doorWidth = 1.2; const doorHeight = 2.2; const doorD = 0.15;
-        const garageDoorWidth = 3; const garageDoorHeight = 2.5; const garageDoorD = 0.15;
-        this.baseHouseGeometries.windowFrame = new THREE.BoxGeometry(windowW, windowH, windowD);
-        this.baseHouseGeometries.windowGlass = new THREE.BoxGeometry(windowW * 0.9, windowH * 0.9, glassD);
-        this.baseHouseGeometries.door = new THREE.BoxGeometry(doorWidth, doorHeight, doorD);
-        this.baseHouseGeometries.garageDoor = new THREE.BoxGeometry(garageDoorWidth, garageDoorHeight, garageDoorD);
-        this.baseHouseGeometries.windowFrame.center();
-        this.baseHouseGeometries.windowGlass.center();
-        this.baseHouseGeometries.door.center();
-        this.baseHouseGeometries.garageDoor.center();
-        console.log(" -> Géométries fenêtres/portes créées et centrées.");
+        // --- Géométries Fenêtres (2 types, basées sur l'orientation) ---
+        // L'origine est au centre de la boîte
+        this.baseHouseGeometries.windowYZ = new THREE.BoxGeometry(windowDepth, windowHeight, windowWidth); // Pour façades X=cst
+        this.baseHouseGeometries.windowXY = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth); // Pour façades Z=cst
+        console.log(" -> Géométries fenêtres créées.");
 
-
-        // --- Calcul et stockage hauteur totale approx ---
-        // Le code pour stocker la hauteur totale approx reste identique
-        const totalApproxHeight = wallHeight + roofHeight;
-        // S'assurer que userData existe avant d'écrire dedans
-        if (this.baseHouseGeometries.wall?.userData) {
-            this.baseHouseGeometries.wall.userData.totalHeight = totalApproxHeight;
-        }
+        // Note : Pas besoin de .center() pour les BoxGeometry car leur origine est déjà au centre.
     }
 
     createProceduralHouseComponents() {
@@ -392,36 +378,34 @@ export default class PlotContentGenerator {
         return plotGeometries;
     }
 
-   // MODIFIÉ: Logique de densité revue pour limiter à 1 maison max par plot
-	// MODIFIÉ: Logique de densité revue pour autoriser plusieurs maisons (max 2x2)
-    generatePlotPrimaryContent(plot) {
+	generatePlotPrimaryContent(plot) {
         // Vérifications essentielles
         if (!this.cityManager) {
            console.error("PlotContentGenerator.generatePlotPrimaryContent: CityManager non disponible.");
            return;
         }
-         // NavigationGraph est nécessaire UNIQUEMENT pour les maisons type grille
-        if (plot.zoneType === 'house' && !this.navigationGraph) {
+        // NavigationGraph est nécessaire pour la logique de grille
+        if (!this.navigationGraph) {
             console.error(`PlotContentGenerator: NavigationGraph requis pour placer maisons sur grille (plot ${plot.id}).`);
             return;
         }
 
-        // --- CAS 'house' (Logique de Densité Revue avec Plafond Max) ---
+        // --- CAS 'house' (Logique revue : Grille + Scaling pour maison L) ---
         if (plot.zoneType === 'house') {
             this.createPlotGround(plot); // Crée le sol spécifique à la parcelle
 
             // Vérifier si les composants de base de la maison sont prêts
-            if (!this.baseHouseGeometries.wall || !this.baseHouseMaterials.wall || !this.baseHouseGeometries.wall.userData) {
-                console.warn(`PlotContentGenerator: Composants maison procédurale non prêts pour plot ${plot.id}. Placement maison annulé.`);
+            if (!this.baseHouseGeometries.base_part1 || !this.baseHouseMaterials.base_part1 || !this.baseHouseGeometries.base_part1.userData) {
+                console.warn(`PlotContentGenerator: Composants maison (L-shape) non prêts pour plot ${plot.id}. Placement maison annulé.`);
                 return;
             }
 
-            // Récupérer les paramètres maison/grille depuis config et NavGraph
-            const houseGridW = this.config.fixedHouseGridWidth;
-            const houseGridD = this.config.fixedHouseGridDepth;
-            const spacing = this.config.fixedHouseGridSpacing;
-            const gridScale = this.navigationGraph.gridScale || 1.0;
-            const gridCellSize = 1.0 / gridScale;
+            // Récupérer les paramètres de la grille depuis config et NavGraph
+            const houseGridW = this.config.fixedHouseGridWidth ?? 10; // Largeur cellule grille pour maison
+            const houseGridD = this.config.fixedHouseGridDepth ?? 10; // Profondeur cellule grille pour maison
+            const spacing = this.config.fixedHouseGridSpacing ?? 8;   // Espace entre les cellules
+            const gridScale = this.navigationGraph.gridScale ?? 1.0;
+            const gridCellSize = 1.0 / gridScale;                     // Taille monde d'une cellule 1x1 grille
 
             // 1. Obtenir les limites de la parcelle en coordonnées de grille
             const plotBounds = plot.getBounds();
@@ -431,129 +415,172 @@ export default class PlotContentGenerator {
             const minGy = minGridPoint.y;
             const maxGx = maxGridPoint.x;
             const maxGy = maxGridPoint.y;
-            const plotGridW = maxGx - minGx + 1;
-            const plotGridD = maxGy - minGy + 1;
+            const plotGridW = maxGx - minGx + 1; // Largeur de la parcelle en cellules de grille
+            const plotGridD = maxGy - minGy + 1; // Profondeur de la parcelle en cellules de grille
 
             if (plotGridW <= 0 || plotGridD <= 0) {
-                console.warn(`Plot ${plot.id} a des dimensions de grille invalides (${plotGridW}x${plotGridD}). Placement des maisons impossible.`);
+                console.warn(`Plot ${plot.id} a des dimensions de grille invalides (${plotGridW}x${plotGridD}). Placement maisons impossible.`);
                 return;
             }
 
-            // 2. Calculer le nombre maximum de maisons possibles
+            // 2. Calculer le nombre maximum de maisons possibles DANS la grille de la parcelle
             const maxPossibleX = Math.max(0, Math.floor((plotGridW + spacing) / (houseGridW + spacing)));
             const maxPossibleY = Math.max(0, Math.floor((plotGridD + spacing) / (houseGridD + spacing)));
 
-            // --- MODIFIÉ: Déterminer le nombre réel à placer (limité à 2x2 max) ---
-            const MAX_HOUSES_PER_AXIS = 2; // Définir le nombre max de maisons par axe
+            // 3. Déterminer le nombre réel à placer (ex: 1 seule pour l'instant, ou basé sur maxPossible)
+            // Pour répliquer l'ancien comportement (potentiellement plusieurs), on utilise maxPossible
+            // Vous pouvez limiter à 1 si vous préférez : const numHousesX = maxPossibleX > 0 ? 1 : 0; etc.
+            let numHousesX = maxPossibleX;
+            let numHousesY = maxPossibleY;
 
-            let numHousesX = Math.min(maxPossibleX, MAX_HOUSES_PER_AXIS);
-            let numHousesY = Math.min(maxPossibleY, MAX_HOUSES_PER_AXIS);
-
-            // Assurer qu'au moins une dimension n'est pas zéro si le placement est possible
-            if (numHousesX === 0 || numHousesY === 0) {
-                 // Si l'une des dimensions est 0, aucun placement n'est possible avec le plafond actuel ou la taille de la parcelle
-                 numHousesX = 0;
-                 numHousesY = 0;
-             } else if (maxPossibleX === 0 || maxPossibleY === 0) {
-                 // Ce cas devrait être couvert ci-dessus, mais ajouté par sécurité
-                 numHousesX = 0;
-                 numHousesY = 0;
-             }
-            // --- FIN MODIFICATION ---
-
-            // 4. Si aucune maison ne doit être placée, sortir
-            if (numHousesX === 0 || numHousesY === 0) {
-                 // console.warn(`Plot ${plot.id} (${plotGridW}x${plotGridD} grid) ne peut pas contenir les maisons requises (demande ${numHousesX}x${numHousesY}, plafonné à ${MAX_HOUSES_PER_AXIS}). Max possible: ${maxPossibleX}x${maxPossibleY}`);
+            // 4. Si aucune maison ne peut être placée, sortir
+            if (numHousesX <= 0 || numHousesY <= 0) {
+                // console.log(`Plot ${plot.id} (${plotGridW}x${plotGridD} grid) trop petite pour 1 maison ${houseGridW}x${houseGridD} avec spacing ${spacing}.`);
                 return;
             }
 
-            // 5. Calculer la zone de grille totale nécessaire pour le nombre réel de maisons
+            // 5. Calculer la zone de grille totale nécessaire et le décalage pour centrer
             const totalGridWidthNeeded = numHousesX * houseGridW + Math.max(0, numHousesX - 1) * spacing;
             const totalGridDepthNeeded = numHousesY * houseGridD + Math.max(0, numHousesY - 1) * spacing;
-
-            // 6. Calculer le décalage de centrage dans la plage de grille de la parcelle
             const offsetX = Math.floor((plotGridW - totalGridWidthNeeded) / 2);
             const offsetY = Math.floor((plotGridD - totalGridDepthNeeded) / 2);
-
-            // 7. Calculer la cellule de grille de départ (coin bas-gauche de la première maison)
-            const startGx = minGx + offsetX;
-            const startGy = minGy + offsetY;
+            const startGx = minGx + offsetX; // Coordonnée grille X de départ
+            const startGy = minGy + offsetY; // Coordonnée grille Y de départ
 
             let housesPlacedOnPlot = 0;
             const groundLevel = 0.01;
 
-            // 8. Boucler et placer les maisons selon la disposition calculée
+            // --- Définir les dimensions de base de la maison L pour le scaling ---
+            // La maison L s'étend sur environ armLength x armLength
+            const baseHouseModelWidth = 2.0; // Correspond à armLength
+            const baseHouseModelDepth = 2.0; // Correspond à armLength
+
+            // 6. Boucler sur la grille calculée et placer les maisons
             for (let rowIndex = 0; rowIndex < numHousesY; rowIndex++) {
                 for (let colIndex = 0; colIndex < numHousesX; colIndex++) {
 
-                    // Calculer la position de grille pour le coin bas-gauche de la maison actuelle
+                    // Position de la cellule de grille actuelle (coin bas-gauche)
                     const currentGx = startGx + colIndex * (houseGridW + spacing);
                     const currentGy = startGy + rowIndex * (houseGridD + spacing);
 
-                    // --- Placer la Maison (logique inchangée par rapport à l'étape précédente) ---
+                    // Calculer le centre MONDE de la cellule de grille
                     const centerGx = currentGx + (houseGridW / 2.0);
                     const centerGy = currentGy + (houseGridD / 2.0);
-                    const worldCenterPos = this.navigationGraph.gridToWorld(centerGx, centerGy);
+                    const worldCenterPos = this.navigationGraph.gridToWorld(centerGx, centerGy); // Donne le centre X,Z au niveau du trottoir
 
-                    const targetWorldWidth = houseGridW * gridCellSize;
-                    const targetWorldDepth = houseGridD * gridCellSize;
-                    const baseHouseWidth = 10;
-                    const baseHouseDepth = 9.5;
-                    let scaleValue = Math.min( targetWorldWidth / baseHouseWidth, targetWorldDepth / baseHouseDepth );
-                    scaleValue = THREE.MathUtils.clamp(scaleValue, 0.3, 1.5);
+                    // --- Calcul de l'échelle pour adapter la maison à la cellule ---
+                    const targetWorldWidth = houseGridW * gridCellSize; // Taille monde cible en X
+                    const targetWorldDepth = houseGridD * gridCellSize; // Taille monde cible en Z
 
-                    const rotationY = Math.floor(Math.random() * 4) * Math.PI / 2;
-                    const wallMinY = this.baseHouseGeometries.wall.userData.minY ?? 0;
-                    const posY = groundLevel - (wallMinY * scaleValue);
-                    const basePosition = new THREE.Vector3(worldCenterPos.x, posY, worldCenterPos.z);
-                    const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotationY);
+                    // Calculer l'échelle basée sur le plus petit ratio pour fitter
+                    let scaleValue = Math.min(
+                        targetWorldWidth / baseHouseModelWidth,
+                        targetWorldDepth / baseHouseModelDepth
+                    );
+                    // Ajouter un peu de variation aléatoire et limiter l'échelle
+                    scaleValue *= THREE.MathUtils.randFloat(0.85, 1.05); // Variation de +/- 15%
+                    scaleValue = THREE.MathUtils.clamp(scaleValue, 0.5, 2.5); // Limiter l'échelle min/max
+
                     const baseScale = new THREE.Vector3(scaleValue, scaleValue, scaleValue);
-                    const mainHouseMatrix = new THREE.Matrix4().compose(basePosition, baseQuaternion, baseScale);
+                    // --- Fin Calcul Échelle ---
 
-                    if (this.houseInstanceMatrices.wall) this.houseInstanceMatrices.wall.push(mainHouseMatrix.clone());
-                    if (this.houseInstanceMatrices.roof) this.houseInstanceMatrices.roof.push(mainHouseMatrix.clone());
-                    const addPartInstance = (partType, localMatrix) => { const finalMatrix = new THREE.Matrix4().multiplyMatrices(mainHouseMatrix, localMatrix); this.houseInstanceMatrices[partType]?.push(finalMatrix); };
-                    const createLocalPartMatrix = (relX, relY, relZ, rotY = 0) => { const localPos = new THREE.Vector3(relX, relY, relZ); const localRot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotY); const localScale = new THREE.Vector3(1, 1, 1); return new THREE.Matrix4().compose(localPos, localRot, localScale); };
-                    const createLocalGlassMatrix = (frameLocalMatrix) => { const framePos = new THREE.Vector3(); const frameRot = new THREE.Quaternion(); const frameScale = new THREE.Vector3(); frameLocalMatrix.decompose(framePos, frameRot, frameScale); const baseWindowFrameD = 0.1; const baseWindowGlassD = 0.05; const glassOffset = (baseWindowFrameD / 2) - (baseWindowGlassD / 2) + 0.01; const zOffsetVector = new THREE.Vector3(0, 0, glassOffset); zOffsetVector.applyQuaternion(frameRot); const glassLocalPos = framePos.clone().add(zOffsetVector); return new THREE.Matrix4().compose(glassLocalPos, frameRot, frameScale); };
-                    const baseWallHeight = this.baseHouseGeometries.wall.userData.height ?? 4; const baseDoorHeight = 2.2; const baseDoorD = 0.15; const baseGarageDoorHeight = 2.5; const baseGarageDoorD = 0.15; const windowRelY = baseWallHeight / 2 + 0.4; const doorRelY = baseDoorHeight / 2; const garageDoorRelY = baseGarageDoorHeight / 2; const wing1W_Base = 10; const wing1D_Base = 6; const wing2W_Base = 6; const wing2D_Base = 7; const wing1PosX_Rel = -wing1W_Base / 4; const wing1PosZ_Rel = -wing1D_Base / 4; const wing2PosX_Rel = wing1PosX_Rel + wing1W_Base / 2; const wing2PosZ_Rel = wing1PosZ_Rel + wing1D_Base / 2; const w1_backZ = wing1PosZ_Rel - wing1D_Base / 2; const w1_leftX = wing1PosX_Rel - wing1W_Base / 2; const w2_rightX = wing2PosX_Rel + wing2W_Base / 2; const w2_frontZ = wing2PosZ_Rel + wing2D_Base / 2; const doorX_W1_Rel = wing1PosX_Rel - wing1W_Base / 3; const w1_frontZ = wing1PosZ_Rel + wing1D_Base / 2;
-                    let frameMatrix = createLocalPartMatrix(wing1PosX_Rel - wing1W_Base / 4, windowRelY, w1_backZ, Math.PI); addPartInstance('windowFrame', frameMatrix); addPartInstance('windowGlass', createLocalGlassMatrix(frameMatrix));
-                    frameMatrix = createLocalPartMatrix(wing1PosX_Rel + wing1W_Base / 4, windowRelY, w1_backZ, Math.PI); addPartInstance('windowFrame', frameMatrix); addPartInstance('windowGlass', createLocalGlassMatrix(frameMatrix));
-                    frameMatrix = createLocalPartMatrix(w1_leftX, windowRelY, wing1PosZ_Rel - wing1D_Base / 4, -Math.PI / 2); addPartInstance('windowFrame', frameMatrix); addPartInstance('windowGlass', createLocalGlassMatrix(frameMatrix));
-                    frameMatrix = createLocalPartMatrix(w1_leftX, windowRelY, wing1PosZ_Rel + wing1D_Base / 4, -Math.PI / 2); addPartInstance('windowFrame', frameMatrix); addPartInstance('windowGlass', createLocalGlassMatrix(frameMatrix));
-                    frameMatrix = createLocalPartMatrix(w2_rightX, windowRelY, wing2PosZ_Rel - wing2D_Base / 4, Math.PI / 2); addPartInstance('windowFrame', frameMatrix); addPartInstance('windowGlass', createLocalGlassMatrix(frameMatrix));
-                    frameMatrix = createLocalPartMatrix(w2_rightX, windowRelY, wing2PosZ_Rel + wing2D_Base / 4, Math.PI / 2); addPartInstance('windowFrame', frameMatrix); addPartInstance('windowGlass', createLocalGlassMatrix(frameMatrix));
-                    let doorMatrix = createLocalPartMatrix(doorX_W1_Rel, doorRelY, w1_frontZ + baseDoorD / 2, 0); addPartInstance('door', doorMatrix);
-                    let garageDoorMatrix = createLocalPartMatrix(wing2PosX_Rel, garageDoorRelY, w2_frontZ + baseGarageDoorD / 2, 0); addPartInstance('garageDoor', garageDoorMatrix);
+                    // --- Rotation Aléatoire ---
+                    const rotationY = Math.floor(Math.random() * 4) * Math.PI / 2;
+                    const baseQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotationY);
 
+                    // --- Positionnement Y ---
+                    const armDepthBase = this.baseHouseGeometries.base_part1.userData.height ?? 0.5;
+                    const baseYOffset = this.baseHouseGeometries.base_part1.userData.minY ?? -armDepthBase / 2;
+                    const posY = groundLevel - baseYOffset * scaleValue;
+                    const basePosition = new THREE.Vector3(worldCenterPos.x, posY, worldCenterPos.z);
+
+                    // --- Matrice GLOBALE pour CETTE instance de maison ---
+                    const globalHouseMatrix = new THREE.Matrix4().compose(basePosition, baseQuaternion, baseScale);
+
+                    // --- Fonction Helper pour ajouter une partie (locale à cette instance) ---
+                    const addPartInstance = (partName, localMatrix) => {
+                         // La logique interne est la même que précédemment
+                         if (this.baseHouseGeometries[partName] /* && this.baseHouseMaterials[partName] - vérifié plus tard */) {
+                            const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix);
+                            const type = 'house'; const modelId = partName;
+                            if (!this.instanceData[type]) this.instanceData[type] = {};
+                            if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
+                            this.instanceData[type][modelId].push(finalMatrix);
+                         } else {
+                            if (!this.baseHouseGeometries[partName]) { console.warn(`Géométrie manquante pour la partie maison: ${partName}`); }
+                         }
+                     };
+                    // --- Fin Helper ---
+
+                    // --- Ajout des Parties (Logique de position relative identique à avant) ---
+                    const armLength = 2; const armWidth = 1; const armDepth = 0.5;
+                    const roofPitchHeight = 0.3;
+                    const doorHeight = 0.7 * armDepth; const doorWidth = 0.3; const doorDepth = 0.05;
+                    const garageDoorHeight = 0.8 * armDepth; const garageDoorWidth = 0.55;
+                    const windowHeight = 0.4 * armDepth; const windowWidth = 0.2; const windowDepth = doorDepth;
+                    const window_Y_pos_Relative = armDepth * 0.6;
+
+                    const base1_Pos = new THREE.Vector3(armLength / 2, armDepth / 2, armWidth / 2);
+                    const base2_Pos = new THREE.Vector3(armWidth / 2, armDepth / 2, armLength / 2);
+                    const roofPosY_Center = armDepth + roofPitchHeight / 2;
+                    const roofPos1 = new THREE.Vector3(armLength / 2, roofPosY_Center, armWidth / 2);
+                    const roofPos2 = new THREE.Vector3(armWidth / 2, roofPosY_Center, armLength / 2);
+                    const roofRotY_1 = Math.PI / 2;
+                    const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), roofRotY_1);
+                    const roofRot2 = new THREE.Quaternion();
+                    const door1_Z_pos = (armWidth + armLength) / 2;
+                    const door1_Pos = new THREE.Vector3(armWidth + doorDepth / 2, doorHeight / 2, door1_Z_pos);
+                    const garageDoor_Pos = new THREE.Vector3(armLength + doorDepth / 2, garageDoorHeight / 2, armWidth / 2);
+
+                    // 1. Bases
+                    let localMatrix = new THREE.Matrix4().makeTranslation(base1_Pos.x, base1_Pos.y, base1_Pos.z); addPartInstance('base_part1', localMatrix);
+                    localMatrix = new THREE.Matrix4().makeTranslation(base2_Pos.x, base2_Pos.y, base2_Pos.z); addPartInstance('base_part2', localMatrix);
+                    // 2. Toits
+                    localMatrix = new THREE.Matrix4().compose(roofPos1, roofRot1, new THREE.Vector3(1, 1, 1)); addPartInstance('roof', localMatrix);
+                    localMatrix = new THREE.Matrix4().compose(roofPos2, roofRot2, new THREE.Vector3(1, 1, 1)); addPartInstance('roof', localMatrix);
+                    // 3. Portes
+                    localMatrix = new THREE.Matrix4().makeTranslation(door1_Pos.x, door1_Pos.y, door1_Pos.z); addPartInstance('door', localMatrix);
+                    localMatrix = new THREE.Matrix4().makeTranslation(garageDoor_Pos.x, garageDoor_Pos.y, garageDoor_Pos.z); addPartInstance('garageDoor', localMatrix);
+                    // 4. Fenêtres
+                    const addWindowPart = (geomKey, x, y, z) => { localMatrix = new THREE.Matrix4().makeTranslation(x, y, z); addPartInstance(geomKey, localMatrix); };
+                    addWindowPart('windowXY', 0.25, window_Y_pos_Relative,-windowDepth/2); addWindowPart('windowXY', 0.75, window_Y_pos_Relative,-windowDepth/2); addWindowPart('windowXY', 1.25, window_Y_pos_Relative,-windowDepth/2); addWindowPart('windowXY', 1.75, window_Y_pos_Relative,-windowDepth/2); addWindowPart('windowXY', 0.25, window_Y_pos_Relative, armWidth+windowDepth/2); addWindowPart('windowXY', 0.75, window_Y_pos_Relative, armWidth+windowDepth/2); addWindowPart('windowXY', 1.25, window_Y_pos_Relative, armWidth+windowDepth/2); addWindowPart('windowXY', 1.75, window_Y_pos_Relative, armWidth+windowDepth/2); addWindowPart('windowYZ', armWidth+windowDepth/2, window_Y_pos_Relative, 0.25); addWindowPart('windowYZ', armWidth+windowDepth/2, window_Y_pos_Relative, 0.75); addWindowPart('windowYZ', armWidth+windowDepth/2, window_Y_pos_Relative, 1.25); addWindowPart('windowYZ', armWidth+windowDepth/2, window_Y_pos_Relative, 1.75); addWindowPart('windowXY', 0.25, window_Y_pos_Relative, armLength+windowDepth/2); addWindowPart('windowXY', 0.75, window_Y_pos_Relative, armLength+windowDepth/2);
+                    // --- Fin Ajout Parties ---
+
+                    // --- Enregistrement Instance Bâtiment ---
+                    const registeredBuilding = this.cityManager.registerBuildingInstance(
+                        plot.id, 'house', worldCenterPos.clone().setY(this.config.sidewalkHeight)
+                    );
+                    if (registeredBuilding) { plot.addBuildingInstance({ id: registeredBuilding.id, type: 'house', position: worldCenterPos.clone().setY(this.config.sidewalkHeight) }); }
+                    // --- Fin Enregistrement ---
+
+                    // --- Visualisation Grille Debug (si activée) ---
+                    if (this.debugPlotGridGroup && this.debugPlotGridMaterial) {
+                        const debugGridWorldWidth = houseGridW * gridCellSize;
+                        const debugGridWorldDepth = houseGridD * gridCellSize;
+                        const debugGeom = new THREE.PlaneGeometry(debugGridWorldWidth, debugGridWorldDepth);
+                        const debugMesh = new THREE.Mesh(debugGeom, this.debugPlotGridMaterial);
+                        // Positionner au centre de la cellule de grille, légèrement au-dessus du sol
+                        debugMesh.position.copy(worldCenterPos).setY(groundLevel + 0.02);
+                        debugMesh.rotation.set(-Math.PI / 2, 0, rotationY); // Rotation X pour être plat + rotation Y de la maison
+                        this.debugPlotGridGroup.add(debugMesh);
+                    }
+                    // --- Fin Debug Grille ---
+
+                    // Marquer la zone de grille comme occupée (pour la logique des arbres par ex.)
                     plot.addPlacedHouseGrid({ gx: currentGx, gy: currentGy, gridWidth: houseGridW, gridDepth: houseGridD });
                     housesPlacedOnPlot++;
-
-                    const registeredBuilding = this.cityManager.registerBuildingInstance( plot.id, 'house', worldCenterPos.clone());
-                    if (registeredBuilding) {
-                        plot.addBuildingInstance({ id: registeredBuilding.id, type: 'house', position: worldCenterPos.clone() });
-                    }
-
-                    if (this.debugPlotGridGroup && this.debugPlotGridMaterial) {
-                         const debugGridWorldWidth = houseGridW * gridCellSize;
-                         const debugGridWorldDepth = houseGridD * gridCellSize;
-                         const debugGeom = new THREE.PlaneGeometry(debugGridWorldWidth, debugGridWorldDepth);
-                         const debugMesh = new THREE.Mesh(debugGeom, this.debugPlotGridMaterial);
-                         debugMesh.position.copy(worldCenterPos).setY(groundLevel + 0.02);
-                         debugMesh.rotation.set(-Math.PI / 2, 0, rotationY);
-                         this.debugPlotGridGroup.add(debugMesh);
-                    }
-                    // --- Fin Placer la Maison ---
 
                 } // Fin boucle colIndex
             } // Fin boucle rowIndex
 
             if (housesPlacedOnPlot > 0) {
-               // Log mis à jour pour refléter le changement
-               console.log(`PlotContentGenerator: Placé ${housesPlacedOnPlot} maisons (${numHousesX}x${numHousesY}, plafonné à ${MAX_HOUSES_PER_AXIS}) centrées sur la parcelle ${plot.id}.`);
+               // console.log(`PlotContentGenerator: Placé ${housesPlacedOnPlot} maisons L-shape (${numHousesX}x${numHousesY}) sur la parcelle ${plot.id}.`);
             }
 
         // --- CAS AUTRES TYPES (Logique inchangée) ---
         } else if (plot.zoneType && ['building', 'industrial', 'park', 'skyscraper'].includes(plot.zoneType)) {
+             // --- Coller ici exactement la même logique que dans la réponse précédente pour ces types ---
+             // ... (création sol, subdivision, placement assets chargés via assetLoader, etc.) ...
              this.createPlotGround(plot);
              const subZones = this.subdivideForPlacement(plot);
              const margin = plot.zoneType === 'park' ? 0 : (this.config.buildingSubZoneMargin ?? 1.5);
@@ -581,8 +608,9 @@ export default class PlotContentGenerator {
                     plot.occupiedSubZones.push({ x: subZone.x + margin, z: subZone.z + margin, width: buildableWidth, depth: buildableDepth });
                  }
              });
+             // --- Fin logique autres types ---
         }
-    }
+    } // Fin generatePlotPrimaryContent
 
     // Place les arbres sur la parcelle selon le type de zone et des probabilités configurées
     placeTreesForPlot(plot) {
@@ -675,14 +703,102 @@ export default class PlotContentGenerator {
         const instanceMatrix = new THREE.Matrix4(); const finalScaleValue = fittingScaleFactor * userScale; const scaleMatrix = new THREE.Matrix4().makeScale(finalScaleValue, finalScaleValue, finalScaleValue); const rotationMatrix = new THREE.Matrix4().makeRotationY(rotationY); const recenterMatrix = new THREE.Matrix4().makeTranslation(-centerOffset.x, -centerOffset.y, -centerOffset.z); const finalHeight = heightAfterFitting * userScale; const finalTranslationMatrix = new THREE.Matrix4().makeTranslation(centerX, finalHeight / 2 + 0.05, centerZ); instanceMatrix.multiplyMatrices(scaleMatrix, rotationMatrix); instanceMatrix.multiply(recenterMatrix); instanceMatrix.premultiply(finalTranslationMatrix); return instanceMatrix;
     }
 
-    // --- createInstancedMeshesFromData ---
     createInstancedMeshesFromData() {
-        console.log("Création des InstancedMesh (maison procédurale multi-part + assets)..."); let totalInstancesCreated = 0; let instancedMeshCount = 0;
-        for (const partName in this.baseHouseGeometries) { if (this.baseHouseGeometries.hasOwnProperty(partName) && this.baseHouseMaterials.hasOwnProperty(partName) && this.houseInstanceMatrices.hasOwnProperty(partName)) { const geometry = this.baseHouseGeometries[partName]; const material = this.baseHouseMaterials[partName]; const matrices = this.houseInstanceMatrices[partName]; if (geometry && material && matrices && matrices.length > 0) { const count = matrices.length; const instancedMesh = new THREE.InstancedMesh(geometry, material, count); instancedMesh.name = `ProceduralHouse_${partName}_Instanced`; instancedMesh.castShadow = true; instancedMesh.receiveShadow = true; matrices.forEach((matrix, index) => { instancedMesh.setMatrixAt(index, matrix); }); instancedMesh.instanceMatrix.needsUpdate = true; this.buildingGroup.add(instancedMesh); this.houseInstancedMeshes[partName] = instancedMesh; instancedMeshCount++; totalInstancesCreated += count; console.log(` -> InstancedMesh pour ${count} maisons (partie: ${partName}) créé.`); } else if (matrices && matrices.length === 0) { } else { console.warn(`Manque geometrie/materiau/matrices pour partie maison: ${partName}`); } } }
-        if (!this.assetLoader && !this.stripeBaseGeometry) { if (!this.stripeBaseGeometry && this.instanceData.crosswalk && Object.keys(this.instanceData.crosswalk).length > 0) { console.error("Impossible de créer InstancedMesh crosswalk: stripeBaseGeometry non dispo."); } else if (!this.assetLoader) { console.error("Impossible de créer InstancedMesh: AssetLoader non disponible (pour assets non-maison)."); } }
-        for (const type in this.instanceData) { if (type === 'house' || !this.instanceData.hasOwnProperty(type)) continue; for (const modelId in this.instanceData[type]) { if (!this.instanceData[type].hasOwnProperty(modelId)) continue; const matrices = this.instanceData[type][modelId]; if (matrices && matrices.length > 0) { let geometry = null; let material = null; let castShadow = true; let receiveShadow = true; if (type === 'crosswalk') { if (this.stripeBaseGeometry && this.materials.crosswalkMaterial) { geometry = this.stripeBaseGeometry; material = this.materials.crosswalkMaterial; castShadow = false; receiveShadow = true; } else { console.warn(`Géométrie/matériau manquant pour 'crosswalk', ${matrices.length} instances ignorées.`); continue; } } else if (this.assetLoader) { const assetData = this.assetLoader.getAssetDataById(modelId); if (assetData && assetData.geometry && assetData.material) { geometry = assetData.geometry; material = assetData.material; } else { console.warn(`Données asset ${modelId} (type ${type}) invalides, ${matrices.length} instances ignorées.`); continue; } } else { console.warn(`AssetLoader manquant pour type '${type}', ${matrices.length} instances ignorées.`); continue; } const instancedMesh = new THREE.InstancedMesh(geometry, material, matrices.length); matrices.forEach((matrix, index) => { instancedMesh.setMatrixAt(index, matrix); }); instancedMesh.instanceMatrix.needsUpdate = true; instancedMesh.castShadow = castShadow; instancedMesh.receiveShadow = receiveShadow; instancedMesh.name = `${type}_${modelId}_Instanced`; this.buildingGroup.add(instancedMesh); instancedMeshCount++; totalInstancesCreated += matrices.length; } } }
-        if (instancedMeshCount > 0) { console.log(`Création InstancedMesh terminée: ${instancedMeshCount} mesh(es) pour ${totalInstancesCreated} instances (tous types confondus) ajoutés.`); } else { console.log("Aucune instance (maison ou autre) à créer via InstancedMesh."); }
-    }
+        console.log("Création des InstancedMesh (maison L-shape grille/scalée + assets)...");
+        let totalInstancesCreated = 0;
+        let instancedMeshCount = 0;
+
+        // Nettoyer le groupe
+        while (this.buildingGroup.children.length > 0) {
+            const child = this.buildingGroup.children[0];
+            this.buildingGroup.remove(child);
+        }
+
+        // --- 1. Création InstancedMesh pour la MAISON (multi-parties) ---
+        const houseDataType = 'house';
+        if (this.instanceData[houseDataType]) {
+            for (const partName in this.instanceData[houseDataType]) {
+                if (this.instanceData[houseDataType].hasOwnProperty(partName)) {
+
+                    const matrices = this.instanceData[houseDataType][partName];
+                    const geometry = this.baseHouseGeometries[partName]; // Ex: base_part1, roof, windowXY, windowYZ
+                    let material = null;
+
+                    // *** Détermination Matériau Clarifiée ***
+                    if (partName.startsWith('base_')) {
+                        material = this.baseHouseMaterials[partName];
+                    } else if (partName === 'roof') {
+                        material = this.baseHouseMaterials.roof;
+                    } else if (partName === 'door') {
+                        material = this.baseHouseMaterials.door;
+                    } else if (partName === 'garageDoor') {
+                        material = this.baseHouseMaterials.garageDoor;
+                    } else if (partName === 'windowXY' || partName === 'windowYZ') {
+                        // EXPLICITEMENT utiliser le matériau 'window' pour les DEUX géométries de fenêtre
+                        material = this.baseHouseMaterials.window;
+                    } else {
+                        material = this.baseHouseMaterials[partName]; // Fallback
+                        if (!material) console.warn(`Matériau non trouvé pour la partie maison: ${partName}`);
+                    }
+                    // *** Fin Détermination Matériau ***
+
+                    if (geometry && material && matrices && matrices.length > 0) {
+                        const count = matrices.length;
+                        const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
+                        instancedMesh.name = `NewHouse_${partName}_Instanced`;
+                        instancedMesh.castShadow = true;
+                        instancedMesh.receiveShadow = true;
+
+                        matrices.forEach((matrix, index) => { instancedMesh.setMatrixAt(index, matrix); });
+                        instancedMesh.instanceMatrix.needsUpdate = true;
+                        this.buildingGroup.add(instancedMesh);
+
+                        instancedMeshCount++;
+                        totalInstancesCreated += count;
+                        // console.log(` -> InstancedMesh pour ${count} instances (partie: ${partName}) créé.`);
+                    } else if (!matrices || matrices.length === 0) {
+                       // Normal
+                    } else {
+                        if (!geometry) console.warn(`Géométrie manquante pour partie maison: ${partName}`);
+                        if (!material) console.warn(`Matériau non déterminé pour partie maison: ${partName}`);
+                    }
+                }
+            }
+        }
+        // --- Fin InstancedMesh Maison ---
+
+        // --- 2. Création InstancedMesh pour les AUTRES assets (Logique inchangée) ---
+        if (!this.assetLoader && !this.stripeBaseGeometry) { /* ... avertissements ... */ }
+        for (const type in this.instanceData) {
+             if (type === houseDataType || !this.instanceData.hasOwnProperty(type)) continue;
+             for (const modelId in this.instanceData[type]) {
+                 if (!this.instanceData[type].hasOwnProperty(modelId)) continue;
+                 const matrices = this.instanceData[type][modelId];
+                 if (matrices && matrices.length > 0) {
+                     let geometry = null; let material = null; let castShadow = true; let receiveShadow = true;
+                     if (type === 'crosswalk') { /* ... logique crosswalk ... */ if (this.stripeBaseGeometry && this.materials.crosswalkMaterial) { geometry = this.stripeBaseGeometry; material = this.materials.crosswalkMaterial; castShadow = false; receiveShadow = true; } else { console.warn(`Géo/mat manquant crosswalk`); continue; }}
+                     else if (this.assetLoader) { /* ... logique asset loader ... */ const assetData = this.assetLoader.getAssetDataById(modelId); if (assetData && assetData.geometry && assetData.material) { geometry = assetData.geometry; material = assetData.material; } else { console.warn(`Données asset ${modelId} invalides`); continue; }}
+                     else { /* ... cas non géré ... */ console.warn(`AssetLoader manquant type '${type}'`); continue; }
+
+                     const instancedMesh = new THREE.InstancedMesh(geometry, material, matrices.length);
+                     matrices.forEach((matrix, index) => { instancedMesh.setMatrixAt(index, matrix); });
+                     instancedMesh.instanceMatrix.needsUpdate = true;
+                     instancedMesh.castShadow = castShadow; instancedMesh.receiveShadow = receiveShadow;
+                     instancedMesh.name = `${type}_${modelId}_Instanced`;
+                     this.buildingGroup.add(instancedMesh);
+                     instancedMeshCount++;
+                     totalInstancesCreated += matrices.length;
+                 }
+             }
+        }
+        // --- Fin InstancedMesh Autres Assets ---
+
+        if (instancedMeshCount > 0) {
+            console.log(`Création InstancedMesh terminée: ${instancedMeshCount} mesh(es) pour ${totalInstancesCreated} instances (tous types confondus) ajoutés.`);
+        } else {
+            console.log("Aucune instance (maison ou autre) à créer via InstancedMesh.");
+        }
+    } // Fin createInstancedMeshesFromData
 
     // --- createPlotGround ---
     createPlotGround(plot) {
