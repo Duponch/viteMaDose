@@ -19,38 +19,60 @@ export default class World {
         // --- Managers ---
         this.cityManager = new CityManager(this.experience);
         this.environment = new Environment(this.experience, this);
-        this.agentManager = null; // Sera initialisé dans initializeWorld
+        this.agentManager = null; // Will be initialized in initializeWorld
 
-        // --- Groupes Debug ---
+        // --- Debug Groups ---
         this.debugNavGridGroup = new THREE.Group();
         this.debugNavGridGroup.name = "DebugNavGrid";
         this.scene.add(this.debugNavGridGroup);
+
+        // NEW: Group for visualizing the house placement grid
+        this.debugPlotGridGroup = new THREE.Group();
+        this.debugPlotGridGroup.name = "DebugPlotGrid";
+        this.scene.add(this.debugPlotGridGroup);
+        // END NEW
 
         this.debugAgentPathGroup = new THREE.Group();
         this.debugAgentPathGroup.name = "DebugAgentPath";
         this.scene.add(this.debugAgentPathGroup);
 
+        // Initial visibility
         this.debugNavGridGroup.visible = false;
+        this.debugPlotGridGroup.visible = false; // NEW: Hide by default
         this.debugAgentPathGroup.visible = false;
 
-        // Lancer l'initialisation asynchrone
+        // Start asynchronous initialization
         this.initializeWorld();
     }
 
     setDebugMode(enabled) {
         this.debugAgentPathGroup.visible = enabled;
-        // Optionnel: Activer aussi la grille de nav
         this.debugNavGridGroup.visible = enabled;
-        // Recréer la visualisation de la grille si elle n'existe pas et qu'on active le debug
+        this.debugPlotGridGroup.visible = enabled; // NEW: Control visibility of the plot grid group
+
+        // Recreate NAV grid visualization if it doesn't exist and debug is enabled
         if (enabled && this.cityManager?.navigationGraph && this.debugNavGridGroup.children.length === 0) {
-             console.log("World: Activation debug - Génération visualisation NavGrid...");
-             //this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
+             console.log("World: Debug enabled - Generating NavGrid visualization...");
+             // this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup); // Optional to recreate
         } else if (!enabled) {
-            // Vider les groupes quand on désactive
+            // Clear ALL groups when disabling
              this.clearDebugAgentPaths();
              this.clearDebugNavGrid();
+             this.clearDebugPlotGrid(); // NEW: Clear the plot grid group
         }
-        console.log(`World Debug Mode: ${enabled ? 'Enabled' : 'Disabled'}`);
+        console.log(`World Debug Mode: ${enabled ? 'Enabled' : 'Disabled'} (PlotGrid visible: ${enabled})`);
+    }
+
+	clearDebugPlotGrid() {
+        while(this.debugPlotGridGroup.children.length > 0){
+            const obj = this.debugPlotGridGroup.children[0];
+            this.debugPlotGridGroup.remove(obj);
+            if(obj.geometry) obj.geometry.dispose();
+            // The material is shared (debugPlotGridMaterial), DO NOT dispose it here,
+            // do it in CityManager.destroy
+            // if(obj.material && obj.material.dispose) obj.material.dispose();
+        }
+        // console.log("Debug plot grid cleared.");
     }
 
     clearDebugAgentPaths() {
@@ -64,15 +86,17 @@ export default class World {
     }
 
     clearDebugNavGrid() {
-         while(this.debugNavGridGroup.children.length > 0){
-             const obj = this.debugNavGridGroup.children[0];
-             this.debugNavGridGroup.remove(obj);
-             if(obj.geometry) obj.geometry.dispose();
-             if(obj.material) obj.material.dispose(); // Material est partagé, mais ok de l'appeler
-         }
-         // console.log("Debug nav grid cleared.");
-    }
-
+		while(this.debugNavGridGroup.children.length > 0){
+			const obj = this.debugNavGridGroup.children[0];
+			this.debugNavGridGroup.remove(obj);
+			if(obj.geometry) obj.geometry.dispose();
+			if(obj.material) { // Handle multiple or single materials
+				if (Array.isArray(obj.material)) { obj.material.forEach(m => m.dispose()); }
+				else if (obj.material.dispose) { obj.material.dispose(); }
+			}
+		}
+		// console.log("Debug nav grid cleared.");
+   }
 
     async initializeWorld() {
         console.log("World: Initialisation asynchrone...");
@@ -202,39 +226,43 @@ export default class World {
     }
 
     destroy() {
-        console.log("Destruction du World...");
+        console.log("Destroying World...");
 
-        // 1. Détruire AgentManager (qui termine son worker)
+        // 1. Destroy AgentManager (which terminates its worker)
         this.agentManager?.destroy();
         this.agentManager = null;
 
-        // 2. Nettoyer les groupes de débogage
-        const cleanGroup = (group) => { /* ... (code inchangé) ... */
+        // 2. Clean up debug groups
+        const cleanGroup = (group) => {
              if (!group) return;
              if (group.parent) group.parent.remove(group);
              while(group.children.length > 0){
                  const obj = group.children[0];
                  group.remove(obj);
                  if(obj.geometry) obj.geometry.dispose();
+                 // Clean material(s) ONLY if they are not shared globally
+                 // For debug groups, assume materials are specific or okay to dispose here
                  if(obj.material) {
                      if(Array.isArray(obj.material)) { obj.material.forEach(m => m.dispose()); }
-                     else { obj.material.dispose(); }
+                     else if (obj.material.dispose) { obj.material.dispose(); }
                  }
              }
         };
         cleanGroup(this.debugNavGridGroup);
         cleanGroup(this.debugAgentPathGroup);
+        cleanGroup(this.debugPlotGridGroup); // NEW: Clean the plot grid group
         this.debugNavGridGroup = null;
         this.debugAgentPathGroup = null;
+        this.debugPlotGridGroup = null; // NEW
 
-        // 3. Détruire CityManager (qui nettoie ses propres éléments, NavGraph inclus)
+        // 3. Destroy CityManager (which cleans its own elements, NavGraph included)
         this.cityManager?.destroy();
         this.cityManager = null;
 
-        // 4. Détruire l'Environnement
+        // 4. Destroy Environment
         this.environment?.destroy();
         this.environment = null;
 
-        console.log("World détruit.");
+        console.log("World destroyed.");
     }
 }
