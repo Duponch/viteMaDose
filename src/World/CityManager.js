@@ -650,11 +650,11 @@ export default class CityManager {
     // Cette fonction traite correctement les parcelles qui SONT dans des districts.
     // Elle n'a pas besoin d'être modifiée pour l'approche 1.
     adjustPlotTypesWithinDistricts() {
-		console.log("Ajustement STRICT des types de parcelles pour correspondre au type du district...");
+		console.log("Ajustement des types de parcelles pour correspondre au type du district (SANS seuil superficie résidentiel)...");
 		const stats = {
 			forcedToSkyscraper: 0,
 			forcedToIndustrial: 0,
-			forcedToResidential: 0,
+			forcedToResidential: 0, // Compte maintenant tous les changements vers 'house'
 			parksProtected: 0,
 			alreadyCorrect: 0,
 			unbuildableSkipped: 0
@@ -662,6 +662,7 @@ export default class CityManager {
 
 		this.districts.forEach(district => {
 			district.plots.forEach(plot => {
+				// Ignorer les parcs et non-constructibles (inchangé)
 				if (plot.zoneType === 'park') {
 					stats.parksProtected++;
 					plot.isPark = true;
@@ -687,33 +688,33 @@ export default class CityManager {
 						break;
 
 					case 'residential':
-						const plotArea = plot.width * plot.depth;
-                        // ===== MODIFICATION DU SEUIL ICI =====
-                        // Augmentez cette valeur (ex: 1000) pour permettre aux parcelles plus grandes d'être des maisons.
-                        // Ajustez selon la taille des parcelles que vous souhaitez pour les maisons.
-						const houseAreaThreshold = 1000; // Anciennement 550
-						targetType = (plotArea > houseAreaThreshold) ? 'building' : 'house';
-                        // ======================================
+                        // --- MODIFICATION ICI ---
+                        // Supprimer le test de superficie.
+                        // Assigner directement 'house' (ou 'building' si vous préférez les assets chargés).
+                        targetType = 'house';
+                        // --- FIN MODIFICATION ---
 						if (initialType !== targetType) stats.forcedToResidential++; else stats.alreadyCorrect++;
 						break;
 
-					default:
-						targetType = initialType;
+					default: // Ne devrait pas arriver si les districts ont un type valide
+						targetType = initialType; // Conserver le type initial
+						console.warn(`District ${district.id} a un type inconnu: ${district.type}. Parcelle ${plot.id} inchangée.`);
 						stats.alreadyCorrect++;
 						break;
 				}
 
+				// Appliquer le type cible si défini (inchangé)
 				if (targetType !== null) {
 					 plot.zoneType = targetType;
-					 plot.isPark = (targetType === 'park');
+					 plot.isPark = (targetType === 'park'); // Devrait toujours être false ici
 				}
 			});
 		});
 
-		console.log(`Ajustement STRICT terminé:`);
+		console.log(`Ajustement (sans seuil résidentiel) terminé:`);
 		console.log(`  - Forcés Gratte-ciel: ${stats.forcedToSkyscraper}`);
 		console.log(`  - Forcés Industriel: ${stats.forcedToIndustrial}`);
-		console.log(`  - Forcés Résidentiel (maison/immeuble): ${stats.forcedToResidential}`);
+		console.log(`  - Forcés Résidentiel ('house'): ${stats.forcedToResidential}`);
 		console.log(`  - Parcs Protégés: ${stats.parksProtected}`);
 		console.log(`  - Déjà Corrects / Inchangés: ${stats.alreadyCorrect}`);
 		console.log(`  - Non-constructibles Ignorés: ${stats.unbuildableSkipped}`);
@@ -1102,6 +1103,7 @@ export default class CityManager {
 } // Fin de la classe CityManager
 
 function disposeGroup(group) {
+    // ... (code inchangé) ...
 	if (!group) return;
 	while(group.children.length > 0){
 		const obj = group.children[0];
@@ -1109,4 +1111,4 @@ function disposeGroup(group) {
 		if(obj.geometry) obj.geometry.dispose();
 		// Ne pas disposer les matériaux ici s'ils sont partagés via CityManager.materials
 	}
-  }
+}
