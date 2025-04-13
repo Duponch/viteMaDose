@@ -407,6 +407,7 @@ export default class PlotContentGenerator {
             const startGx = minGx + offsetX; const startGy = minGy + offsetY;
             const groundLevel = 0.01;
             // --- Fin Configuration Grille ---
+			const scale = 2;
 
             // --- Dimensions modèle LOCAL L pour référence ---
             const armLength = 2.0; // Dimension X/Z de l'empreinte carrée englobante
@@ -439,7 +440,7 @@ export default class PlotContentGenerator {
                         targetWorldDepth / baseModelFootprintSize
                     );
                     scaleValue *= THREE.MathUtils.randFloat(0.9, 1.1);
-                    scaleValue = THREE.MathUtils.clamp(scaleValue, 0.8, 4.0);
+                    scaleValue = THREE.MathUtils.clamp(scaleValue, 0.8 * scale, 4.0 * scale);
                     const baseScale = new THREE.Vector3(scaleValue, scaleValue, scaleValue);
                     // --- Fin Centre Cellule et Échelle ---
 

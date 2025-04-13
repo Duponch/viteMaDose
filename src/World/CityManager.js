@@ -48,7 +48,8 @@ export default class CityManager {
             // --- Grid Houses (remis aux valeurs précédentes ou ajustez si besoin) ---
             fixedHouseGridWidth: 10,
             fixedHouseGridDepth: 10,
-            fixedHouseGridSpacing: 3,
+            fixedHouseGridSpacing: 5,
+			proceduralHouseBaseScale: 1.0, // <-- AJOUTEZ CETTE LIGNE (ou une valeur différente si vous voulez)
             // ------------------------------------------------------
 
             // Assets (Paths and configs - ensure they are correct)
