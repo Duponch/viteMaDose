@@ -372,9 +372,13 @@ export default class PlotContentGenerator {
             this.createPlotGround(plot); // Sol pour la parcelle globale
 
             const subZones = this.subdivideForPlacement(plot);
-            const margin = plot.zoneType === 'house' ? (this.config.houseSubZoneMargin ?? 0.5) :
+
+            // *** MODIFICATION ICI: Augmenter la marge pour les maisons ***
+            // Utiliser la nouvelle config 'houseSubZoneMargin' avec un défaut plus grand (ex: 2.0)
+            const margin = plot.zoneType === 'house' ? (this.config.houseSubZoneMargin ?? 2.0) : // <-- MARGE AUGMENTÉE POUR MAISONS
                            plot.zoneType === 'park' ? 0 :
                            (this.config.buildingSubZoneMargin ?? 1.5);
+            // ************************************************************
 
             subZones.forEach((subZone, index) => {
                 const buildableWidth = Math.max(0, subZone.width - margin * 2);
@@ -392,8 +396,13 @@ export default class PlotContentGenerator {
                         }
 
                         // Ajustement échelle pour éviter overlap
-                        const baseHouseWidth = 10; const baseHouseDepth = 9.5;
-                        const fittingScaleFactor = 0.98; // Laisser 2% de marge à l'intérieur de la zone constructible
+                        const baseHouseWidth = 10; // Largeur de référence de la géométrie de base
+                        const baseHouseDepth = 9.5; // Profondeur de référence de la géométrie de base (incluant les 2 ailes)
+
+                        // *** MODIFICATION ICI: Réduire légèrement fittingScaleFactor ***
+                        const fittingScaleFactor = 0.95; // <-- Facteur réduit (était 0.98)
+                        // ************************************************************
+
                         let scaleValue = Math.min(
                             (buildableWidth * fittingScaleFactor) / baseHouseWidth,
                             (buildableDepth * fittingScaleFactor) / baseHouseDepth
@@ -468,7 +477,7 @@ export default class PlotContentGenerator {
                             this.instanceData[plot.zoneType][modelId].push(instanceMatrix.clone());
                             // Enregistrement CityManager
                             const buildingPosition = new THREE.Vector3(subZoneCenterX, this.config.sidewalkHeight, subZoneCenterZ);
-                            const buildingType = assetInfo.type || plot.zoneType;
+                            const buildingType = assetInfo.type || plot.zoneType; // Utilise le type de l'asset si dispo
                             const registeredBuilding = this.cityManager.registerBuildingInstance( plot.id, buildingType, buildingPosition );
                             if (registeredBuilding) { plot.addBuildingInstance({ id: registeredBuilding.id, type: buildingType, position: buildingPosition.clone() }); }
                         }
@@ -485,79 +494,20 @@ export default class PlotContentGenerator {
 
     // Place les arbres sur la parcelle selon le type de zone et des probabilités configurées
     placeTreesForPlot(plot) {
-        // Vérifier si des assets d'arbres sont chargés
-        if (!this.assetLoader || !this.assetLoader.assets.tree || this.assetLoader.assets.tree.length === 0) {
-            return; // Pas d'arbres à placer
-        }
-
-        // Récupérer les paramètres de config
-        const probSidewalk = this.config.treePlacementProbabilitySidewalk;
-        const probPark = this.config.treePlacementProbabilityPark;
-        const probMargin = this.config.treePlacementProbabilityMargin;
-        const sidewalkW = this.config.sidewalkWidth;
-
-        // 1. Arbres sur trottoir (coins et potentiellement le long des bords)
+        if (!this.assetLoader || !this.assetLoader.assets.tree || this.assetLoader.assets.tree.length === 0) { return; }
+        const probSidewalk = this.config.treePlacementProbabilitySidewalk; const probPark = this.config.treePlacementProbabilityPark; const probMargin = this.config.treePlacementProbabilityMargin; const sidewalkW = this.config.sidewalkWidth;
         if (sidewalkW > 0 && probSidewalk > 0) {
-            // Coins du trottoir extérieur
-            const corners = [
-                { x: plot.x - sidewalkW / 2, z: plot.z - sidewalkW / 2 }, // Haut Gauche
-                { x: plot.x + plot.width + sidewalkW / 2, z: plot.z - sidewalkW / 2 }, // Haut Droite
-                { x: plot.x - sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 }, // Bas Gauche
-                { x: plot.x + plot.width + sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 } // Bas Droite
-            ];
-            corners.forEach(corner => {
-                if (Math.random() < probSidewalk) {
-                    this.addTreeInstance(corner.x, corner.z); // Appel interne
-                }
-            });
-            // TODO: Ajouter potentiellement des arbres le long des bords du trottoir aussi
+            const corners = [ { x: plot.x - sidewalkW / 2, z: plot.z - sidewalkW / 2 }, { x: plot.x + plot.width + sidewalkW / 2, z: plot.z - sidewalkW / 2 }, { x: plot.x - sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 }, { x: plot.x + plot.width + sidewalkW / 2, z: plot.z + plot.depth + sidewalkW / 2 } ]; corners.forEach(corner => { if (Math.random() < probSidewalk) { this.addTreeInstance(corner.x, corner.z); } });
         }
-
-        // 2. Arbres dans la parcelle (parcs ou marges)
-        const plotBounds = {
-            minX: plot.x, maxX: plot.x + plot.width,
-            minZ: plot.z, maxZ: plot.z + plot.depth,
-        };
-
-        // Cas spécifique des parcs
+        const plotBounds = { minX: plot.x, maxX: plot.x + plot.width, minZ: plot.z, maxZ: plot.z + plot.depth, };
         if (plot.zoneType === 'park' && probPark > 0) {
-            const area = plot.width * plot.depth;
-            const numTreesToTry = Math.ceil(area * probPark); // Nombre d'arbres proportionnel à l'aire
+            const area = plot.width * plot.depth; const numTreesToTry = Math.ceil(area * probPark); for (let i = 0; i < numTreesToTry; i++) { const treeX = THREE.MathUtils.randFloat(plotBounds.minX, plotBounds.maxX); const treeZ = THREE.MathUtils.randFloat(plotBounds.minZ, plotBounds.maxZ); this.addTreeInstance(treeX, treeZ); }
+        } else if (['house', 'building', 'industrial', 'skyscraper'].includes(plot.zoneType) && probMargin > 0) {
+            const area = plot.width * plot.depth; const occupiedArea = (plot.occupiedSubZones || []).reduce((acc, sz) => acc + (sz.width * sz.depth), 0); const marginArea = Math.max(0, area - occupiedArea); const numTreesToTry = Math.ceil(marginArea * probMargin);
             for (let i = 0; i < numTreesToTry; i++) {
-                const treeX = THREE.MathUtils.randFloat(plotBounds.minX, plotBounds.maxX);
-                const treeZ = THREE.MathUtils.randFloat(plotBounds.minZ, plotBounds.maxZ);
-                // Dans un parc, on suppose qu'on peut placer n'importe où (pas d'occupiedSubZones à vérifier)
-                this.addTreeInstance(treeX, treeZ);
-            }
-        }
-        // Cas des marges des autres zones constructibles
-        else if (['house', 'building', 'industrial', 'skyscraper'].includes(plot.zoneType) && probMargin > 0) {
-            const area = plot.width * plot.depth;
-            // Calculer l'aire occupée par les bâtiments/structures principaux
-            const occupiedArea = (plot.occupiedSubZones || []).reduce((acc, sz) => acc + (sz.width * sz.depth), 0);
-            const marginArea = Math.max(0, area - occupiedArea); // Aire disponible en marge
-            const numTreesToTry = Math.ceil(marginArea * probMargin); // Proportionnel à l'aire de marge
-
-            for (let i = 0; i < numTreesToTry; i++) {
-                const treeX = THREE.MathUtils.randFloat(plotBounds.minX, plotBounds.maxX);
-                const treeZ = THREE.MathUtils.randFloat(plotBounds.minZ, plotBounds.maxZ);
-
-                // Vérifier si l'emplacement est dans une zone déjà occupée
-                let isOccupied = false;
-                if (plot.occupiedSubZones) {
-                    for (const sz of plot.occupiedSubZones) {
-                        if (treeX >= sz.x && treeX <= sz.x + sz.width &&
-                            treeZ >= sz.z && treeZ <= sz.z + sz.depth) {
-                            isOccupied = true;
-                            break;
-                        }
-                    }
-                }
-
-                // Si l'emplacement est libre, ajouter l'arbre
-                if (!isOccupied) {
-                    this.addTreeInstance(treeX, treeZ);
-                }
+                const treeX = THREE.MathUtils.randFloat(plotBounds.minX, plotBounds.maxX); const treeZ = THREE.MathUtils.randFloat(plotBounds.minZ, plotBounds.maxZ); let isOccupied = false;
+                if (plot.occupiedSubZones) { for (const sz of plot.occupiedSubZones) { if (treeX >= sz.x && treeX <= sz.x + sz.width && treeZ >= sz.z && treeZ <= sz.z + sz.depth) { isOccupied = true; break; } } }
+                if (!isOccupied) { this.addTreeInstance(treeX, treeZ); }
             }
         }
     }
@@ -566,256 +516,48 @@ export default class PlotContentGenerator {
     addTreeInstance(treeX, treeZ) {
         const assetInfo = this.assetLoader.getRandomAssetData('tree');
         if (assetInfo) {
-            const randomScaleMultiplier = THREE.MathUtils.randFloat(0.85, 1.15);
-            const finalUserScale = assetInfo.userScale * randomScaleMultiplier;
-            const randomRotationY = Math.random() * Math.PI * 2;
-            const instanceMatrix = this.calculateInstanceMatrix(
-                treeX, treeZ,
-                assetInfo.sizeAfterFitting.y,
-                assetInfo.fittingScaleFactor,
-                assetInfo.centerOffset,
-                finalUserScale,
-                randomRotationY
-            );
-            const modelId = assetInfo.id;
-            const type = 'tree';
-            if (!this.instanceData[type]) this.instanceData[type] = {};
-            if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
-            this.instanceData[type][modelId].push(instanceMatrix);
+            const randomScaleMultiplier = THREE.MathUtils.randFloat(0.85, 1.15); const finalUserScale = assetInfo.userScale * randomScaleMultiplier; const randomRotationY = Math.random() * Math.PI * 2;
+            const instanceMatrix = this.calculateInstanceMatrix( treeX, treeZ, assetInfo.sizeAfterFitting.y, assetInfo.fittingScaleFactor, assetInfo.centerOffset, finalUserScale, randomRotationY );
+            const modelId = assetInfo.id; const type = 'tree'; if (!this.instanceData[type]) this.instanceData[type] = {}; if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = []; this.instanceData[type][modelId].push(instanceMatrix);
         }
     }
 
-    // Retourne les groupes créés pour insertion dans la scène
-    getGroups() {
-        return { sidewalkGroup: this.sidewalkGroup, buildingGroup: this.buildingGroup };
-    }
+    // --- getGroups ---
+    getGroups() { return { sidewalkGroup: this.sidewalkGroup, buildingGroup: this.buildingGroup }; }
 
-    // Réinitialise les données et stocke la référence vers l'assetLoader
+    // --- reset ---
 	reset(assetLoader) {
-        this.assetLoader = assetLoader;
-        this.cityManager = null;
-        // Réinitialiser instanceData standard
-        this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {}, skyscraper: {}, crosswalk: {} };
-
-        // --- Nettoyer maison procédurale ---
-        // Disposer les géométries de base
-        Object.values(this.baseHouseGeometries).forEach(geom => geom?.dispose());
-        this.baseHouseGeometries = {};
-        // Disposer les matériaux de base
-        Object.values(this.baseHouseMaterials).forEach(mat => mat?.dispose());
-        this.baseHouseMaterials = {};
-        // Vider les tableaux de matrices
-        this.initializeHouseMatrixArrays(); // Remet les tableaux à []
-        // Les InstancedMesh eux-mêmes sont retirés par disposeGroupContents
-        this.houseInstancedMeshes = {};
-        // -----------------------------------
-
-        const disposeGroupContents = (group) => {
-             while (group.children.length > 0) {
-                 const c = group.children[0];
-                 group.remove(c);
-                 // Disposer la géométrie SEULEMENT si ce n'est PAS une géométrie de base partagée
-                 const isBaseHouseGeo = Object.values(this.baseHouseGeometries).includes(c.geometry);
-                 const isBaseStripeGeo = c.geometry === this.stripeBaseGeometry;
-                 // Aussi vérifier si c'est une géométrie chargée par AssetLoader (on ne dispose pas ici)
-                 let isLoadedAssetGeo = false;
-                 if(this.assetLoader){
-                     for(const type in this.assetLoader.assets){
-                         if(this.assetLoader.assets[type].some(a => a.geometry === c.geometry)){
-                             isLoadedAssetGeo = true; break;
-                         }
-                     }
-                 }
-
-                 if (c.geometry && !isBaseHouseGeo && !isBaseStripeGeo && !isLoadedAssetGeo) {
-                     c.geometry.dispose();
-                 }
-                 // Ne pas disposer les matériaux ici (gérés via baseHouseMaterials, materials, ou assetLoader)
-             }
-        };
-        disposeGroupContents(this.sidewalkGroup);
-        disposeGroupContents(this.buildingGroup); // Nettoie tous les InstancedMesh
-
+        this.assetLoader = assetLoader; this.cityManager = null; this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {}, skyscraper: {}, crosswalk: {} };
+        Object.values(this.baseHouseGeometries).forEach(geom => geom?.dispose()); this.baseHouseGeometries = {}; Object.values(this.baseHouseMaterials).forEach(mat => mat?.dispose()); this.baseHouseMaterials = {}; this.initializeHouseMatrixArrays(); this.houseInstancedMeshes = {};
+        const disposeGroupContents = (group) => { while (group.children.length > 0) { const c = group.children[0]; group.remove(c); const isBaseHouseGeo = Object.values(this.baseHouseGeometries).includes(c.geometry); const isBaseStripeGeo = c.geometry === this.stripeBaseGeometry; let isLoadedAssetGeo = false; if(this.assetLoader){ for(const type in this.assetLoader.assets){ if(this.assetLoader.assets[type].some(a => a.geometry === c.geometry)){ isLoadedAssetGeo = true; break; } } } if (c.geometry && !isBaseHouseGeo && !isBaseStripeGeo && !isLoadedAssetGeo) { c.geometry.dispose(); } } }; disposeGroupContents(this.sidewalkGroup); disposeGroupContents(this.buildingGroup);
         if (this.stripeBaseGeometry) { this.stripeBaseGeometry.dispose(); this.stripeBaseGeometry = null; }
-
-         // Redéfinir les matériaux/géométries de base pour la prochaine génération
-         this.defineHouseBaseMaterials();
-         this.defineHouseBaseGeometries();
+        this.defineHouseBaseMaterials(); this.defineHouseBaseGeometries();
     }
 
-    // Calcule la matrice d'instance à partir de la position, du scale, d'une rotation optionnelle et du décalage
     calculateInstanceMatrix(centerX, centerZ, heightAfterFitting, fittingScaleFactor, centerOffset, userScale, rotationY = 0) {
-        const instanceMatrix = new THREE.Matrix4();
-        const finalScaleValue = fittingScaleFactor * userScale;
-        const scaleMatrix = new THREE.Matrix4().makeScale(finalScaleValue, finalScaleValue, finalScaleValue);
-        const rotationMatrix = new THREE.Matrix4().makeRotationY(rotationY);
-        const recenterMatrix = new THREE.Matrix4().makeTranslation(-centerOffset.x, -centerOffset.y, -centerOffset.z);
-        const finalHeight = heightAfterFitting * userScale;
-        const finalTranslationMatrix = new THREE.Matrix4().makeTranslation(centerX, finalHeight / 2 + 0.05, centerZ);
-        instanceMatrix.multiplyMatrices(scaleMatrix, rotationMatrix);
-        instanceMatrix.multiply(recenterMatrix);
-        instanceMatrix.premultiply(finalTranslationMatrix);
-        return instanceMatrix;
+        const instanceMatrix = new THREE.Matrix4(); const finalScaleValue = fittingScaleFactor * userScale; const scaleMatrix = new THREE.Matrix4().makeScale(finalScaleValue, finalScaleValue, finalScaleValue); const rotationMatrix = new THREE.Matrix4().makeRotationY(rotationY); const recenterMatrix = new THREE.Matrix4().makeTranslation(-centerOffset.x, -centerOffset.y, -centerOffset.z); const finalHeight = heightAfterFitting * userScale; const finalTranslationMatrix = new THREE.Matrix4().makeTranslation(centerX, finalHeight / 2 + 0.05, centerZ); instanceMatrix.multiplyMatrices(scaleMatrix, rotationMatrix); instanceMatrix.multiply(recenterMatrix); instanceMatrix.premultiply(finalTranslationMatrix); return instanceMatrix;
     }
 
-    // Itère sur instanceData pour créer pour chaque asset un InstancedMesh et l'ajouter au groupe principal
+    // --- createInstancedMeshesFromData ---
     createInstancedMeshesFromData() {
-        console.log("Création des InstancedMesh (maison procédurale multi-part + assets)...");
-        let totalInstancesCreated = 0;
-        let instancedMeshCount = 0;
-
-        // --- 1. Créer les InstancedMesh pour chaque partie de la MAISON ---
-        for (const partName in this.baseHouseGeometries) {
-            if (this.baseHouseGeometries.hasOwnProperty(partName) && this.baseHouseMaterials.hasOwnProperty(partName) && this.houseInstanceMatrices.hasOwnProperty(partName)) {
-                const geometry = this.baseHouseGeometries[partName];
-                const material = this.baseHouseMaterials[partName];
-                const matrices = this.houseInstanceMatrices[partName];
-
-                if (geometry && material && matrices && matrices.length > 0) {
-                    const count = matrices.length;
-                    const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
-                    instancedMesh.name = `ProceduralHouse_${partName}_Instanced`;
-                    instancedMesh.castShadow = true; // Les parties de la maison projettent des ombres
-                    instancedMesh.receiveShadow = true; // Reçoivent aussi
-
-                    matrices.forEach((matrix, index) => {
-                        instancedMesh.setMatrixAt(index, matrix);
-                    });
-                    instancedMesh.instanceMatrix.needsUpdate = true; // TRÈS IMPORTANT
-
-                    this.buildingGroup.add(instancedMesh);
-                    this.houseInstancedMeshes[partName] = instancedMesh; // Stocker la référence si besoin
-                    instancedMeshCount++;
-                    totalInstancesCreated += count;
-                    console.log(` -> InstancedMesh pour ${count} maisons (partie: ${partName}) créé.`);
-                } else if (matrices && matrices.length === 0) {
-                    // Pas d'erreur si juste aucune instance pour cette partie (ex: pas de porte de garage partout)
-                    // console.log(` -> Aucune instance pour la partie maison: ${partName}`);
-                } else {
-                     console.warn(`Manque geometrie/materiau/matrices pour partie maison: ${partName}`);
-                }
-            }
-        }
-        // --- FIN création InstancedMesh Maison ---
-
-
-        // --- 2. Créer les InstancedMesh pour les AUTRES assets (code existant adapté) ---
-        if (!this.assetLoader && !this.stripeBaseGeometry) {
-             if (!this.stripeBaseGeometry && this.instanceData.crosswalk && Object.keys(this.instanceData.crosswalk).length > 0) { console.error("Impossible de créer InstancedMesh crosswalk: stripeBaseGeometry non dispo."); }
-             else if (!this.assetLoader) { console.error("Impossible de créer InstancedMesh: AssetLoader non disponible (pour assets non-maison)."); }
-        }
-
-        for (const type in this.instanceData) {
-            // *** Ignorer 'house' car traité ci-dessus ***
-            if (type === 'house' || !this.instanceData.hasOwnProperty(type)) continue;
-
-            for (const modelId in this.instanceData[type]) {
-                if (!this.instanceData[type].hasOwnProperty(modelId)) continue;
-                const matrices = this.instanceData[type][modelId];
-                if (matrices && matrices.length > 0) {
-                    let geometry = null; let material = null; let castShadow = true; let receiveShadow = true;
-                    if (type === 'crosswalk') {
-                        if (this.stripeBaseGeometry && this.materials.crosswalkMaterial) { geometry = this.stripeBaseGeometry; material = this.materials.crosswalkMaterial; castShadow = false; receiveShadow = true; }
-                        else { console.warn(`Géométrie/matériau manquant pour 'crosswalk', ${matrices.length} instances ignorées.`); continue; }
-                    } else if (this.assetLoader) {
-                        const assetData = this.assetLoader.getAssetDataById(modelId);
-                        if (assetData && assetData.geometry && assetData.material) { geometry = assetData.geometry; material = assetData.material; }
-                        else { console.warn(`Données asset ${modelId} (type ${type}) invalides, ${matrices.length} instances ignorées.`); continue; }
-                    } else { console.warn(`AssetLoader manquant pour type '${type}', ${matrices.length} instances ignorées.`); continue; }
-
-                    const instancedMesh = new THREE.InstancedMesh(geometry, material, matrices.length);
-                    matrices.forEach((matrix, index) => { instancedMesh.setMatrixAt(index, matrix); });
-                    instancedMesh.instanceMatrix.needsUpdate = true;
-                    instancedMesh.castShadow = castShadow; instancedMesh.receiveShadow = receiveShadow;
-                    instancedMesh.name = `${type}_${modelId}_Instanced`;
-                    this.buildingGroup.add(instancedMesh);
-                    instancedMeshCount++;
-                    totalInstancesCreated += matrices.length;
-                }
-            }
-        }
-
-        // Log final
-        if (instancedMeshCount > 0) {
-            console.log(`Création InstancedMesh terminée: ${instancedMeshCount} mesh(es) pour ${totalInstancesCreated} instances (tous types confondus) ajoutés.`);
-        } else {
-            console.log("Aucune instance (maison ou autre) à créer via InstancedMesh.");
-        }
+        console.log("Création des InstancedMesh (maison procédurale multi-part + assets)..."); let totalInstancesCreated = 0; let instancedMeshCount = 0;
+        for (const partName in this.baseHouseGeometries) { if (this.baseHouseGeometries.hasOwnProperty(partName) && this.baseHouseMaterials.hasOwnProperty(partName) && this.houseInstanceMatrices.hasOwnProperty(partName)) { const geometry = this.baseHouseGeometries[partName]; const material = this.baseHouseMaterials[partName]; const matrices = this.houseInstanceMatrices[partName]; if (geometry && material && matrices && matrices.length > 0) { const count = matrices.length; const instancedMesh = new THREE.InstancedMesh(geometry, material, count); instancedMesh.name = `ProceduralHouse_${partName}_Instanced`; instancedMesh.castShadow = true; instancedMesh.receiveShadow = true; matrices.forEach((matrix, index) => { instancedMesh.setMatrixAt(index, matrix); }); instancedMesh.instanceMatrix.needsUpdate = true; this.buildingGroup.add(instancedMesh); this.houseInstancedMeshes[partName] = instancedMesh; instancedMeshCount++; totalInstancesCreated += count; console.log(` -> InstancedMesh pour ${count} maisons (partie: ${partName}) créé.`); } else if (matrices && matrices.length === 0) { } else { console.warn(`Manque geometrie/materiau/matrices pour partie maison: ${partName}`); } } }
+        if (!this.assetLoader && !this.stripeBaseGeometry) { if (!this.stripeBaseGeometry && this.instanceData.crosswalk && Object.keys(this.instanceData.crosswalk).length > 0) { console.error("Impossible de créer InstancedMesh crosswalk: stripeBaseGeometry non dispo."); } else if (!this.assetLoader) { console.error("Impossible de créer InstancedMesh: AssetLoader non disponible (pour assets non-maison)."); } }
+        for (const type in this.instanceData) { if (type === 'house' || !this.instanceData.hasOwnProperty(type)) continue; for (const modelId in this.instanceData[type]) { if (!this.instanceData[type].hasOwnProperty(modelId)) continue; const matrices = this.instanceData[type][modelId]; if (matrices && matrices.length > 0) { let geometry = null; let material = null; let castShadow = true; let receiveShadow = true; if (type === 'crosswalk') { if (this.stripeBaseGeometry && this.materials.crosswalkMaterial) { geometry = this.stripeBaseGeometry; material = this.materials.crosswalkMaterial; castShadow = false; receiveShadow = true; } else { console.warn(`Géométrie/matériau manquant pour 'crosswalk', ${matrices.length} instances ignorées.`); continue; } } else if (this.assetLoader) { const assetData = this.assetLoader.getAssetDataById(modelId); if (assetData && assetData.geometry && assetData.material) { geometry = assetData.geometry; material = assetData.material; } else { console.warn(`Données asset ${modelId} (type ${type}) invalides, ${matrices.length} instances ignorées.`); continue; } } else { console.warn(`AssetLoader manquant pour type '${type}', ${matrices.length} instances ignorées.`); continue; } const instancedMesh = new THREE.InstancedMesh(geometry, material, matrices.length); matrices.forEach((matrix, index) => { instancedMesh.setMatrixAt(index, matrix); }); instancedMesh.instanceMatrix.needsUpdate = true; instancedMesh.castShadow = castShadow; instancedMesh.receiveShadow = receiveShadow; instancedMesh.name = `${type}_${modelId}_Instanced`; this.buildingGroup.add(instancedMesh); instancedMeshCount++; totalInstancesCreated += matrices.length; } } }
+        if (instancedMeshCount > 0) { console.log(`Création InstancedMesh terminée: ${instancedMeshCount} mesh(es) pour ${totalInstancesCreated} instances (tous types confondus) ajoutés.`); } else { console.log("Aucune instance (maison ou autre) à créer via InstancedMesh."); }
     }
 
-    // Crée le sol de la parcelle (pour tout type de zone)
+    // --- createPlotGround ---
     createPlotGround(plot) {
-        const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
-        let groundMaterial;
-        if (plot.zoneType === 'park') {
-            groundMaterial = this.materials.parkMaterial;
-        } else {
-            groundMaterial = this.materials.buildingGroundMaterial;
-        }
-        const groundMesh = new THREE.Mesh(groundGeom, groundMaterial);
-        groundMesh.rotation.x = -Math.PI / 2;
-        // On suppose que plot possède une propriété center calculée en amont
-        groundMesh.position.set(plot.center ? plot.center.x : plot.x + plot.width / 2, 0.2, plot.center ? plot.center.z : plot.z + plot.depth / 2);
-        groundMesh.receiveShadow = true;
-        groundMesh.name = `Ground_Plot_${plot.id}_${plot.zoneType}`;
-        this.buildingGroup.add(groundMesh);
+        const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth); let groundMaterial; if (plot.zoneType === 'park') { groundMaterial = this.materials.parkMaterial; } else { groundMaterial = this.materials.buildingGroundMaterial; } const groundMesh = new THREE.Mesh(groundGeom, groundMaterial); groundMesh.rotation.x = -Math.PI / 2; groundMesh.position.set(plot.center ? plot.center.x : plot.x + plot.width / 2, 0.2, plot.center ? plot.center.z : plot.z + plot.depth / 2); groundMesh.receiveShadow = true; groundMesh.name = `Ground_Plot_${plot.id}_${plot.zoneType}`; this.buildingGroup.add(groundMesh);
     }
 
-    // Subdivision pour le placement de contenus dans la parcelle (pour zones autres que skyscraper)
+    // --- subdivideForPlacement ---
     subdivideForPlacement(plot) {
-        let minSubZoneSize;
-        switch (plot.zoneType) {
-            case 'house': 
-                minSubZoneSize = this.config.minHouseSubZoneSize; 
-                break;
-            case 'building': 
-                minSubZoneSize = this.config.minBuildingSubZoneSize; 
-                break;
-            case 'industrial': 
-                minSubZoneSize = this.config.minIndustrialSubZoneSize; 
-                break;
-            case 'park': 
-                minSubZoneSize = this.config.minParkSubZoneSize; 
-                break;
-            case 'skyscraper':
-                // Bien que les gratte-ciels soient gérés séparément, on peut définir la taille minimale ici
-                minSubZoneSize = this.config.minSkyscraperSubZoneSize; 
-                break;
-            default: 
-                minSubZoneSize = 10;
-        }
-        minSubZoneSize = Math.max(minSubZoneSize, 1);
-        if (plot.width < minSubZoneSize && plot.depth < minSubZoneSize) {
-            return [{ x: plot.x, z: plot.z, width: plot.width, depth: plot.depth }];
-        }
-        if (plot.width < minSubZoneSize) {
-            let numRows = Math.max(1, Math.floor(plot.depth / minSubZoneSize));
-            const subDepth = plot.depth / numRows;
-            const subZones = [];
-            for (let j = 0; j < numRows; j++) {
-                subZones.push({ x: plot.x, z: plot.z + j * subDepth, width: plot.width, depth: subDepth });
-            }
-            return subZones;
-        }
-        if (plot.depth < minSubZoneSize) {
-            let numCols = Math.max(1, Math.floor(plot.width / minSubZoneSize));
-            const subWidth = plot.width / numCols;
-            const subZones = [];
-            for (let i = 0; i < numCols; i++) {
-                subZones.push({ x: plot.x + i * subWidth, z: plot.z, width: subWidth, depth: plot.depth });
-            }
-            return subZones;
-        }
-        let numCols = Math.max(1, Math.floor(plot.width / minSubZoneSize));
-        let numRows = Math.max(1, Math.floor(plot.depth / minSubZoneSize));
-        const subZones = [];
-        const subWidth = plot.width / numCols;
-        const subDepth = plot.depth / numRows;
-        for (let i = 0; i < numCols; i++) {
-            for (let j = 0; j < numRows; j++) {
-                subZones.push({ x: plot.x + i * subWidth, z: plot.z + j * subDepth, width: subWidth, depth: subDepth });
-            }
-        }
-        return subZones;
+        let minSubZoneSize; switch (plot.zoneType) { case 'house': minSubZoneSize = this.config.minHouseSubZoneSize; break; case 'building': minSubZoneSize = this.config.minBuildingSubZoneSize; break; case 'industrial': minSubZoneSize = this.config.minIndustrialSubZoneSize; break; case 'park': minSubZoneSize = this.config.minParkSubZoneSize; break; case 'skyscraper': minSubZoneSize = this.config.minSkyscraperSubZoneSize; break; default: minSubZoneSize = 10; } minSubZoneSize = Math.max(minSubZoneSize, 1);
+        if (plot.width < minSubZoneSize && plot.depth < minSubZoneSize) { return [{ x: plot.x, z: plot.z, width: plot.width, depth: plot.depth }]; }
+        if (plot.width < minSubZoneSize) { let numRows = Math.max(1, Math.floor(plot.depth / minSubZoneSize)); const subDepth = plot.depth / numRows; const subZones = []; for (let j = 0; j < numRows; j++) { subZones.push({ x: plot.x, z: plot.z + j * subDepth, width: plot.width, depth: subDepth }); } return subZones; }
+        if (plot.depth < minSubZoneSize) { let numCols = Math.max(1, Math.floor(plot.width / minSubZoneSize)); const subWidth = plot.width / numCols; const subZones = []; for (let i = 0; i < numCols; i++) { subZones.push({ x: plot.x + i * subWidth, z: plot.z, width: subWidth, depth: plot.depth }); } return subZones; }
+        let numCols = Math.max(1, Math.floor(plot.width / minSubZoneSize)); let numRows = Math.max(1, Math.floor(plot.depth / minSubZoneSize)); const subZones = []; const subWidth = plot.width / numCols; const subDepth = plot.depth / numRows; for (let i = 0; i < numCols; i++) { for (let j = 0; j < numRows; j++) { subZones.push({ x: plot.x + i * subWidth, z: plot.z + j * subDepth, width: subWidth, depth: subDepth }); } } return subZones;
     }
 }

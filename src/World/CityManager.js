@@ -22,7 +22,12 @@ export default class CityManager {
             crosswalkWidth: 0.1, crosswalkHeight: 0.03, crosswalkStripeCount: 5, crosswalkStripeWidth: 0.6, crosswalkStripeGap: 0.5,
             // Districts
             minDistrictSize: 5, maxDistrictSize: 10, forceBusinessMaxDistance: 0.15,
-            districtProbabilities: { /* ... vos probas ... */ },
+            districtProbabilities: {
+                 // Exemple de configuration des probabilités de district (ajustez selon vos besoins)
+                 business: { max: 0.15, decay: 10 }, // Très probable près du centre, diminue rapidement
+                 industrial: { base: 0.01, threshold: 0.85, factor: 5, multiplier: 0.2 }, // Peu probable sauf en périphérie lointaine
+                 residential: { base: 0.8, peakCenter: 0.5, peakWidth: 0.2 } // Pic au milieu, reste élevé partout
+             },
             validationZoneCenterMaxDist: 0.20, validationZoneEdgeMinDist: 0.80,
             minBusinessInCenter: 1, minIndustrialInEdge: 1,
             strictMinIndustrialDist: 0.35, strictMaxBusinessDist: 0.60,
@@ -32,45 +37,18 @@ export default class CityManager {
             // Plot Content
             sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
             minHouseSubZoneSize: 7, minBuildingSubZoneSize: 10, minIndustrialSubZoneSize: 13,
-            minParkSubZoneSize: 10, minSkyscraperSubZoneSize: 13, buildingSubZoneMargin: 1.5,
+            minParkSubZoneSize: 10, minSkyscraperSubZoneSize: 13,
+            // *** NOUVELLE OPTION DE CONFIGURATION ***
+            houseSubZoneMargin: 2.0, // Marge spécifique pour les maisons (plus grande par défaut)
+            // ***************************************
+            buildingSubZoneMargin: 1.5,
             // Assets (Chemins et configs - assurez-vous qu'ils sont corrects)
-            houseModelDir: "Public/Assets/Models/Houses/", houseModelFiles: [
-				{ file: "House1.fbx", scale: 1.3 },
-				{ file: "House2.fbx", scale: 1.3 },
-				{ file: "House3.fbx", scale: 1.3 },
-				{ file: "House4.fbx", scale: 1.3 },
-				{ file: "House5.fbx", scale: 1.3 },
-				{ file: "House6.fbx", scale: 1.3 },
-				{ file: "House7.fbx", scale: 1.3 },
-				{ file: "House8.fbx", scale: 1.3 },
-				{ file: "House9.fbx", scale: 1.3 },
-				{ file: "House10.fbx", scale: 1.3 },
-				{ file: "House11.fbx", scale: 1.3 },
-				{ file: "House12.fbx", scale: 1.3 },
-				{ file: "House13.fbx", scale: 1.3 },
-				{ file: "House14.fbx", scale: 1.3 },
-				{ file: "House15.fbx", scale: 1.3 },
-				{ file: "House16.fbx", scale: 1.3 },
-				{ file: "House17.fbx", scale: 1.3 },
-				{ file: "House18.fbx", scale: 1.3 },
-				{ file: "House19.fbx", scale: 1.3 },
-				{ file: "House20.fbx", scale: 1.3 },
-				{ file: "House21.fbx", scale: 1.3 },
-				{ file: "House22.fbx", scale: 1.3 },
-				{ file: "House23.fbx", scale: 1.3 },
-				{ file: "House24.fbx", scale: 1.3 },
+             houseModelDir: "Public/Assets/Models/Houses/", houseModelFiles: [
+				{ file: "House1.fbx", scale: 1.3 }, { file: "House2.fbx", scale: 1.3 }, { file: "House3.fbx", scale: 1.3 }, { file: "House4.fbx", scale: 1.3 }, { file: "House5.fbx", scale: 1.3 }, { file: "House6.fbx", scale: 1.3 }, { file: "House7.fbx", scale: 1.3 }, { file: "House8.fbx", scale: 1.3 }, { file: "House9.fbx", scale: 1.3 }, { file: "House10.fbx", scale: 1.3 }, { file: "House11.fbx", scale: 1.3 }, { file: "House12.fbx", scale: 1.3 }, { file: "House13.fbx", scale: 1.3 }, { file: "House14.fbx", scale: 1.3 }, { file: "House15.fbx", scale: 1.3 }, { file: "House16.fbx", scale: 1.3 }, { file: "House17.fbx", scale: 1.3 }, { file: "House18.fbx", scale: 1.3 }, { file: "House19.fbx", scale: 1.3 }, { file: "House20.fbx", scale: 1.3 }, { file: "House21.fbx", scale: 1.3 }, { file: "House22.fbx", scale: 1.3 }, { file: "House23.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 },
 			],
             houseBaseWidth: 5, houseBaseHeight: 6, houseBaseDepth: 5,
             buildingModelDir: "Public/Assets/Models/Buildings/", buildingModelFiles: [
-				{ file: "Building1.fbx", scale: 0.8 },
-				{ file: "Building2.fbx", scale: 0.8 },
-				{ file: "Building3.fbx", scale: 0.8 },
-				{ file: "Building4.fbx", scale: 0.8 },
-				{ file: "Building5.fbx", scale: 0.8 },
-				{ file: "Building6.fbx", scale: 0.8 },
-				{ file: "Building7.fbx", scale: 0.8 },
-				{ file: "Building8.fbx", scale: 0.8 },
-				{ file: "Building10.glb", scale: 0.8 },
+				{ file: "Building1.fbx", scale: 0.8 }, { file: "Building2.fbx", scale: 0.8 }, { file: "Building3.fbx", scale: 0.8 }, { file: "Building4.fbx", scale: 0.8 }, { file: "Building5.fbx", scale: 0.8 }, { file: "Building6.fbx", scale: 0.8 }, { file: "Building7.fbx", scale: 0.8 }, { file: "Building8.fbx", scale: 0.8 }, { file: "Building10.glb", scale: 0.8 },
 			],
             buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
             industrialModelDir: "Public/Assets/Models/Industrials/", industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 1 }, { file: "Factory2_glb.glb", scale: 1 }, { file: "Factory3_glb.glb", scale: 1 } ],
@@ -94,6 +72,11 @@ export default class CityManager {
             agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
 			agentAnimationSpeedFactor: 8, // 1.0 = vitesse normale, <1.0 = plus lent, >1.0 = plus rapide
 			maxAgents: 500,
+             // Capacités par défaut (peuvent être surchargées par buildingInfo)
+             maxCitizensPerHouse: 5,
+             maxCitizensPerBuilding: 10, // Immeuble résidentiel
+             maxWorkersPerSkyscraper: 100,
+             maxWorkersPerIndustrial: 50
         };
 
         // --- Fusion Config Externe ---
@@ -103,7 +86,7 @@ export default class CityManager {
         const deepMerge = (target, source) => {
              for (const key in source) {
                  if (source.hasOwnProperty(key)) {
-                     if (source[key] instanceof Object && key in target && target[key] instanceof Object) {
+                     if (source[key] instanceof Object && !(source[key] instanceof THREE.Color) && !(source[key] instanceof THREE.Vector3) && key in target && target[key] instanceof Object && !(target[key] instanceof THREE.Color) && !(target[key] instanceof THREE.Vector3)) {
                          deepMerge(target[key], source[key]);
                      } else {
                          target[key] = source[key];
@@ -158,7 +141,7 @@ export default class CityManager {
         this.scene.add(this.cityContainer);
         if (this.config.showDistrictBoundaries) { this.cityContainer.add(this.debugGroup); }
         console.log("CityManager initialisé (avec registres Bâtiments & Citoyens).");
-    }
+    } // --- FIN DU CONSTRUCTOR ---
 
 	registerBuildingInstance(plotId, assetType, position, capacityOverride = null) {
         const id = `bldg_${this.nextBuildingInstanceId++}`;
