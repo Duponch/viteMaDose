@@ -44,7 +44,7 @@ export default class World {
         // Recréer la visualisation de la grille si elle n'existe pas et qu'on active le debug
         if (enabled && this.cityManager?.navigationGraph && this.debugNavGridGroup.children.length === 0) {
              console.log("World: Activation debug - Génération visualisation NavGrid...");
-             this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
+             //this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
         } else if (!enabled) {
             // Vider les groupes quand on désactive
              this.clearDebugAgentPaths();
