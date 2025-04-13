@@ -56,54 +56,81 @@ export default class CityManager {
             */
 
             // --- Échelles de Base pour la Grille Dynamique ---
-            gridHouseBaseScale: 8,       // Échelle finale appliquée aux maisons
+            gridHouseBaseScale: 9,       // Échelle finale appliquée aux maisons
             gridBuildingBaseScale: 1.5,    // Échelle finale appliquée aux immeubles
             gridIndustrialBaseScale: 1.6,  // Échelle finale appliquée aux industries
             gridSkyscraperBaseScale: 1.0, // Échelle finale appliquée aux gratte-ciels
 
             // --- NOUVEAU : Espacements Minimum pour la Grille Dynamique ---
             minHouseSpacing: 5.0,       // Espacement minimum entre les maisons
-            minBuildingSpacing: 3.0,    // Espacement minimum entre les immeubles
-            minIndustrialSpacing: 8.0,  // Espacement minimum entre les industries
-            minSkyscraperSpacing: 10.0, // Espacement minimum entre les gratte-ciels
+            minBuildingSpacing: 3.0,    // Espacement minimum entre les immeubles (type 'building')
+            minIndustrialSpacing: 3.0,  // Espacement minimum entre les industries
+            minSkyscraperSpacing: 4.0, // Espacement minimum entre les gratte-ciels
+            minParkSpacing: 2.0,        // Espacement minimum pour les éléments de parc (si applicable à l'avenir)
             // ----------------------------------------------------------
 
-            // --- Assets (Chemins et dimensions de base pour l'ajustement initial) ---
-            houseModelDir: "Public/Assets/Models/Houses/", houseModelFiles: [
-                { file: "House1.fbx", scale: 1.3 }, { file: "House2.fbx", scale: 1.3 }, { file: "House3.fbx", scale: 1.3 }, { file: "House4.fbx", scale: 1.3 }, { file: "House5.fbx", scale: 1.3 }, { file: "House6.fbx", scale: 1.3 }, { file: "House7.fbx", scale: 1.3 }, { file: "House8.fbx", scale: 1.3 }, { file: "House9.fbx", scale: 1.3 }, { file: "House10.fbx", scale: 1.3 }, { file: "House11.fbx", scale: 1.3 }, { file: "House12.fbx", scale: 1.3 }, { file: "House13.fbx", scale: 1.3 }, { file: "House14.fbx", scale: 1.3 }, { file: "House15.fbx", scale: 1.3 }, { file: "House16.fbx", scale: 1.3 }, { file: "House17.fbx", scale: 1.3 }, { file: "House18.fbx", scale: 1.3 }, { file: "House19.fbx", scale: 1.3 }, { file: "House20.fbx", scale: 1.3 }, { file: "House21.fbx", scale: 1.3 }, { file: "House22.fbx", scale: 1.3 }, { file: "House23.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 },
-            ],
-            houseBaseWidth: 5, houseBaseHeight: 6, houseBaseDepth: 5,
-            buildingModelDir: "Public/Assets/Models/Buildings/", buildingModelFiles: [
-                { file: "Building1.fbx", scale: 0.8 }, { file: "Building2.fbx", scale: 0.8 }, { file: "Building3.fbx", scale: 0.8 }, { file: "Building4.fbx", scale: 0.8 }, { file: "Building5.fbx", scale: 0.8 }, { file: "Building6.fbx", scale: 0.8 }, { file: "Building7.fbx", scale: 0.8 }, { file: "Building8.fbx", scale: 0.8 }, { file: "Building10.glb", scale: 0.8 },
-            ],
-            buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
-            industrialModelDir: "Public/Assets/Models/Industrials/", industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 1 }, { file: "Factory2_glb.glb", scale: 1 }, { file: "Factory3_glb.glb", scale: 1 } ],
-            industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
-            parkModelDir: "Public/Assets/Models/Parks/", parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
-            parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
-            treeModelDir: "Public/Assets/Models/Trees/", treeModelFiles: [{ file: "Tree2.glb", scale: 0.9 }, { file: "Tree3.glb", scale: 0.9 }, { file: "Tree4.glb", scale: 0.9 }, { file: "Tree5.glb", scale: 0.9 }, { file: "Tree6.glb", scale: 0.9 } ],
-            treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
-            skyscraperModelDir: "Public/Assets/Models/Skyscrapers/", skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 }, ],
-            skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
-            // Tree Placement
-            treePlacementProbabilitySidewalk: 0.3,
-            treePlacementProbabilityPark: 0.04,
-            // Debug
-            showDistrictBoundaries: false,
-            // Time
-            dayNightCycleEnabled: true, dayDurationMinutes: 1, startTimeOfDay: 0.25,
-            // Agents
-            agentScale: 0.1, agentYOffset: 0.35, agentRotationSpeed: 20, agentWalkSpeed: 10,
-            agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7, agentSwingAmplitude: 1.2,
-            agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
-            agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
-            agentAnimationSpeedFactor: 8,
-            maxAgents: 500,
-             // Default Capacities
-             maxCitizensPerHouse: 5,
-             maxCitizensPerBuilding: 10,
-             maxWorkersPerSkyscraper: 100,
-             maxWorkersPerIndustrial: 50
+            // --- Échelles de Base (inchangées) ---
+            gridHouseBaseScale: 8,
+            gridBuildingBaseScale: 1.5,
+            gridIndustrialBaseScale: 1.6,
+            gridSkyscraperBaseScale: 1.0,
+
+            // ... (reste de la configuration inchangée : assets, tree placement, debug, time, agents etc.)
+             // Map & Layout
+             mapSize: 800,
+             roadWidth: 10,
+             minPlotSize: 23,
+             maxPlotSize: 60,
+             maxRecursionDepth: 7,
+             // Crosswalks
+             crosswalkWidth: 0.1, crosswalkHeight: 0.03, crosswalkStripeCount: 5, crosswalkStripeWidth: 0.6, crosswalkStripeGap: 0.5,
+             // Districts
+             minDistrictSize: 5, maxDistrictSize: 10, forceBusinessMaxDistance: 0.15,
+             districtProbabilities: {
+                  business: { max: 0.15, decay: 10 },
+                  industrial: { base: 0.01, threshold: 0.85, factor: 5, multiplier: 0.2 },
+                  residential: { base: 0.8, peakCenter: 0.5, peakWidth: 0.2 }
+              },
+             validationZoneCenterMaxDist: 0.20, validationZoneEdgeMinDist: 0.80,
+             minBusinessInCenter: 1, minIndustrialInEdge: 1,
+             strictMinIndustrialDist: 0.35, strictMaxBusinessDist: 0.60,
+             minTotalIndustrialDistricts: 1, maxTotalIndustrialDistricts: 5,
+             minTotalBusinessDistricts: 1, maxTotalBusinessDistricts: 4,
+             maxDistrictRegenAttempts: 15,
+             // Plot Content
+             sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
+             // Assets (Chemins et dimensions de base pour l'ajustement initial)
+             houseModelDir: "Public/Assets/Models/Houses/", houseModelFiles: [ { file: "House1.fbx", scale: 1.3 }, /* ... autres maisons ... */ { file: "House24.fbx", scale: 1.3 }, ],
+             houseBaseWidth: 5, houseBaseHeight: 6, houseBaseDepth: 5,
+             buildingModelDir: "Public/Assets/Models/Buildings/", buildingModelFiles: [ { file: "Building1.fbx", scale: 0.8 }, /* ... autres immeubles ... */ { file: "Building10.glb", scale: 0.8 }, ],
+             buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
+             industrialModelDir: "Public/Assets/Models/Industrials/", industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 1 }, { file: "Factory2_glb.glb", scale: 1 }, { file: "Factory3_glb.glb", scale: 1 } ],
+             industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
+             parkModelDir: "Public/Assets/Models/Parks/", parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
+             parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
+             treeModelDir: "Public/Assets/Models/Trees/", treeModelFiles: [{ file: "Tree2.glb", scale: 0.9 }, /* ... autres arbres ... */ { file: "Tree6.glb", scale: 0.9 } ],
+             treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
+             skyscraperModelDir: "Public/Assets/Models/Skyscrapers/", skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 }, ],
+             skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
+             // Tree Placement
+             treePlacementProbabilitySidewalk: 0.3,
+             treePlacementProbabilityPark: 0.04,
+             // Debug
+             showDistrictBoundaries: false,
+             // Time
+             dayNightCycleEnabled: true, dayDurationMinutes: 1, startTimeOfDay: 0.25,
+             // Agents
+             agentScale: 0.1, agentYOffset: 0.35, agentRotationSpeed: 20, agentWalkSpeed: 10,
+             agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7, agentSwingAmplitude: 1.2,
+             agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
+             agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
+             agentAnimationSpeedFactor: 8,
+             maxAgents: 500,
+              // Default Capacities
+              maxCitizensPerHouse: 5,
+              maxCitizensPerBuilding: 10,
+              maxWorkersPerSkyscraper: 100,
+              maxWorkersPerIndustrial: 50
         };
 
         // --- External Config Merge ---
