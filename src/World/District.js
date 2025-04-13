@@ -1,3 +1,8 @@
+/*
+ * Fichier: src/World/District.js
+ * Modifications:
+ * - Ajout de la méthode `hasPark()` pour vérifier la présence d'un parc.
+ */
 // src/World/District.js
 import * as THREE from 'three';
 
@@ -78,8 +83,17 @@ export default class District {
         return this._bounds;
     }
 
-    // hasPark() et findPlotToConvertToPark() sont supprimés car plus nécessaires avec la nouvelle logique.
-    // On pourrait garder hasPark() pour du logging si besoin.
+    // ==============================================================
+    // NOUVELLE FONCTION: hasPark
+    // ==============================================================
+    /**
+     * Checks if this district already contains a plot designated as a park.
+     * @returns {boolean} True if a park exists, false otherwise.
+     */
+    hasPark() {
+        return this.plots.some(plot => plot.zoneType === 'park');
+    }
+    // ==============================================================
 
      /**
       * Returns the count of plots with specific zone types allowed for this district.
@@ -97,10 +111,13 @@ export default class District {
      isAllowedPlotType(zoneType) {
          switch (this.type) {
              case 'residential':
+                 // Un parc est autorisé (mais un seul sera gardé)
                  return ['house', 'building', 'park'].includes(zoneType);
              case 'industrial':
+                 // Un parc est autorisé (mais un seul sera gardé)
                  return ['industrial', 'park'].includes(zoneType);
              case 'business':
+                 // Un parc est autorisé (mais un seul sera gardé)
                  return ['skyscraper', 'park'].includes(zoneType);
              default:
                  return false;
