@@ -15,8 +15,14 @@ export default class CityManager {
 
         // --- Configuration Initiale ---
         this.config = {
-            // Map & Layout
-            mapSize: 800, roadWidth: 10, minPlotSize: 13, maxPlotSize: 40, maxRecursionDepth: 7,
+            // ===== Map & Layout MODIFIÉ =====
+            mapSize: 800,
+            roadWidth: 10,
+            minPlotSize: 25, // Augmenté (ex: de 13 à 25)
+            maxPlotSize: 60, // Augmenté (ex: de 40 à 60)
+            maxRecursionDepth: 7, // Peut rester le même ou être réduit si les plots deviennent trop grands trop vite
+            // ================================
+
             // Crosswalks
             crosswalkWidth: 0.1, crosswalkHeight: 0.03, crosswalkStripeCount: 5, crosswalkStripeWidth: 0.6, crosswalkStripeGap: 0.5,
             // Districts
@@ -39,10 +45,10 @@ export default class CityManager {
             houseSubZoneMargin: 2.0, // This margin is no longer relevant for grid houses
             buildingSubZoneMargin: 1.5,
 
-            // --- MODIFIED Configurations for Grid Houses ---
-            fixedHouseGridWidth: 10,     // Increased fixed width
-            fixedHouseGridDepth: 10,     // Increased fixed depth
-            fixedHouseGridSpacing: 5,   // Increased spacing
+            // --- Grid Houses (remis aux valeurs précédentes ou ajustez si besoin) ---
+            fixedHouseGridWidth: 10,
+            fixedHouseGridDepth: 10,
+            fixedHouseGridSpacing: 8,
             // ------------------------------------------------------
 
             // Assets (Paths and configs - ensure they are correct)
@@ -118,7 +124,7 @@ export default class CityManager {
         this.navigationGraph = null; // Will be created in generateCity
         this.pathfinder = null;
         this.assetLoader = new CityAssetLoader(this.config);
-        this.layoutGenerator = new CityLayoutGenerator(this.config);
+        this.layoutGenerator = new CityLayoutGenerator(this.config); // Utilise la config mise à jour
         this.roadGenerator = new RoadNetworkGenerator(this.config, this.materials);
         // MODIFIED: Pass the new debug material to the constructor
         this.contentGenerator = new PlotContentGenerator(this.config, this.materials, this.materials.debugPlotGridMaterial);
@@ -648,11 +654,6 @@ export default class CityManager {
 
 		this.districts.forEach(district => {
 			district.plots.forEach(plot => {
-				// Optionnel: Vérification de cohérence
-				// if (plot.districtId !== district.id) {
-				//     console.warn(`Incohérence: Parcelle ${plot.id} (districtId=${plot.districtId}) trouvée dans la liste du district ${district.id}.`);
-				// }
-
 				if (plot.zoneType === 'park') {
 					stats.parksProtected++;
 					plot.isPark = true;
@@ -679,7 +680,12 @@ export default class CityManager {
 
 					case 'residential':
 						const plotArea = plot.width * plot.depth;
-						targetType = (plotArea > 550) ? 'building' : 'house';
+                        // ===== MODIFICATION DU SEUIL ICI =====
+                        // Augmentez cette valeur (ex: 1000) pour permettre aux parcelles plus grandes d'être des maisons.
+                        // Ajustez selon la taille des parcelles que vous souhaitez pour les maisons.
+						const houseAreaThreshold = 1000; // Anciennement 550
+						targetType = (plotArea > houseAreaThreshold) ? 'building' : 'house';
+                        // ======================================
 						if (initialType !== targetType) stats.forcedToResidential++; else stats.alreadyCorrect++;
 						break;
 
@@ -704,7 +710,6 @@ export default class CityManager {
 		console.log(`  - Déjà Corrects / Inchangés: ${stats.alreadyCorrect}`);
 		console.log(`  - Non-constructibles Ignorés: ${stats.unbuildableSkipped}`);
 	}
-
 
     // ... (Coller ici le reste des fonctions de CityManager.js :
     // validateDistrictLayout, getDistrictTypeProbabilities, chooseDistrictType,
