@@ -19,9 +19,50 @@ export default class Plot {
         // --- NOUVEAU ---
         // Stockera les infos des bâtiments *instances* placés sur cette parcelle
         this.buildingInstances = []; // { id: string, type: string, position: Vector3, capacity?: number, occupants?: number[] }
+        // Stockera les zones de grille occupées par les maisons {gx, gy, gridWidth, gridDepth}
+        this.placedHouseGrids = []; // Initialisé comme tableau vide
         // -------------
     }
-    // --- FIN MODIFIÉ ---
+
+	addPlacedHouseGrid(gridArea) {
+        // gridArea devrait être { gx, gy, gridWidth, gridDepth }
+        if (!this.placedHouseGrids) {
+            this.placedHouseGrids = []; // Double sécurité
+        }
+        this.placedHouseGrids.push(gridArea);
+    }
+
+	isGridAreaFree(targetGx, targetGy, targetGridWidth, targetGridDepth, spacing) {
+        if (!this.placedHouseGrids) {
+            return true; // Initialisation tardive ou aucune maison placée
+        }
+
+        // Calculer les limites de la zone cible AVEC l'espacement inclus
+        const checkMinX = targetGx - spacing;
+        const checkMinY = targetGy - spacing; // Rappel: grid Y correspond à world Z
+        const checkMaxX = targetGx + targetGridWidth + spacing;
+        const checkMaxY = targetGy + targetGridDepth + spacing;
+
+        // Vérifier les chevauchements avec les maisons déjà placées sur cette parcelle
+        for (const placed of this.placedHouseGrids) {
+            // Calculer les limites de la zone placée AVEC l'espacement inclus
+            const placedMinX = placed.gx - spacing;
+            const placedMinY = placed.gy - spacing;
+            const placedMaxX = placed.gx + placed.gridWidth + spacing;
+            const placedMaxY = placed.gy + placed.gridDepth + spacing;
+
+            // Vérification de chevauchement de rectangles (AABB)
+            // Il y a chevauchement si les intervalles [minX, maxX] ET [minY, maxY] se chevauchent.
+            // Ils NE se chevauchent PAS si l'un est complètement à gauche/droite OU complètement au-dessus/en-dessous de l'autre.
+            const overlapsX = checkMinX < placedMaxX && checkMaxX > placedMinX;
+            const overlapsY = checkMinY < placedMaxY && checkMaxY > placedMinY;
+
+            if (overlapsX && overlapsY) {
+                return false; // Chevauchement trouvé
+            }
+        }
+        return true; // Aucun chevauchement trouvé
+    }
 
     // --- INCHANGÉ (mais fourni pour complétude) ---
     get center() {

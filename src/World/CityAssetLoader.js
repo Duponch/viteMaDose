@@ -8,13 +8,11 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 export default class CityAssetLoader {
     // ----- CONSTRUCTEUR MODIFIÉ -----
 	constructor(config) {
-        this.config = config; // Contient maintenant la config skyscraper
+        this.config = config;
         this.fbxLoader = new FBXLoader();
         this.gltfLoader = new GLTFLoader();
-
-        // S'assurer que 'house' est listé, même s'il ne sera pas chargé
         this.assets = {
-            house: [], // Gardé pour la structure, mais ne sera pas peuplé par loadAssets
+            house: [], // Gardé pour la structure, mais ne sera pas peuplé
             building: [],
             industrial: [],
             park: [],
@@ -22,15 +20,15 @@ export default class CityAssetLoader {
             skyscraper: []
         };
         this.assetIdCounter = 0;
-        console.log("CityAssetLoader initialisé (support FBX & GLB/GLTF, scale par modèle, incluant arbres et gratte-ciels). Le chargement des maisons ('house') sera ignoré.");
+        // Message mis à jour pour refléter l'ignorance des maisons
+        console.log("CityAssetLoader initialisé. Le chargement des maisons ('house') sera ignoré.");
     }
 
     // ----- getRandomAssetData (Inchangé mais fonctionne pour 'skyscraper') -----
 	getRandomAssetData(type) {
         // Ne retourne rien pour le type 'house' car ils sont générés procéduralement
         if (type === 'house') {
-            // console.warn("getRandomAssetData: Le type 'house' est généré procéduralement, aucun asset chargé.");
-            return null;
+            return null; // Les maisons ne sont plus basées sur des assets chargés
         }
 
         // Logique existante pour les autres types
@@ -47,8 +45,7 @@ export default class CityAssetLoader {
 	getAssetDataById(id) {
 		// Ne cherche pas le type 'house'
 		if (id && id.startsWith('house_')) {
-		   // console.warn(`getAssetDataById: Le type 'house' est généré procéduralement.`);
-			return null;
+			return null; // Les maisons ne sont plus basées sur des assets chargés
 		}
 		// Logique existante pour les autres types
 		for (const type in this.assets) {
@@ -63,11 +60,18 @@ export default class CityAssetLoader {
 
     // ----- loadAssets MODIFIÉ -----
     async loadAssets() {
-        console.log("Chargement des assets (MAISONS IGNORÉES, arbres et gratte-ciels inclus)...");
-        this.reset(); // Nettoie tous les types, y compris 'house'
+        console.log("Chargement des assets (MAISONS IGNORÉES)...");
+        this.reset();
 
-        // Fonction interne createLoadPromises (inchangée)
+        // Fonction interne createLoadPromises (MODIFIÉE pour ignorer 'house')
         const createLoadPromises = (assetConfigs, dir, type, width, height, depth) => {
+           // *** AJOUT : Ignorer le type 'house' DANS la fonction helper ***
+           if (type === 'house') {
+               // console.log(` -> Chargement ignoré pour le type 'house'.`); // Log optionnel
+               return []; // Retourne un tableau de promesses vide
+           }
+           // *** FIN AJOUT ***
+
            if (!assetConfigs || !dir || !type || width == null || height == null || depth == null) {
                 console.warn(`Configuration incomplète ou invalide pour le type '${type}', chargement ignoré.`);
                 return [];
@@ -79,24 +83,22 @@ export default class CityAssetLoader {
             return assetConfigs.map(assetConfig => {
                     if (typeof assetConfig !== 'object' || assetConfig === null || !assetConfig.file) {
                         console.error(`Format de configuration d'asset invalide pour le type ${type}:`, assetConfig, ` dans ${dir}`);
-                        return Promise.resolve(null);
+                        return Promise.resolve(null); // Résoudre avec null pour ne pas bloquer Promise.all
                     }
                     const fileName = assetConfig.file;
                     const userScale = assetConfig.scale !== undefined ? assetConfig.scale : 1;
+                    // Appel à loadAssetModel qui ignore aussi 'house'
                     return this.loadAssetModel(dir + fileName, type, width, height, depth, userScale)
                         .catch(error => {
                             console.error(`Echec chargement ${type} ${fileName}:`, error);
-                            return null;
+                            return null; // Retourner null en cas d'erreur pour ne pas bloquer Promise.all
                         });
                 }
             );
         };
 
-        // *** IGNORER la création des promesses pour les maisons ***
-        // const housePromises = createLoadPromises(this.config.houseModelFiles, this.config.houseModelDir, 'house', this.config.houseBaseWidth, this.config.houseBaseHeight, this.config.houseBaseDepth);
-        const housePromises = Promise.resolve([]); // <- Retourne un tableau vide immédiatement
-
-        // Créer les promesses pour les autres types (inchangé)
+        // Créer les promesses pour les autres types (l'appel pour 'house' retournera [])
+        const housePromises = createLoadPromises(this.config.houseModelFiles, this.config.houseModelDir, 'house', this.config.houseBaseWidth, this.config.houseBaseHeight, this.config.houseBaseDepth);
         const buildingPromises = createLoadPromises(this.config.buildingModelFiles, this.config.buildingModelDir, 'building', this.config.buildingBaseWidth, this.config.buildingBaseHeight, this.config.buildingBaseDepth);
         const industrialPromises = createLoadPromises(this.config.industrialModelFiles, this.config.industrialModelDir, 'industrial', this.config.industrialBaseWidth, this.config.industrialBaseHeight, this.config.industrialBaseDepth);
         const parkPromises = createLoadPromises(this.config.parkModelFiles, this.config.parkModelDir, 'park', this.config.parkBaseWidth, this.config.parkBaseHeight, this.config.parkBaseDepth);
@@ -107,7 +109,7 @@ export default class CityAssetLoader {
         try {
             // Attendre toutes les promesses (houseResults sera toujours [])
             const [houseResults, buildingResults, industrialResults, parkResults, treeResults, skyscraperResults] = await Promise.all([
-                 housePromises, // <- Contiendra toujours []
+                 Promise.all(housePromises), // Attendre même si vide
                  Promise.all(buildingPromises),
                  Promise.all(industrialPromises),
                  Promise.all(parkPromises),
@@ -115,22 +117,21 @@ export default class CityAssetLoader {
                  Promise.all(skyscraperPromises)
             ]);
 
-            // Assigner les résultats (en filtrant les nulls et en ignorant houseResults)
-            // this.assets.house = houseResults.filter(r => r !== null); // <- Ligne retirée/commentée
+            // Assigner les résultats (en filtrant les nulls et en s'assurant que house est vide)
+            this.assets.house = []; // Assurer que c'est vide
             this.assets.building = buildingResults.filter(r => r !== null);
             this.assets.industrial = industrialResults.filter(r => r !== null);
             this.assets.park = parkResults.filter(r => r !== null);
             this.assets.tree = treeResults.filter(r => r !== null);
             this.assets.skyscraper = skyscraperResults.filter(r => r !== null);
 
-            // Mettre à jour le log pour refléter l'ignorance des maisons
             console.log(`Assets chargés (MAISONS IGNORÉES): ${this.assets.building.length} immeubles, ${this.assets.industrial.length} usines, ${this.assets.park.length} parcs, ${this.assets.tree.length} arbres, ${this.assets.skyscraper.length} gratte-ciels.`);
             return this.assets;
 
         } catch (error) {
             console.error("Erreur durant le chargement groupé des assets:", error);
-            this.reset();
-            return this.assets;
+            this.reset(); // Assure un état propre
+            return this.assets; // Retourne l'état potentiellement vide
         }
     }
 
@@ -144,9 +145,9 @@ export default class CityAssetLoader {
 
     // ----- loadAssetModel (Inchangé mais fonctionne pour 'skyscraper') -----
     async loadAssetModel(path, type, baseWidth, baseHeight, baseDepth, userScale = 1) {
-        // *** Ajout : Ignorer le type 'house' ici aussi ***
+        // *** AJOUT : Ignorer le type 'house' ici aussi ***
         if (type === 'house') {
-            // console.log(`[${type}] Chargement ignoré pour ${path}`);
+            // console.log(`[${type}] Chargement ignoré pour ${path}`); // Log optionnel
             return Promise.resolve(null); // Retourne null pour ce type
         }
         // --- Reste de la fonction inchangée ---
@@ -167,47 +168,72 @@ export default class CityAssetLoader {
                         if (!modelRootObject) {
                             return reject(new Error(`[${modelId}] Aucun objet racine trouvé dans ${path}.`));
                         }
+                        let mergedGeometry = null; // Déclarer ici pour la portée du catch
                         const geometries = []; const materials = []; let hasValidMesh = false;
                         modelRootObject.traverse((child) => {
                             if (child.isMesh) {
-                                hasValidMesh = true; child.updateMatrixWorld(true);
+                                hasValidMesh = true; child.updateMatrixWorld(true); // Force la màj matrice monde
                                 const clonedGeom = child.geometry.clone();
-                                clonedGeom.applyMatrix4(child.matrixWorld);
+                                clonedGeom.applyMatrix4(child.matrixWorld); // Appliquer la transformation monde
                                 geometries.push(clonedGeom);
+                                // Gestion matériaux (simplifiée pour l'exemple, peut nécessiter multi-matériaux)
                                 if (child.material) {
                                     const mats = Array.isArray(child.material) ? child.material : [child.material];
                                     mats.forEach(m => { if (m && m.isMaterial) { materials.push(m); } });
                                 }
+                                // Ombres
                                 child.castShadow = true; child.receiveShadow = true;
                             }
                         });
                         if (!hasValidMesh) { return reject(new Error(`[${modelId}] Aucune géométrie de mesh valide trouvée dans ${path}.`)); }
                         if (geometries.length === 0) { return reject(new Error(`[${modelId}] Aucune géométrie collectée dans ${path}.`)); }
-                        const mergedGeometry = mergeGeometries(geometries, false);
+                        // Fusionner les géométries
+                        mergedGeometry = mergeGeometries(geometries, false); // 'false' pour ne pas créer de groupes
                         if (!mergedGeometry) { geometries.forEach(g => g.dispose()); return reject(new Error(`[${modelId}] Echec de la fusion des géométries pour ${path}.`)); }
+                        // Centrer la géométrie fusionnée et calculer sa BBox
                         mergedGeometry.center();
                         mergedGeometry.computeBoundingBox();
                         const bbox = mergedGeometry.boundingBox;
                         if (!bbox) { mergedGeometry.dispose(); geometries.forEach(g => g.dispose()); return reject(new Error(`[${modelId}] Echec calcul BBox pour ${path}.`)); }
                         const size = new THREE.Vector3(); bbox.getSize(size);
-                        const centerOffset = new THREE.Vector3(); bbox.getCenter(centerOffset);
+                        const centerOffset = new THREE.Vector3(); bbox.getCenter(centerOffset); // Offset du centre après .center()
+                        // Empêcher taille nulle (cause division par zéro)
                         size.x = Math.max(size.x, 0.001); size.y = Math.max(size.y, 0.001); size.z = Math.max(size.z, 0.001);
+                        // Calculer le facteur d'échelle pour fitter dans les dimensions de base fournies
                         const fittingScaleFactor = Math.min(baseWidth / size.x, baseHeight / size.y, baseDepth / size.z);
                         const sizeAfterFitting = size.clone().multiplyScalar(fittingScaleFactor);
+                        // Sélectionner/cloner un matériau (simplifié: prend le premier trouvé)
                         let baseMaterial = materials.length > 0 ? materials[0] : new THREE.MeshStandardMaterial({ color: 0xcccccc });
                         if (!baseMaterial || !baseMaterial.isMaterial) { baseMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc }); }
-                        const finalMaterial = baseMaterial.clone();
-                        if (!finalMaterial.color) { finalMaterial.color = new THREE.Color(0xcccccc); }
-                        resolve({ id: modelId, geometry: mergedGeometry, material: finalMaterial, fittingScaleFactor: fittingScaleFactor, userScale: userScale, centerOffset: centerOffset, sizeAfterFitting: sizeAfterFitting });
+                        const finalMaterial = baseMaterial.clone(); // Cloner pour éviter modif partagée
+                        if (!finalMaterial.color) { finalMaterial.color = new THREE.Color(0xcccccc); } // Assurer couleur par défaut
+
+                        // Résoudre la promesse avec les données traitées
+                        resolve({
+                            id: modelId,
+                            geometry: mergedGeometry,      // Géométrie fusionnée et centrée
+                            material: finalMaterial,       // Matériau cloné
+                            fittingScaleFactor: fittingScaleFactor, // Échelle pour fitter base dims
+                            userScale: userScale,          // Échelle fournie par l'utilisateur
+                            centerOffset: centerOffset,    // Offset du centre de la géométrie (après .center())
+                            sizeAfterFitting: sizeAfterFitting // Taille approx après fittingScaleFactor
+                        });
+                        // Nettoyer les géométries intermédiaires clonées
                         geometries.forEach(g => g.dispose());
                     } catch(processingError) {
+                         // Gestion d'erreur interne au traitement
                          console.error(`Erreur interne pendant traitement ${path} [${modelId}]:`, processingError);
-                         geometries?.forEach(g => g?.dispose()); if (mergedGeometry) mergedGeometry.dispose();
-                         reject(processingError);
+                         geometries?.forEach(g => g?.dispose()); // Nettoyer si possible
+                         if (mergedGeometry) mergedGeometry.dispose(); // Nettoyer si possible
+                         reject(processingError); // Rejeter la promesse principale
                     }
                 },
-                undefined,
-                (error) => { console.error(`Erreur chargement ${extension.toUpperCase()} ${path} [${modelId}]:`, error); reject(error); }
+                undefined, // onProgress non utilisé ici
+                (error) => {
+                    // Gestion d'erreur du loader lui-même
+                    console.error(`Erreur chargement ${extension.toUpperCase()} ${path} [${modelId}]:`, error);
+                    reject(error);
+                }
             );
         });
     }

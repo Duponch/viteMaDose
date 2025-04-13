@@ -14,7 +14,6 @@ export default class CityManager {
         this.scene = this.experience.scene;
 
         // --- Configuration Initiale ---
-        // Mettez ici votre objet config *complet* par défaut
         this.config = {
             // Map & Layout
             mapSize: 800, roadWidth: 10, minPlotSize: 13, maxPlotSize: 40, maxRecursionDepth: 7,
@@ -23,10 +22,9 @@ export default class CityManager {
             // Districts
             minDistrictSize: 5, maxDistrictSize: 10, forceBusinessMaxDistance: 0.15,
             districtProbabilities: {
-                 // Exemple de configuration des probabilités de district (ajustez selon vos besoins)
-                 business: { max: 0.15, decay: 10 }, // Très probable près du centre, diminue rapidement
-                 industrial: { base: 0.01, threshold: 0.85, factor: 5, multiplier: 0.2 }, // Peu probable sauf en périphérie lointaine
-                 residential: { base: 0.8, peakCenter: 0.5, peakWidth: 0.2 } // Pic au milieu, reste élevé partout
+                 business: { max: 0.15, decay: 10 },
+                 industrial: { base: 0.01, threshold: 0.85, factor: 5, multiplier: 0.2 },
+                 residential: { base: 0.8, peakCenter: 0.5, peakWidth: 0.2 }
              },
             validationZoneCenterMaxDist: 0.20, validationZoneEdgeMinDist: 0.80,
             minBusinessInCenter: 1, minIndustrialInEdge: 1,
@@ -38,10 +36,15 @@ export default class CityManager {
             sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
             minHouseSubZoneSize: 7, minBuildingSubZoneSize: 10, minIndustrialSubZoneSize: 13,
             minParkSubZoneSize: 10, minSkyscraperSubZoneSize: 13,
-            // *** NOUVELLE OPTION DE CONFIGURATION ***
-            houseSubZoneMargin: 2.0, // Marge spécifique pour les maisons (plus grande par défaut)
-            // ***************************************
+            houseSubZoneMargin: 2.0, // Cette marge n'est plus pertinente pour les maisons grille
             buildingSubZoneMargin: 1.5,
+
+            // --- NOUVELLES Configurations pour Maisons sur Grille ---
+            fixedHouseGridWidth: 5,     // Largeur fixe de la maison en cellules de grille
+            fixedHouseGridDepth: 5,     // Profondeur fixe de la maison en cellules de grille
+            fixedHouseGridSpacing: 1,   // Espacement minimum entre les maisons en cellules de grille
+            // ------------------------------------------------------
+
             // Assets (Chemins et configs - assurez-vous qu'ils sont corrects)
              houseModelDir: "Public/Assets/Models/Houses/", houseModelFiles: [
 				{ file: "House1.fbx", scale: 1.3 }, { file: "House2.fbx", scale: 1.3 }, { file: "House3.fbx", scale: 1.3 }, { file: "House4.fbx", scale: 1.3 }, { file: "House5.fbx", scale: 1.3 }, { file: "House6.fbx", scale: 1.3 }, { file: "House7.fbx", scale: 1.3 }, { file: "House8.fbx", scale: 1.3 }, { file: "House9.fbx", scale: 1.3 }, { file: "House10.fbx", scale: 1.3 }, { file: "House11.fbx", scale: 1.3 }, { file: "House12.fbx", scale: 1.3 }, { file: "House13.fbx", scale: 1.3 }, { file: "House14.fbx", scale: 1.3 }, { file: "House15.fbx", scale: 1.3 }, { file: "House16.fbx", scale: 1.3 }, { file: "House17.fbx", scale: 1.3 }, { file: "House18.fbx", scale: 1.3 }, { file: "House19.fbx", scale: 1.3 }, { file: "House20.fbx", scale: 1.3 }, { file: "House21.fbx", scale: 1.3 }, { file: "House22.fbx", scale: 1.3 }, { file: "House23.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 },
@@ -70,19 +73,16 @@ export default class CityManager {
             agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7, agentSwingAmplitude: 1.2,
             agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
             agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
-			agentAnimationSpeedFactor: 8, // 1.0 = vitesse normale, <1.0 = plus lent, >1.0 = plus rapide
+			agentAnimationSpeedFactor: 8,
 			maxAgents: 500,
-             // Capacités par défaut (peuvent être surchargées par buildingInfo)
+             // Capacités par défaut
              maxCitizensPerHouse: 5,
-             maxCitizensPerBuilding: 10, // Immeuble résidentiel
+             maxCitizensPerBuilding: 10,
              maxWorkersPerSkyscraper: 100,
              maxWorkersPerIndustrial: 50
         };
 
         // --- Fusion Config Externe ---
-        // Utiliser une fusion profonde si nécessaire pour les objets imbriqués comme districtProbabilities
-        // Pour une simple fusion de premier niveau : Object.assign(this.config, config);
-        // Pour une fusion plus robuste (exemple simple, pourrait nécessiter une lib ou fonction récursive):
         const deepMerge = (target, source) => {
              for (const key in source) {
                  if (source.hasOwnProperty(key)) {
@@ -99,7 +99,6 @@ export default class CityManager {
 
 
         // --- Matériaux ---
-        // Assurez-vous que tous vos matériaux sont définis ici
         this.materials = {
             groundMaterial: new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.1, roughness: 0.8 }),
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
@@ -114,7 +113,7 @@ export default class CityManager {
         };
 
         // --- Composants ---
-        this.navigationGraph = null;
+        this.navigationGraph = null; // Sera créé dans generateCity
         this.pathfinder = null;
         this.assetLoader = new CityAssetLoader(this.config);
         this.layoutGenerator = new CityLayoutGenerator(this.config);
@@ -131,17 +130,15 @@ export default class CityManager {
         this.groundMesh = null;
         this.debugGroup = new THREE.Group(); this.debugGroup.name = "DebugVisuals";
 
-        // --- NOUVEAU: Registres ---
-        this.buildingInstances = new Map(); // Map<buildingInstanceId, BuildingInstanceInfo>
-        this.citizens = new Map();         // Map<citizenId, CitizenInfo>
+        // --- Registres ---
+        this.buildingInstances = new Map();
+        this.citizens = new Map();
         this.nextBuildingInstanceId = 0;
-        // --------------------------
-
 
         this.scene.add(this.cityContainer);
         if (this.config.showDistrictBoundaries) { this.cityContainer.add(this.debugGroup); }
-        console.log("CityManager initialisé (avec registres Bâtiments & Citoyens).");
-    } // --- FIN DU CONSTRUCTOR ---
+        console.log("CityManager initialisé (avec config maisons grille et registres).");
+    }
 
 	registerBuildingInstance(plotId, assetType, position, capacityOverride = null) {
         const id = `bldg_${this.nextBuildingInstanceId++}`;
