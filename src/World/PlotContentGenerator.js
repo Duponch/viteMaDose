@@ -373,7 +373,7 @@ export default class PlotContentGenerator {
 			return;
 		}
 		// Création du sol de la parcelle
-		const plotGroundY = 0.005;
+		const plotGroundY = 0.15;
 		this.createPlotGround(plot, plotGroundY);
 		plot.buildingInstances = [];
 		const groundLevel = plotGroundY;

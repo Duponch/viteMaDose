@@ -116,7 +116,7 @@ export default class CityManager {
             centerlineMaterial: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.8 }),
             crosswalkMaterial: new THREE.MeshStandardMaterial({ color: 0xE0E0E0, roughness: 0.7, metalness: 0.1 }),
             parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
-            buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x333333 }),
+            buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
             debugResidentialMat: new THREE.MeshBasicMaterial({ color: 0x0077ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugIndustrialMat: new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugBusinessMat: new THREE.MeshBasicMaterial({ color: 0xcc0000, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
