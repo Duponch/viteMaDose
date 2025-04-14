@@ -296,7 +296,7 @@ export default class CityAssetLoader {
 
 		// **MODIFIÉ**: Revenir à MeshPhysicalMaterial pour la transparence,
 		// mais configurer aussi les propriétés émissives pour la nuit.
-		const skyscraperWindowMaterial = new THREE.MeshPhysicalMaterial({
+		/* const skyscraperWindowMaterial = new THREE.MeshPhysicalMaterial({
 			color: 0x60a3bc,        // Couleur de base du "verre"
 			metalness: 0.1,
 			roughness: 0.05,        // Lisse pour la réflexion type verre (état jour)
@@ -307,7 +307,21 @@ export default class CityAssetLoader {
 			emissive: 0xFFFF99,     // Garder la couleur émissive prête
 			emissiveIntensity: 0.0, // ** Commence éteint **
 			name: "SkyscraperWindowMat_Physical" // ** Nom distinctif important ! **
+		}); */
+
+		const skyscraperWindowMaterial = new THREE.MeshStandardMaterial({
+			color: 0x60a3bc,           // Couleur bleutée du verre
+			metalness: 0.5,            // Faible métallisation pour un léger reflet
+			roughness: 0.1,            // Faible rugosité pour des reflets nets
+			transparent: true,         // Active la transparence
+			opacity: 0.5,              // Ajuste selon l'effet souhaité (0 = totalement transparent, 1 = opaque)
+			side: THREE.DoubleSide,    // Rendre visible depuis les deux côtés
+			flatShading: true,
+			emissive: 0xFFFF99,        // Optionnel pour effets lumineux nocturnes
+			emissiveIntensity: 0,    // Éteint par défaut, peut être activé selon besoin
+			name: "SkyscraperWindowMat_Standard" // Nom distinctif
 		});
+		
 		// ---------------------------------------------------------
 
 		// --- Dimensions générales ---
