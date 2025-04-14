@@ -1,10 +1,3 @@
-/*
- * Fichier: src/Experience.js
- * Ajouts:
- * - Propriété `isDebugMode` et méthodes pour la gérer.
- * - Appel à `world.setDebugMode` lors du changement d'état.
- * - Dispatch d'un événement `debugmodechanged`.
- */
 // src/Experience.js
 import * as THREE from 'three';
 import Stats from 'stats.js';
@@ -33,8 +26,18 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.sizes = new Sizes();
         this.time = new Time();
         this.scene = new THREE.Scene();
+
+        // --- Ajout du Brouillard (Fog) ---
+        const fogColor = 0x1e2a36; // Couleur du brouillard (gris-bleu)
+        const fogNear = 200;      // Distance minimale où le brouillard commence
+        const fogFar = 900;       // Distance où le brouillard est opaque
+        this.scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+        // Optionnel : faire correspondre la couleur de fond au brouillard
+        // this.scene.background = new THREE.Color(fogColor); // Décommenter si Renderer ne définit pas setClearColor
+
+        // --- Suite des composants Core ---
         this.camera = new Camera(this);
-        this.renderer = new Renderer(this);
+        this.renderer = new Renderer(this); // Renderer définira la couleur de fond (setClearColor)
         this.world = new World(this);
 
         // --- Debug State ---
@@ -61,8 +64,11 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         // --- Initialisation ---
         // Appliquer l'état de debug initial (même si false)
         this.world.setDebugMode(this.isDebugMode);
-        console.log("Experience initialisée. Mode debug:", this.isDebugMode);
+        console.log("Experience initialisée (avec Brouillard). Mode debug:", this.isDebugMode);
     }
+
+    // --- Les autres méthodes (enableDebugMode, disableDebugMode, toggleDebugMode, resize, update, destroy) restent inchangées ---
+    // ... (elles ne sont pas incluses ici car inchangées)
 
     // --- Debug Mode Methods ---
     enableDebugMode() {
