@@ -984,7 +984,7 @@ export default class PlotContentGenerator {
 				if (isSkyscraperWindow) {
                     // Logique spécifique gratte-ciel
 					const currentIntensity = material.emissiveIntensity;
-                    targetIntensity = lightsOn ? 1.21 : 0.0;
+                    targetIntensity = lightsOn ? 1.17 : 0.0;
 
                     // Propriétés nécessitant potentiellement material.needsUpdate
 					const targetTransmission = lightsOn ? 0.0 : 0.0; // Jour: transparent (si voulu), Nuit: opaque
@@ -1002,12 +1002,12 @@ export default class PlotContentGenerator {
 
 				} else if (isHouseWindow) {
                     // Logique spécifique maison
-                    targetIntensity = lightsOn ? 1.25 : 0.0;
+                    targetIntensity = lightsOn ? 1.23 : 0.0;
                     // Pour les maisons, on ne change que l'intensité émissive pour l'instant
 
 				} else if (isBuildingWindow) {
                     // Logique spécifique immeuble
-                    targetIntensity = lightsOn ? 1.5 : 0.0; // Exemple: un peu plus lumineux
+                    targetIntensity = lightsOn ? 1.2 : 0.0; // Exemple: un peu plus lumineux
                     // Ici aussi, on ne change que l'intensité émissive
 				}
                 // else: Gérer d'autres types de fenêtres si ajoutés

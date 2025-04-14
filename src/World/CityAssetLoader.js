@@ -332,7 +332,7 @@ export default class CityAssetLoader {
             opacity: 0.5,
             side: THREE.DoubleSide,
             flatShading: true,
-            emissive: 0x60a3bc, // << AJOUT: Couleur émissive (peut être différente de la couleur de base)
+            emissive: 0xfcffe0, // << AJOUT: Couleur émissive (peut être différente de la couleur de base)
             // emissiveIntensity: 0, // L'intensité initiale est gérée par PlotContentGenerator.update
             name: "SkyscraperWindowMat_Standard"
         });
@@ -593,7 +593,7 @@ export default class CityAssetLoader {
             color: windowColor,
             metalness: 0.8,
             roughness: 0.2,
-            emissive: windowColor, // << AJOUT: Couleur émissive
+            emissive: 0xFFFFFF, // << AJOUT: Couleur émissive
             // emissiveIntensity: 0, // Géré par PlotContentGenerator.update
             name: "BuildingWindowMat"
         });
