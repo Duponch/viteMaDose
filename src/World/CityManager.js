@@ -94,7 +94,8 @@ export default class CityManager {
               maxWorkersPerIndustrial: 50,
 
 			 lampPostLightConeRadiusBottom: 5.0, // Rayon du cône au sol
-             lampPostLightConeOpacity: 0.15,      // Opacité du cône
+             lampPostLightConeOpacity: 0.002,      // Opacité du cône
+
              lampPostLightConeColor: 0xFFFF99      // Couleur du cône (jaune pâle)
         };
 
@@ -440,7 +441,7 @@ export default class CityManager {
 
         // --- Calculs pour le cône ---
         const lightSourceCenterY = poleTopY - lampHeadHeight - lightSourceHeight / 2; // Y approx. de l'ampoule
-        const coneHeight = lightSourceCenterY - (this.config.sidewalkHeight ?? 0.2); // Hauteur du cône jusqu'au trottoir
+        const coneHeight = lightSourceCenterY - (this.config.sidewalkHeight ?? 0.2) + 1; // Hauteur du cône jusqu'au trottoir
         const coneRadiusBottom = this.config.lampPostLightConeRadiusBottom ?? 5.0;
         const coneRadiusTop = 0.1; // Petit rayon en haut
         const coneRadialSegments = 16;
@@ -450,7 +451,7 @@ export default class CityManager {
             this.lampPostConeGeometry = new THREE.ConeGeometry(
                 coneRadiusBottom, coneHeight, coneRadialSegments, 1, true
             );
-            this.lampPostConeGeometry.translate(0, coneHeight / 2, 0); // Centre le cône verticalement
+            this.lampPostConeGeometry.translate(0, coneHeight / 2 - 2.5, 0); // Centre le cône verticalement
             // !!! CORRECTION : Ajouter computeBoundingBox aussi pour le cône !!!
             this.lampPostConeGeometry.computeBoundingBox();
             console.log(`Géométrie cône lumière créée (H: ${coneHeight.toFixed(1)}, R_bas: ${coneRadiusBottom})`);
