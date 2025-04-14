@@ -787,9 +787,9 @@ export default class PlotContentGenerator {
         let instancedMeshCount = 0;
 
         // Vider le groupe avant de le remplir
-		while (this.buildingGroup.children.length > 0) {
-			this.buildingGroup.remove(this.buildingGroup.children[0]);
-		}
+        while (this.buildingGroup.children.length > 0) {
+            this.buildingGroup.remove(this.buildingGroup.children[0]);
+        }
 
         // --- 1. Maison L-shape ---
         const houseDataType = 'house';
@@ -798,80 +798,95 @@ export default class PlotContentGenerator {
                 if (this.instanceData[houseDataType].hasOwnProperty(partName)) {
                     const matrices = this.instanceData[houseDataType][partName];
                     const geometry = this.baseHouseGeometries[partName];
-                    let material = null;
-                    if (partName.startsWith('base_')) { material = this.baseHouseMaterials[partName]; }
-                    else if (partName === 'roof') { material = this.baseHouseMaterials.roof; }
-                    else if (partName === 'door') { material = this.baseHouseMaterials.door; }
-                    else if (partName === 'garageDoor') { material = this.baseHouseMaterials.garageDoor; }
-                    else if (partName === 'windowXY' || partName === 'windowYZ') { material = this.baseHouseMaterials.window; }
-                    else { material = this.baseHouseMaterials[partName]; if (!material) console.warn(`[InstancedMesh] Matériau non trouvé pour la partie maison: ${partName}`); }
+                    let material = null; // Sera défini ci-dessous
+
+                    // --- MODIFICATION START ---
+                    // Traitement spécial pour les fenêtres afin d'ajouter la réflexion
+                    const isWindowPart = (partName === 'windowXY' || partName === 'windowYZ');
+
+                    if (isWindowPart) {
+                        // Cloner le matériau de base de la fenêtre
+                        material = this.baseHouseMaterials.window.clone();
+                        material.name = `HouseWindowMat_Inst_${partName}`; // Nom unique pour le clone
+
+                        // Essayer d'assigner la carte d'environnement de la scène
+                        if (this.experience && this.experience.scene && this.experience.scene.environment) {
+                            material.envMap = this.experience.scene.environment;
+                            material.roughness = 0.05; // Rendre les reflets plus nets (moins rugueux)
+                            material.metalness = 0.9;  // Augmenter la métalité pour renforcer la réflexion type miroir
+                            material.needsUpdate = true; // Important pour que les changements soient pris en compte
+                        } else {
+                            // Fallback si la carte d'environnement n'est pas prête ou disponible
+                             console.warn(`[InstancedMesh] Environment map non trouvée dans experience.scene.environment pour les fenêtres (${partName}). Pas de réflexion.`);
+                            // Conserver les propriétés originales ou légèrement ajustées si nécessaire
+                            // material.roughness = 0.1;
+                            // material.metalness = 0.1;
+                        }
+                    } else {
+                        // Pour les autres parties, utiliser la recherche de matériau standard
+                        if (partName.startsWith('base_')) { material = this.baseHouseMaterials[partName]; }
+                        else if (partName === 'roof') { material = this.baseHouseMaterials.roof; }
+                        else if (partName === 'door') { material = this.baseHouseMaterials.door; }
+                        else if (partName === 'garageDoor') { material = this.baseHouseMaterials.garageDoor; }
+                        // Note: Les cas 'windowXY' et 'windowYZ' sont déjà traités au-dessus
+                        else { material = this.baseHouseMaterials[partName]; } // Recherche générique (peut échouer)
+
+                        if (!material) {
+                             console.warn(`[InstancedMesh] Matériau standard non trouvé pour la partie maison: ${partName}`);
+                        }
+                    }
+                    // --- MODIFICATION END ---
+
 
                     if (geometry && material && matrices && matrices.length > 0) {
                         const count = matrices.length;
                         const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
                         instancedMesh.name = `NewHouse_${partName}_Instanced`;
-                        instancedMesh.castShadow = true; instancedMesh.receiveShadow = true;
+                        instancedMesh.castShadow = true;
+                        // Les fenêtres réfléchissantes peuvent aussi recevoir des ombres, mais ça peut être étrange visuellement
+                        instancedMesh.receiveShadow = !isWindowPart; // Désactiver receiveShadow pour les fenêtres pour un look plus propre
                         matrices.forEach((matrix, index) => { instancedMesh.setMatrixAt(index, matrix); });
                         instancedMesh.instanceMatrix.needsUpdate = true;
                         this.buildingGroup.add(instancedMesh);
-                        instancedMeshCount++; totalInstancesCreated += count;
-                    } else if (!matrices || matrices.length === 0) { /* Cas normal */ }
-                    else { if (!geometry) console.warn(`[InstancedMesh] Géométrie manquante pour la partie maison: ${partName}`); if (!material) console.warn(`[InstancedMesh] Matériau manquant pour la partie maison: ${partName}`); }
+                        instancedMeshCount++;
+                        totalInstancesCreated += count;
+                    } else if (!matrices || matrices.length === 0) {
+                         /* Cas normal où une partie n'a pas d'instances */
+                    } else {
+                         if (!geometry) console.warn(`[InstancedMesh] Géométrie manquante pour la partie maison: ${partName}`);
+                         if (!material && !isWindowPart) console.warn(`[InstancedMesh] Matériau non trouvé (et ce n'est pas une fenêtre) pour la partie maison: ${partName}`);
+                    }
                 }
             }
         }
 
         // --- 2. Autres Assets (Building, Industrial, Park, Tree, Skyscraper, Crosswalk) ---
+        // (Cette partie reste inchangée par rapport à votre code original)
         if (!this.assetLoader && !this.stripeBaseGeometry) {
              console.warn("[InstancedMesh] AssetLoader et stripeBaseGeometry non disponibles pour les autres types.");
         }
 
-        // Boucle sur les types (sauf 'house')
         for (const type in this.instanceData) {
              if (type === houseDataType || !this.instanceData.hasOwnProperty(type)) continue;
+             if(type === 'park'){ console.log(`[InstancedMesh Debug] Traitement du type 'park'. Données:`, this.instanceData[type]); }
 
-             // >>> AJOUT DEBUG POUR PARK <<<
-             if(type === 'park'){
-                 console.log(`[InstancedMesh Debug] Traitement du type 'park'. Données:`, this.instanceData[type]);
-             }
-             // >>> FIN DEBUG <<<
-
-             // Boucle sur les modelId
              for (const modelId in this.instanceData[type]) {
                  if (!this.instanceData[type].hasOwnProperty(modelId)) continue;
-
                  const matrices = this.instanceData[type][modelId];
                  if (matrices && matrices.length > 0) {
-                     let geometry = null;
-                     let material = null;
-                     let castShadow = true;
-                     let receiveShadow = true;
+                     let geometry = null; let material = null; let castShadow = true; let receiveShadow = true;
+                     if(type === 'park'){ console.log(`[InstancedMesh Debug - Park] Préparation mesh pour modelId: ${modelId} avec ${matrices.length} instance(s).`); }
 
-                     // >>> AJOUT DEBUG POUR PARK <<<
-                     if(type === 'park'){
-                        console.log(`[InstancedMesh Debug - Park] Préparation mesh pour modelId: ${modelId} avec ${matrices.length} instance(s).`);
-                     }
-                     // >>> FIN DEBUG <<<
-
-                     // Déterminer la géométrie et le matériau
                      if (type === 'crosswalk') {
-                         if (this.stripeBaseGeometry && this.materials.crosswalkMaterial) {
-                             geometry = this.stripeBaseGeometry; material = this.materials.crosswalkMaterial; castShadow = false; receiveShadow = true;
-                         } else { console.warn(`[InstancedMesh] Géométrie/matériau manquant pour crosswalk.`); continue; }
+                         if (this.stripeBaseGeometry && this.materials.crosswalkMaterial) { geometry = this.stripeBaseGeometry; material = this.materials.crosswalkMaterial; castShadow = false; receiveShadow = true; }
+                         else { console.warn(`[InstancedMesh] Géométrie/matériau manquant pour crosswalk.`); continue; }
                      } else if (this.assetLoader) {
                          const assetData = this.assetLoader.getAssetDataById(modelId);
-                         // >>> AJOUT DEBUG POUR PARK <<<
-                         if(type === 'park'){
-                            console.log(`[InstancedMesh Debug - Park] AssetData trouvé pour ${modelId}:`, assetData ? 'Oui' : 'Non');
-                            if(assetData) console.log(`   -> Geometry valid: ${!!assetData.geometry}, Material valid: ${!!assetData.material}`);
-                         }
-                         // >>> FIN DEBUG <<<
-                         if (assetData && assetData.geometry && assetData.material) {
-                             geometry = assetData.geometry; material = assetData.material;
-                         } else { console.warn(`[InstancedMesh] Données asset ${modelId} (type ${type}) invalides ou non trouvées.`); continue; }
+                         if(type === 'park'){ console.log(`[InstancedMesh Debug - Park] AssetData trouvé pour ${modelId}:`, assetData ? 'Oui' : 'Non'); if(assetData) console.log(`   -> Geometry valid: ${!!assetData.geometry}, Material valid: ${!!assetData.material}`); }
+                         if (assetData && assetData.geometry && assetData.material) { geometry = assetData.geometry; material = assetData.material; }
+                         else { console.warn(`[InstancedMesh] Données asset ${modelId} (type ${type}) invalides ou non trouvées.`); continue; }
                      } else { console.warn(`[InstancedMesh] AssetLoader manquant pour type '${type}'.`); continue; }
 
-                     // Créer l'InstancedMesh
                      if (!geometry) { console.error(`[InstancedMesh] ERREUR CRITIQUE: Géométrie est null/undefined pour ${type} - ${modelId}`); continue; }
                      if (!material) { console.error(`[InstancedMesh] ERREUR CRITIQUE: Matériau est null/undefined pour ${type} - ${modelId}`); continue; }
 
@@ -881,24 +896,16 @@ export default class PlotContentGenerator {
                      instancedMesh.castShadow = castShadow;
                      instancedMesh.receiveShadow = receiveShadow;
                      instancedMesh.name = `${type}_${modelId}_Instanced`;
-
-                      // >>> AJOUT DEBUG POUR PARK <<<
-                      if(type === 'park'){
-                         console.log(`[InstancedMesh Debug - Park] InstancedMesh créé et ajouté pour ${instancedMesh.name}`);
-                      }
-                      // >>> FIN DEBUG <<<
-
+                     if(type === 'park'){ console.log(`[InstancedMesh Debug - Park] InstancedMesh créé et ajouté pour ${instancedMesh.name}`); }
                      this.buildingGroup.add(instancedMesh);
                      instancedMeshCount++;
                      totalInstancesCreated += matrices.length;
-                 } else if (type === 'park') { // DEBUG spécifique si pas de matrices pour un modelId de parc
-                     console.log(`[InstancedMesh Debug - Park] Aucune matrice trouvée pour modelId: ${modelId}`);
-                 }
-             } // Fin boucle modelId
-        } // Fin boucle type
+                 } else if (type === 'park') { console.log(`[InstancedMesh Debug - Park] Aucune matrice trouvée pour modelId: ${modelId}`); }
+             }
+        }
 
         if (instancedMeshCount > 0) {
-            console.log(`InstancedMesh: ${instancedMeshCount} mesh(es) pour ${totalInstancesCreated} instances créés au total.`);
+            console.log(`InstancedMesh: ${instancedMeshCount} mesh(es) pour ${totalInstancesCreated} instances créés au total (Fenêtres avec envMap si disponible).`);
         } else {
             console.log("Aucune instance à créer via InstancedMesh.");
         }
