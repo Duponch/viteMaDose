@@ -350,14 +350,27 @@ export default class CityManager {
             console.timeEnd("PathfinderInitialization");
 
             console.time("ContentGeneration");
-            const debugPlotGridGroup = this.experience.world?.debugPlotGridGroup;
-            if (!debugPlotGridGroup) { console.warn("CityManager.generateCity: debugPlotGridGroup not found in World."); }
-            const { sidewalkGroup, buildingGroup } = this.contentGenerator.generateContent(this.leafPlots, this.assetLoader, crosswalkInfos, this, debugPlotGridGroup);
-            this.sidewalkGroup = sidewalkGroup;
-            this.contentGroup = buildingGroup;
-            this.cityContainer.add(this.sidewalkGroup);
-            this.cityContainer.add(this.contentGroup);
-            console.timeEnd("ContentGeneration");
+
+			const debugPlotGridGroup = this.experience.world ? this.experience.world.debugPlotGridGroup : null;
+
+			const { sidewalkGroup, buildingGroup, groundGroup } = this.contentGenerator.generateContent(
+				this.leafPlots,
+				this.assetLoader,
+				crosswalkInfos,
+				this,
+				debugPlotGridGroup
+			);
+
+			this.sidewalkGroup = sidewalkGroup;
+			this.contentGroup = buildingGroup;
+			this.groundGroup = groundGroup;
+			// Ajout des trois groupes à cityContainer
+			this.cityContainer.add(this.sidewalkGroup);
+			this.cityContainer.add(this.contentGroup);
+			this.cityContainer.add(this.groundGroup);
+
+			console.timeEnd("ContentGeneration");
+
             console.log(`Total Building Instances Registered: ${this.buildingInstances.size}`);
 
             // --- Debug Visuals ---

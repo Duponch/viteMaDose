@@ -3,33 +3,37 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export default class PlotContentGenerator {
-    // --- MODIFIÉ : Ajout cityManager ref ---
 	constructor(config, materials, debugPlotGridMaterial) {
-        // ... (Constructeur potentiellement modifié pour garder les références, MAIS LE CODE N'EST PAS FOURNI car inchangé dans sa structure principale)
-        this.config = config;
-        this.materials = materials;
-        this.sidewalkGroup = new THREE.Group(); this.sidewalkGroup.name = "Sidewalks";
-        this.buildingGroup = new THREE.Group(); this.buildingGroup.name = "PlotContents";
-        this.assetLoader = null;
-        this.instanceData = {}; // Pour non-house assets + crosswalks
-        this.stripeBaseGeometry = null;
-        this.cityManager = null;
-        this.navigationGraph = null;
-        this.debugPlotGridGroup = null;
-        this.debugPlotGridMaterial = debugPlotGridMaterial ?? new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
+		this.config = config;
+		this.materials = materials;
+		this.sidewalkGroup = new THREE.Group(); 
+		this.sidewalkGroup.name = "Sidewalks";
+		this.buildingGroup = new THREE.Group(); 
+		this.buildingGroup.name = "PlotContents";
+		// Nouveau groupe pour les sols des parcelles
+		this.groundGroup = new THREE.Group();
+		this.groundGroup.name = "PlotGrounds";
 
-        // --- Section Maison Procédurale ---
-        this.baseHouseGeometries = {};
-        this.baseHouseMaterials = {};
-        this.houseInstanceMatrices = {};
-        this.houseInstancedMeshes = {};
-        this.defineHouseBaseMaterials();
-        this.defineHouseBaseGeometries();
-        this.initializeHouseMatrixArrays();
-        // --------------------------------
+		this.assetLoader = null;
+		this.instanceData = {}; // Pour non-house assets + crosswalks
+		this.stripeBaseGeometry = null;
+		this.cityManager = null;
+		this.navigationGraph = null;
+		this.debugPlotGridGroup = null;
+		this.debugPlotGridMaterial = debugPlotGridMaterial ?? new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
 
-        console.log("PlotContentGenerator initialized (Dynamic World Coordinate Grid logic).");
-    }
+		// --- Section Maison Procédurale ---
+		this.baseHouseGeometries = {};
+		this.baseHouseMaterials = {};
+		this.houseInstanceMatrices = {};
+		this.houseInstancedMeshes = {};
+		this.defineHouseBaseMaterials();
+		this.defineHouseBaseGeometries();
+		this.initializeHouseMatrixArrays();
+		// --------------------------------
+
+		console.log("PlotContentGenerator initialized (Dynamic World Coordinate Grid logic).");
+	}
 
 	initializeHouseMatrixArrays() {
         this.houseInstanceMatrices = {
@@ -708,35 +712,53 @@ export default class PlotContentGenerator {
         }
     }
 
-    // --- getGroups ---
-    getGroups() { return { sidewalkGroup: this.sidewalkGroup, buildingGroup: this.buildingGroup }; }
+	getGroups() {
+		return {
+			sidewalkGroup: this.sidewalkGroup,
+			buildingGroup: this.buildingGroup,
+			groundGroup: this.groundGroup
+		};
+	}
 
-    // --- reset ---
+	// On vide aussi le groupe groundGroup
 	reset(assetLoader) {
-        this.assetLoader = assetLoader;
-        this.cityManager = null;
-        this.navigationGraph = null; // Réinitialiser ref NavGraph
-        // this.debugPlotGridGroup = null; // La référence au groupe debug est externe maintenant, ne pas la nullifier ici
+		this.assetLoader = assetLoader;
+		this.cityManager = null;
+		this.navigationGraph = null;
+		this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {}, skyscraper: {}, crosswalk: {} };
+		this.initializeHouseMatrixArrays(); // Spécifique maison procédurale
+		this.houseInstancedMeshes = {};     // Spécifique maison procédurale
 
-        // --- Réinitialisation données d'instance (inchangé) ---
-        this.instanceData = { house: {}, building: {}, industrial: {}, park: {}, tree: {}, skyscraper: {}, crosswalk: {} };
-        this.initializeHouseMatrixArrays(); // Spécifique maison procédurale
-        this.houseInstancedMeshes = {};     // Spécifique maison procédurale
+		// Nettoyer les géométries de base
+		Object.values(this.baseHouseGeometries).forEach(geom => {
+			if (geom) geom.dispose();
+		});
+		this.baseHouseGeometries = {};
+		if (this.stripeBaseGeometry) {
+			this.stripeBaseGeometry.dispose();
+			this.stripeBaseGeometry = null;
+		}
 
-        // --- Nettoyage Géométries de Base (inchangé) ---
-        Object.values(this.baseHouseGeometries).forEach(geom => geom?.dispose());
-        this.baseHouseGeometries = {};
-        if (this.stripeBaseGeometry) { this.stripeBaseGeometry.dispose(); this.stripeBaseGeometry = null; }
+		// Fonction interne de nettoyage d'un groupe
+		const disposeGroupContents = (group) => {
+			if (!group) return;
+			while (group.children.length > 0) {
+				const c = group.children[0];
+				group.remove(c);
+				if (c.geometry) {
+					c.geometry.dispose();
+				}
+			}
+		};
+		disposeGroupContents(this.sidewalkGroup);
+		disposeGroupContents(this.buildingGroup);
+		// Nettoyer également le groupe des sols
+		disposeGroupContents(this.groundGroup);
 
-        // --- Nettoyage Groupes Scène (inchangé) ---
-        const disposeGroupContents = (group) => { /* ... (code interne inchangé) ... */ if (!group) return; while (group.children.length > 0) { const c = group.children[0]; group.remove(c); const isBaseHouseGeo = Object.values(this.baseHouseGeometries).includes(c.geometry); const isBaseStripeGeo = c.geometry === this.stripeBaseGeometry; let isLoadedAssetGeo = false; if (this.assetLoader) { for (const type in this.assetLoader.assets) { if (this.assetLoader.assets[type].some(a => a.geometry === c.geometry)) { isLoadedAssetGeo = true; break; } } } if (c.geometry && !isBaseHouseGeo && !isBaseStripeGeo && !isLoadedAssetGeo) { c.geometry.dispose(); } } };
-        disposeGroupContents(this.sidewalkGroup);
-        disposeGroupContents(this.buildingGroup);
-
-        // --- Redéfinition Géométries/Matériaux de Base (inchangé) ---
-        this.defineHouseBaseMaterials(); // Redéfinit les matériaux
-        this.defineHouseBaseGeometries(); // Recrée les géométries de base
-    }
+		// Redéfinition des géométries/Matériaux de base
+		this.defineHouseBaseMaterials();
+		this.defineHouseBaseGeometries();
+	}
 
     // ==============================================================
     // --- calculateInstanceMatrix (Inchangée) ---
@@ -771,9 +793,9 @@ export default class PlotContentGenerator {
         let instancedMeshCount = 0;
 
         // Vider le groupe avant de le remplir
-        while (this.buildingGroup.children.length > 0) {
-            this.buildingGroup.remove(this.buildingGroup.children[0]);
-        }
+		while (this.buildingGroup.children.length > 0) {
+			this.buildingGroup.remove(this.buildingGroup.children[0]);
+		}
 
         // --- 1. Maison L-shape ---
         const houseDataType = 'house';
@@ -889,22 +911,26 @@ export default class PlotContentGenerator {
     }
 
     // --- createPlotGround ---
-    createPlotGround(plot, groundY = 0.01) { // Ajout paramètre groundY avec valeur par défaut
-        const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
-        let groundMaterial;
-        if (plot.zoneType === 'park') {
-            groundMaterial = this.materials.parkMaterial;
-        } else {
-            groundMaterial = this.materials.buildingGroundMaterial;
-        }
-        const groundMesh = new THREE.Mesh(groundGeom, groundMaterial);
-        groundMesh.rotation.x = -Math.PI / 2;
-        // Utilise le paramètre groundY pour la position Y
-        groundMesh.position.set(plot.center ? plot.center.x : plot.x + plot.width / 2, groundY, plot.center ? plot.center.z : plot.z + plot.depth / 2);
-        groundMesh.receiveShadow = true;
-        groundMesh.name = `Ground_Plot_${plot.id}_${plot.zoneType}`;
-        this.buildingGroup.add(groundMesh);
-    }
+    createPlotGround(plot, groundY = 0.01) {
+		const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
+		let groundMaterial;
+		if (plot.zoneType === 'park') {
+			groundMaterial = this.materials.parkMaterial;
+		} else {
+			groundMaterial = this.materials.buildingGroundMaterial;
+		}
+		const groundMesh = new THREE.Mesh(groundGeom, groundMaterial);
+		groundMesh.rotation.x = -Math.PI / 2;
+		groundMesh.position.set(
+			plot.center ? plot.center.x : plot.x + plot.width / 2,
+			groundY,
+			plot.center ? plot.center.z : plot.z + plot.depth / 2
+		);
+		groundMesh.receiveShadow = true;
+		groundMesh.name = `Ground_Plot_${plot.id}_${plot.zoneType}`;
+		// Ajout du sol dans le groupe dédié aux sols
+		this.groundGroup.add(groundMesh);
+	}
 
     // --- subdivideForPlacement ---
     subdivideForPlacement(plot) {
