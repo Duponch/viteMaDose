@@ -285,70 +285,82 @@ export default class CityAssetLoader {
 	}
 
 	generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale = 1) {
-		// --- Création du groupe et construction du gratte‑ciel (version V13) ---
+		// --- Création du groupe temporaire pour la construction ---
 		const skyscraper = new THREE.Group();
-	
-		// Matériaux
-		const structureMaterial = new THREE.MeshStandardMaterial({ color: 0xced4da, flatShading: true });
-		const baseMaterial = new THREE.MeshStandardMaterial({ color: 0xadb5bd, flatShading: true });
-		const windowMaterial = new THREE.MeshPhysicalMaterial({
-			color: 0x60a3bc, metalness: 0.1, roughness: 0.05,
-			transmission: 0.9, thickness: 0.3, ior: 1.5, flatShading: true,
+
+		// --- Matériaux ---
+		const structureMaterial = new THREE.MeshStandardMaterial({ color: 0xced4da, flatShading: true, name: "SkyscraperStructureMat" });
+		const baseMaterial = new THREE.MeshStandardMaterial({ color: 0xadb5bd, flatShading: true, name: "SkyscraperBaseMat" });
+		const metallicMaterial = new THREE.MeshStandardMaterial({ color: 0xadb5bd, metalness: 0.9, roughness: 0.4, flatShading: true, side: THREE.DoubleSide, name: "SkyscraperMetallicMat" });
+		const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, flatShading: true, name: "SkyscraperFloorMat" });
+
+		// **MODIFIÉ**: Revenir à MeshPhysicalMaterial pour la transparence,
+		// mais configurer aussi les propriétés émissives pour la nuit.
+		const skyscraperWindowMaterial = new THREE.MeshPhysicalMaterial({
+			color: 0x60a3bc,        // Couleur de base du "verre"
+			metalness: 0.1,
+			roughness: 0.05,        // Lisse pour la réflexion type verre (état jour)
+			transmission: 0.9,      // Haute transmission pour effet verre (état jour)
+			thickness: 0.3,         // Épaisseur virtuelle pour la réfraction
+			ior: 1.5,               // Indice de réfraction (proche du verre)
+			flatShading: true,
+			emissive: 0xFFFF99,     // Garder la couleur émissive prête
+			emissiveIntensity: 0.0, // ** Commence éteint **
+			name: "SkyscraperWindowMat_Physical" // ** Nom distinctif important ! **
 		});
-		const metallicMaterial = new THREE.MeshStandardMaterial({
-			color: 0xadb5bd, metalness: 0.9, roughness: 0.4, flatShading: true, side: THREE.DoubleSide
-		});
-		const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, flatShading: true });
-	
+		// ---------------------------------------------------------
+
 		// --- Dimensions générales ---
 		const mainWidth = 9, mainDepth = 9, mainHeight = 30;
 		const baseHeightVal = 2.5, intermediateStructureHeight = 1.0;
 		const intermediateOverhang = 0.5, pillarThickness = 0.4;
 		const windowInset = 0.05, intermediateBandThickness = pillarThickness, floorThickness = 0.1;
-	
-		// --- Base ---
+
+		// --- Base (Utilise baseMaterial) ---
 		const baseGeometry = new THREE.BoxGeometry(mainWidth, baseHeightVal, mainDepth);
 		const baseMesh = new THREE.Mesh(baseGeometry, baseMaterial);
 		baseMesh.position.y = baseHeightVal / 2;
 		baseMesh.castShadow = true; baseMesh.receiveShadow = true;
 		skyscraper.add(baseMesh);
-	
-		// --- Entrées/Portes de la Base ---
+
+		// --- Entrées/Portes de la Base (Utilise skyscraperWindowMaterial) ---
 		const doorHeight = baseHeightVal;
 		const doorWidthFactor = 0.5;
 		const originalBaseWindowPanelWidth = (mainWidth - 3 * pillarThickness) / 2;
 		const doorWidth = originalBaseWindowPanelWidth * doorWidthFactor;
 		const doorPanelDepth = (pillarThickness * 0.8) / 2;
-		if (doorWidth > 0) {
-			const doorGeomX = new THREE.BoxGeometry(doorWidth, doorHeight, doorPanelDepth);
+		let doorGeomX = null;
+		let doorGeomZ = null;
+		if (doorWidth > 0.01) { // Vérifier la largeur avant de créer
+			doorGeomX = new THREE.BoxGeometry(doorWidth, doorHeight, doorPanelDepth);
 			const doorCenterX = doorWidth * 0.75;
 			for (let i = 0; i < 2; i++) {
 				const zPos = (mainDepth / 2) * (i === 0 ? 1 : -1) + (doorPanelDepth / 2 * (i === 0 ? 1 : -1));
-				const doorLeft = new THREE.Mesh(doorGeomX, windowMaterial);
+				const doorLeft = new THREE.Mesh(doorGeomX, skyscraperWindowMaterial);
 				doorLeft.position.set(-doorCenterX, doorHeight / 2, zPos);
 				doorLeft.castShadow = true; skyscraper.add(doorLeft);
-				const doorRight = new THREE.Mesh(doorGeomX, windowMaterial);
+				const doorRight = new THREE.Mesh(doorGeomX, skyscraperWindowMaterial);
 				doorRight.position.set(doorCenterX, doorHeight / 2, zPos);
 				doorRight.castShadow = true; skyscraper.add(doorRight);
 			}
 		}
 		const originalBaseSideWindowPanelWidth = (mainDepth - 3 * pillarThickness) / 2;
 		const sideDoorWidth = originalBaseSideWindowPanelWidth * doorWidthFactor;
-		if (sideDoorWidth > 0) {
-			const doorGeomZ = new THREE.BoxGeometry(doorPanelDepth, doorHeight, sideDoorWidth);
+		if (sideDoorWidth > 0.01) { // Vérifier la largeur avant de créer
+			doorGeomZ = new THREE.BoxGeometry(doorPanelDepth, doorHeight, sideDoorWidth);
 			const doorCenterZ = sideDoorWidth * 0.75;
 			for (let i = 0; i < 2; i++) {
 				const xPos = (mainWidth / 2) * (i === 0 ? 1 : -1) + (doorPanelDepth / 2 * (i === 0 ? 1 : -1));
-				const doorBack = new THREE.Mesh(doorGeomZ, windowMaterial);
+				const doorBack = new THREE.Mesh(doorGeomZ, skyscraperWindowMaterial);
 				doorBack.position.set(xPos, doorHeight / 2, -doorCenterZ);
 				doorBack.castShadow = true; skyscraper.add(doorBack);
-				const doorFront = new THREE.Mesh(doorGeomZ, windowMaterial);
+				const doorFront = new THREE.Mesh(doorGeomZ, skyscraperWindowMaterial);
 				doorFront.position.set(xPos, doorHeight / 2, doorCenterZ);
 				doorFront.castShadow = true; skyscraper.add(doorFront);
 			}
 		}
-	
-		// --- Structure Intermédiaire ---
+
+		// --- Structure Intermédiaire (Utilise baseMaterial) ---
 		const intermediateWidth = mainWidth + 2 * intermediateOverhang;
 		const intermediateDepth = mainDepth + 2 * intermediateOverhang;
 		const intermediateGeometry = new THREE.BoxGeometry(intermediateWidth, intermediateStructureHeight, intermediateDepth);
@@ -356,7 +368,7 @@ export default class CityAssetLoader {
 		intermediateMesh.position.y = baseHeightVal + intermediateStructureHeight / 2;
 		intermediateMesh.castShadow = true; intermediateMesh.receiveShadow = true;
 		skyscraper.add(intermediateMesh);
-	
+
 		// --- Corps Principal ---
 		const startY = baseHeightVal + intermediateStructureHeight;
 		const numFloors = 9;
@@ -366,230 +378,182 @@ export default class CityAssetLoader {
 		const numIntermediateBands = numWindowsPerFace - 1;
 		const horizontalBandHeight = pillarThickness * 0.5;
 		const windowHeightVal = floorHeight - horizontalBandHeight;
+
+		// Piliers de coin (Utilise structureMaterial)
 		const cornerPillarGeom = new THREE.BoxGeometry(pillarThickness, structureHeight, pillarThickness);
-		for (let i = 0; i < 2; i++) {
-			for (let j = 0; j < 2; j++) {
-				const pillar = new THREE.Mesh(cornerPillarGeom, structureMaterial);
-				pillar.position.set(
-					(mainWidth / 2) * (i === 0 ? -1 : 1),
-					startY + structureHeight / 2,
-					(mainDepth / 2) * (j === 0 ? -1 : 1)
-				);
-				pillar.castShadow = true; pillar.receiveShadow = true;
-				skyscraper.add(pillar);
-			}
-		}
+		for (let i = 0; i < 2; i++) { for (let j = 0; j < 2; j++) { /* ... ajout piliers ... */
+			const pillar = new THREE.Mesh(cornerPillarGeom, structureMaterial);
+			pillar.position.set((mainWidth / 2) * (i === 0 ? -1 : 1), startY + structureHeight / 2, (mainDepth / 2) * (j === 0 ? -1 : 1));
+			pillar.castShadow = true; pillar.receiveShadow = true; skyscraper.add(pillar);
+		} }
+
+		// Calcul dimensions fenêtres
 		const totalSpanX = mainWidth - pillarThickness;
 		const totalSpanZ = mainDepth - pillarThickness;
 		const totalIntermediateBandWidthX = numIntermediateBands * intermediateBandThickness;
 		const totalIntermediateBandWidthZ = numIntermediateBands * intermediateBandThickness;
-		const totalWindowWidthX = totalSpanX - totalIntermediateBandWidthX;
-		const totalWindowWidthZ = totalSpanZ - totalIntermediateBandWidthZ;
-		const singleWindowWidthX = totalWindowWidthX / numWindowsPerFace;
-		const singleWindowWidthZ = totalWindowWidthZ / numWindowsPerFace;
-		const windowGeomX = new THREE.BoxGeometry(singleWindowWidthX, windowHeightVal, pillarThickness * 0.9);
-		const windowGeomZ = new THREE.BoxGeometry(pillarThickness * 0.9, windowHeightVal, singleWindowWidthZ);
-		for (let floor = 0; floor < numFloors; floor++) {
-			const yPosWindowCenter = startY + floor * floorHeight + horizontalBandHeight / 2 + windowHeightVal / 2;
-			for (let win = 0; win < numWindowsPerFace; win++) {
-				const xPos = (-mainWidth / 2 + pillarThickness / 2) + win * intermediateBandThickness + win * singleWindowWidthX + singleWindowWidthX / 2;
-				const zPos = (-mainDepth / 2 + pillarThickness / 2) + win * intermediateBandThickness + win * singleWindowWidthZ + singleWindowWidthZ / 2;
-				const windowFront = new THREE.Mesh(windowGeomX, windowMaterial);
-				windowFront.position.set(xPos, yPosWindowCenter, mainDepth / 2 - windowInset);
-				windowFront.castShadow = true; skyscraper.add(windowFront);
-				const windowBack = new THREE.Mesh(windowGeomX, windowMaterial);
-				windowBack.position.set(xPos, yPosWindowCenter, -mainDepth / 2 + windowInset);
-				windowBack.castShadow = true; skyscraper.add(windowBack);
-				const windowRight = new THREE.Mesh(windowGeomZ, windowMaterial);
-				windowRight.position.set(mainWidth / 2 - windowInset, yPosWindowCenter, zPos);
-				windowRight.castShadow = true; skyscraper.add(windowRight);
-				const windowLeft = new THREE.Mesh(windowGeomZ, windowMaterial);
-				windowLeft.position.set(-mainWidth / 2 + windowInset, yPosWindowCenter, zPos);
-				windowLeft.castShadow = true; skyscraper.add(windowLeft);
+		const totalWindowWidthX = Math.max(0, totalSpanX - totalIntermediateBandWidthX); // Assure >= 0
+		const totalWindowWidthZ = Math.max(0, totalSpanZ - totalIntermediateBandWidthZ); // Assure >= 0
+		const singleWindowWidthX = numWindowsPerFace > 0 ? totalWindowWidthX / numWindowsPerFace : 0;
+		const singleWindowWidthZ = numWindowsPerFace > 0 ? totalWindowWidthZ / numWindowsPerFace : 0;
+
+		// Géométries fenêtres
+		const windowGeomX = singleWindowWidthX > 0.01 ? new THREE.BoxGeometry(singleWindowWidthX, windowHeightVal, pillarThickness * 0.9) : null;
+		const windowGeomZ = singleWindowWidthZ > 0.01 ? new THREE.BoxGeometry(pillarThickness * 0.9, windowHeightVal, singleWindowWidthZ) : null;
+
+		// Création et placement des fenêtres (Utilise skyscraperWindowMaterial)
+		if (windowGeomX || windowGeomZ) { // Seulement si au moins une géométrie de fenêtre a été créée
+			for (let floor = 0; floor < numFloors; floor++) {
+				const yPosWindowCenter = startY + floor * floorHeight + horizontalBandHeight / 2 + windowHeightVal / 2;
+				for (let win = 0; win < numWindowsPerFace; win++) {
+					const xPos = (-mainWidth / 2 + pillarThickness / 2) + win * intermediateBandThickness + win * singleWindowWidthX + singleWindowWidthX / 2;
+					const zPos = (-mainDepth / 2 + pillarThickness / 2) + win * intermediateBandThickness + win * singleWindowWidthZ + singleWindowWidthZ / 2;
+
+					if (windowGeomX) {
+						const windowFront = new THREE.Mesh(windowGeomX, skyscraperWindowMaterial);
+						windowFront.position.set(xPos, yPosWindowCenter, mainDepth / 2 - windowInset);
+						windowFront.castShadow = true; skyscraper.add(windowFront);
+						const windowBack = new THREE.Mesh(windowGeomX, skyscraperWindowMaterial);
+						windowBack.position.set(xPos, yPosWindowCenter, -mainDepth / 2 + windowInset);
+						windowBack.castShadow = true; skyscraper.add(windowBack);
+					}
+					if (windowGeomZ) {
+						const windowRight = new THREE.Mesh(windowGeomZ, skyscraperWindowMaterial);
+						windowRight.position.set(mainWidth / 2 - windowInset, yPosWindowCenter, zPos);
+						windowRight.castShadow = true; skyscraper.add(windowRight);
+						const windowLeft = new THREE.Mesh(windowGeomZ, skyscraperWindowMaterial);
+						windowLeft.position.set(-mainWidth / 2 + windowInset, yPosWindowCenter, zPos);
+						windowLeft.castShadow = true; skyscraper.add(windowLeft);
+					}
+				}
 			}
 		}
-		// --- Bandes Verticales ---
+
+		// Bandes Verticales intermédiaires (Utilise structureMaterial)
 		const verticalBandGeomX = new THREE.BoxGeometry(intermediateBandThickness, structureHeight, pillarThickness);
 		const verticalBandGeomZ = new THREE.BoxGeometry(pillarThickness, structureHeight, intermediateBandThickness);
 		const yPosBandVert = startY + structureHeight / 2;
-		for (let i = 0; i < numIntermediateBands; i++) {
-			const xPosBand = (-mainWidth / 2 + pillarThickness / 2) + (i + 1) * singleWindowWidthX + i * intermediateBandThickness + intermediateBandThickness / 2;
-			const zPosBand = (-mainDepth / 2 + pillarThickness / 2) + (i + 1) * singleWindowWidthZ + i * intermediateBandThickness + intermediateBandThickness / 2;
-			const bandFrontVert = new THREE.Mesh(verticalBandGeomX, structureMaterial);
-			bandFrontVert.position.set(xPosBand, yPosBandVert, mainDepth / 2);
-			bandFrontVert.castShadow = true; bandFrontVert.receiveShadow = true;
-			skyscraper.add(bandFrontVert);
-			const bandBackVert = new THREE.Mesh(verticalBandGeomX, structureMaterial);
-			bandBackVert.position.set(xPosBand, yPosBandVert, -mainDepth / 2);
-			bandBackVert.castShadow = true; bandBackVert.receiveShadow = true;
-			skyscraper.add(bandBackVert);
-			const bandRightVert = new THREE.Mesh(verticalBandGeomZ, structureMaterial);
-			bandRightVert.position.set(mainWidth / 2, yPosBandVert, zPosBand);
-			bandRightVert.castShadow = true; bandRightVert.receiveShadow = true;
-			skyscraper.add(bandRightVert);
-			const bandLeftVert = new THREE.Mesh(verticalBandGeomZ, structureMaterial);
-			bandLeftVert.position.set(-mainWidth / 2, yPosBandVert, zPosBand);
-			bandLeftVert.castShadow = true; bandLeftVert.receiveShadow = true;
-			skyscraper.add(bandLeftVert);
+		if (singleWindowWidthX > 0.01 && singleWindowWidthZ > 0.01 && numIntermediateBands > 0){ // Vérifier que des bandes sont nécessaires
+			for (let i = 0; i < numIntermediateBands; i++) {
+				const xPosBand = (-mainWidth / 2 + pillarThickness / 2) + (i + 1) * singleWindowWidthX + i * intermediateBandThickness + intermediateBandThickness / 2;
+				const zPosBand = (-mainDepth / 2 + pillarThickness / 2) + (i + 1) * singleWindowWidthZ + i * intermediateBandThickness + intermediateBandThickness / 2;
+				const bandFrontVert = new THREE.Mesh(verticalBandGeomX, structureMaterial); bandFrontVert.position.set(xPosBand, yPosBandVert, mainDepth / 2); bandFrontVert.castShadow = true; bandFrontVert.receiveShadow = true; skyscraper.add(bandFrontVert);
+				const bandBackVert = new THREE.Mesh(verticalBandGeomX, structureMaterial); bandBackVert.position.set(xPosBand, yPosBandVert, -mainDepth / 2); bandBackVert.castShadow = true; bandBackVert.receiveShadow = true; skyscraper.add(bandBackVert);
+				const bandRightVert = new THREE.Mesh(verticalBandGeomZ, structureMaterial); bandRightVert.position.set(mainWidth / 2, yPosBandVert, zPosBand); bandRightVert.castShadow = true; bandRightVert.receiveShadow = true; skyscraper.add(bandRightVert);
+				const bandLeftVert = new THREE.Mesh(verticalBandGeomZ, structureMaterial); bandLeftVert.position.set(-mainWidth / 2, yPosBandVert, zPosBand); bandLeftVert.castShadow = true; bandLeftVert.receiveShadow = true; skyscraper.add(bandLeftVert);
+			}
 		}
-		// --- Bandes Horizontales ---
+
+		// Bandes Horizontales (Utilise structureMaterial)
 		const horizontalBandGeomX = new THREE.BoxGeometry(mainWidth, horizontalBandHeight, pillarThickness);
 		const horizontalBandGeomZ = new THREE.BoxGeometry(pillarThickness, horizontalBandHeight, mainDepth);
-		for (let floor = 0; floor <= numFloors; floor++) {
+		for (let floor = 0; floor <= numFloors; floor++) { /* ... ajout bandes horizontales ... */
 			const yPosBand = startY + floor * floorHeight;
-			const bandFront = new THREE.Mesh(horizontalBandGeomX, structureMaterial);
-			bandFront.position.set(0, yPosBand, mainDepth / 2);
-			skyscraper.add(bandFront);
-			const bandBack = new THREE.Mesh(horizontalBandGeomX, structureMaterial);
-			bandBack.position.set(0, yPosBand, -mainDepth / 2);
-			skyscraper.add(bandBack);
-			const bandRight = new THREE.Mesh(horizontalBandGeomZ, structureMaterial);
-			bandRight.position.set(mainWidth / 2, yPosBand, 0);
-			skyscraper.add(bandRight);
-			const bandLeft = new THREE.Mesh(horizontalBandGeomZ, structureMaterial);
-			bandLeft.position.set(-mainWidth / 2, yPosBand, 0);
-			skyscraper.add(bandLeft);
+			const bandFront = new THREE.Mesh(horizontalBandGeomX, structureMaterial); bandFront.position.set(0, yPosBand, mainDepth / 2); skyscraper.add(bandFront);
+			const bandBack = new THREE.Mesh(horizontalBandGeomX, structureMaterial); bandBack.position.set(0, yPosBand, -mainDepth / 2); skyscraper.add(bandBack);
+			const bandRight = new THREE.Mesh(horizontalBandGeomZ, structureMaterial); bandRight.position.set(mainWidth / 2, yPosBand, 0); skyscraper.add(bandRight);
+			const bandLeft = new THREE.Mesh(horizontalBandGeomZ, structureMaterial); bandLeft.position.set(-mainWidth / 2, yPosBand, 0); skyscraper.add(bandLeft);
 		}
-		// --- Sols intérieurs ---
+
+		// Sols intérieurs (Utilise floorMaterial)
 		const floorGeometry = new THREE.BoxGeometry(mainWidth - pillarThickness, floorThickness, mainDepth - pillarThickness);
-		for (let floor = 0; floor < numFloors; floor++) {
+		for (let floor = 0; floor < numFloors; floor++) { /* ... ajout sols ... */
 			const yPosFloor = startY + floor * floorHeight + floorThickness / 2;
-			const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
-			floorMesh.position.set(0, yPosFloor, 0);
-			floorMesh.receiveShadow = true;
-			skyscraper.add(floorMesh);
+			const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial); floorMesh.position.set(0, yPosFloor, 0); floorMesh.receiveShadow = true; skyscraper.add(floorMesh);
 		}
-		// --- Toit ---
+
+		// Toit (Utilise baseMaterial)
 		const roofHeightVal = 1.5;
 		const roofGeom = new THREE.BoxGeometry(mainWidth, roofHeightVal, mainDepth);
 		const roofMesh = new THREE.Mesh(roofGeom, baseMaterial);
 		roofMesh.position.y = startY + mainHeight + roofHeightVal / 2;
 		roofMesh.castShadow = true; roofMesh.receiveShadow = true;
 		skyscraper.add(roofMesh);
-		// --- Détails sur le Toit ---
+
+		// Détails sur le Toit (Utilise metallicMaterial)
 		const roofTopY = roofMesh.position.y + roofHeightVal / 2;
-		const antennaHeight = 3, antennaRadius = 0.1;
-		const antennaGeom = new THREE.CylinderGeometry(antennaRadius, antennaRadius, antennaHeight, 8);
-		const antenna1 = new THREE.Mesh(antennaGeom, metallicMaterial);
-		antenna1.position.set(mainWidth * 0.3, roofTopY + antennaHeight / 2, mainDepth * 0.3);
-		antenna1.castShadow = true;
-		skyscraper.add(antenna1);
-		const antenna2 = new THREE.Mesh(antennaGeom, metallicMaterial);
-		antenna2.position.set(-mainWidth * 0.3, roofTopY + antennaHeight / 2, -mainDepth * 0.3);
-		antenna2.castShadow = true;
-		skyscraper.add(antenna2);
-		const boxSize = 0.8;
-		const boxGeom = new THREE.BoxGeometry(boxSize, boxSize * 0.5, boxSize);
-		const roofBox1 = new THREE.Mesh(boxGeom, metallicMaterial);
-		roofBox1.position.set(0, roofTopY + (boxSize * 0.5) / 2, -mainDepth * 0.2);
-		roofBox1.castShadow = true;
-		skyscraper.add(roofBox1);
-		const dishRadius = 1.2;
-		const dishDepth = Math.PI * 0.3;
-		const dishThetaStart = Math.PI - dishDepth;
-		const dishThetaLength = dishDepth;
-		const dishGeometry = new THREE.SphereGeometry(dishRadius, 20, 10, 0, Math.PI * 2, dishThetaStart, dishThetaLength);
-		const dish = new THREE.Mesh(dishGeometry, metallicMaterial);
-		dish.rotation.x = Math.PI * 0.05;
-		const dishStandHeight = 0.5;
-		const dishStandGeom = new THREE.CylinderGeometry(0.1, 0.1, dishStandHeight, 8);
-		const dishStand = new THREE.Mesh(dishStandGeom, metallicMaterial);
-		dishStand.position.set(mainWidth * -0.25, roofTopY + dishStandHeight / 2, mainDepth * 0.2);
-		dishStand.castShadow = true;
-		skyscraper.add(dishStand);
-		dish.position.x = dishStand.position.x;
-		dish.position.z = dishStand.position.z;
-		dish.position.y = dishStand.position.y + dishStandHeight / 2 + dishRadius * 0.3;
-		dish.castShadow = true;
-		skyscraper.add(dish);
-		const equipBoxGeom1 = new THREE.BoxGeometry(1.5, 0.8, 0.8);
-		const equipBox1 = new THREE.Mesh(equipBoxGeom1, metallicMaterial);
-		equipBox1.position.set(mainWidth * 0.3, roofTopY + 0.8 / 2, -mainDepth * 0.3);
-		equipBox1.castShadow = true;
-		skyscraper.add(equipBox1);
-		const equipCylGeom1 = new THREE.CylinderGeometry(0.4, 0.4, 1.2, 12);
-		const equipCyl1 = new THREE.Mesh(equipCylGeom1, metallicMaterial);
-		equipCyl1.position.set(-mainWidth * 0.1, roofTopY + 1.2 / 2, mainDepth * 0.35);
-		equipCyl1.castShadow = true;
-		skyscraper.add(equipCyl1);
-	
-		// --- Fin de la construction du gratte‑ciel ---
-	
-		// --- Regroupement par matériau pour conserver les couleurs ---
+		/* ... ajout détails toit ... */
+		const antennaHeight = 3, antennaRadius = 0.1; const antennaGeom = new THREE.CylinderGeometry(antennaRadius, antennaRadius, antennaHeight, 8); const antenna1 = new THREE.Mesh(antennaGeom, metallicMaterial); antenna1.position.set(mainWidth * 0.3, roofTopY + antennaHeight / 2, mainDepth * 0.3); antenna1.castShadow = true; skyscraper.add(antenna1); const antenna2 = new THREE.Mesh(antennaGeom, metallicMaterial); antenna2.position.set(-mainWidth * 0.3, roofTopY + antennaHeight / 2, -mainDepth * 0.3); antenna2.castShadow = true; skyscraper.add(antenna2);
+		const boxSize = 0.8; const boxGeom = new THREE.BoxGeometry(boxSize, boxSize * 0.5, boxSize); const roofBox1 = new THREE.Mesh(boxGeom, metallicMaterial); roofBox1.position.set(0, roofTopY + (boxSize * 0.5) / 2, -mainDepth * 0.2); roofBox1.castShadow = true; skyscraper.add(roofBox1);
+		const dishRadius = 1.2; const dishDepth = Math.PI * 0.3; const dishThetaStart = Math.PI - dishDepth; const dishThetaLength = dishDepth; const dishGeometry = new THREE.SphereGeometry(dishRadius, 20, 10, 0, Math.PI * 2, dishThetaStart, dishThetaLength); const dish = new THREE.Mesh(dishGeometry, metallicMaterial); dish.rotation.x = Math.PI * 0.05; const dishStandHeight = 0.5; const dishStandGeom = new THREE.CylinderGeometry(0.1, 0.1, dishStandHeight, 8); const dishStand = new THREE.Mesh(dishStandGeom, metallicMaterial); dishStand.position.set(mainWidth * -0.25, roofTopY + dishStandHeight / 2, mainDepth * 0.2); dishStand.castShadow = true; skyscraper.add(dishStand); dish.position.x = dishStand.position.x; dish.position.z = dishStand.position.z; dish.position.y = dishStand.position.y + dishStandHeight / 2 + dishRadius * 0.3; dish.castShadow = true; skyscraper.add(dish);
+		const equipBoxGeom1 = new THREE.BoxGeometry(1.5, 0.8, 0.8); const equipBox1 = new THREE.Mesh(equipBoxGeom1, metallicMaterial); equipBox1.position.set(mainWidth * 0.3, roofTopY + 0.8 / 2, -mainDepth * 0.3); equipBox1.castShadow = true; skyscraper.add(equipBox1);
+		const equipCylGeom1 = new THREE.CylinderGeometry(0.4, 0.4, 1.2, 12); const equipCyl1 = new THREE.Mesh(equipCylGeom1, metallicMaterial); equipCyl1.position.set(-mainWidth * 0.1, roofTopY + 1.2 / 2, mainDepth * 0.35); equipCyl1.castShadow = true; skyscraper.add(equipCyl1);
+		// --- Fin de la construction ---
+
+
+		// --- Regroupement par matériau pour créer les 'parts' ---
 		const allGeoms = [];
-		const materialGroups = {}; // clé = material.uuid, valeur = { material: material, geoms: [] }
+		const materialGroups = {};
+
 		skyscraper.traverse(child => {
-			if (child.isMesh && child.geometry) {
+			if (child.isMesh && child.geometry && child.material) {
 				child.updateMatrixWorld(true);
 				let clonedGeom = child.geometry.clone();
 				clonedGeom.applyMatrix4(child.matrixWorld);
-				if (!clonedGeom.index) {
-					clonedGeom = clonedGeom.toNonIndexed();
-				}
+				if (!clonedGeom.index) clonedGeom = clonedGeom.toNonIndexed();
 				allGeoms.push(clonedGeom);
-				const matKey = child.material.uuid;
+				const matKey = child.material.name || 'default_skymat'; // Utilise le nom comme clé
 				if (!materialGroups[matKey]) {
 					materialGroups[matKey] = { material: child.material.clone(), geoms: [] };
+					materialGroups[matKey].material.name = matKey; // Assure que le clone a le bon nom
 				}
 				materialGroups[matKey].geoms.push(clonedGeom);
 			}
 		});
-	
+
+		// Calcul BBox global et échelle
 		const globalMerged = mergeGeometries(allGeoms, false);
-		if (!globalMerged) {
+		if (!globalMerged) { /* ... gestion erreur + dispose ... */
 			console.error("Échec de fusion globale pour le gratte‑ciel procédural.");
 			allGeoms.forEach(g => g.dispose());
+			baseGeometry?.dispose(); cornerPillarGeom?.dispose(); intermediateGeometry?.dispose(); verticalBandGeomX?.dispose(); verticalBandGeomZ?.dispose(); horizontalBandGeomX?.dispose(); horizontalBandGeomZ?.dispose(); floorGeometry?.dispose(); roofGeom?.dispose(); antennaGeom?.dispose(); boxGeom?.dispose(); dishGeometry?.dispose(); dishStandGeom?.dispose(); equipBoxGeom1?.dispose(); equipCylGeom1?.dispose(); windowGeomX?.dispose(); windowGeomZ?.dispose(); doorGeomX?.dispose(); doorGeomZ?.dispose();
 			return null;
 		}
 		globalMerged.computeBoundingBox();
-		// Récupération de la valeur minimale en Y pour aligner le bas sur y = 0
 		const globalMin = globalMerged.boundingBox.min;
-		const globalCenter = new THREE.Vector3();
-		globalMerged.boundingBox.getCenter(globalCenter);
-		const globalSize = new THREE.Vector3();
-		globalMerged.boundingBox.getSize(globalSize);
-		const fittingScaleFactor = Math.min(
-			baseWidth / globalSize.x,
-			baseHeight / globalSize.y,
-			baseDepth / globalSize.z
-		);
+		const globalCenter = new THREE.Vector3(); globalMerged.boundingBox.getCenter(globalCenter);
+		const globalSize = new THREE.Vector3(); globalMerged.boundingBox.getSize(globalSize);
+		globalSize.x = Math.max(globalSize.x, 0.001); globalSize.y = Math.max(globalSize.y, 0.001); globalSize.z = Math.max(globalSize.z, 0.001);
+		const fittingScaleFactor = Math.min( baseWidth / globalSize.x, baseHeight / globalSize.y, baseDepth / globalSize.z );
 		const sizeAfterFitting = globalSize.clone().multiplyScalar(fittingScaleFactor);
-	
-		// Fusionner séparément chaque groupe de géométries par matériau et recentrer
-		// Ici, on décale verticalement en soustrayant globalMin.y afin que le bas soit à y = 0
+
+		// Création des 'parts' finales
 		const parts = [];
 		for (const key in materialGroups) {
 			if (materialGroups.hasOwnProperty(key)) {
 				const groupData = materialGroups[key];
+				if (groupData.geoms.length === 0) continue;
 				const mergedPart = mergeGeometries(groupData.geoms, false);
-				if (!mergedPart) {
-					console.error("Échec de fusion d'un groupe de géométries pour le gratte‑ciel.");
+				if (!mergedPart) { /* ... gestion erreur + dispose geoms ... */
+					console.error(`Échec de fusion du groupe de géométries "${key}" pour le gratte‑ciel.`);
+					groupData.geoms.forEach(g => g.dispose());
 					continue;
 				}
-				// Décalage : on retire globalCenter.x et globalCenter.z pour centrer horizontalement,
-				// et globalMin.y pour que le bas soit à 0.
 				mergedPart.translate(-globalCenter.x, -globalMin.y, -globalCenter.z);
 				mergedPart.computeBoundingBox();
-				parts.push({
-					geometry: mergedPart,
-					material: groupData.material
-				});
-				groupData.geoms.forEach(g => g.dispose());
+				const finalMaterial = groupData.material; // Le nom est déjà correct
+				parts.push({ geometry: mergedPart, material: finalMaterial });
+				groupData.geoms.forEach(g => g.dispose()); // Nettoie les géométries clonées du groupe
 			}
 		}
-		allGeoms.forEach(g => g.dispose());
+
+		// Nettoyage final
+		allGeoms.forEach(g => g.dispose()); // Nettoie les géométries transformées initiales
 		globalMerged.dispose();
-	
-		// La valeur centerOffset est définie avec la coordonnée Y correspondant au bas (globalMin.y)
+		// Nettoie les géométries de base
+		baseGeometry?.dispose(); cornerPillarGeom?.dispose(); intermediateGeometry?.dispose(); verticalBandGeomX?.dispose(); verticalBandGeomZ?.dispose(); horizontalBandGeomX?.dispose(); horizontalBandGeomZ?.dispose(); floorGeometry?.dispose(); roofGeom?.dispose(); antennaGeom?.dispose(); boxGeom?.dispose(); dishGeometry?.dispose(); dishStandGeom?.dispose(); equipBoxGeom1?.dispose(); equipCylGeom1?.dispose(); windowGeomX?.dispose(); windowGeomZ?.dispose(); doorGeomX?.dispose(); doorGeomZ?.dispose();
+
+		// Objet asset final
 		const asset = {
 			id: `skyscraper_procedural_${this.assetIdCounter++}`,
 			parts: parts,
 			fittingScaleFactor: fittingScaleFactor,
+			userScale: userScale,
 			centerOffset: new THREE.Vector3(globalCenter.x, globalCenter.y, globalCenter.z),
 			sizeAfterFitting: sizeAfterFitting
 		};
 		return asset;
-	}		
+	}
 
      // ----- disposeAssets (MODIFIÉ pour s'assurer que 'house' est dans la boucle mais sera vide) -----
      disposeAssets() {
