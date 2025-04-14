@@ -223,10 +223,16 @@ export default class World {
 		// Mettre à jour l'environnement (pour obtenir l'heure)
 		this.environment?.update(deltaTime);
 
+		const currentHour = this.environment?.getCurrentHour() ?? 12; // Heure par défaut si env non prêt
+
 		// --- NOUVEAU: Mettre à jour le PlotContentGenerator (via CityManager) ---
 		if (this.environment?.isInitialized && this.cityManager?.contentGenerator) {
-			const currentHour = this.environment.getCurrentHour();
+			// L'update des fenêtres se fait DANS PlotContentGenerator maintenant
 			this.cityManager.contentGenerator.update(currentHour);
+		}
+		// --- NOUVEAU: Mettre à jour les lumières des lampadaires (via CityManager) ---
+		if(this.cityManager) {
+			this.cityManager.updateLampPostLights(currentHour); // Appel de la nouvelle fonction
 		}
 		// --------------------------------------------------------------------
 

@@ -7,6 +7,7 @@ import CityAssetLoader from './CityAssetLoader.js';
 import District from './District.js';
 import NavigationGraph from './NavigationGraph.js';
 import Pathfinder from './Pathfinder.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export default class CityManager {
     constructor(experience, config = {}) {
@@ -292,74 +293,78 @@ export default class CityManager {
     }
 
     async generateCity() {
-        console.time("CityGeneration");
-        this.clearCity(); // Appelle maintenant aussi clearDebugVisuals
-
-        try {
-            console.log("--- Starting city generation ---");
-            this.createGlobalGround();
-
-            console.time("AssetLoading");
-            await this.assetLoader.loadAssets();
-            console.timeEnd("AssetLoading");
-            this.logLoadedAssets();
-
-            console.time("LayoutGeneration");
-            this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
-            console.timeEnd("LayoutGeneration");
-            console.log(`Layout generated with ${this.leafPlots.length} plots.`);
-            this.logInitialZoneTypes();
-
-
-            if (!this.leafPlots || this.leafPlots.length === 0) throw new Error("Layout produced no plots.");
-
-            // --- District Logic ---
-            let districtLayoutValid = false;
-            let attempts = 0;
-            console.time("DistrictFormationAndValidation");
-            while (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
-                attempts++;
-                console.log(`\nAttempting district formation/validation #${attempts}...`);
-                this.districts = []; this.leafPlots.forEach(p => { p.districtId = null; p.buildingInstances = []; }); // Reset buildingInstances on plots too
-                this.createDistricts_V2(); // Internal creation/assignment function
-                this.logDistrictStats();
-                districtLayoutValid = this.validateDistrictLayout(); // Internal validation function
-                if (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) { console.log(`Invalid layout, retrying...`); }
-                else if (!districtLayoutValid) { console.error(`ERROR: Could not get a valid district layout after ${attempts} attempts.`); }
-            }
-            console.timeEnd("DistrictFormationAndValidation");
-            if (!districtLayoutValid) { throw new Error(`Critical failure: Invalid district layout after ${attempts} attempts.`); }
-            console.log("District layout validated...");
-            // --- End District Logic ---
-
-            // --- Plot Type Adjustment & Fallback ---
-            console.time("PlotTypeAdjustment");
-            this.adjustPlotTypesWithinDistricts(); // Internal function
-            console.timeEnd("PlotTypeAdjustment");
-            this.assignDefaultTypeToUnassigned(); // Internal function
-            this.logAdjustedZoneTypes(); // Log FINAL des types après ajustement et fallback
-
-            // --- Road, NavGraph, Content Generation ---
-            console.time("RoadAndCrosswalkInfoGeneration");
-            const { roadGroup, crosswalkInfos } = this.roadGenerator.generateRoads(this.leafPlots);
-            this.roadGroup = roadGroup;
-            this.cityContainer.add(this.roadGroup);
-            console.timeEnd("RoadAndCrosswalkInfoGeneration");
-            console.log(`Road network generated and ${crosswalkInfos.length} crosswalk locations identified.`);
-
-            console.time("NavigationGraphBuilding");
-            this.navigationGraph = new NavigationGraph(this.config);
-            this.navigationGraph.buildGraph(this.leafPlots, crosswalkInfos);
-            console.timeEnd("NavigationGraphBuilding");
-
-            console.time("PathfinderInitialization");
-            this.pathfinder = new Pathfinder(this.navigationGraph);
-            console.timeEnd("PathfinderInitialization");
-
-            console.time("ContentGeneration");
-
+		console.time("CityGeneration");
+		this.clearCity(); // Appelle maintenant aussi clearDebugVisuals
+	
+		try {
+			console.log("--- Starting city generation ---");
+			this.createGlobalGround();
+	
+			console.time("AssetLoading");
+			await this.assetLoader.loadAssets();
+			console.timeEnd("AssetLoading");
+			this.logLoadedAssets();
+	
+			console.time("LayoutGeneration");
+			this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
+			console.timeEnd("LayoutGeneration");
+			console.log(`Layout generated with ${this.leafPlots.length} plots.`);
+			this.logInitialZoneTypes();
+	
+			if (!this.leafPlots || this.leafPlots.length === 0)
+				throw new Error("Layout produced no plots.");
+	
+			// --- District Logic ---
+			let districtLayoutValid = false;
+			let attempts = 0;
+			console.time("DistrictFormationAndValidation");
+			while (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
+				attempts++;
+				console.log(`\nAttempting district formation/validation #${attempts}...`);
+				this.districts = [];
+				this.leafPlots.forEach(p => {
+					p.districtId = null;
+					p.buildingInstances = [];
+				});
+				this.createDistricts_V2(); // Fonction interne de création/assignation
+				this.logDistrictStats();
+				districtLayoutValid = this.validateDistrictLayout();
+				if (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
+					console.log(`Invalid layout, retrying...`);
+				} else if (!districtLayoutValid) {
+					console.error(`ERROR: Could not get a valid district layout after ${attempts} attempts.`);
+				}
+			}
+			console.timeEnd("DistrictFormationAndValidation");
+			if (!districtLayoutValid)
+				throw new Error(`Critical failure: Invalid district layout after ${attempts} attempts.`);
+			console.log("District layout validated...");
+	
+			console.time("PlotTypeAdjustment");
+			this.adjustPlotTypesWithinDistricts();
+			console.timeEnd("PlotTypeAdjustment");
+			this.assignDefaultTypeToUnassigned();
+			this.logAdjustedZoneTypes();
+	
+			console.time("RoadAndCrosswalkInfoGeneration");
+			const { roadGroup, crosswalkInfos } = this.roadGenerator.generateRoads(this.leafPlots);
+			this.roadGroup = roadGroup;
+			this.cityContainer.add(this.roadGroup);
+			console.timeEnd("RoadAndCrosswalkInfoGeneration");
+			console.log(`Road network generated and ${crosswalkInfos.length} crosswalk locations identified.`);
+	
+			console.time("NavigationGraphBuilding");
+			this.navigationGraph = new NavigationGraph(this.config);
+			this.navigationGraph.buildGraph(this.leafPlots, crosswalkInfos);
+			console.timeEnd("NavigationGraphBuilding");
+	
+			console.time("PathfinderInitialization");
+			this.pathfinder = new Pathfinder(this.navigationGraph);
+			console.timeEnd("PathfinderInitialization");
+	
+			console.time("ContentGeneration");
+	
 			const debugPlotGridGroup = this.experience.world ? this.experience.world.debugPlotGridGroup : null;
-
 			const { sidewalkGroup, buildingGroup, groundGroup } = this.contentGenerator.generateContent(
 				this.leafPlots,
 				this.assetLoader,
@@ -367,46 +372,383 @@ export default class CityManager {
 				this,
 				debugPlotGridGroup
 			);
-
 			this.sidewalkGroup = sidewalkGroup;
 			this.contentGroup = buildingGroup;
 			this.groundGroup = groundGroup;
-			// Ajout des trois groupes à cityContainer
 			this.cityContainer.add(this.sidewalkGroup);
 			this.cityContainer.add(this.contentGroup);
 			this.cityContainer.add(this.groundGroup);
-
 			console.timeEnd("ContentGeneration");
+	
+			console.log(`Total Building Instances Registered: ${this.buildingInstances.size}`);
+	
+			// ------ Nouvelle étape : Ajout des lampadaires sur les trottoirs ------
+			this.addLampPosts();
+	
+			// --- Debug Visuals ---
+			if (this.experience.isDebugMode) {
+				console.time("DebugVisualsGeneration");
+				if (!this.debugGroup.parent) {
+					this.cityContainer.add(this.debugGroup);
+				}
+				this.createDistrictDebugVisuals();
+				this.createParkDebugVisuals();
+				console.timeEnd("DebugVisualsGeneration");
+			} else {
+				this.clearDebugVisuals();
+				if (this.debugGroup.parent) {
+					this.cityContainer.remove(this.debugGroup);
+				}
+			}
+	
+			console.log("--- City generation finished ---");
+		} catch (error) {
+			console.error("Major error during generation:", error);
+			this.clearCity();
+		} finally {
+			console.timeEnd("CityGeneration");
+		}
+	}
 
-            console.log(`Total Building Instances Registered: ${this.buildingInstances.size}`);
+	buildLampPostGeometries() {
+		// Configuration de base
+		const poleSegments = 16; // Réduit légèrement pour potentiellement moins de complexité
 
-            // --- Debug Visuals ---
-            // N'exécuter que si le mode debug est actif DANS Experience
-            if (this.experience.isDebugMode) {
-                 console.time("DebugVisualsGeneration");
-                 if (!this.debugGroup.parent) { // S'assurer que le groupe est dans la scène
-                    this.cityContainer.add(this.debugGroup);
-                 }
-                 this.createDistrictDebugVisuals(); // Génère les plans colorés pour les districts
-                 this.createParkDebugVisuals();     // <<--- APPEL DE LA NOUVELLE FONCTION
-                 // Note : NavGrid debug est géré dans World.js basé sur le NavGraph généré ici
-                 console.timeEnd("DebugVisualsGeneration");
-            } else {
-                 this.clearDebugVisuals(); // Assure qu'ils sont retirés si debug désactivé
-                 if (this.debugGroup.parent) { // Retirer le groupe s'il n'est pas nécessaire
-                    this.cityContainer.remove(this.debugGroup);
-                 }
+		// 1. Base cylindrique
+		const baseRadiusTop = 0.4;
+		const baseRadiusBottom = 0.5;
+		const baseHeight = 0.8;
+		const baseGeo = new THREE.CylinderGeometry(baseRadiusTop, baseRadiusBottom, baseHeight, poleSegments);
+		baseGeo.translate(0, baseHeight / 2, 0); // Positionne la base
+
+		// 2. Poteau principal
+		const poleRadius = 0.2;
+		const poleLowerHeight = 5;
+		const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleLowerHeight, poleSegments);
+		poleGeo.translate(0, baseHeight + poleLowerHeight / 2, 0); // Positionne au-dessus de la base
+		const poleTopY = baseHeight + poleLowerHeight;
+
+		// 3. Section courbée (TubeGeometry basée sur ArcCurve)
+		const curveRadius = 1.0;
+		const curveTubeRadius = poleRadius;
+		const curveSegmentsCount = 20; // Réduit
+		// L'ArcCurve semble correct: centre (-curveRadius, poleTopY), rayon, angle début PI/2 (90deg), angle fin 0 (0deg), sens horaire
+		const arcCurve = new THREE.ArcCurve(-curveRadius, poleTopY, curveRadius, Math.PI / 2, 0, true);
+		const curveGeo = new THREE.TubeGeometry(arcCurve, curveSegmentsCount, curveTubeRadius, poleSegments, false);
+		// Pas de translation nécessaire ici car l'ArcCurve est déjà positionné
+
+		// 4. Bras horizontal
+		const armLength = 2.5;
+		const armGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, armLength, poleSegments);
+		// Positionner le bras horizontal au bon endroit après rotation
+		// Le centre de l'arc se termine à x = -curveRadius, y = poleTopY. Le point final de l'arc est à x = 0, y = poleTopY.
+		// Le bras doit partir de là.
+		armGeo.rotateZ(Math.PI / 2); // Oriente le cylindre horizontalement
+		armGeo.translate(armLength / 2, poleTopY, 0); // Le positionne au bout de la courbe
+
+		// 5. Tête de la lampe
+		const lampHeadWidth = 1.2;
+		const lampHeadHeight = 0.4;
+		const lampHeadDepth = 0.6;
+		const lampHeadGeo = new THREE.BoxGeometry(lampHeadWidth, lampHeadHeight, lampHeadDepth);
+		// Positionner par rapport à la fin du bras horizontal
+		lampHeadGeo.translate(armLength, poleTopY - lampHeadHeight / 2, 0);
+
+		// 6. Partie lumineuse (ampoule) - Géométrie séparée
+		const lightSourceWidth = lampHeadWidth * 0.8;
+		const lightSourceHeight = 0.1;
+		const lightSourceDepth = lampHeadDepth * 0.8;
+		const lightGeo = new THREE.BoxGeometry(lightSourceWidth, lightSourceHeight, lightSourceDepth);
+		// Positionner l'ampoule sous la tête de lampe
+		lightGeo.translate(armLength, poleTopY - lampHeadHeight - lightSourceHeight / 2, 0); // Position Y ajustée
+
+		// --- Fusion des parties grises ---
+		// **MODIFICATION : Suppression de .toNonIndexed()**
+		const greyGeos = [baseGeo, poleGeo, curveGeo, armGeo, lampHeadGeo];
+		const mergedGreyGeo = mergeGeometries(greyGeos, false); // Utiliser 'false' pour ne pas créer de groupes
+		if (!mergedGreyGeo) {
+			console.error("Échec critique de la fusion des géométries du lampadaire (parties grises).");
+			// Nettoyer les géométries individuelles en cas d'échec
+			greyGeos.forEach(g => g.dispose());
+			// Retourner des géométries vides pour éviter d'autres erreurs
+			return {
+				greyGeometry: new THREE.BufferGeometry(),
+				lightGeometry: new THREE.BufferGeometry(),
+				greyMaterial: new THREE.MeshStandardMaterial({ color: 0xff0000 }), // Rouge pour indiquer l'erreur
+				lightMaterial: new THREE.MeshStandardMaterial({ color: 0xff0000 })
+			};
+		}
+
+		// Nettoyer les géométries individuelles après fusion réussie
+        greyGeos.forEach(g => g.dispose());
+
+        // **MODIFICATION : Suppression des computeBoundingSphere et fallbacks manuels**
+        // Laisser Three.js calculer les bounding spheres au besoin.
+
+		// Matériaux (inchangés)
+		const greyMaterial = new THREE.MeshStandardMaterial({
+			color: 0x606060,
+			roughness: 0.6,
+			metalness: 0.4,
+			name: "LampPostGreyMat"
+		});
+		const lightMaterial = new THREE.MeshStandardMaterial({
+			color: 0xffffaa, // Jaune pâle
+			emissive: 0xffffdd, // Légèrement plus clair pour l'émission
+			emissiveIntensity: 0.0, // Commence éteint
+			name: "LampPostLightMat"
+		});
+
+		return {
+			greyGeometry: mergedGreyGeo,
+			lightGeometry: lightGeo, // Retourne la géométrie non fusionnée de l'ampoule
+			greyMaterial,
+			lightMaterial
+		};
+	}
+
+	/**
+	 * Ajoute des lampadaires le long des bords des parcelles (trottoirs).
+	 */
+	addLampPosts() {
+		// Intervalle entre lampadaires, modifiable via config
+		const spacing = this.config.lampPostSpacing || 20; // Défaut 20 si non défini
+		const lampPositions = []; // Stocke les positions Vector3
+		const sidewalkH = this.config.sidewalkHeight || 0.2; // Hauteur du trottoir
+
+		console.log(`Ajout des lampadaires avec espacement de ${spacing}...`);
+
+		// Utiliser un Set pour éviter les doublons aux coins exacts
+		const positionSet = new Set();
+		const addPosition = (x, z) => {
+			const key = `${x.toFixed(2)},${z.toFixed(2)}`; // Clé basée sur les coordonnées
+			if (!positionSet.has(key)) {
+				lampPositions.push(new THREE.Vector3(x, sidewalkH, z));
+				positionSet.add(key);
+			}
+		};
+
+		this.leafPlots.forEach(plot => {
+			// Ne pas placer de lampadaires sur les parcelles de type 'park' ou 'unbuildable'
+			if (plot.zoneType === 'park' || plot.zoneType === 'unbuildable') return;
+
+            const plotX = plot.x;
+            const plotZ = plot.z;
+            const plotW = plot.width;
+            const plotD = plot.depth;
+            const sidewalkOffset = (this.config.sidewalkWidth || 0) / 2; // Décalage pour être sur le trottoir
+
+			// --- Placement sur les 4 bords ---
+            // Bord Supérieur (Z constant = plot.z - offset)
+            for (let x = plotX; x <= plotX + plotW; x += spacing) {
+                addPosition(x, plotZ - sidewalkOffset);
             }
+            // Bord Inférieur (Z constant = plot.z + plotD + offset)
+             for (let x = plotX; x <= plotX + plotW; x += spacing) {
+                addPosition(x, plotZ + plotD + sidewalkOffset);
+            }
+			// Bord Gauche (X constant = plot.x - offset) - Exclure les coins déjà faits
+			for (let z = plotZ + spacing; z < plotZ + plotD; z += spacing) {
+                addPosition(plotX - sidewalkOffset, z);
+            }
+            // Bord Droit (X constant = plot.x + plotW + offset) - Exclure les coins déjà faits
+             for (let z = plotZ + spacing; z < plotZ + plotD; z += spacing) {
+                addPosition(plotX + plotW + sidewalkOffset, z);
+            }
+		});
 
-            console.log("--- City generation finished ---");
+		if (lampPositions.length === 0) {
+			console.log("Aucune position de lampadaire générée.");
+			return;
+		}
 
-        } catch (error) {
-            console.error("Major error during generation:", error);
-            this.clearCity(); // Ensure cleanup on error
-        } finally {
-            console.timeEnd("CityGeneration");
+		console.log(`${lampPositions.length} positions de lampadaires uniques déterminées.`);
+		this.createLampPostInstancedMeshes(lampPositions);
+	}
+
+	/**
+	 * Crée les InstancedMesh pour les parties grises et lumineuses des lampadaires.
+	 * @param {Array<THREE.Vector3>} lampPositions - Les positions où placer les lampadaires.
+	 */
+	createLampPostInstancedMeshes(lampPositions) {
+		// Récupération des géométries et des matériaux pour le lampadaire
+		const { greyGeometry, lightGeometry, greyMaterial, lightMaterial } = this.buildLampPostGeometries();
+
+        // Vérifier si les géométries sont valides avant de continuer
+        if (!greyGeometry || greyGeometry.attributes.position.count === 0 || !lightGeometry || lightGeometry.attributes.position.count === 0) {
+            console.error("Échec de la création des InstancedMesh de lampadaires : géométrie(s) invalide(s) reçue(s) de buildLampPostGeometries.");
+            return;
+        }
+
+		const count = lampPositions.length;
+		if (count === 0) return;
+
+		console.log(`Création des InstancedMesh pour ${count} lampadaires...`);
+
+		// InstancedMesh pour les parties grises
+		const greyInstancedMesh = new THREE.InstancedMesh(greyGeometry, greyMaterial, count);
+		greyInstancedMesh.name = "LampPosts_GreyParts_Instanced";
+
+		// InstancedMesh pour les parties lumineuses (ampoules)
+		const lightInstancedMesh = new THREE.InstancedMesh(lightGeometry, lightMaterial, count);
+		lightInstancedMesh.name = "LampPosts_LightParts_Instanced";
+
+		const dummy = new THREE.Object3D(); // Objet temporaire pour calculer les matrices
+		const yAxis = new THREE.Vector3(0, 1, 0);
+
+		for (let i = 0; i < count; i++) {
+			dummy.position.copy(lampPositions[i]);
+
+            // --- Déterminer la rotation ---
+            // TODO: Améliorer la rotation pour qu'elle pointe vers la route/centre de la parcelle.
+            // Pour l'instant, une rotation aléatoire simple ou fixe.
+            // Exemple simple: toutes orientées pareil (pas idéal)
+            dummy.rotation.set(0, 0, 0);
+            // Exemple aléatoire:
+            // dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
+
+            // Mettre à l'échelle si nécessaire (ici, échelle 1)
+			dummy.scale.set(1, 1, 1);
+			dummy.updateMatrix(); // Calcule la matrice de transformation pour cette instance
+
+			greyInstancedMesh.setMatrixAt(i, dummy.matrix);
+			lightInstancedMesh.setMatrixAt(i, dummy.matrix);
+		}
+
+		// Indiquer que les matrices d'instance ont changé et doivent être mises à jour sur le GPU
+		greyInstancedMesh.instanceMatrix.needsUpdate = true;
+		lightInstancedMesh.instanceMatrix.needsUpdate = true;
+
+		// Configuration des ombres
+		greyInstancedMesh.castShadow = true;
+		greyInstancedMesh.receiveShadow = true; // Les poteaux peuvent recevoir des ombres
+		lightInstancedMesh.castShadow = false; // L'ampoule elle-même ne projette pas d'ombre significative
+		lightInstancedMesh.receiveShadow = false; // Ne reçoit pas d'ombre non plus
+
+		// Ajout des InstancedMesh dans le conteneur de la ville (ou un groupe dédié)
+		// Assurez-vous que this.cityContainer est bien le THREE.Group où vous voulez ajouter les lampadaires
+		if (this.cityContainer) {
+            this.cityContainer.add(greyInstancedMesh);
+            this.cityContainer.add(lightInstancedMesh);
+            console.log("InstancedMesh des lampadaires (gris et lumière) ajoutés à cityContainer.");
+        } else {
+            console.error("Impossible d'ajouter les InstancedMesh de lampadaires : this.cityContainer est null.");
+        }
+
+
+		// Stockage optionnel des références pour d'éventuelles mises à jour (ex: allumer/éteindre)
+		this.lampPostMeshes = {
+			grey: greyInstancedMesh,
+			light: lightInstancedMesh
+		};
+
+        // --- AJOUT : Mise à jour des lumières des lampadaires ---
+        // Appeler la fonction d'update une fois pour définir l'état initial
+        if(this.experience?.world?.environment) {
+            this.updateLampPostLights(this.experience.world.environment.getCurrentHour());
+        } else {
+            this.updateLampPostLights(12); // Supposer qu'il fait jour si l'environnement n'est pas prêt
+        }
+        // -----------------------------------------------------
+	}
+
+	updateLampPostLights(currentHour) {
+        if (!this.lampPostMeshes || !this.lampPostMeshes.light) {
+            return; // Pas encore de lampadaires créés
+        }
+
+        const lightMesh = this.lampPostMeshes.light;
+        if (!lightMesh.material) return;
+
+        // Déterminer si les lumières doivent être allumées (exemple: de 18h à 6h)
+        const lightsOn = (currentHour >= 18 || currentHour < 6);
+        const targetIntensity = lightsOn ? 1.8 : 0.0; // Intensité cible (ajustable)
+
+        // Appliquer l'intensité au matériau de l'InstancedMesh des ampoules
+        // Vérifier si une mise à jour est nécessaire pour éviter des opérations inutiles
+        if (lightMesh.material.emissiveIntensity !== targetIntensity) {
+            lightMesh.material.emissiveIntensity = targetIntensity;
+            // Note: Pas besoin de material.needsUpdate = true pour les uniforms standards comme emissiveIntensity
         }
     }
+
+	createLampPost() {
+		const lampPost = new THREE.Group();
+		const poleSegments = 20;
+	
+		// Matériaux utilisés
+		const greyMaterial = new THREE.MeshStandardMaterial({
+			color: 0x606060,
+			roughness: 0.6,
+			metalness: 0.4
+		});
+		const lightMaterial = new THREE.MeshStandardMaterial({
+			color: 0xffffaa,
+			emissive: 0xffffaa,
+			emissiveIntensity: 1
+		});
+	
+		// 1. Base cylindrique
+		const baseRadiusTop = 0.4;
+		const baseRadiusBottom = 0.5;
+		const baseHeight = 0.8;
+		const baseGeometry = new THREE.CylinderGeometry(baseRadiusTop, baseRadiusBottom, baseHeight, poleSegments);
+		const baseMesh = new THREE.Mesh(baseGeometry, greyMaterial);
+		baseMesh.position.y = baseHeight / 2;
+		lampPost.add(baseMesh);
+	
+		// 2. Poteau principal (partie inférieure)
+		const poleRadius = 0.2;
+		const poleLowerHeight = 5;
+		const poleLowerGeometry = new THREE.CylinderGeometry(poleRadius, poleRadius, poleLowerHeight, poleSegments);
+		const poleLowerMesh = new THREE.Mesh(poleLowerGeometry, greyMaterial);
+		poleLowerMesh.position.y = baseHeight + poleLowerHeight / 2;
+		lampPost.add(poleLowerMesh);
+		const poleTopY = baseHeight + poleLowerHeight;
+	
+		// 3. Section courbée
+		const curveRadius = 1.0;
+		const curveTubeRadius = poleRadius;
+		const curveSegmentsCount = 40;
+		const curveRadialSegments = poleSegments;
+		const curvePath = new THREE.Path();
+		const curveCenterX = -curveRadius;
+		const curveCenterY = poleTopY;
+		curvePath.absarc(curveCenterX, curveCenterY, curveRadius, Math.PI / 2, 0, true);
+		const curveGeometry = new THREE.TubeGeometry(curvePath, curveSegmentsCount, curveTubeRadius, curveRadialSegments, false);
+		const curveMesh = new THREE.Mesh(curveGeometry, greyMaterial);
+		lampPost.add(curveMesh);
+	
+		// 4. Bras horizontal
+		const armLength = 2.5;
+		const verticalOffset = poleRadius / 4;
+		const adjustedArmY = poleTopY - verticalOffset;
+		const armGeometry = new THREE.CylinderGeometry(poleRadius, poleRadius, armLength, poleSegments);
+		const armMesh = new THREE.Mesh(armGeometry, greyMaterial);
+		armMesh.position.set(armLength / 2, adjustedArmY, 0);
+		armMesh.rotation.z = Math.PI / 2;
+		lampPost.add(armMesh);
+	
+		// 5. Tête de la lampe (forme simple)
+		const lampHeadWidth = 1.2;
+		const lampHeadHeight = 0.4;
+		const lampHeadDepth = 0.6;
+		const lampHeadGeometry = new THREE.BoxGeometry(lampHeadWidth, lampHeadHeight, lampHeadDepth);
+		const lampHeadMesh = new THREE.Mesh(lampHeadGeometry, greyMaterial);
+		lampHeadMesh.position.set(armLength, adjustedArmY - lampHeadHeight / 2, 0);
+		lampPost.add(lampHeadMesh);
+	
+		// 6. Partie lumineuse sous la tête
+		const lightSourceWidth = lampHeadWidth * 0.8;
+		const lightSourceHeight = 0.1;
+		const lightSourceDepth = lampHeadDepth * 0.8;
+		const lightSourceGeometry = new THREE.BoxGeometry(lightSourceWidth, lightSourceHeight, lightSourceDepth);
+		const lightSourceMesh = new THREE.Mesh(lightSourceGeometry, lightMaterial);
+		lightSourceMesh.position.set(armLength, lampHeadMesh.position.y - lampHeadHeight / 2 - lightSourceHeight / 2, 0);
+		lampPost.add(lightSourceMesh);
+	
+		return lampPost;
+	}	
 
 	clearDebugVisuals(visualType = null) {
         const objectsToRemove = [];
