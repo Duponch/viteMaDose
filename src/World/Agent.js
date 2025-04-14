@@ -64,29 +64,37 @@ export default class Agent {
         }
 
         const navGraph = cityManager.getNavigationGraph();
-        const sidewalkHeight = navGraph ? navGraph.sidewalkHeight : (this.config?.sidewalkHeight ?? 0.2);
+        // Utiliser la hauteur du trottoir depuis la config CityManager si navGraph n'est pas dispo (sécurité)
+        const sidewalkHeight = navGraph ? navGraph.sidewalkHeight : (cityManager.config?.sidewalkHeight ?? 0.2);
 
         // --- Récupérer position domicile et NŒUD GRILLE ---
         const homeInfo = cityManager.getBuildingInfo(this.homeBuildingId);
         if (homeInfo) {
-             const homePlot = cityManager.getPlots().find(p => p.id === homeInfo.plotId);
-             let baseHomePos = homePlot ? homePlot.getEntryPoint(sidewalkHeight) : homeInfo.position.clone();
-             baseHomePos.y = sidewalkHeight;
+             // *** CORRECTION : Utiliser homeInfo.position directement ***
+             // C'est la position enregistrée lors de la création du bâtiment,
+             // qui est plus susceptible d'être près de l'entrée réelle.
+             let baseHomePos = homeInfo.position.clone();
+             baseHomePos.y = sidewalkHeight; // S'assurer qu'on est à la bonne hauteur
 
              if (navGraph) {
+                 // Chercher le noeud marchable le plus proche de cette position
                  this.homeGridNode = navGraph.getClosestWalkableNode(baseHomePos);
                  if (this.homeGridNode) {
+                    // Convertir le noeud trouvé en position monde pour le positionnement initial
                     this.homePosition = navGraph.gridToWorld(this.homeGridNode.x, this.homeGridNode.y);
                     // console.log(`Agent ${this.id}: Domicile ${this.homeBuildingId} -> Node (${this.homeGridNode.x},${this.homeGridNode.y}) Pos:`, this.homePosition.toArray().map(n=>n.toFixed(1)).join(','));
                  } else {
-                     console.warn(`Agent ${this.id}: Pas de nœud NavGraph proche trouvé pour domicile ${this.homeBuildingId}. Utilisation position plot/brute.`);
+                     console.warn(`Agent ${this.id}: Pas de nœud NavGraph proche trouvé pour domicile ${this.homeBuildingId} à la position ${baseHomePos.x.toFixed(1)},${baseHomePos.z.toFixed(1)}. Utilisation position brute (peut causer problèmes).`);
+                     // Utiliser la position brute comme fallback, mais l'agent risque de ne pas pouvoir bouger
                      this.homePosition = baseHomePos;
                      this.homeGridNode = null;
                  }
              } else {
+                 // Fallback si pas de NavGraph (devrait pas arriver normalement)
                  this.homePosition = baseHomePos;
                  this.homeGridNode = null;
              }
+             // Positionner l'agent à la position trouvée sur le NavGraph (ou la position brute en fallback)
              this.position.copy(this.homePosition);
              this.currentState = AgentState.AT_HOME;
              this.isVisible = false; // Commence caché à la maison
@@ -95,27 +103,30 @@ export default class Agent {
             console.error(`Agent ${this.id}: Infos domicile ${this.homeBuildingId} non trouvées. Agent reste IDLE.`);
             this.currentState = AgentState.IDLE;
             this.isVisible = false;
-            return;
+            return; // Important de retourner ici si pas de domicile
         }
 
         // --- Récupérer position travail et NŒUD GRILLE ---
          const workInfo = cityManager.getBuildingInfo(this.workBuildingId);
          if (workInfo) {
-             const workPlot = cityManager.getPlots().find(p => p.id === workInfo.plotId);
-             let baseWorkPos = workPlot ? workPlot.getEntryPoint(sidewalkHeight) : workInfo.position.clone();
-             baseWorkPos.y = sidewalkHeight;
+             // *** CORRECTION : Utiliser workInfo.position directement ***
+             let baseWorkPos = workInfo.position.clone();
+             baseWorkPos.y = sidewalkHeight; // S'assurer qu'on est à la bonne hauteur
 
               if (navGraph) {
+                  // Chercher le noeud marchable le plus proche
                   this.workGridNode = navGraph.getClosestWalkableNode(baseWorkPos);
                   if (this.workGridNode) {
+                     // Convertir le noeud trouvé en position monde
                      this.workPosition = navGraph.gridToWorld(this.workGridNode.x, this.workGridNode.y);
                     //  console.log(`Agent ${this.id}: Travail ${this.workBuildingId} -> Node (${this.workGridNode.x},${this.workGridNode.y}) Pos:`, this.workPosition?.toArray().map(n=>n.toFixed(1)).join(','));
                   } else {
-                      console.warn(`Agent ${this.id}: Pas de nœud NavGraph proche trouvé pour travail ${this.workBuildingId}.`);
-                      this.workPosition = baseWorkPos;
+                      console.warn(`Agent ${this.id}: Pas de nœud NavGraph proche trouvé pour travail ${this.workBuildingId} à la position ${baseWorkPos.x.toFixed(1)},${baseWorkPos.z.toFixed(1)}.`);
+                      this.workPosition = baseWorkPos; // Fallback
                       this.workGridNode = null;
                   }
               } else {
+                  // Fallback si pas de NavGraph
                   this.workPosition = baseWorkPos;
                   this.workGridNode = null;
               }
@@ -124,6 +135,7 @@ export default class Agent {
             this.workPosition = null;
             this.workGridNode = null;
          }
+         // Note: La position initiale de l'agent est déjà définie sur homePosition.
     }
 
     // ==============================================================
