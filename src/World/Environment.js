@@ -143,10 +143,10 @@ export default class Environment {
         const baseGeometry = new THREE.IcosahedronGeometry(5, 0); // Rayon 5, détail 0
 
         // --- RANDOMISATION ---
-        const numParts = THREE.MathUtils.randInt(4, 8); // Nombre aléatoire de parties
+        const numParts = THREE.MathUtils.randInt(6, 10); // Nombre aléatoire de parties
         const maxOffset = 6;
-        const minPartScale = 0.4;
-        const maxPartScale = 1.2;
+        const minPartScale = 0.3;
+        const maxPartScale = 0.7;
         // --------------------
 
         for (let i = 0; i < numParts; i++) {
@@ -277,7 +277,7 @@ export default class Environment {
              return;
          }
 
-        const numberOfClouds = 10;
+        const numberOfClouds = 7;
         const skyHeight = 150;
         const spreadRadius = this.config.mapSize * 0.8;
 
