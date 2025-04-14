@@ -94,7 +94,7 @@ export default class CityManager {
               maxWorkersPerIndustrial: 50,
 
 			 lampPostLightConeRadiusBottom: 5.0, // Rayon du cône au sol
-             lampPostLightConeOpacity: 0.002,      // Opacité du cône
+             lampPostLightConeOpacity: 0.0023,      // Opacité du cône
 
              lampPostLightConeColor: 0xFFFF99      // Couleur du cône (jaune pâle)
         };
@@ -508,7 +508,8 @@ export default class CityManager {
         const spacing = this.config.lampPostSpacing || 20;
         const lampData = []; // Stocke des objets { position: Vector3, angleY: number }
         const sidewalkH = this.config.sidewalkHeight || 0.2;
-        console.log(`Ajout des lampadaires avec espacement ${spacing} et orientation 'dos au plot'...`);
+        // Message mis à jour pour refléter la nouvelle orientation (corrigée)
+        console.log(`Ajout des lampadaires avec espacement ${spacing} et orientation parallèle au trottoir (corrigée)...`);
 
         const positionMap = new Map(); // Utiliser une Map pour stocker { positionKey: angleY }
 
@@ -519,7 +520,9 @@ export default class CityManager {
                  positionMap.set(key, angleY); // Stocker l'angle associé
                  lampData.push({
                     position: new THREE.Vector3(x, sidewalkH, z),
-                    angleY: angleY
+                    // --- Correction : Normaliser l'angle pour être dans [-PI, PI] ou [0, 2PI] ---
+                    // Math.atan2(Math.sin(angleY), Math.cos(angleY)) fait cela proprement.
+                    angleY: Math.atan2(Math.sin(angleY), Math.cos(angleY))
                  });
             }
             // Si la clé existe déjà, on garde l'angle du premier lampadaire ajouté à cet emplacement.
@@ -534,28 +537,35 @@ export default class CityManager {
             const plotD = plot.depth;
             const sidewalkOffset = (this.config.sidewalkWidth || 0) / 2;
 
-            // --- Placement et calcul de l'angle pour chaque bord ---
-            // Bord Supérieur (Z constant = plot.z - offset) -> Tourne le dos au plot -> Angle = PI (face vers +Z)
-            const angleTop = Math.PI;
+            // --- Placement et calcul de l'angle pour chaque bord (ANGLES CORRIGÉS) ---
+
+            // Bord Supérieur (Z constant = plot.z - offset)
+            // Pointe vers +X (supposé correct)
+            const angleTop = Math.PI / 2; // INCHANGÉ par rapport à la version précédente
             for (let x = plotX; x <= plotX + plotW; x += spacing) {
                 addLampData(x, plotZ - sidewalkOffset, angleTop);
             }
 
-            // Bord Inférieur (Z constant = plot.z + plotD + offset) -> Tourne le dos au plot -> Angle = 0 (face vers -Z)
-            const angleBottom = 0;
+            // Bord Inférieur (Z constant = plot.z + plotD + offset)
+            // Pointe vers -X dans la version précédente (-PI/2). Doit pointer vers +X.
+            // Rotation de 180° (PI) -> -PI/2 + PI = PI/2
+            const angleBottom = -Math.PI / 2; // <- MODIFIÉ (était -Math.PI / 2)
              for (let x = plotX; x <= plotX + plotW; x += spacing) {
                 addLampData(x, plotZ + plotD + sidewalkOffset, angleBottom);
             }
 
-            // Bord Gauche (X constant = plot.x - offset) -> Tourne le dos au plot -> Angle = PI/2 (face vers +X)
-            const angleLeft = Math.PI / 2;
+            // Bord Gauche (X constant = plot.x - offset)
+            // Pointe vers -Z (supposé correct)
+            const angleLeft = Math.PI; // INCHANGÉ par rapport à la version précédente
              // Exclure les coins déjà potentiellement faits par les bords haut/bas
             for (let z = plotZ + spacing / 2; z < plotZ + plotD; z += spacing) { // Léger décalage pour éviter coin exact
                 addLampData(plotX - sidewalkOffset, z, angleLeft);
             }
 
-            // Bord Droit (X constant = plot.x + plotW + offset) -> Tourne le dos au plot -> Angle = -PI/2 (face vers -X)
-            const angleRight = -Math.PI / 2;
+            // Bord Droit (X constant = plot.x + plotW + offset)
+            // Pointe vers +Z dans la version précédente (PI). Doit pointer vers -Z.
+            // Rotation de 180° (PI) -> PI + PI = 2*PI (équivalent à 0)
+            const angleRight = Math.PI * 2; // <- MODIFIÉ (était Math.PI)
             // Exclure les coins déjà potentiellement faits
              for (let z = plotZ + spacing / 2; z < plotZ + plotD; z += spacing) {
                 addLampData(plotX + plotW + sidewalkOffset, z, angleRight);
@@ -567,7 +577,7 @@ export default class CityManager {
             return;
         }
 
-        console.log(`${lampData.length} lampadaires uniques à créer (avec orientation).`);
+        console.log(`${lampData.length} lampadaires uniques à créer (avec orientation parallèle corrigée).`);
         this.createLampPostInstancedMeshes(lampData); // Passer les données complètes
     }
 
