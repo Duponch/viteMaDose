@@ -364,140 +364,262 @@ export default class PlotContentGenerator {
     }
 
 	generatePlotPrimaryContent(plot) {
-        // Prérequis (inchangé)
-        if (!this.cityManager || !this.assetLoader) { console.error(`PlotContentGenerator: Prérequis manquants pour plot ${plot.id}`); return; }
-
-        // Créer le sol de la parcelle
-        const plotGroundY = 0.005;
-        this.createPlotGround(plot, plotGroundY);
-        plot.buildingInstances = [];
-        const groundLevel = plotGroundY;
-        const zoneType = plot.zoneType;
-
-        let targetBuildingWidth = 0;
-        let targetBuildingDepth = 0;
-        let baseScaleFactor = 1.0;
-        let assetInfo = null;
-        let minSpacing = 0;
-
-        // --- Déterminer dimensions cibles, échelle ET ESPACEMENT MINIMAL ---
-        switch(zoneType) {
-            case 'house':
-                 const houseArmLength = 2.0; baseScaleFactor = this.config.gridHouseBaseScale ?? 1.5;
-                 targetBuildingWidth = houseArmLength * baseScaleFactor; targetBuildingDepth = houseArmLength * baseScaleFactor;
-                 minSpacing = this.config.minHouseSpacing ?? 0;
-                 break;
-            case 'building': case 'industrial': case 'skyscraper':
-                assetInfo = this.assetLoader.getRandomAssetData(zoneType);
-                if (!assetInfo) {
-                    console.warn(`Aucun asset ${zoneType} trouvé pour les dimensions de grille du plot ${plot.id}.`);
-                    return;
-                }
-                if(zoneType === 'building'){ baseScaleFactor = this.config.gridBuildingBaseScale ?? 1.0; minSpacing = this.config.minBuildingSpacing ?? 0; }
-                else if(zoneType === 'industrial'){ baseScaleFactor = this.config.gridIndustrialBaseScale ?? 1.0; minSpacing = this.config.minIndustrialSpacing ?? 0; }
-                else { baseScaleFactor = this.config.gridSkyscraperBaseScale ?? 1.0; minSpacing = this.config.minSkyscraperSpacing ?? 0; }
-                targetBuildingWidth = assetInfo.sizeAfterFitting.x * baseScaleFactor;
-                targetBuildingDepth = assetInfo.sizeAfterFitting.z * baseScaleFactor;
-                break;
-
-            case 'park':
-                minSpacing = this.config.minParkSpacing ?? 2.0;
-                const parkAssetProbability = 0.8; // Probabilité augmentée précédemment
-                console.log(`[Plot ${plot.id} - Park] Processing plot. Probability: ${parkAssetProbability}`); // DEBUG
-
-                const subZones = this.subdivideForPlacement(plot);
-                console.log(`[Plot ${plot.id} - Park] Subdivided into ${subZones.length} zones.`); // DEBUG
-
-                let parkAssetsPlacedCount = 0; // DEBUG counter
-
-                subZones.forEach((subZone, index) => {
-                    const randomCheck = Math.random();
-                    // console.log(`[Plot ${plot.id} - Park] SubZone ${index}: Random check ${randomCheck.toFixed(2)} vs Probability ${parkAssetProbability}`); // DEBUG détaillé
-                    if (randomCheck < parkAssetProbability) {
-                        const parkAssetInfo = this.assetLoader.getRandomAssetData('park');
-                        // console.log(`[Plot ${plot.id} - Park] SubZone ${index}: Attempting to place asset. Got asset info:`, parkAssetInfo ? parkAssetInfo.id : 'null'); // DEBUG
-
-                        if (parkAssetInfo) {
-                            const centerX = subZone.x + subZone.width * (0.3 + Math.random() * 0.4);
-                            const centerZ = subZone.z + subZone.depth * (0.3 + Math.random() * 0.4);
-                            const randomParkUserScale = THREE.MathUtils.randFloat(0.8, 1.2);
-                            const finalUserScale = parkAssetInfo.userScale * randomParkUserScale;
-
-                            // console.log(`[Plot ${plot.id} - Park] SubZone ${index}: Placing ${parkAssetInfo.id} at (${centerX.toFixed(1)}, ${centerZ.toFixed(1)}) with scale ${finalUserScale.toFixed(2)}`); // DEBUG
-
-                            const instanceMatrix = this.calculateInstanceMatrix(
-                                centerX, centerZ,
-                                parkAssetInfo.sizeAfterFitting.y,
-                                parkAssetInfo.fittingScaleFactor,
-                                parkAssetInfo.centerOffset,
-                                finalUserScale,
-                                Math.random() * Math.PI * 2
-                            );
-
-                            // console.log(`[Plot ${plot.id} - Park] SubZone ${index}: Calculated Matrix for ${parkAssetInfo.id}:`, instanceMatrix.elements); // DEBUG (peut être très verbeux)
-
-                            const modelId = parkAssetInfo.id;
-                            const type = 'park';
-                            if (!this.instanceData[type]) this.instanceData[type] = {};
-                            if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
-                            this.instanceData[type][modelId].push(instanceMatrix.clone());
-                            parkAssetsPlacedCount++; // DEBUG counter
-                        } else {
-                             console.warn(`[Plot ${plot.id} - Park] SubZone ${index}: Did not receive valid parkAssetInfo from loader.`); // DEBUG
-                        }
-                    }
-                });
-                console.log(`[Plot ${plot.id} - Park] Finished processing subzones. Placed ${parkAssetsPlacedCount} park assets.`); // DEBUG
-                return; // Fin logique 'park'
-
-            default:
-                console.warn(`Type de zone inconnu ou non géré pour le contenu primaire: ${zoneType}`);
-                return;
-        }
-
-        // --- Grille pour autres types ---
-        if (zoneType !== 'park') {
-            // ... (code de la grille pour house, building, etc. - INCHANGÉ, non fourni) ...
-             if (targetBuildingWidth <= 0.01 || targetBuildingDepth <= 0.01) { return; }
-             minSpacing = Math.max(0, minSpacing);
-             let numItemsX = 0; const itemPlusSpacingX = targetBuildingWidth + minSpacing; if (plot.width >= targetBuildingWidth) { if (itemPlusSpacingX > 0.01) { numItemsX = Math.floor((plot.width + minSpacing) / itemPlusSpacingX); } else { numItemsX = Math.floor(plot.width / targetBuildingWidth); } if (numItemsX === 0) numItemsX = 1; }
-             let numItemsY = 0; const itemPlusSpacingY = targetBuildingDepth + minSpacing; if (plot.depth >= targetBuildingDepth) { if (itemPlusSpacingY > 0.01) { numItemsY = Math.floor((plot.depth + minSpacing) / itemPlusSpacingY); } else { numItemsY = Math.floor(plot.depth / targetBuildingDepth); } if (numItemsY === 0) numItemsY = 1; }
-             numItemsX = Math.max(0, numItemsX); numItemsY = Math.max(0, numItemsY); if (numItemsX === 0 || numItemsY === 0) { return; }
-             const remainingWidth = plot.width - (numItemsX * targetBuildingWidth); const remainingDepth = plot.depth - (numItemsY * targetBuildingDepth); const gapX = (numItemsX > 0) ? Math.max(0, remainingWidth / (numItemsX + 1)) : 0; const gapZ = (numItemsY > 0) ? Math.max(0, remainingDepth / (numItemsY + 1)) : 0;
-             for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
-                 for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
-                     const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + gapX)) + targetBuildingWidth / 2; const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + gapZ)) + targetBuildingDepth / 2; const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ); const distToLeft = cellCenterX - plot.x; const distToRight = (plot.x + plot.width) - cellCenterX; const distToTop = cellCenterZ - plot.z; const distToBottom = (plot.z + plot.depth) - cellCenterZ; const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom); let targetRotationY = 0; const tolerance = 0.1; if (Math.abs(minDist - distToLeft) < tolerance) targetRotationY = -Math.PI / 2; else if (Math.abs(minDist - distToRight) < tolerance) targetRotationY = Math.PI / 2; else if (Math.abs(minDist - distToBottom) < tolerance) targetRotationY = Math.PI; const finalQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotationY);
-                     if (zoneType === 'house') {
-                         const armLength = 2; const armWidth = 1; const armDepth = 0.5; const roofPitchHeight = 0.3; const doorHeight = 0.7 * armDepth; const doorDepth = 0.02; const doorWidth = 0.3; const garageDoorHeight = 0.8 * armDepth; const garageDoorWidth = 0.55; const windowHeight = 0.4 * armDepth; const windowDepth = doorDepth; const window_Y_pos_Base = armDepth * 0.3;
-                         const finalScaleVector = new THREE.Vector3(baseScaleFactor, baseScaleFactor, baseScaleFactor); const finalPosY = groundLevel;
-                         const modelCenterLocal = new THREE.Vector3(armLength / 2, armDepth / 2, armLength / 2); const centerOffsetRotated = modelCenterLocal.clone().applyQuaternion(finalQuaternion); const centerOffsetScaledRotated = centerOffsetRotated.multiplyScalar(baseScaleFactor);
-                         const finalPosition = new THREE.Vector3(worldCellCenterPos.x - centerOffsetScaledRotated.x, finalPosY, worldCellCenterPos.z - centerOffsetScaledRotated.z);
-                         const globalHouseMatrix = new THREE.Matrix4().compose(finalPosition, finalQuaternion, finalScaleVector);
-                         let localMatrix;
-                         const addPartInstance = (partName, localMatrix) => { if (this.baseHouseGeometries[partName]) { const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix); const type = 'house'; const modelId = partName; if (!this.instanceData[type]) this.instanceData[type] = {}; if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = []; this.instanceData[type][modelId].push(finalMatrix.clone()); } else { console.warn(`Géométrie maison manquante: ${partName}`); } };
-                         const addWindowPart = (geomKey, facadeCoordX, facadeCoordZ, yBase, isYZPlane) => { const yCenter = yBase + windowHeight / 2; let xPos, zPos; if(isYZPlane) { xPos = facadeCoordX; zPos = facadeCoordZ; } else { xPos = facadeCoordX; zPos = facadeCoordZ; } localMatrix = new THREE.Matrix4().makeTranslation(xPos, yCenter, zPos); addPartInstance(geomKey, localMatrix); };
-                         localMatrix = new THREE.Matrix4(); addPartInstance('base_part1', localMatrix); localMatrix = new THREE.Matrix4(); addPartInstance('base_part2', localMatrix);
-                         const roofBaseY = armDepth; const roofPos1 = new THREE.Vector3(armLength / 2, roofBaseY, armWidth / 2); const roofPos2 = new THREE.Vector3(armWidth / 2, roofBaseY, armLength / 2); const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2); const roofRot2 = new THREE.Quaternion(); localMatrix = new THREE.Matrix4().compose(roofPos1, roofRot1, new THREE.Vector3(1, 1, 1)); addPartInstance('roof', localMatrix); localMatrix = new THREE.Matrix4().compose(roofPos2, roofRot2, new THREE.Vector3(1, 1, 1)); addPartInstance('roof', localMatrix);
-                         const doorPos = new THREE.Vector3(armWidth, doorHeight / 2, armLength * 0.75); localMatrix = new THREE.Matrix4().makeTranslation(doorPos.x, doorPos.y, doorPos.z); addPartInstance('door', localMatrix);
-                         const garagePos = new THREE.Vector3(armLength, garageDoorHeight / 2, armWidth / 2); localMatrix = new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z); addPartInstance('garageDoor', localMatrix);
-                         addWindowPart('windowXY', 0.25, 0, window_Y_pos_Base, false); addWindowPart('windowXY', 0.75, 0, window_Y_pos_Base, false); addWindowPart('windowXY', 1.25, 0, window_Y_pos_Base, false); addWindowPart('windowXY', 1.75, 0, window_Y_pos_Base, false); addWindowPart('windowXY', 0.25, armWidth, window_Y_pos_Base, false); addWindowPart('windowXY', 0.75, armWidth, window_Y_pos_Base, false); addWindowPart('windowXY', 1.25, armWidth, window_Y_pos_Base, false); addWindowPart('windowXY', 1.75, armWidth, window_Y_pos_Base, false); addWindowPart('windowYZ', 0, 0.25, window_Y_pos_Base, true); addWindowPart('windowYZ', 0, 0.75, window_Y_pos_Base, true); addWindowPart('windowYZ', armWidth, 0.25, window_Y_pos_Base, true); addWindowPart('windowYZ', armWidth, 0.75, window_Y_pos_Base, true); const doorEdgeLeft = armLength * 0.75 - doorWidth / 2; const doorEdgeRight = armLength * 0.75 + doorWidth / 2; addWindowPart('windowYZ', armWidth, (armWidth + doorEdgeLeft) / 2, window_Y_pos_Base, true); addWindowPart('windowYZ', armWidth, (doorEdgeRight + armLength) / 2, window_Y_pos_Base, true);
-                         const buildingPosition = finalPosition.clone().setY(this.config.sidewalkHeight); const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'house', buildingPosition); if (registeredBuilding) { plot.addBuildingInstance({ id: registeredBuilding.id, type: 'house', position: buildingPosition.clone() }); }
-                     } else if (assetInfo && ['building', 'industrial', 'skyscraper'].includes(zoneType)) {
-                         const currentAssetInfo = this.assetLoader.getRandomAssetData(zoneType);
-                         if (currentAssetInfo) {
-                              const instanceMatrix = this.calculateInstanceMatrix(worldCellCenterPos.x, worldCellCenterPos.z, currentAssetInfo.sizeAfterFitting.y, currentAssetInfo.fittingScaleFactor, currentAssetInfo.centerOffset, baseScaleFactor, targetRotationY);
-                              const modelId = currentAssetInfo.id;
-                              if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
-                              if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
-                              this.instanceData[zoneType][modelId].push(instanceMatrix.clone());
-                              const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight); const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition); if (registeredBuilding) { plot.addBuildingInstance({ id: registeredBuilding.id, type: zoneType, position: buildingPosition.clone() }); }
-                         } else { console.warn(`Impossible d'obtenir un asset aléatoire de type ${zoneType} pour l'instance (${rowIndex}, ${colIndex}) du plot ${plot.id}`); }
-                     }
-                     if (this.debugPlotGridGroup && this.debugPlotGridMaterial) { /* ... */ }
-                 }
-             }
-        } // Fin if (zoneType !== 'park')
-    } // Fin generatePlotPrimaryContent
+		if (!this.cityManager || !this.assetLoader) {
+			console.error(`PlotContentGenerator: Prérequis manquants pour plot ${plot.id}`);
+			return;
+		}
+		// Créer le sol de la parcelle
+		const plotGroundY = 0.005;
+		this.createPlotGround(plot, plotGroundY);
+		plot.buildingInstances = [];
+		const groundLevel = plotGroundY;
+		const zoneType = plot.zoneType;
+	
+		let targetBuildingWidth = 0;
+		let targetBuildingDepth = 0;
+		let baseScaleFactor = 1.0;
+		let assetInfo = null;
+		let minSpacing = 0;
+	
+		// Définition des dimensions cibles et de l'espacement selon le type de zone
+		switch (zoneType) {
+			case 'house': {
+				const houseArmLength = 2.0;
+				baseScaleFactor = this.config.gridHouseBaseScale ?? 1.5;
+				targetBuildingWidth = houseArmLength * baseScaleFactor;
+				targetBuildingDepth = houseArmLength * baseScaleFactor;
+				minSpacing = this.config.minHouseSpacing ?? 0;
+				break;
+			}
+			case 'building':
+			case 'industrial':
+			case 'skyscraper': {
+				assetInfo = this.assetLoader.getRandomAssetData(zoneType);
+				if (!assetInfo) {
+					console.warn(`Aucun asset ${zoneType} trouvé pour le plot ${plot.id}.`);
+					return;
+				}
+				if (zoneType === 'building') {
+					baseScaleFactor = this.config.gridBuildingBaseScale ?? 1.0;
+					minSpacing = this.config.minBuildingSpacing ?? 0;
+				} else if (zoneType === 'industrial') {
+					baseScaleFactor = this.config.gridIndustrialBaseScale ?? 1.0;
+					minSpacing = this.config.minIndustrialSpacing ?? 0;
+				} else {
+					baseScaleFactor = this.config.gridSkyscraperBaseScale ?? 1.0;
+					minSpacing = this.config.minSkyscraperSpacing ?? 0;
+				}
+				targetBuildingWidth = assetInfo.sizeAfterFitting.x * baseScaleFactor;
+				targetBuildingDepth = assetInfo.sizeAfterFitting.z * baseScaleFactor;
+				break;
+			}
+			case 'park': {
+				assetInfo = this.assetLoader.getRandomAssetData('park');
+				if (!assetInfo) {
+					console.warn(`Aucun asset park trouvé pour le plot ${plot.id}.`);
+					return;
+				}
+				baseScaleFactor = this.config.gridParkBaseScale ?? 1.0;
+				targetBuildingWidth = assetInfo.sizeAfterFitting.x * baseScaleFactor;
+				targetBuildingDepth = assetInfo.sizeAfterFitting.z * baseScaleFactor;
+				minSpacing = this.config.minParkSpacing ?? 2.0;
+				break;
+			}
+			default:
+				console.warn(`Type de zone inconnu ou non géré pour le contenu primaire: ${zoneType}`);
+				return;
+		}
+	
+		if (['house', 'building', 'industrial', 'skyscraper', 'park'].includes(zoneType)) {
+			if (targetBuildingWidth <= 0.01 || targetBuildingDepth <= 0.01) { return; }
+			minSpacing = Math.max(0, minSpacing);
+			let numItemsX = 0;
+			const itemPlusSpacingX = targetBuildingWidth + minSpacing;
+			if (plot.width >= targetBuildingWidth) {
+				numItemsX = itemPlusSpacingX > 0.01 ? Math.floor((plot.width + minSpacing) / itemPlusSpacingX) : Math.floor(plot.width / targetBuildingWidth);
+				if (numItemsX === 0) numItemsX = 1;
+			}
+			let numItemsY = 0;
+			const itemPlusSpacingY = targetBuildingDepth + minSpacing;
+			if (plot.depth >= targetBuildingDepth) {
+				numItemsY = itemPlusSpacingY > 0.01 ? Math.floor((plot.depth + minSpacing) / itemPlusSpacingY) : Math.floor(plot.depth / targetBuildingDepth);
+				if (numItemsY === 0) numItemsY = 1;
+			}
+			numItemsX = Math.max(0, numItemsX);
+			numItemsY = Math.max(0, numItemsY);
+			if (numItemsX === 0 || numItemsY === 0) { return; }
+			const remainingWidth = plot.width - (numItemsX * targetBuildingWidth);
+			const remainingDepth = plot.depth - (numItemsY * targetBuildingDepth);
+			const gapX = numItemsX > 0 ? Math.max(0, remainingWidth / (numItemsX + 1)) : 0;
+			const gapZ = numItemsY > 0 ? Math.max(0, remainingDepth / (numItemsY + 1)) : 0;
+	
+			// Boucle de placement par grille
+			for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
+				for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
+					const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + gapX)) + targetBuildingWidth / 2;
+					const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + gapZ)) + targetBuildingDepth / 2;
+					const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
+					const distToLeft = cellCenterX - plot.x;
+					const distToRight = (plot.x + plot.width) - cellCenterX;
+					const distToTop = cellCenterZ - plot.z;
+					const distToBottom = (plot.z + plot.depth) - cellCenterZ;
+					const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+					let targetRotationY = 0;
+					const tolerance = 0.1;
+					if (Math.abs(minDist - distToLeft) < tolerance)
+						targetRotationY = -Math.PI / 2;
+					else if (Math.abs(minDist - distToRight) < tolerance)
+						targetRotationY = Math.PI / 2;
+					else if (Math.abs(minDist - distToBottom) < tolerance)
+						targetRotationY = Math.PI;
+					const finalQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotationY);
+	
+					if (zoneType === 'house') {
+						// --- Logique de placement pour les maisons (récupérée depuis l'implémentation originale) ---
+						const armLength = 2;
+						const armWidth = 1;
+						const armDepth = 0.5;
+						const roofPitchHeight = 0.3;
+						const doorHeight = 0.7 * armDepth;
+						const doorDepth = 0.02;
+						const doorWidth = 0.3;
+						const garageDoorHeight = 0.8 * armDepth;
+						const garageDoorWidth = 0.55;
+						const windowHeight = 0.4 * armDepth;
+						const windowDepth = doorDepth;
+						const window_Y_pos_Base = armDepth * 0.3;
+	
+						const finalScaleVector = new THREE.Vector3(baseScaleFactor, baseScaleFactor, baseScaleFactor);
+						const finalPosY = groundLevel;
+						const modelCenterLocal = new THREE.Vector3(armLength / 2, armDepth / 2, armLength / 2);
+						const centerOffsetRotated = modelCenterLocal.clone().applyQuaternion(finalQuaternion);
+						const centerOffsetScaledRotated = centerOffsetRotated.multiplyScalar(baseScaleFactor);
+						const finalPosition = new THREE.Vector3(
+							worldCellCenterPos.x - centerOffsetScaledRotated.x,
+							finalPosY,
+							worldCellCenterPos.z - centerOffsetScaledRotated.z
+						);
+						const globalHouseMatrix = new THREE.Matrix4().compose(finalPosition, finalQuaternion, finalScaleVector);
+						let localMatrix;
+						const addPartInstance = (partName, localMatrix) => {
+							if (this.baseHouseGeometries[partName]) {
+								const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix);
+								const type = 'house';
+								const modelId = partName;
+								if (!this.instanceData[type]) this.instanceData[type] = {};
+								if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
+								this.instanceData[type][modelId].push(finalMatrix.clone());
+							} else {
+								console.warn(`Géométrie maison manquante: ${partName}`);
+							}
+						};
+						const addWindowPart = (geomKey, facadeCoordX, facadeCoordZ, yBase, isYZPlane) => {
+							const yCenter = yBase + windowHeight / 2;
+							let xPos, zPos;
+							if (isYZPlane) {
+								xPos = facadeCoordX;
+								zPos = facadeCoordZ;
+							} else {
+								xPos = facadeCoordX;
+								zPos = facadeCoordZ;
+							}
+							localMatrix = new THREE.Matrix4().makeTranslation(xPos, yCenter, zPos);
+							addPartInstance(geomKey, localMatrix);
+						};
+	
+						localMatrix = new THREE.Matrix4();
+						addPartInstance('base_part1', localMatrix);
+						localMatrix = new THREE.Matrix4();
+						addPartInstance('base_part2', localMatrix);
+						const roofBaseY = armDepth;
+						const roofPos1 = new THREE.Vector3(armLength / 2, roofBaseY, armWidth / 2);
+						const roofPos2 = new THREE.Vector3(armWidth / 2, roofBaseY, armLength / 2);
+						const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+						const roofRot2 = new THREE.Quaternion();
+						localMatrix = new THREE.Matrix4().compose(roofPos1, roofRot1, new THREE.Vector3(1, 1, 1));
+						addPartInstance('roof', localMatrix);
+						localMatrix = new THREE.Matrix4().compose(roofPos2, roofRot2, new THREE.Vector3(1, 1, 1));
+						addPartInstance('roof', localMatrix);
+						const doorPos = new THREE.Vector3(armWidth, doorHeight / 2, armLength * 0.75);
+						localMatrix = new THREE.Matrix4().makeTranslation(doorPos.x, doorPos.y, doorPos.z);
+						addPartInstance('door', localMatrix);
+						const garagePos = new THREE.Vector3(armLength, garageDoorHeight / 2, armWidth / 2);
+						localMatrix = new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z);
+						addPartInstance('garageDoor', localMatrix);
+						addWindowPart('windowXY', 0.25, 0, window_Y_pos_Base, false);
+						addWindowPart('windowXY', 0.75, 0, window_Y_pos_Base, false);
+						addWindowPart('windowXY', 1.25, 0, window_Y_pos_Base, false);
+						addWindowPart('windowXY', 1.75, 0, window_Y_pos_Base, false);
+						addWindowPart('windowXY', 0.25, armWidth, window_Y_pos_Base, false);
+						addWindowPart('windowXY', 0.75, armWidth, window_Y_pos_Base, false);
+						addWindowPart('windowXY', 1.25, armWidth, window_Y_pos_Base, false);
+						addWindowPart('windowXY', 1.75, armWidth, window_Y_pos_Base, false);
+						addWindowPart('windowYZ', 0, 0.25, window_Y_pos_Base, true);
+						addWindowPart('windowYZ', 0, 0.75, window_Y_pos_Base, true);
+						addWindowPart('windowYZ', armWidth, 0.25, window_Y_pos_Base, true);
+						addWindowPart('windowYZ', armWidth, 0.75, window_Y_pos_Base, true);
+						const doorEdgeLeft = armLength * 0.75 - doorWidth / 2;
+						const doorEdgeRight = armLength * 0.75 + doorWidth / 2;
+						addWindowPart('windowYZ', armWidth, (armWidth + doorEdgeLeft) / 2, window_Y_pos_Base, true);
+						addWindowPart('windowYZ', armWidth, (doorEdgeRight + armLength) / 2, window_Y_pos_Base, true);
+						const buildingPosition = finalPosition.clone().setY(this.config.sidewalkHeight);
+						const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'house', buildingPosition);
+						if (registeredBuilding) {
+							plot.addBuildingInstance({
+								id: registeredBuilding.id,
+								type: 'house',
+								position: buildingPosition.clone()
+							});
+						}
+					} else if (assetInfo && ['building', 'industrial', 'skyscraper'].includes(zoneType)) {
+						const instanceMatrix = this.calculateInstanceMatrix(
+							worldCellCenterPos.x, worldCellCenterPos.z,
+							assetInfo.sizeAfterFitting.y,
+							assetInfo.fittingScaleFactor,
+							assetInfo.centerOffset,
+							baseScaleFactor,
+							targetRotationY
+						);
+						const modelId = assetInfo.id;
+						if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
+						if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
+						this.instanceData[zoneType][modelId].push(instanceMatrix.clone());
+						const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
+						const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition);
+						if (registeredBuilding) {
+							plot.addBuildingInstance({
+								id: registeredBuilding.id,
+								type: zoneType,
+								position: buildingPosition.clone()
+							});
+						}
+					} else if (assetInfo && zoneType === 'park') {
+						const instanceMatrix = this.calculateInstanceMatrix(
+							worldCellCenterPos.x, worldCellCenterPos.z,
+							assetInfo.sizeAfterFitting.y,
+							assetInfo.fittingScaleFactor,
+							assetInfo.centerOffset,
+							baseScaleFactor,
+							targetRotationY
+						);
+						const modelId = assetInfo.id;
+						if (!this.instanceData['park']) this.instanceData['park'] = {};
+						if (!this.instanceData['park'][modelId]) this.instanceData['park'][modelId] = [];
+						this.instanceData['park'][modelId].push(instanceMatrix.clone());
+						const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
+						const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'park', buildingPosition);
+						if (registeredBuilding) {
+							plot.addBuildingInstance({
+								id: registeredBuilding.id,
+								type: 'park',
+								position: buildingPosition.clone()
+							});
+						}
+					}
+				}
+			}
+		}
+	}		
 
     // Place les arbres sur la parcelle selon le type de zone et des probabilités configurées
 	placeTreesForPlot(plot) {
