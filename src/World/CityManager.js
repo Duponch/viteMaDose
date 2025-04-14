@@ -55,7 +55,7 @@ export default class CityManager {
 
             // --- Échelles de Base ---
             gridHouseBaseScale: 6.5,
-            gridBuildingBaseScale: 1.3,
+            gridBuildingBaseScale: 1,
             gridIndustrialBaseScale: 1.2,
             gridSkyscraperBaseScale: 1.7,
 
