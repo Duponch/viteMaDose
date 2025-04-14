@@ -91,7 +91,11 @@ export default class CityManager {
               maxCitizensPerHouse: 5,
               maxCitizensPerBuilding: 10,
               maxWorkersPerSkyscraper: 100,
-              maxWorkersPerIndustrial: 50
+              maxWorkersPerIndustrial: 50,
+
+			 lampPostLightConeRadiusBottom: 5.0, // Rayon du cône au sol
+             lampPostLightConeOpacity: 0.15,      // Opacité du cône
+             lampPostLightConeColor: 0xFFFF99      // Couleur du cône (jaune pâle)
         };
 
         // --- External Config Merge ---
@@ -134,6 +138,13 @@ export default class CityManager {
                  color: 0x00ff00,
                  linewidth: 2,
                  depthTest: false
+            }),
+			lampLightConeMaterial: new THREE.MeshBasicMaterial({
+                color: this.config.lampPostLightConeColor,
+                transparent: true,
+                opacity: this.config.lampPostLightConeOpacity,
+                side: THREE.DoubleSide, // Important pour voir l'intérieur et l'extérieur
+                depthWrite: false      // Important pour le rendu correct de la transparence
             })
         };
 
@@ -159,6 +170,13 @@ export default class CityManager {
         this.buildingInstances = new Map();
         this.citizens = new Map();
         this.nextBuildingInstanceId = 0;
+
+		this.lampPostConeGeometry = null;
+		this.lampPostMeshes = {
+            grey: null,
+            light: null,
+            lightCone: null // Pour stocker l'InstancedMesh des cônes
+        };
 
         this.scene.add(this.cityContainer);
         if (this.experience.isDebugMode || this.config.showDistrictBoundaries) { // Ajusté pour prendre en compte la config aussi
@@ -411,241 +429,279 @@ export default class CityManager {
 	}
 
 	buildLampPostGeometries() {
-		console.warn("--- UTILISATION GÉOMÉTRIE LAMPADAIRE SIMPLIFIÉE (SANS COURBE) ---"); // Log pour savoir quelle version est utilisée
-		const poleSegments = 16;
+        console.warn("--- UTILISATION GÉOMÉTRIE LAMPADAIRE SIMPLIFIÉE (SANS COURBE) ---");
+        const poleSegments = 16;
+        const baseRadiusTop = 0.4; const baseRadiusBottom = 0.5; const baseHeight = 0.8;
+        const poleRadius = 0.2; const poleLowerHeight = 5;
+        const poleTopY = baseHeight + poleLowerHeight; // Coordonnée Y du sommet du poteau
+        const armLength = 2.5;
+        const lampHeadWidth = 1.2; const lampHeadHeight = 0.4; const lampHeadDepth = 0.6;
+        const lightSourceWidth = lampHeadWidth * 0.8; const lightSourceHeight = 0.35; const lightSourceDepth = lampHeadDepth * 0.8;
 
-		// 1. Base cylindrique
-		const baseRadiusTop = 0.4;
-		const baseRadiusBottom = 0.5;
-		const baseHeight = 0.8;
-		const baseGeo = new THREE.CylinderGeometry(baseRadiusTop, baseRadiusBottom, baseHeight, poleSegments);
-		baseGeo.translate(0, baseHeight / 2, 0); // Positionne la base
+        // --- Calculs pour le cône ---
+        const lightSourceCenterY = poleTopY - lampHeadHeight - lightSourceHeight / 2; // Y approx. de l'ampoule
+        const coneHeight = lightSourceCenterY - (this.config.sidewalkHeight ?? 0.2); // Hauteur du cône jusqu'au trottoir
+        const coneRadiusBottom = this.config.lampPostLightConeRadiusBottom ?? 5.0;
+        const coneRadiusTop = 0.1; // Petit rayon en haut
+        const coneRadialSegments = 16;
 
-		// 2. Poteau principal
-		const poleRadius = 0.2;
-		const poleLowerHeight = 5;
-		const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleLowerHeight, poleSegments);
-		poleGeo.translate(0, baseHeight + poleLowerHeight / 2, 0); // Positionne au-dessus de la base
-		const poleTopY = baseHeight + poleLowerHeight; // Coordonnée Y du sommet du poteau
+        // --- Création géométrie Cône (et stockage) ---
+        if (coneHeight > 0) {
+            this.lampPostConeGeometry = new THREE.ConeGeometry(
+                coneRadiusBottom, coneHeight, coneRadialSegments, 1, true
+            );
+            this.lampPostConeGeometry.translate(0, coneHeight / 2, 0); // Centre le cône verticalement
+            // !!! CORRECTION : Ajouter computeBoundingBox aussi pour le cône !!!
+            this.lampPostConeGeometry.computeBoundingBox();
+            console.log(`Géométrie cône lumière créée (H: ${coneHeight.toFixed(1)}, R_bas: ${coneRadiusBottom})`);
+        } else {
+            console.error("Hauteur du cône calculée négative ou nulle. Impossible de créer la géométrie du cône.");
+            this.lampPostConeGeometry = null;
+        }
 
-		// 3. Section courbée - TEMPORAIREMENT SUPPRIMÉE POUR TEST
-		// const curveRadius = 1.0;
-		// const curveTubeRadius = poleRadius;
-		// const curveSegmentsCount = 20;
-		// const arcCurve = new THREE.ArcCurve(-curveRadius, poleTopY, curveRadius, Math.PI / 2, 0, true);
-		// const curveGeo = new THREE.TubeGeometry(arcCurve, curveSegmentsCount, curveTubeRadius, poleSegments, false);
+        // --- Construction des autres parties du lampadaire ---
+        const baseGeo = new THREE.CylinderGeometry(baseRadiusTop, baseRadiusBottom, baseHeight, poleSegments);
+        baseGeo.translate(0, baseHeight / 2, 0);
+        const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleLowerHeight, poleSegments);
+        poleGeo.translate(0, baseHeight + poleLowerHeight / 2, 0);
+        const armGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, armLength, poleSegments);
+        armGeo.rotateZ(Math.PI / 2); armGeo.translate(armLength / 2, poleTopY, 0);
+        const lampHeadGeo = new THREE.BoxGeometry(lampHeadWidth, lampHeadHeight, lampHeadDepth);
+        lampHeadGeo.translate(armLength, poleTopY - lampHeadHeight / 2, 0);
+        const lightGeo = new THREE.BoxGeometry(lightSourceWidth, lightSourceHeight, lightSourceDepth);
+        lightGeo.translate(armLength, lightSourceCenterY, 0);
+        // !!! CORRECTION : Ajouter computeBoundingBox pour lightGeo !!!
+        lightGeo.computeBoundingBox();
 
-		// 4. Bras horizontal - POSITION AJUSTÉE
-		const armLength = 2.5;
-		const armGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, armLength, poleSegments);
-		armGeo.rotateZ(Math.PI / 2); // Oriente le cylindre horizontalement
-		// Connecte le bras directement au sommet du poteau vertical (translation ajustée)
-		armGeo.translate(armLength / 2, poleTopY, 0);
 
-		// 5. Tête de la lampe - POSITION AJUSTÉE
-		const lampHeadWidth = 1.2;
-		const lampHeadHeight = 0.4;
-		const lampHeadDepth = 0.6;
-		const lampHeadGeo = new THREE.BoxGeometry(lampHeadWidth, lampHeadHeight, lampHeadDepth);
-		// Positionner par rapport à la fin du bras (Y est toujours poleTopY pour le bras)
-		lampHeadGeo.translate(armLength, poleTopY - lampHeadHeight / 2, 0);
+        const greyGeos = [baseGeo, poleGeo, armGeo, lampHeadGeo];
+        const mergedGreyGeo = mergeGeometries(greyGeos, false);
 
-		// 6. Partie lumineuse (ampoule) - POSITION AJUSTÉE
-		const lightSourceWidth = lampHeadWidth * 0.8;
-		const lightSourceHeight = 0.35;
-		const lightSourceDepth = lampHeadDepth * 0.8;
-		const lightGeo = new THREE.BoxGeometry(lightSourceWidth, lightSourceHeight, lightSourceDepth);
-		// Positionner l'ampoule sous la tête de lampe (Y relatif à poleTopY)
-		lightGeo.translate(armLength, poleTopY - lampHeadHeight - lightSourceHeight / 2, 0);
+        if (!mergedGreyGeo) {
+            console.error("Échec critique de la fusion des géométries du lampadaire (parties grises).");
+            greyGeos.forEach(g => g.dispose());
+             // Nettoyer lightGeo aussi si la fusion échoue
+             lightGeo.dispose();
+             // Retourner un objet vide ou gérer l'erreur autrement
+             return { greyGeometry: null, lightGeometry: null, greyMaterial: null, lightMaterial: null };
+        }
 
-		// --- Fusion des parties grises (SANS curveGeo) ---
-		const greyGeos = [baseGeo, poleGeo, /* curveGeo retiré */ armGeo, lampHeadGeo];
-		const mergedGreyGeo = mergeGeometries(greyGeos, false);
-		if (!mergedGreyGeo) {
-			console.error("Échec critique de la fusion des géométries du lampadaire (parties grises - SIMPLIFIÉ).");
-			greyGeos.forEach(g => g.dispose());
-			return { /* Gérer l'erreur, retourner géométries vides */ };
-		}
-		greyGeos.forEach(g => g.dispose()); // Nettoyer après fusion
+        // !!! CORRECTION : Calculer la bounding box APRÈS la fusion !!!
+        mergedGreyGeo.computeBoundingBox();
+        // ----------------------------------------------------------
 
-		// Matériaux (inchangés, mais on peut changer le nom pour débug)
-		const greyMaterial = new THREE.MeshStandardMaterial({
-			color: 0x606060, roughness: 0.6, metalness: 0.4, name: "LampPostGreyMat_Simplified"
-		});
-		const lightMaterial = new THREE.MeshStandardMaterial({
-			color: 0xffffaa, emissive: 0xffffdd, emissiveIntensity: 0.0, name: "LampPostLightMat_Simplified"
-		});
+        greyGeos.forEach(g => g.dispose()); // Nettoyer les géométries intermédiaires
 
-		return {
-			greyGeometry: mergedGreyGeo,
-			lightGeometry: lightGeo,
-			greyMaterial,
-			lightMaterial
-		};
-	}
+        const greyMaterial = new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.6, metalness: 0.4, name: "LampPostGreyMat_Simplified" });
+        const lightMaterial = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffdd, emissiveIntensity: 0.0, name: "LampPostLightMat_Simplified" });
+
+        return {
+            greyGeometry: mergedGreyGeo, // Maintenant avec une boundingBox calculée
+            lightGeometry: lightGeo,     // A maintenant une boundingBox calculée
+            greyMaterial,
+            lightMaterial
+        };
+    }
 	
-	/**
-	 * Ajoute des lampadaires le long des bords des parcelles (trottoirs).
-	 */
 	addLampPosts() {
-		// Intervalle entre lampadaires, modifiable via config
-		const spacing = this.config.lampPostSpacing || 20; // Défaut 20 si non défini
-		const lampPositions = []; // Stocke les positions Vector3
-		const sidewalkH = this.config.sidewalkHeight || 0.2; // Hauteur du trottoir
+        const spacing = this.config.lampPostSpacing || 20;
+        const lampData = []; // Stocke des objets { position: Vector3, angleY: number }
+        const sidewalkH = this.config.sidewalkHeight || 0.2;
+        console.log(`Ajout des lampadaires avec espacement ${spacing} et orientation 'dos au plot'...`);
 
-		console.log(`Ajout des lampadaires avec espacement de ${spacing}...`);
+        const positionMap = new Map(); // Utiliser une Map pour stocker { positionKey: angleY }
 
-		// Utiliser un Set pour éviter les doublons aux coins exacts
-		const positionSet = new Set();
-		const addPosition = (x, z) => {
-			const key = `${x.toFixed(2)},${z.toFixed(2)}`; // Clé basée sur les coordonnées
-			if (!positionSet.has(key)) {
-				lampPositions.push(new THREE.Vector3(x, sidewalkH, z));
-				positionSet.add(key);
-			}
-		};
+        const addLampData = (x, z, angleY) => {
+            const key = `${x.toFixed(1)},${z.toFixed(1)}`; // Clé basée sur position arrondie
+            // Ajouter seulement si la position n'existe pas déjà (évite doublons aux coins)
+            if (!positionMap.has(key)) {
+                 positionMap.set(key, angleY); // Stocker l'angle associé
+                 lampData.push({
+                    position: new THREE.Vector3(x, sidewalkH, z),
+                    angleY: angleY
+                 });
+            }
+            // Si la clé existe déjà, on garde l'angle du premier lampadaire ajouté à cet emplacement.
+        };
 
-		this.leafPlots.forEach(plot => {
-			// Ne pas placer de lampadaires sur les parcelles de type 'park' ou 'unbuildable'
-			if (plot.zoneType === 'park' || plot.zoneType === 'unbuildable') return;
+        this.leafPlots.forEach(plot => {
+            if (plot.zoneType === 'park' || plot.zoneType === 'unbuildable') return;
 
             const plotX = plot.x;
             const plotZ = plot.z;
             const plotW = plot.width;
             const plotD = plot.depth;
-            const sidewalkOffset = (this.config.sidewalkWidth || 0) / 2; // Décalage pour être sur le trottoir
+            const sidewalkOffset = (this.config.sidewalkWidth || 0) / 2;
 
-			// --- Placement sur les 4 bords ---
-            // Bord Supérieur (Z constant = plot.z - offset)
+            // --- Placement et calcul de l'angle pour chaque bord ---
+            // Bord Supérieur (Z constant = plot.z - offset) -> Tourne le dos au plot -> Angle = PI (face vers +Z)
+            const angleTop = Math.PI;
             for (let x = plotX; x <= plotX + plotW; x += spacing) {
-                addPosition(x, plotZ - sidewalkOffset);
+                addLampData(x, plotZ - sidewalkOffset, angleTop);
             }
-            // Bord Inférieur (Z constant = plot.z + plotD + offset)
+
+            // Bord Inférieur (Z constant = plot.z + plotD + offset) -> Tourne le dos au plot -> Angle = 0 (face vers -Z)
+            const angleBottom = 0;
              for (let x = plotX; x <= plotX + plotW; x += spacing) {
-                addPosition(x, plotZ + plotD + sidewalkOffset);
+                addLampData(x, plotZ + plotD + sidewalkOffset, angleBottom);
             }
-			// Bord Gauche (X constant = plot.x - offset) - Exclure les coins déjà faits
-			for (let z = plotZ + spacing; z < plotZ + plotD; z += spacing) {
-                addPosition(plotX - sidewalkOffset, z);
+
+            // Bord Gauche (X constant = plot.x - offset) -> Tourne le dos au plot -> Angle = PI/2 (face vers +X)
+            const angleLeft = Math.PI / 2;
+             // Exclure les coins déjà potentiellement faits par les bords haut/bas
+            for (let z = plotZ + spacing / 2; z < plotZ + plotD; z += spacing) { // Léger décalage pour éviter coin exact
+                addLampData(plotX - sidewalkOffset, z, angleLeft);
             }
-            // Bord Droit (X constant = plot.x + plotW + offset) - Exclure les coins déjà faits
-             for (let z = plotZ + spacing; z < plotZ + plotD; z += spacing) {
-                addPosition(plotX + plotW + sidewalkOffset, z);
+
+            // Bord Droit (X constant = plot.x + plotW + offset) -> Tourne le dos au plot -> Angle = -PI/2 (face vers -X)
+            const angleRight = -Math.PI / 2;
+            // Exclure les coins déjà potentiellement faits
+             for (let z = plotZ + spacing / 2; z < plotZ + plotD; z += spacing) {
+                addLampData(plotX + plotW + sidewalkOffset, z, angleRight);
             }
-		});
+        });
 
-		if (lampPositions.length === 0) {
-			console.log("Aucune position de lampadaire générée.");
-			return;
-		}
-
-		console.log(`${lampPositions.length} positions de lampadaires uniques déterminées.`);
-		this.createLampPostInstancedMeshes(lampPositions);
-	}
-
-	/**
-	 * Crée les InstancedMesh pour les parties grises et lumineuses des lampadaires.
-	 * @param {Array<THREE.Vector3>} lampPositions - Les positions où placer les lampadaires.
-	 */
-	createLampPostInstancedMeshes(lampPositions) {
-		// Récupération des géométries et des matériaux pour le lampadaire
-		const { greyGeometry, lightGeometry, greyMaterial, lightMaterial } = this.buildLampPostGeometries();
-
-        // Vérifier si les géométries sont valides avant de continuer
-        if (!greyGeometry || greyGeometry.attributes.position.count === 0 || !lightGeometry || lightGeometry.attributes.position.count === 0) {
-            console.error("Échec de la création des InstancedMesh de lampadaires : géométrie(s) invalide(s) reçue(s) de buildLampPostGeometries.");
+        if (lampData.length === 0) {
+            console.log("Aucune position de lampadaire générée.");
             return;
         }
 
-		const count = lampPositions.length;
-		if (count === 0) return;
+        console.log(`${lampData.length} lampadaires uniques à créer (avec orientation).`);
+        this.createLampPostInstancedMeshes(lampData); // Passer les données complètes
+    }
 
-		console.log(`Création des InstancedMesh pour ${count} lampadaires...`);
+	createLampPostInstancedMeshes(lampData) { // Paramètre renommé
+        const { greyGeometry, lightGeometry, greyMaterial, lightMaterial } = this.buildLampPostGeometries();
 
-		// InstancedMesh pour les parties grises
-		const greyInstancedMesh = new THREE.InstancedMesh(greyGeometry, greyMaterial, count);
-		greyInstancedMesh.name = "LampPosts_GreyParts_Instanced";
+        const coneGeometry = this.lampPostConeGeometry;
+        const coneMaterial = this.materials.lampLightConeMaterial;
 
-		// InstancedMesh pour les parties lumineuses (ampoules)
-		const lightInstancedMesh = new THREE.InstancedMesh(lightGeometry, lightMaterial, count);
-		lightInstancedMesh.name = "LampPosts_LightParts_Instanced";
+        if (!greyGeometry || !lightGeometry || !greyGeometry.boundingBox || !lightGeometry.boundingBox) {
+            console.error("Échec création InstancedMesh: géométrie(s) grise/lumière invalide(s) ou boundingBox manquante.");
+            return;
+        }
+         // coneGeometry peut être null, géré plus bas
 
-		const dummy = new THREE.Object3D(); // Objet temporaire pour calculer les matrices
-		const yAxis = new THREE.Vector3(0, 1, 0);
+        const count = lampData.length; // Utiliser lampData
+        if (count === 0) return;
+        console.log(`Création des InstancedMesh pour ${count} lampadaires (orientation plot + cônes corrigés)...`);
 
-		for (let i = 0; i < count; i++) {
-			dummy.position.copy(lampPositions[i]);
+        // Création des InstancedMesh (inchangé)
+        const greyInstancedMesh = new THREE.InstancedMesh(greyGeometry, greyMaterial, count);
+        greyInstancedMesh.name = "LampPosts_GreyParts_Instanced";
+        const lightInstancedMesh = new THREE.InstancedMesh(lightGeometry, lightMaterial, count);
+        lightInstancedMesh.name = "LampPosts_LightParts_Instanced";
 
-            // --- Déterminer la rotation ---
-            // TODO: Améliorer la rotation pour qu'elle pointe vers la route/centre de la parcelle.
-            // Pour l'instant, une rotation aléatoire simple ou fixe.
-            // Exemple simple: toutes orientées pareil (pas idéal)
-            dummy.rotation.set(0, 0, 0);
-            // Exemple aléatoire:
-            // dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
-
-            // Mettre à l'échelle si nécessaire (ici, échelle 1)
-			dummy.scale.set(1, 1, 1);
-			dummy.updateMatrix(); // Calcule la matrice de transformation pour cette instance
-
-			greyInstancedMesh.setMatrixAt(i, dummy.matrix);
-			lightInstancedMesh.setMatrixAt(i, dummy.matrix);
-		}
-
-		// Indiquer que les matrices d'instance ont changé et doivent être mises à jour sur le GPU
-		greyInstancedMesh.instanceMatrix.needsUpdate = true;
-		lightInstancedMesh.instanceMatrix.needsUpdate = true;
-
-		// Configuration des ombres
-		greyInstancedMesh.castShadow = true;
-		greyInstancedMesh.receiveShadow = true; // Les poteaux peuvent recevoir des ombres
-		lightInstancedMesh.castShadow = false; // L'ampoule elle-même ne projette pas d'ombre significative
-		lightInstancedMesh.receiveShadow = false; // Ne reçoit pas d'ombre non plus
-
-		// Ajout des InstancedMesh dans le conteneur de la ville (ou un groupe dédié)
-		// Assurez-vous que this.cityContainer est bien le THREE.Group où vous voulez ajouter les lampadaires
-		if (this.cityContainer) {
-            this.cityContainer.add(greyInstancedMesh);
-            this.cityContainer.add(lightInstancedMesh);
-            console.log("InstancedMesh des lampadaires (gris et lumière) ajoutés à cityContainer.");
-        } else {
-            console.error("Impossible d'ajouter les InstancedMesh de lampadaires : this.cityContainer est null.");
+        let coneInstancedMesh = null;
+        let coneHeight = 0;
+        if (coneGeometry && coneMaterial) {
+            coneInstancedMesh = new THREE.InstancedMesh(coneGeometry, coneMaterial, count);
+            coneInstancedMesh.name = "LampPosts_LightCones_Instanced";
+            coneInstancedMesh.visible = false;
+            coneHeight = coneGeometry.parameters.height;
+            if (!coneGeometry.boundingBox) coneGeometry.computeBoundingBox(); // Assurer BBox pour le cône
         }
 
+        const dummy = new THREE.Object3D();
+        const coneMatrix = new THREE.Matrix4();
+        const armLength = 2.5;
 
-		// Stockage optionnel des références pour d'éventuelles mises à jour (ex: allumer/éteindre)
-		this.lampPostMeshes = {
-			grey: greyInstancedMesh,
-			light: lightInstancedMesh
-		};
+        // Calcul précis Y ampoule (inchangé)
+        const baseHeight = 0.8; const poleLowerHeight = 5; const lampHeadHeight = 0.4; const lightSourceHeight = 0.35;
+        const poleTopY = baseHeight + poleLowerHeight;
+        const calculatedLightSourceCenterY = poleTopY - lampHeadHeight - lightSourceHeight / 2;
 
-        // --- AJOUT : Mise à jour des lumières des lampadaires ---
-        // Appeler la fonction d'update une fois pour définir l'état initial
+        // --- Objets temporaires pour calcul cône ---
+        const lampRotation = new THREE.Quaternion();
+        const coneUpVector = new THREE.Vector3(0, 1, 0); // Vecteur Y local du cône
+        const positionOffset = new THREE.Vector3();
+        const coneScale = new THREE.Vector3(1, 1, 1);
+        // ----------------------------------------
+
+
+        for (let i = 0; i < count; i++) {
+            const data = lampData[i]; // Récupérer les données pour cette instance
+
+            // --- Position et Orientation du Lampadaire ---
+            dummy.position.copy(data.position);
+            dummy.rotation.set(0, data.angleY, 0); // Utiliser l'angle calculé
+            dummy.scale.set(1, 1, 1);
+            dummy.updateMatrix();
+            // ------------------------------------------
+
+            greyInstancedMesh.setMatrixAt(i, dummy.matrix);
+            lightInstancedMesh.setMatrixAt(i, dummy.matrix);
+
+            // --- Matrice pour le cône (si existant) ---
+            if (coneInstancedMesh && coneHeight > 0) {
+                 // 1. Position monde de l'ampoule (inchangé)
+                 const localBulbPos = new THREE.Vector3(armLength, calculatedLightSourceCenterY, 0);
+                 const worldBulbPos = localBulbPos.applyMatrix4(dummy.matrix);
+
+                 // 2. Rotation du lampadaire/cône (identique au dummy)
+                 lampRotation.setFromRotationMatrix(dummy.matrix);
+
+                 // 3. Position finale du *centre* du cône
+                 // On veut que le sommet (apex) du cône (local Y = +coneHeight/2) soit à worldBulbPos.
+                 // Le centre de la géométrie du cône (local Y = 0) doit donc être décalé vers le bas
+                 // depuis worldBulbPos, le long de l'axe Y *local* du cône (qui est maintenant orienté comme le lampadaire),
+                 // d'une distance de coneHeight / 2.
+                 positionOffset.copy(coneUpVector)          // Prend le vecteur Y (0,1,0)
+                               .applyQuaternion(lampRotation) // Oriente ce vecteur comme le lampadaire
+                               .multiplyScalar(-coneHeight / 2); // Le multiplie par -hauteur/2 pour obtenir le décalage vers le bas
+
+                 const coneCenterPos = worldBulbPos.clone().add(positionOffset); // Applique le décalage
+
+                 // 4. Composer la matrice SANS rotation additionnelle (la géométrie pointe déjà vers +Y)
+                 coneMatrix.compose(coneCenterPos, lampRotation, coneScale);
+                 coneInstancedMesh.setMatrixAt(i, coneMatrix);
+            }
+        }
+
+        // Mises à jour GPU, ombres, ajout scène (inchangé)
+        greyInstancedMesh.instanceMatrix.needsUpdate = true;
+        lightInstancedMesh.instanceMatrix.needsUpdate = true;
+        if (coneInstancedMesh) coneInstancedMesh.instanceMatrix.needsUpdate = true;
+
+        greyInstancedMesh.castShadow = true; greyInstancedMesh.receiveShadow = true;
+        lightInstancedMesh.castShadow = false; lightInstancedMesh.receiveShadow = false;
+        if (coneInstancedMesh) { coneInstancedMesh.castShadow = false; coneInstancedMesh.receiveShadow = false; }
+
+        if (this.cityContainer) {
+            this.cityContainer.add(greyInstancedMesh);
+            this.cityContainer.add(lightInstancedMesh);
+            if (coneInstancedMesh) this.cityContainer.add(coneInstancedMesh);
+            console.log("InstancedMesh des lampadaires (orientés plot, cônes corrigés) ajoutés.");
+        } else { /* ... erreur ... */ }
+
+        this.lampPostMeshes.grey = greyInstancedMesh;
+        this.lampPostMeshes.light = lightInstancedMesh;
+        this.lampPostMeshes.lightCone = coneInstancedMesh;
+
         if(this.experience?.world?.environment) {
             this.updateLampPostLights(this.experience.world.environment.getCurrentHour());
         } else {
-            this.updateLampPostLights(12); // Supposer qu'il fait jour si l'environnement n'est pas prêt
+            this.updateLampPostLights(12);
         }
-        // -----------------------------------------------------
-	}
+    }
 
 	updateLampPostLights(currentHour) {
-        if (!this.lampPostMeshes || !this.lampPostMeshes.light) {
-            return; // Pas encore de lampadaires créés
+        if (!this.lampPostMeshes || (!this.lampPostMeshes.light && !this.lampPostMeshes.lightCone)) {
+            return;
         }
-
-        const lightMesh = this.lampPostMeshes.light;
-        if (!lightMesh.material) return;
-
-        // Déterminer si les lumières doivent être allumées (exemple: de 18h à 6h)
         const lightsOn = (currentHour >= 18 || currentHour < 6);
-        const targetIntensity = lightsOn ? 1.8 : 0.0; // Intensité cible (ajustable)
-
-        // Appliquer l'intensité au matériau de l'InstancedMesh des ampoules
-        // Vérifier si une mise à jour est nécessaire pour éviter des opérations inutiles
-        if (lightMesh.material.emissiveIntensity !== targetIntensity) {
-            lightMesh.material.emissiveIntensity = targetIntensity;
-            // Note: Pas besoin de material.needsUpdate = true pour les uniforms standards comme emissiveIntensity
+        const lightMesh = this.lampPostMeshes.light;
+        if (lightMesh && lightMesh.material) {
+            const targetIntensity = lightsOn ? 1.8 : 0.0;
+            if (lightMesh.material.emissiveIntensity !== targetIntensity) {
+                lightMesh.material.emissiveIntensity = targetIntensity;
+            }
+        }
+        const coneMesh = this.lampPostMeshes.lightCone;
+        if (coneMesh) {
+            if (coneMesh.visible !== lightsOn) {
+                coneMesh.visible = lightsOn;
+            }
         }
     }
 
@@ -1267,12 +1323,9 @@ export default class CityManager {
 	}
 
 	clearCity() {
-        console.log("Nettoyage de la ville existante...");
+        console.log("Nettoyage de la ville existante (incluant cônes lumineux)...");
+        this.clearDebugVisuals();
 
-        // --- Nettoyer les visuels de débogage D'ABORD ---
-        this.clearDebugVisuals(); // Appelle la nouvelle fonction pour TOUT nettoyer dans debugGroup
-
-        // Retirer les groupes principaux de la scène et nettoyer leur contenu
         const disposeGroupContents = (group) => {
             if (!group) return;
             while(group.children.length > 0){
@@ -1289,23 +1342,28 @@ export default class CityManager {
         disposeGroupContents(this.sidewalkGroup); this.sidewalkGroup = null;
         if (this.contentGroup && this.contentGroup.parent) this.cityContainer.remove(this.contentGroup);
         disposeGroupContents(this.contentGroup); this.contentGroup = null;
-        // debugGroup est géré par clearDebugVisuals et son retrait/ajout est géré dans generateCity
+        // Nettoyage groundGroup qui a été ajouté
+        if (this.groundGroup && this.groundGroup.parent) this.cityContainer.remove(this.groundGroup);
+        disposeGroupContents(this.groundGroup); this.groundGroup = null; // Ne pas oublier de nullifier
 
-        // Nettoyer le sol global
-        if (this.groundMesh) {
-            if (this.groundMesh.parent) this.scene.remove(this.groundMesh);
-            if (this.groundMesh.geometry) this.groundMesh.geometry.dispose();
-            this.groundMesh = null;
-        }
+        // Nettoyage lampadaires/cônes
+        if (this.lampPostMeshes.grey && this.lampPostMeshes.grey.parent) this.cityContainer.remove(this.lampPostMeshes.grey);
+        if (this.lampPostMeshes.light && this.lampPostMeshes.light.parent) this.cityContainer.remove(this.lampPostMeshes.light);
+        if (this.lampPostMeshes.lightCone && this.lampPostMeshes.lightCone.parent) this.cityContainer.remove(this.lampPostMeshes.lightCone);
+        this.lampPostMeshes = { grey: null, light: null, lightCone: null };
 
-        // Réinitialiser les générateurs et composants
+        // Nettoyage sol global (maintenant CityGround)
+        if (this.groundMesh && this.groundMesh.parent) this.scene.remove(this.groundMesh);
+        if (this.groundMesh?.geometry) this.groundMesh.geometry.dispose();
+        this.groundMesh = null;
+
+
+        // Reste du nettoyage
         this.roadGenerator?.reset();
         this.contentGenerator?.reset(this.assetLoader);
         this.layoutGenerator?.reset();
         this.navigationGraph?.destroy(); this.navigationGraph = null;
         this.pathfinder = null;
-
-        // Vider les listes et registres
         this.leafPlots = [];
         this.districts = [];
         this.buildingInstances.clear();
@@ -1348,10 +1406,10 @@ export default class CityManager {
 	}
 
     destroy() {
-        console.log("Destroying CityManager...");
-        this.clearCity(); // Nettoie déjà la plupart des éléments, y compris le debug group et les registres
+        console.log("Destroying CityManager (incluant cônes lumineux)...");
+        this.clearCity(); // Nettoie déjà beaucoup, y compris les lampPostMeshes
 
-        // Dispose des matériaux centraux (ceux créés dans CityManager)
+        // Dispose des matériaux centraux (inclut lampLightConeMaterial maintenant)
         Object.values(this.materials).forEach(material => {
             if (material && typeof material.dispose === 'function') {
                 material.dispose();
@@ -1359,22 +1417,28 @@ export default class CityManager {
         });
         this.materials = {};
 
-        // Détruit AssetLoader (qui dispose ses propres assets)
+        // --- NOUVEAU : Dispose géométrie du cône ---
+        if (this.lampPostConeGeometry) {
+            this.lampPostConeGeometry.dispose();
+            this.lampPostConeGeometry = null;
+        }
+        // ------------------------------------------
+
+        // Détruit AssetLoader (inchangé)
         this.assetLoader?.disposeAssets();
-        this.assetLoader = null; // Nullify après appel dispose
+        this.assetLoader = null;
 
-
-        // Retirer le conteneur principal (normalement déjà vide après clearCity)
+        // Retirer le conteneur principal (inchangé)
         if (this.cityContainer && this.cityContainer.parent) {
            this.cityContainer.parent.remove(this.cityContainer);
         }
-        this.cityContainer = null; // Nullify
+        this.cityContainer = null;
 
-
-        // Nullifier toutes les références restantes
+        // Nullifier les références (inchangé)
         this.experience = null;
         this.scene = null;
-        this.layoutGenerator = null;
+        // ... autres nullifications ...
+         this.layoutGenerator = null;
         this.roadGenerator = null;
         this.contentGenerator = null;
         this.navigationGraph = null;
@@ -1384,6 +1448,7 @@ export default class CityManager {
         this.debugGroup = null;
         this.buildingInstances = null;
         this.citizens = null;
+
 
         console.log("CityManager destroyed.");
     }
