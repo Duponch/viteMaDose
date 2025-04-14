@@ -68,7 +68,7 @@ export default class CityManager {
              industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
              parkModelDir: "Public/Assets/Models/Parks/", parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
              parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
-             treeModelDir: "Public/Assets/Models/Trees/", treeModelFiles: [{ file: "Tree2.glb", scale: 0.9 }, { file: "Tree6.glb", scale: 0.9 } ],
+             treeModelDir: "Public/Assets/Models/Trees/", treeModelFiles: [{ file: "Tree2.glb", scale: 0.9 }, { file: "Tree3.glb", scale: 0.9 }, { file: "Tree4.glb", scale: 0.9 }, { file: "Tree5.glb", scale: 0.9 }, { file: "Tree6.glb", scale: 0.9 } ],
              treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
              skyscraperModelDir: "Public/Assets/Models/Skyscrapers/", skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 }, ],
              skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
