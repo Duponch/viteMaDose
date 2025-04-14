@@ -368,7 +368,7 @@ export default class PlotContentGenerator {
 			console.error(`PlotContentGenerator: Prérequis manquants pour plot ${plot.id}`);
 			return;
 		}
-		// Créer le sol de la parcelle
+		// Création du sol de la parcelle
 		const plotGroundY = 0.005;
 		this.createPlotGround(plot, plotGroundY);
 		plot.buildingInstances = [];
@@ -381,7 +381,7 @@ export default class PlotContentGenerator {
 		let assetInfo = null;
 		let minSpacing = 0;
 	
-		// Définition des dimensions cibles et de l'espacement selon le type de zone
+		// Définition des dimensions cibles, de l’échelle et de l’espacement en fonction du type de zone
 		switch (zoneType) {
 			case 'house': {
 				const houseArmLength = 2.0;
@@ -414,6 +414,7 @@ export default class PlotContentGenerator {
 				break;
 			}
 			case 'park': {
+				// On choisit un asset park par défaut pour établir la taille de grille
 				assetInfo = this.assetLoader.getRandomAssetData('park');
 				if (!assetInfo) {
 					console.warn(`Aucun asset park trouvé pour le plot ${plot.id}.`);
@@ -436,13 +437,13 @@ export default class PlotContentGenerator {
 			let numItemsX = 0;
 			const itemPlusSpacingX = targetBuildingWidth + minSpacing;
 			if (plot.width >= targetBuildingWidth) {
-				numItemsX = itemPlusSpacingX > 0.01 ? Math.floor((plot.width + minSpacing) / itemPlusSpacingX) : Math.floor(plot.width / targetBuildingWidth);
+				numItemsX = (itemPlusSpacingX > 0.01) ? Math.floor((plot.width + minSpacing) / itemPlusSpacingX) : Math.floor(plot.width / targetBuildingWidth);
 				if (numItemsX === 0) numItemsX = 1;
 			}
 			let numItemsY = 0;
 			const itemPlusSpacingY = targetBuildingDepth + minSpacing;
 			if (plot.depth >= targetBuildingDepth) {
-				numItemsY = itemPlusSpacingY > 0.01 ? Math.floor((plot.depth + minSpacing) / itemPlusSpacingY) : Math.floor(plot.depth / targetBuildingDepth);
+				numItemsY = (itemPlusSpacingY > 0.01) ? Math.floor((plot.depth + minSpacing) / itemPlusSpacingY) : Math.floor(plot.depth / targetBuildingDepth);
 				if (numItemsY === 0) numItemsY = 1;
 			}
 			numItemsX = Math.max(0, numItemsX);
@@ -450,170 +451,212 @@ export default class PlotContentGenerator {
 			if (numItemsX === 0 || numItemsY === 0) { return; }
 			const remainingWidth = plot.width - (numItemsX * targetBuildingWidth);
 			const remainingDepth = plot.depth - (numItemsY * targetBuildingDepth);
-			const gapX = numItemsX > 0 ? Math.max(0, remainingWidth / (numItemsX + 1)) : 0;
-			const gapZ = numItemsY > 0 ? Math.max(0, remainingDepth / (numItemsY + 1)) : 0;
+			const gapX = (numItemsX > 0) ? Math.max(0, remainingWidth / (numItemsX + 1)) : 0;
+			const gapZ = (numItemsY > 0) ? Math.max(0, remainingDepth / (numItemsY + 1)) : 0;
 	
-			// Boucle de placement par grille
-			for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
-				for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
-					const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + gapX)) + targetBuildingWidth / 2;
-					const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + gapZ)) + targetBuildingDepth / 2;
-					const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
-					const distToLeft = cellCenterX - plot.x;
-					const distToRight = (plot.x + plot.width) - cellCenterX;
-					const distToTop = cellCenterZ - plot.z;
-					const distToBottom = (plot.z + plot.depth) - cellCenterZ;
-					const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-					let targetRotationY = 0;
-					const tolerance = 0.1;
-					if (Math.abs(minDist - distToLeft) < tolerance)
-						targetRotationY = -Math.PI / 2;
-					else if (Math.abs(minDist - distToRight) < tolerance)
-						targetRotationY = Math.PI / 2;
-					else if (Math.abs(minDist - distToBottom) < tolerance)
-						targetRotationY = Math.PI;
-					const finalQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotationY);
-	
-					if (zoneType === 'house') {
-						// --- Logique de placement pour les maisons (récupérée depuis l'implémentation originale) ---
-						const armLength = 2;
-						const armWidth = 1;
-						const armDepth = 0.5;
-						const roofPitchHeight = 0.3;
-						const doorHeight = 0.7 * armDepth;
-						const doorDepth = 0.02;
-						const doorWidth = 0.3;
-						const garageDoorHeight = 0.8 * armDepth;
-						const garageDoorWidth = 0.55;
-						const windowHeight = 0.4 * armDepth;
-						const windowDepth = doorDepth;
-						const window_Y_pos_Base = armDepth * 0.3;
-	
-						const finalScaleVector = new THREE.Vector3(baseScaleFactor, baseScaleFactor, baseScaleFactor);
-						const finalPosY = groundLevel;
-						const modelCenterLocal = new THREE.Vector3(armLength / 2, armDepth / 2, armLength / 2);
-						const centerOffsetRotated = modelCenterLocal.clone().applyQuaternion(finalQuaternion);
-						const centerOffsetScaledRotated = centerOffsetRotated.multiplyScalar(baseScaleFactor);
-						const finalPosition = new THREE.Vector3(
-							worldCellCenterPos.x - centerOffsetScaledRotated.x,
-							finalPosY,
-							worldCellCenterPos.z - centerOffsetScaledRotated.z
-						);
-						const globalHouseMatrix = new THREE.Matrix4().compose(finalPosition, finalQuaternion, finalScaleVector);
-						let localMatrix;
-						const addPartInstance = (partName, localMatrix) => {
-							if (this.baseHouseGeometries[partName]) {
-								const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix);
-								const type = 'house';
-								const modelId = partName;
-								if (!this.instanceData[type]) this.instanceData[type] = {};
-								if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
-								this.instanceData[type][modelId].push(finalMatrix.clone());
-							} else {
-								console.warn(`Géométrie maison manquante: ${partName}`);
+			if (zoneType === 'park') {
+				// Pour les parcs, on collecte toutes les positions de grille
+				let parkCells = [];
+				for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
+					for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
+						const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + gapX)) + targetBuildingWidth / 2;
+						const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + gapZ)) + targetBuildingDepth / 2;
+						const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
+						const distToLeft = cellCenterX - plot.x;
+						const distToRight = (plot.x + plot.width) - cellCenterX;
+						const distToTop = cellCenterZ - plot.z;
+						const distToBottom = (plot.z + plot.depth) - cellCenterZ;
+						const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+						let targetRotationY = 0;
+						const tolerance = 0.1;
+						if (Math.abs(minDist - distToLeft) < tolerance)
+							targetRotationY = -Math.PI / 2;
+						else if (Math.abs(minDist - distToRight) < tolerance)
+							targetRotationY = Math.PI / 2;
+						else if (Math.abs(minDist - distToBottom) < tolerance)
+							targetRotationY = Math.PI;
+						parkCells.push({ pos: worldCellCenterPos, rotationY: targetRotationY });
+					}
+				}
+				const availableCells = parkCells.length;
+				if (availableCells === 0) return;
+				const minParkElements = this.config.minParkElements ?? 3;
+				const maxParkElements = this.config.maxParkElements ?? 5;
+				const effectiveMax = Math.min(maxParkElements, availableCells);
+				const chosenCount = Math.floor(Math.random() * (effectiveMax - minParkElements + 1)) + minParkElements;
+				// Mélanger les cellules et en sélectionner 'chosenCount'
+				let shuffledCells = parkCells.slice();
+				for (let i = shuffledCells.length - 1; i > 0; i--) {
+					const j = Math.floor(Math.random() * (i + 1));
+					[shuffledCells[i], shuffledCells[j]] = [shuffledCells[j], shuffledCells[i]];
+				}
+				const selectedCells = shuffledCells.slice(0, chosenCount);
+				// Pour chaque cellule sélectionnée, choisir aléatoirement un asset park pour varier les éléments
+				selectedCells.forEach(item => {
+					const currentParkAsset = this.assetLoader.getRandomAssetData('park');
+					if (!currentParkAsset) {
+						console.warn("Aucun asset park trouvé lors de la sélection aléatoire.");
+						return;
+					}
+					const instanceMatrix = this.calculateInstanceMatrix(
+						item.pos.x, item.pos.z,
+						currentParkAsset.sizeAfterFitting.y,
+						currentParkAsset.fittingScaleFactor,
+						currentParkAsset.centerOffset,
+						baseScaleFactor,
+						item.rotationY
+					);
+					const modelId = currentParkAsset.id;
+					if (!this.instanceData['park']) this.instanceData['park'] = {};
+					if (!this.instanceData['park'][modelId]) this.instanceData['park'][modelId] = [];
+					this.instanceData['park'][modelId].push(instanceMatrix.clone());
+					const buildingPosition = item.pos.clone().setY(this.config.sidewalkHeight);
+					const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'park', buildingPosition);
+					if (registeredBuilding) {
+						plot.addBuildingInstance({
+							id: registeredBuilding.id,
+							type: 'park',
+							position: buildingPosition.clone()
+						});
+					}
+				});
+			} else {
+				// Traitement standard pour 'house', 'building', 'industrial' et 'skyscraper'
+				for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
+					for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
+						const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + gapX)) + targetBuildingWidth / 2;
+						const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + gapZ)) + targetBuildingDepth / 2;
+						const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
+						const distToLeft = cellCenterX - plot.x;
+						const distToRight = (plot.x + plot.width) - cellCenterX;
+						const distToTop = cellCenterZ - plot.z;
+						const distToBottom = (plot.z + plot.depth) - cellCenterZ;
+						const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+						let targetRotationY = 0;
+						const tolerance = 0.1;
+						if (Math.abs(minDist - distToLeft) < tolerance)
+							targetRotationY = -Math.PI / 2;
+						else if (Math.abs(minDist - distToRight) < tolerance)
+							targetRotationY = Math.PI / 2;
+						else if (Math.abs(minDist - distToBottom) < tolerance)
+							targetRotationY = Math.PI;
+		
+						if (zoneType === 'house') {
+							// Logique de placement pour les maisons (récupérée depuis l'implémentation originale)
+							const armLength = 2;
+							const armWidth = 1;
+							const armDepth = 0.5;
+							const doorHeight = 0.7 * armDepth;
+							const doorDepth = 0.02;
+							const doorWidth = 0.3;
+							const garageDoorHeight = 0.8 * armDepth;
+							const garageDoorWidth = 0.55;
+							const windowHeight = 0.4 * armDepth;
+							const windowDepth = doorDepth;
+							const window_Y_pos_Base = armDepth * 0.3;
+							const finalScaleVector = new THREE.Vector3(baseScaleFactor, baseScaleFactor, baseScaleFactor);
+							const finalPosY = groundLevel;
+							const modelCenterLocal = new THREE.Vector3(armLength / 2, armDepth / 2, armLength / 2);
+							const centerOffsetRotated = modelCenterLocal.clone().applyQuaternion(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotationY));
+							const centerOffsetScaledRotated = centerOffsetRotated.multiplyScalar(baseScaleFactor);
+							const finalPosition = new THREE.Vector3(
+								worldCellCenterPos.x - centerOffsetScaledRotated.x,
+								finalPosY,
+								worldCellCenterPos.z - centerOffsetScaledRotated.z
+							);
+							const globalHouseMatrix = new THREE.Matrix4().compose(finalPosition, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotationY), finalScaleVector);
+							let localMatrix;
+							const addPartInstance = (partName, localMatrix) => {
+								if (this.baseHouseGeometries[partName]) {
+									const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix);
+									const type = 'house';
+									const modelId = partName;
+									if (!this.instanceData[type]) this.instanceData[type] = {};
+									if (!this.instanceData[type][modelId]) this.instanceData[type][modelId] = [];
+									this.instanceData[type][modelId].push(finalMatrix.clone());
+								} else {
+									console.warn(`Géométrie maison manquante: ${partName}`);
+								}
+							};
+							const addWindowPart = (geomKey, facadeCoordX, facadeCoordZ, yBase, isYZPlane) => {
+								const yCenter = yBase + windowHeight / 2;
+								let xPos, zPos;
+								if (isYZPlane) {
+									xPos = facadeCoordX;
+									zPos = facadeCoordZ;
+								} else {
+									xPos = facadeCoordX;
+									zPos = facadeCoordZ;
+								}
+								localMatrix = new THREE.Matrix4().makeTranslation(xPos, yCenter, zPos);
+								addPartInstance(geomKey, localMatrix);
+							};
+							localMatrix = new THREE.Matrix4();
+							addPartInstance('base_part1', localMatrix);
+							localMatrix = new THREE.Matrix4();
+							addPartInstance('base_part2', localMatrix);
+							const roofBaseY = armDepth;
+							const roofPos1 = new THREE.Vector3(armLength / 2, roofBaseY, armWidth / 2);
+							const roofPos2 = new THREE.Vector3(armWidth / 2, roofBaseY, armLength / 2);
+							const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+							const roofRot2 = new THREE.Quaternion();
+							localMatrix = new THREE.Matrix4().compose(roofPos1, roofRot1, new THREE.Vector3(1, 1, 1));
+							addPartInstance('roof', localMatrix);
+							localMatrix = new THREE.Matrix4().compose(roofPos2, roofRot2, new THREE.Vector3(1, 1, 1));
+							addPartInstance('roof', localMatrix);
+							const doorPos = new THREE.Vector3(armWidth, doorHeight / 2, armLength * 0.75);
+							localMatrix = new THREE.Matrix4().makeTranslation(doorPos.x, doorPos.y, doorPos.z);
+							addPartInstance('door', localMatrix);
+							const garagePos = new THREE.Vector3(armLength, garageDoorHeight / 2, armWidth / 2);
+							localMatrix = new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z);
+							addPartInstance('garageDoor', localMatrix);
+							addWindowPart('windowXY', 0.25, 0, window_Y_pos_Base, false);
+							addWindowPart('windowXY', 0.75, 0, window_Y_pos_Base, false);
+							addWindowPart('windowXY', 1.25, 0, window_Y_pos_Base, false);
+							addWindowPart('windowXY', 1.75, 0, window_Y_pos_Base, false);
+							addWindowPart('windowXY', 0.25, armWidth, window_Y_pos_Base, false);
+							addWindowPart('windowXY', 0.75, armWidth, window_Y_pos_Base, false);
+							addWindowPart('windowXY', 1.25, armWidth, window_Y_pos_Base, false);
+							addWindowPart('windowXY', 1.75, armWidth, window_Y_pos_Base, false);
+							addWindowPart('windowYZ', 0, 0.25, window_Y_pos_Base, true);
+							addWindowPart('windowYZ', 0, 0.75, window_Y_pos_Base, true);
+							addWindowPart('windowYZ', armWidth, 0.25, window_Y_pos_Base, true);
+							addWindowPart('windowYZ', armWidth, 0.75, window_Y_pos_Base, true);
+							const doorEdgeLeft = armLength * 0.75 - doorWidth / 2;
+							const doorEdgeRight = armLength * 0.75 + doorWidth / 2;
+							addWindowPart('windowYZ', armWidth, (armWidth + doorEdgeLeft) / 2, window_Y_pos_Base, true);
+							addWindowPart('windowYZ', armWidth, (doorEdgeRight + armLength) / 2, window_Y_pos_Base, true);
+							const buildingPosition = finalPosition.clone().setY(this.config.sidewalkHeight);
+							const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'house', buildingPosition);
+							if (registeredBuilding) {
+								plot.addBuildingInstance({
+									id: registeredBuilding.id,
+									type: 'house',
+									position: buildingPosition.clone()
+								});
 							}
-						};
-						const addWindowPart = (geomKey, facadeCoordX, facadeCoordZ, yBase, isYZPlane) => {
-							const yCenter = yBase + windowHeight / 2;
-							let xPos, zPos;
-							if (isYZPlane) {
-								xPos = facadeCoordX;
-								zPos = facadeCoordZ;
-							} else {
-								xPos = facadeCoordX;
-								zPos = facadeCoordZ;
+						} else if (assetInfo && ['building', 'industrial', 'skyscraper'].includes(zoneType)) {
+							const instanceMatrix = this.calculateInstanceMatrix(
+								worldCellCenterPos.x, worldCellCenterPos.z,
+								assetInfo.sizeAfterFitting.y,
+								assetInfo.fittingScaleFactor,
+								assetInfo.centerOffset,
+								baseScaleFactor,
+								targetRotationY
+							);
+							const modelId = assetInfo.id;
+							if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
+							if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
+							this.instanceData[zoneType][modelId].push(instanceMatrix.clone());
+							const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
+							const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition);
+							if (registeredBuilding) {
+								plot.addBuildingInstance({
+									id: registeredBuilding.id,
+									type: zoneType,
+									position: buildingPosition.clone()
+								});
 							}
-							localMatrix = new THREE.Matrix4().makeTranslation(xPos, yCenter, zPos);
-							addPartInstance(geomKey, localMatrix);
-						};
-	
-						localMatrix = new THREE.Matrix4();
-						addPartInstance('base_part1', localMatrix);
-						localMatrix = new THREE.Matrix4();
-						addPartInstance('base_part2', localMatrix);
-						const roofBaseY = armDepth;
-						const roofPos1 = new THREE.Vector3(armLength / 2, roofBaseY, armWidth / 2);
-						const roofPos2 = new THREE.Vector3(armWidth / 2, roofBaseY, armLength / 2);
-						const roofRot1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
-						const roofRot2 = new THREE.Quaternion();
-						localMatrix = new THREE.Matrix4().compose(roofPos1, roofRot1, new THREE.Vector3(1, 1, 1));
-						addPartInstance('roof', localMatrix);
-						localMatrix = new THREE.Matrix4().compose(roofPos2, roofRot2, new THREE.Vector3(1, 1, 1));
-						addPartInstance('roof', localMatrix);
-						const doorPos = new THREE.Vector3(armWidth, doorHeight / 2, armLength * 0.75);
-						localMatrix = new THREE.Matrix4().makeTranslation(doorPos.x, doorPos.y, doorPos.z);
-						addPartInstance('door', localMatrix);
-						const garagePos = new THREE.Vector3(armLength, garageDoorHeight / 2, armWidth / 2);
-						localMatrix = new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z);
-						addPartInstance('garageDoor', localMatrix);
-						addWindowPart('windowXY', 0.25, 0, window_Y_pos_Base, false);
-						addWindowPart('windowXY', 0.75, 0, window_Y_pos_Base, false);
-						addWindowPart('windowXY', 1.25, 0, window_Y_pos_Base, false);
-						addWindowPart('windowXY', 1.75, 0, window_Y_pos_Base, false);
-						addWindowPart('windowXY', 0.25, armWidth, window_Y_pos_Base, false);
-						addWindowPart('windowXY', 0.75, armWidth, window_Y_pos_Base, false);
-						addWindowPart('windowXY', 1.25, armWidth, window_Y_pos_Base, false);
-						addWindowPart('windowXY', 1.75, armWidth, window_Y_pos_Base, false);
-						addWindowPart('windowYZ', 0, 0.25, window_Y_pos_Base, true);
-						addWindowPart('windowYZ', 0, 0.75, window_Y_pos_Base, true);
-						addWindowPart('windowYZ', armWidth, 0.25, window_Y_pos_Base, true);
-						addWindowPart('windowYZ', armWidth, 0.75, window_Y_pos_Base, true);
-						const doorEdgeLeft = armLength * 0.75 - doorWidth / 2;
-						const doorEdgeRight = armLength * 0.75 + doorWidth / 2;
-						addWindowPart('windowYZ', armWidth, (armWidth + doorEdgeLeft) / 2, window_Y_pos_Base, true);
-						addWindowPart('windowYZ', armWidth, (doorEdgeRight + armLength) / 2, window_Y_pos_Base, true);
-						const buildingPosition = finalPosition.clone().setY(this.config.sidewalkHeight);
-						const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'house', buildingPosition);
-						if (registeredBuilding) {
-							plot.addBuildingInstance({
-								id: registeredBuilding.id,
-								type: 'house',
-								position: buildingPosition.clone()
-							});
-						}
-					} else if (assetInfo && ['building', 'industrial', 'skyscraper'].includes(zoneType)) {
-						const instanceMatrix = this.calculateInstanceMatrix(
-							worldCellCenterPos.x, worldCellCenterPos.z,
-							assetInfo.sizeAfterFitting.y,
-							assetInfo.fittingScaleFactor,
-							assetInfo.centerOffset,
-							baseScaleFactor,
-							targetRotationY
-						);
-						const modelId = assetInfo.id;
-						if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
-						if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
-						this.instanceData[zoneType][modelId].push(instanceMatrix.clone());
-						const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
-						const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition);
-						if (registeredBuilding) {
-							plot.addBuildingInstance({
-								id: registeredBuilding.id,
-								type: zoneType,
-								position: buildingPosition.clone()
-							});
-						}
-					} else if (assetInfo && zoneType === 'park') {
-						const instanceMatrix = this.calculateInstanceMatrix(
-							worldCellCenterPos.x, worldCellCenterPos.z,
-							assetInfo.sizeAfterFitting.y,
-							assetInfo.fittingScaleFactor,
-							assetInfo.centerOffset,
-							baseScaleFactor,
-							targetRotationY
-						);
-						const modelId = assetInfo.id;
-						if (!this.instanceData['park']) this.instanceData['park'] = {};
-						if (!this.instanceData['park'][modelId]) this.instanceData['park'][modelId] = [];
-						this.instanceData['park'][modelId].push(instanceMatrix.clone());
-						const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
-						const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, 'park', buildingPosition);
-						if (registeredBuilding) {
-							plot.addBuildingInstance({
-								id: registeredBuilding.id,
-								type: 'park',
-								position: buildingPosition.clone()
-							});
 						}
 					}
 				}
