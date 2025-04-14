@@ -493,7 +493,7 @@ export default class CityManager {
 
         greyGeos.forEach(g => g.dispose()); // Nettoyer les géométries intermédiaires
 
-        const greyMaterial = new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.6, metalness: 0.4, name: "LampPostGreyMat_Simplified" });
+        const greyMaterial = new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.6, metalness: 0.9, name: "LampPostGreyMat_Simplified" });
         const lightMaterial = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffdd, emissiveIntensity: 0.0, name: "LampPostLightMat_Simplified" });
 
         return {
