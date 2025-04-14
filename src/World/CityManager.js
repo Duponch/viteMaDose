@@ -111,12 +111,19 @@ export default class CityManager {
 
         // --- Materials ---
         this.materials = {
-            groundMaterial: new THREE.MeshStandardMaterial({ color: 0x404040, metalness: 0.1, roughness: 0.8 }),
+            groundMaterial: new THREE.MeshStandardMaterial({ color: 0x272442, metalness: 0.1, roughness: 0.8 }), // Sol extérieur
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
             centerlineMaterial: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.8 }),
             crosswalkMaterial: new THREE.MeshStandardMaterial({ color: 0xE0E0E0, roughness: 0.7, metalness: 0.1 }),
-            parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
-            buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }),
+
+            // --- Couleurs des sols des parcelles ---
+            parkMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }), // Vert pour les parcs
+            houseGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x61874c }), // Terre de Sienne pour résidentiel 'house'
+            buildingGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x676d70 }), // Gris pour 'building' générique
+            industrialGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x676d70 }), // Bleu acier pour industriel
+            skyscraperGroundMaterial: new THREE.MeshStandardMaterial({ color: 0x708090 }), // Gris ardoise pour gratte-ciel ('business')
+
+            // --- Matériaux Debug (existants) ---
             debugResidentialMat: new THREE.MeshBasicMaterial({ color: 0x0077ff, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugIndustrialMat: new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugBusinessMat: new THREE.MeshBasicMaterial({ color: 0xcc0000, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),

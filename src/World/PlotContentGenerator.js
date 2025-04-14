@@ -6,23 +6,19 @@ export default class PlotContentGenerator {
 	constructor(config, materials, debugPlotGridMaterial) {
 		this.config = config;
 		this.materials = materials;
-		this.sidewalkGroup = new THREE.Group(); 
+		this.sidewalkGroup = new THREE.Group();
 		this.sidewalkGroup.name = "Sidewalks";
-		this.buildingGroup = new THREE.Group(); 
+		this.buildingGroup = new THREE.Group();
 		this.buildingGroup.name = "PlotContents";
-		// Nouveau groupe pour les sols des parcelles
 		this.groundGroup = new THREE.Group();
 		this.groundGroup.name = "PlotGrounds";
-
 		this.assetLoader = null;
-		this.instanceData = {}; // Pour non-house assets + crosswalks
+		this.instanceData = {};
 		this.stripeBaseGeometry = null;
 		this.cityManager = null;
 		this.navigationGraph = null;
 		this.debugPlotGridGroup = null;
 		this.debugPlotGridMaterial = debugPlotGridMaterial ?? new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
-
-		// --- Section Maison Procédurale ---
 		this.baseHouseGeometries = {};
 		this.baseHouseMaterials = {};
 		this.houseInstanceMatrices = {};
@@ -30,8 +26,6 @@ export default class PlotContentGenerator {
 		this.defineHouseBaseMaterials();
 		this.defineHouseBaseGeometries();
 		this.initializeHouseMatrixArrays();
-		// --------------------------------
-
 		console.log("PlotContentGenerator initialized (Dynamic World Coordinate Grid logic).");
 	}
 
@@ -910,25 +904,51 @@ export default class PlotContentGenerator {
         }
     }
 
-    // --- createPlotGround ---
     createPlotGround(plot, groundY = 0.01) {
 		const groundGeom = new THREE.PlaneGeometry(plot.width, plot.depth);
-		let groundMaterial;
-		if (plot.zoneType === 'park') {
-			groundMaterial = this.materials.parkMaterial;
-		} else {
-			groundMaterial = this.materials.buildingGroundMaterial;
-		}
+		let groundMaterial; // Variable pour stocker le matériau choisi
+
+        // Utilisation d'un switch pour déterminer le matériau basé sur zoneType
+        switch (plot.zoneType) {
+            case 'park':
+                groundMaterial = this.materials.parkMaterial;
+                break;
+            case 'house': // Type résidentiel spécifique maison
+                groundMaterial = this.materials.houseGroundMaterial;
+                break;
+            case 'building': // Type bâtiment résidentiel/commercial générique
+                groundMaterial = this.materials.buildingGroundMaterial;
+                break;
+            case 'industrial': // Type industriel
+                groundMaterial = this.materials.industrialGroundMaterial;
+                break;
+            case 'skyscraper': // Type gratte-ciel / quartier d'affaires
+                groundMaterial = this.materials.skyscraperGroundMaterial;
+                break;
+            default:
+                // Fallback pour 'unbuildable' ou des types inattendus
+                console.warn(`Plot ${plot.id} a un zoneType ('${plot.zoneType}') non géré pour la couleur du sol. Utilisation du matériau 'buildingGround'.`);
+                groundMaterial = this.materials.buildingGroundMaterial; // Utiliser un matériau par défaut sûr
+        }
+
+        // Vérification de sécurité: si le matériau n'a pas été trouvé (ne devrait pas arriver)
+        if (!groundMaterial) {
+            console.error(`Matériau non trouvé pour zoneType '${plot.zoneType}' dans plot ${plot.id}. Utilisation du matériau 'buildingGround'.`);
+            groundMaterial = this.materials.buildingGroundMaterial; // Fallback final
+        }
+
+		// Création du mesh avec la géométrie et le matériau sélectionné
 		const groundMesh = new THREE.Mesh(groundGeom, groundMaterial);
-		groundMesh.rotation.x = -Math.PI / 2;
+		groundMesh.rotation.x = -Math.PI / 2; // Orienter horizontalement
 		groundMesh.position.set(
 			plot.center ? plot.center.x : plot.x + plot.width / 2,
-			groundY,
+			groundY, // Position Y définie
 			plot.center ? plot.center.z : plot.z + plot.depth / 2
 		);
-		groundMesh.receiveShadow = true;
+		groundMesh.receiveShadow = true; // Le sol reçoit des ombres
 		groundMesh.name = `Ground_Plot_${plot.id}_${plot.zoneType}`;
-		// Ajout du sol dans le groupe dédié aux sols
+
+		// Ajouter le mesh du sol au groupe dédié (groundGroup)
 		this.groundGroup.add(groundMesh);
 	}
 
