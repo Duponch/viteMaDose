@@ -217,13 +217,22 @@ export default class World {
 		}
    }
 
-    update() {
-        const deltaTime = this.experience.time.delta;
-        this.environment?.update(deltaTime); // Met à jour cycle jour/nuit, nuages etc.
-        // AgentManager met à jour les agents (logique & visuel)
-        // Le pathfinding se fait maintenant dans le worker, AgentManager reçoit les résultats via _handleWorkerMessage
-        this.agentManager?.update(deltaTime);
-    }
+   update() {
+		const deltaTime = this.experience.time.delta;
+
+		// Mettre à jour l'environnement (pour obtenir l'heure)
+		this.environment?.update(deltaTime);
+
+		// --- NOUVEAU: Mettre à jour le PlotContentGenerator (via CityManager) ---
+		if (this.environment?.isInitialized && this.cityManager?.contentGenerator) {
+			const currentHour = this.environment.getCurrentHour();
+			this.cityManager.contentGenerator.update(currentHour);
+		}
+		// --------------------------------------------------------------------
+
+		// Mettre à jour les agents
+		this.agentManager?.update(deltaTime);
+	}
 
     destroy() {
         console.log("Destroying World...");
