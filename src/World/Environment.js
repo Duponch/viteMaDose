@@ -359,7 +359,7 @@ export default class Environment {
         // --- Définition des rayons et distances ---
         this.skyboxRadius = this.config.mapSize * 1.5; // Rayon de la sphère céleste
         this.sunDistance = this.skyboxRadius * 0.9;   // Distance du soleil depuis le centre
-        this.moonDistance = this.skyboxRadius * 0.8;  // Distance de la lune (légèrement plus proche ?)
+        this.moonDistance = this.skyboxRadius * 1.1;  // Distance de la lune (légèrement plus proche ?)
         // ----------------------------------------
 
         console.log(`Skybox: Rayon=${this.skyboxRadius.toFixed(0)}, DistSoleil=${this.sunDistance.toFixed(0)}, DistLune=${this.moonDistance.toFixed(0)}`);
@@ -389,11 +389,12 @@ export default class Environment {
              return;
         }
 
-        const moonGeometry = new THREE.SphereGeometry(this.moonSize, 16, 16); // Taille et segments
+        const moonGeometry = new THREE.SphereGeometry(this.moonSize, 16, 16);
         // Utilisation d'un matériau basique pour qu'elle soit visible même sans lumière directe forte
         const moonMaterial = new THREE.MeshBasicMaterial({
             color: this.moonColor, // Même couleur que la lumière pour cohérence
-            depthWrite: false      // Pour éviter conflits de profondeur avec objets lointains/skybox
+            depthWrite: false,     // Pour éviter conflits de profondeur avec objets lointains/skybox
+            fog: false             // <--- AJOUTER CETTE LIGNE
         });
 
         this.moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
