@@ -593,7 +593,7 @@ export default class CityAssetLoader {
             color: windowColor,
             metalness: 0.8,
             roughness: 0.2,
-            emissive: 0xFFFFFF, // << AJOUT: Couleur émissive
+            emissive: 0xfcffe0, // << AJOUT: Couleur émissive
             // emissiveIntensity: 0, // Géré par PlotContentGenerator.update
             name: "BuildingWindowMat"
         });

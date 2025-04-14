@@ -1007,7 +1007,7 @@ export default class PlotContentGenerator {
 
 				} else if (isBuildingWindow) {
                     // Logique spécifique immeuble
-                    targetIntensity = lightsOn ? 1.2 : 0.0; // Exemple: un peu plus lumineux
+                    targetIntensity = lightsOn ? 0.88 : 0.0; // Exemple: un peu plus lumineux
                     // Ici aussi, on ne change que l'intensité émissive
 				}
                 // else: Gérer d'autres types de fenêtres si ajoutés
