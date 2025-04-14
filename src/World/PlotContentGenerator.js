@@ -1124,7 +1124,7 @@ export default class PlotContentGenerator {
 					// --- Logique pour les fenêtres de gratte-ciel (MeshPhysicalMaterial) ---
 					const targetTransmission = lightsOn ? 0.0 : 0.0;  // Jour: transparent, Nuit: opaque
 					const targetRoughness = lightsOn ? 0.8 : 0.05; // Jour: lisse, Nuit: rugueux (moins réflectif)
-					const targetIntensity = lightsOn ? 1.2 : 0.0;  // Jour: éteint, Nuit: allumé (ajuster intensité)
+					const targetIntensity = lightsOn ? 1.21 : 0.0;  // Jour: éteint, Nuit: allumé (ajuster intensité)
 	
 					// Appliquer les changements et marquer pour mise à jour si nécessaire
 					if (material.transmission !== targetTransmission) {
@@ -1147,7 +1147,7 @@ export default class PlotContentGenerator {
 	
 				} else if (isHouseWindow) {
 					// --- Logique pour les fenêtres de maison (MeshStandardMaterial - inchangée) ---
-					const targetIntensity = lightsOn ? 1.2 : 0.0; // Intensité cible (peut être différente)
+					const targetIntensity = lightsOn ? 1.25 : 0.0; // Intensité cible (peut être différente)
 					if (material.emissiveIntensity !== targetIntensity) {
 						material.emissiveIntensity = targetIntensity;
 						// Pas besoin de needsUpdate pour emissiveIntensity seul
