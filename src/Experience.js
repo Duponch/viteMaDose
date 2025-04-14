@@ -28,10 +28,16 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.scene = new THREE.Scene();
 
         // --- Ajout du Brouillard (Fog) ---
-        const fogColor = 0x1e2a36; // Couleur du brouillard (gris-bleu)
+        /* const fogColor = 0x1e2a36; // Couleur du brouillard (gris-bleu)
         const fogNear = 200;      // Distance minimale où le brouillard commence
         const fogFar = 900;       // Distance où le brouillard est opaque
-        this.scene.fog = new THREE.Fog(fogColor, fogNear, fogFar);
+        this.scene.fog = new THREE.Fog(fogColor, fogNear, fogFar); */
+
+		// --- Ajout du Brouillard Exponentiel (FogExp2) ---
+		const fogColor = 0x1e2a36;  // Couleur du brouillard (gris-bleu)
+		const fogDensity = 0.003;   // Densité du brouillard (ajustez cette valeur selon vos besoins)
+		this.scene.fog = new THREE.FogExp2(fogColor, fogDensity);
+
         // Optionnel : faire correspondre la couleur de fond au brouillard
         // this.scene.background = new THREE.Color(fogColor); // Décommenter si Renderer ne définit pas setClearColor
 
