@@ -285,39 +285,36 @@ export default class CityAssetLoader {
 	}
 
 	generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale = 1) {
-		// Création d'un modèle procédural de gratte‑ciel basé sur le code récupéré sur internet
+		// --- Création du groupe et construction du gratte‑ciel (version V13) ---
 		const skyscraper = new THREE.Group();
 	
 		// Matériaux
 		const structureMaterial = new THREE.MeshStandardMaterial({ color: 0xced4da, flatShading: true });
 		const baseMaterial = new THREE.MeshStandardMaterial({ color: 0xadb5bd, flatShading: true });
 		const windowMaterial = new THREE.MeshPhysicalMaterial({
-			color: 0x60a3bc,
-			metalness: 0.1,
-			roughness: 0.05,
-			transmission: 0.9,
-			thickness: 0.3,
-			ior: 1.5,
-			flatShading: true,
+			color: 0x60a3bc, metalness: 0.1, roughness: 0.05,
+			transmission: 0.9, thickness: 0.3, ior: 1.5, flatShading: true,
 		});
-		const metallicMaterial = new THREE.MeshStandardMaterial({ color: 0xadb5bd, metalness: 0.9, roughness: 0.4, flatShading: true, side: THREE.DoubleSide });
+		const metallicMaterial = new THREE.MeshStandardMaterial({
+			color: 0xadb5bd, metalness: 0.9, roughness: 0.4, flatShading: true, side: THREE.DoubleSide
+		});
 		const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, flatShading: true });
 	
 		// --- Dimensions générales ---
 		const mainWidth = 9, mainDepth = 9, mainHeight = 30;
-		const baseHeightLocal = 2.5, intermediateStructureHeight = 1.0;
+		const baseHeightVal = 2.5, intermediateStructureHeight = 1.0;
 		const intermediateOverhang = 0.5, pillarThickness = 0.4;
 		const windowInset = 0.05, intermediateBandThickness = pillarThickness, floorThickness = 0.1;
 	
 		// --- Base ---
-		const baseGeometry = new THREE.BoxGeometry(mainWidth, baseHeightLocal, mainDepth);
+		const baseGeometry = new THREE.BoxGeometry(mainWidth, baseHeightVal, mainDepth);
 		const baseMesh = new THREE.Mesh(baseGeometry, baseMaterial);
-		baseMesh.position.y = baseHeightLocal / 2;
+		baseMesh.position.y = baseHeightVal / 2;
 		baseMesh.castShadow = true; baseMesh.receiveShadow = true;
 		skyscraper.add(baseMesh);
 	
 		// --- Entrées/Portes de la Base ---
-		const doorHeight = baseHeightLocal;
+		const doorHeight = baseHeightVal;
 		const doorWidthFactor = 0.5;
 		const originalBaseWindowPanelWidth = (mainWidth - 3 * pillarThickness) / 2;
 		const doorWidth = originalBaseWindowPanelWidth * doorWidthFactor;
@@ -356,12 +353,12 @@ export default class CityAssetLoader {
 		const intermediateDepth = mainDepth + 2 * intermediateOverhang;
 		const intermediateGeometry = new THREE.BoxGeometry(intermediateWidth, intermediateStructureHeight, intermediateDepth);
 		const intermediateMesh = new THREE.Mesh(intermediateGeometry, baseMaterial);
-		intermediateMesh.position.y = baseHeightLocal + intermediateStructureHeight / 2;
+		intermediateMesh.position.y = baseHeightVal + intermediateStructureHeight / 2;
 		intermediateMesh.castShadow = true; intermediateMesh.receiveShadow = true;
 		skyscraper.add(intermediateMesh);
 	
 		// --- Corps Principal ---
-		const startY = baseHeightLocal + intermediateStructureHeight;
+		const startY = baseHeightVal + intermediateStructureHeight;
 		const numFloors = 9;
 		const floorHeight = mainHeight / numFloors;
 		const structureHeight = mainHeight;
@@ -373,7 +370,11 @@ export default class CityAssetLoader {
 		for (let i = 0; i < 2; i++) {
 			for (let j = 0; j < 2; j++) {
 				const pillar = new THREE.Mesh(cornerPillarGeom, structureMaterial);
-				pillar.position.set((mainWidth / 2) * (i === 0 ? -1 : 1), startY + structureHeight / 2, (mainDepth / 2) * (j === 0 ? -1 : 1));
+				pillar.position.set(
+					(mainWidth / 2) * (i === 0 ? -1 : 1),
+					startY + structureHeight / 2,
+					(mainDepth / 2) * (j === 0 ? -1 : 1)
+				);
 				pillar.castShadow = true; pillar.receiveShadow = true;
 				skyscraper.add(pillar);
 			}
@@ -512,59 +513,83 @@ export default class CityAssetLoader {
 		equipCyl1.castShadow = true;
 		skyscraper.add(equipCyl1);
 	
-		// --- Fusion des géométries du groupe ---
-		const geometries = [];
+		// --- Fin de la construction du gratte‑ciel ---
+	
+		// --- Regroupement par matériau pour conserver les couleurs ---
+		const allGeoms = [];
+		const materialGroups = {}; // clé = material.uuid, valeur = { material: material, geoms: [] }
 		skyscraper.traverse(child => {
 			if (child.isMesh && child.geometry) {
 				child.updateMatrixWorld(true);
-				const clonedGeom = child.geometry.clone();
+				let clonedGeom = child.geometry.clone();
 				clonedGeom.applyMatrix4(child.matrixWorld);
-				geometries.push(clonedGeom);
+				if (!clonedGeom.index) {
+					clonedGeom = clonedGeom.toNonIndexed();
+				}
+				allGeoms.push(clonedGeom);
+				const matKey = child.material.uuid;
+				if (!materialGroups[matKey]) {
+					materialGroups[matKey] = { material: child.material.clone(), geoms: [] };
+				}
+				materialGroups[matKey].geoms.push(clonedGeom);
 			}
 		});
-		if (geometries.length === 0) {
-			console.error("Aucune géométrie collectée pour le gratte-ciel procédural.");
-			return null;
-		}
-		const mergedGeometry = mergeGeometries(geometries, false);
-		if (!mergedGeometry) {
-			console.error("Échec de la fusion des géométries du gratte-ciel procédural.");
-			geometries.forEach(g => g.dispose());
-			return null;
-		}
-		mergedGeometry.center();
-		mergedGeometry.computeBoundingBox();
-		const bbox = mergedGeometry.boundingBox;
-		if (!bbox) {
-			console.error("Échec du calcul de la bounding box du gratte-ciel procédural.");
-			mergedGeometry.dispose();
-			geometries.forEach(g => g.dispose());
-			return null;
-		}
-		const size = new THREE.Vector3();
-		bbox.getSize(size);
-		const centerOffset = new THREE.Vector3();
-		bbox.getCenter(centerOffset);
-		size.x = Math.max(size.x, 0.001);
-		size.y = Math.max(size.y, 0.001);
-		size.z = Math.max(size.z, 0.001);
-		const fittingScaleFactor = Math.min(baseWidth / size.x, baseHeight / size.y, baseDepth / size.z);
-		const sizeAfterFitting = size.clone().multiplyScalar(fittingScaleFactor);
 	
+		const globalMerged = mergeGeometries(allGeoms, false);
+		if (!globalMerged) {
+			console.error("Échec de fusion globale pour le gratte‑ciel procédural.");
+			allGeoms.forEach(g => g.dispose());
+			return null;
+		}
+		globalMerged.computeBoundingBox();
+		// Récupération de la valeur minimale en Y pour aligner le bas sur y = 0
+		const globalMin = globalMerged.boundingBox.min;
+		const globalCenter = new THREE.Vector3();
+		globalMerged.boundingBox.getCenter(globalCenter);
+		const globalSize = new THREE.Vector3();
+		globalMerged.boundingBox.getSize(globalSize);
+		const fittingScaleFactor = Math.min(
+			baseWidth / globalSize.x,
+			baseHeight / globalSize.y,
+			baseDepth / globalSize.z
+		);
+		const sizeAfterFitting = globalSize.clone().multiplyScalar(fittingScaleFactor);
+	
+		// Fusionner séparément chaque groupe de géométries par matériau et recentrer
+		// Ici, on décale verticalement en soustrayant globalMin.y afin que le bas soit à y = 0
+		const parts = [];
+		for (const key in materialGroups) {
+			if (materialGroups.hasOwnProperty(key)) {
+				const groupData = materialGroups[key];
+				const mergedPart = mergeGeometries(groupData.geoms, false);
+				if (!mergedPart) {
+					console.error("Échec de fusion d'un groupe de géométries pour le gratte‑ciel.");
+					continue;
+				}
+				// Décalage : on retire globalCenter.x et globalCenter.z pour centrer horizontalement,
+				// et globalMin.y pour que le bas soit à 0.
+				mergedPart.translate(-globalCenter.x, -globalMin.y, -globalCenter.z);
+				mergedPart.computeBoundingBox();
+				parts.push({
+					geometry: mergedPart,
+					material: groupData.material
+				});
+				groupData.geoms.forEach(g => g.dispose());
+			}
+		}
+		allGeoms.forEach(g => g.dispose());
+		globalMerged.dispose();
+	
+		// La valeur centerOffset est définie avec la coordonnée Y correspondant au bas (globalMin.y)
 		const asset = {
 			id: `skyscraper_procedural_${this.assetIdCounter++}`,
-			geometry: mergedGeometry,
-			material: baseMaterial.clone(), // Vous pouvez ajuster le choix du matériau ici si besoin
+			parts: parts,
 			fittingScaleFactor: fittingScaleFactor,
-			userScale: userScale,
-			centerOffset: centerOffset,
+			centerOffset: new THREE.Vector3(globalCenter.x, globalCenter.y, globalCenter.z),
 			sizeAfterFitting: sizeAfterFitting
 		};
-	
-		// Nettoyage des géométries temporaires
-		geometries.forEach(g => g.dispose());
 		return asset;
-	}	
+	}		
 
      // ----- disposeAssets (MODIFIÉ pour s'assurer que 'house' est dans la boucle mais sera vide) -----
      disposeAssets() {
