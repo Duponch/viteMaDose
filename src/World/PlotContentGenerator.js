@@ -1001,7 +1001,7 @@ export default class PlotContentGenerator {
 									instancedMesh.castShadow = true;
 	
 									// **MODIFIÉ** : Identification basée sur le nom du matériau physique
-									const isSkyscraperWindowPart = partMaterial.name === "SkyscraperWindowMat_Physical";
+									const isSkyscraperWindowPart = partMaterial.name === "SkyscraperWindowMat_Standard";
 									instancedMesh.receiveShadow = !isSkyscraperWindowPart;
 	
 									matrices.forEach((matrix, idx) => { instancedMesh.setMatrixAt(idx, matrix); });
@@ -1117,14 +1117,14 @@ export default class PlotContentGenerator {
 				let needsMaterialUpdate = false; // Drapeau pour savoir si material.needsUpdate est nécessaire
 	
 				// Identifier le type de fenêtre grâce au nom du matériau
-				const isSkyscraperWindow = material.name === "SkyscraperWindowMat_Physical";
+				const isSkyscraperWindow = material.name === "SkyscraperWindowMat_Standard";
 				const isHouseWindow = material.name.startsWith("HouseWindowMat_Inst_");
 	
 				if (isSkyscraperWindow) {
 					// --- Logique pour les fenêtres de gratte-ciel (MeshPhysicalMaterial) ---
-					const targetTransmission = lightsOn ? 0.0 : 0.9;  // Jour: transparent, Nuit: opaque
+					const targetTransmission = lightsOn ? 0.0 : 0.0;  // Jour: transparent, Nuit: opaque
 					const targetRoughness = lightsOn ? 0.8 : 0.05; // Jour: lisse, Nuit: rugueux (moins réflectif)
-					const targetIntensity = lightsOn ? 1.5 : 0.0;  // Jour: éteint, Nuit: allumé (ajuster intensité)
+					const targetIntensity = lightsOn ? 1.2 : 0.0;  // Jour: éteint, Nuit: allumé (ajuster intensité)
 	
 					// Appliquer les changements et marquer pour mise à jour si nécessaire
 					if (material.transmission !== targetTransmission) {
@@ -1147,7 +1147,7 @@ export default class PlotContentGenerator {
 	
 				} else if (isHouseWindow) {
 					// --- Logique pour les fenêtres de maison (MeshStandardMaterial - inchangée) ---
-					const targetIntensity = lightsOn ? 1.5 : 0.0; // Intensité cible (peut être différente)
+					const targetIntensity = lightsOn ? 1.2 : 0.0; // Intensité cible (peut être différente)
 					if (material.emissiveIntensity !== targetIntensity) {
 						material.emissiveIntensity = targetIntensity;
 						// Pas besoin de needsUpdate pour emissiveIntensity seul
