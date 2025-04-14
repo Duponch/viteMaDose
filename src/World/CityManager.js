@@ -452,7 +452,7 @@ export default class CityManager {
 
 		// 6. Partie lumineuse (ampoule) - POSITION AJUSTÉE
 		const lightSourceWidth = lampHeadWidth * 0.8;
-		const lightSourceHeight = 0.1;
+		const lightSourceHeight = 0.35;
 		const lightSourceDepth = lampHeadDepth * 0.8;
 		const lightGeo = new THREE.BoxGeometry(lightSourceWidth, lightSourceHeight, lightSourceDepth);
 		// Positionner l'ampoule sous la tête de lampe (Y relatif à poleTopY)
@@ -648,84 +648,6 @@ export default class CityManager {
             // Note: Pas besoin de material.needsUpdate = true pour les uniforms standards comme emissiveIntensity
         }
     }
-
-	createLampPost() {
-		const lampPost = new THREE.Group();
-		const poleSegments = 20;
-	
-		// Matériaux utilisés
-		const greyMaterial = new THREE.MeshStandardMaterial({
-			color: 0x606060,
-			roughness: 0.6,
-			metalness: 0.4
-		});
-		const lightMaterial = new THREE.MeshStandardMaterial({
-			color: 0xffffaa,
-			emissive: 0xffffaa,
-			emissiveIntensity: 1
-		});
-	
-		// 1. Base cylindrique
-		const baseRadiusTop = 0.4;
-		const baseRadiusBottom = 0.5;
-		const baseHeight = 0.8;
-		const baseGeometry = new THREE.CylinderGeometry(baseRadiusTop, baseRadiusBottom, baseHeight, poleSegments);
-		const baseMesh = new THREE.Mesh(baseGeometry, greyMaterial);
-		baseMesh.position.y = baseHeight / 2;
-		lampPost.add(baseMesh);
-	
-		// 2. Poteau principal (partie inférieure)
-		const poleRadius = 0.2;
-		const poleLowerHeight = 5;
-		const poleLowerGeometry = new THREE.CylinderGeometry(poleRadius, poleRadius, poleLowerHeight, poleSegments);
-		const poleLowerMesh = new THREE.Mesh(poleLowerGeometry, greyMaterial);
-		poleLowerMesh.position.y = baseHeight + poleLowerHeight / 2;
-		lampPost.add(poleLowerMesh);
-		const poleTopY = baseHeight + poleLowerHeight;
-	
-		// 3. Section courbée
-		const curveRadius = 1.0;
-		const curveTubeRadius = poleRadius;
-		const curveSegmentsCount = 40;
-		const curveRadialSegments = poleSegments;
-		const curvePath = new THREE.Path();
-		const curveCenterX = -curveRadius;
-		const curveCenterY = poleTopY;
-		curvePath.absarc(curveCenterX, curveCenterY, curveRadius, Math.PI / 2, 0, true);
-		const curveGeometry = new THREE.TubeGeometry(curvePath, curveSegmentsCount, curveTubeRadius, curveRadialSegments, false);
-		const curveMesh = new THREE.Mesh(curveGeometry, greyMaterial);
-		lampPost.add(curveMesh);
-	
-		// 4. Bras horizontal
-		const armLength = 2.5;
-		const verticalOffset = poleRadius / 4;
-		const adjustedArmY = poleTopY - verticalOffset;
-		const armGeometry = new THREE.CylinderGeometry(poleRadius, poleRadius, armLength, poleSegments);
-		const armMesh = new THREE.Mesh(armGeometry, greyMaterial);
-		armMesh.position.set(armLength / 2, adjustedArmY, 0);
-		armMesh.rotation.z = Math.PI / 2;
-		lampPost.add(armMesh);
-	
-		// 5. Tête de la lampe (forme simple)
-		const lampHeadWidth = 1.2;
-		const lampHeadHeight = 0.4;
-		const lampHeadDepth = 0.6;
-		const lampHeadGeometry = new THREE.BoxGeometry(lampHeadWidth, lampHeadHeight, lampHeadDepth);
-		const lampHeadMesh = new THREE.Mesh(lampHeadGeometry, greyMaterial);
-		lampHeadMesh.position.set(armLength, adjustedArmY - lampHeadHeight / 2, 0);
-		lampPost.add(lampHeadMesh);
-	
-		// 6. Partie lumineuse sous la tête
-		const lightSourceWidth = lampHeadWidth * 0.8;
-		const lightSourceHeight = 0.1;
-		const lightSourceDepth = lampHeadDepth * 0.8;
-		const lightSourceGeometry = new THREE.BoxGeometry(lightSourceWidth, lightSourceHeight, lightSourceDepth);
-		const lightSourceMesh = new THREE.Mesh(lightSourceGeometry, lightMaterial);
-		lightSourceMesh.position.set(armLength, lampHeadMesh.position.y - lampHeadHeight / 2 - lightSourceHeight / 2, 0);
-		lampPost.add(lightSourceMesh);
-	
-		return lampPost;
-	}	
 
 	clearDebugVisuals(visualType = null) {
         const objectsToRemove = [];
