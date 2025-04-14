@@ -411,8 +411,8 @@ export default class CityManager {
 	}
 
 	buildLampPostGeometries() {
-		// Configuration de base
-		const poleSegments = 16; // Réduit légèrement pour potentiellement moins de complexité
+		console.warn("--- UTILISATION GÉOMÉTRIE LAMPADAIRE SIMPLIFIÉE (SANS COURBE) ---"); // Log pour savoir quelle version est utilisée
+		const poleSegments = 16;
 
 		// 1. Base cylindrique
 		const baseRadiusTop = 0.4;
@@ -426,87 +426,64 @@ export default class CityManager {
 		const poleLowerHeight = 5;
 		const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleLowerHeight, poleSegments);
 		poleGeo.translate(0, baseHeight + poleLowerHeight / 2, 0); // Positionne au-dessus de la base
-		const poleTopY = baseHeight + poleLowerHeight;
+		const poleTopY = baseHeight + poleLowerHeight; // Coordonnée Y du sommet du poteau
 
-		// 3. Section courbée (TubeGeometry basée sur ArcCurve)
-		const curveRadius = 1.0;
-		const curveTubeRadius = poleRadius;
-		const curveSegmentsCount = 20; // Réduit
-		// L'ArcCurve semble correct: centre (-curveRadius, poleTopY), rayon, angle début PI/2 (90deg), angle fin 0 (0deg), sens horaire
-		const arcCurve = new THREE.ArcCurve(-curveRadius, poleTopY, curveRadius, Math.PI / 2, 0, true);
-		const curveGeo = new THREE.TubeGeometry(arcCurve, curveSegmentsCount, curveTubeRadius, poleSegments, false);
-		// Pas de translation nécessaire ici car l'ArcCurve est déjà positionné
+		// 3. Section courbée - TEMPORAIREMENT SUPPRIMÉE POUR TEST
+		// const curveRadius = 1.0;
+		// const curveTubeRadius = poleRadius;
+		// const curveSegmentsCount = 20;
+		// const arcCurve = new THREE.ArcCurve(-curveRadius, poleTopY, curveRadius, Math.PI / 2, 0, true);
+		// const curveGeo = new THREE.TubeGeometry(arcCurve, curveSegmentsCount, curveTubeRadius, poleSegments, false);
 
-		// 4. Bras horizontal
+		// 4. Bras horizontal - POSITION AJUSTÉE
 		const armLength = 2.5;
 		const armGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, armLength, poleSegments);
-		// Positionner le bras horizontal au bon endroit après rotation
-		// Le centre de l'arc se termine à x = -curveRadius, y = poleTopY. Le point final de l'arc est à x = 0, y = poleTopY.
-		// Le bras doit partir de là.
 		armGeo.rotateZ(Math.PI / 2); // Oriente le cylindre horizontalement
-		armGeo.translate(armLength / 2, poleTopY, 0); // Le positionne au bout de la courbe
+		// Connecte le bras directement au sommet du poteau vertical (translation ajustée)
+		armGeo.translate(armLength / 2, poleTopY, 0);
 
-		// 5. Tête de la lampe
+		// 5. Tête de la lampe - POSITION AJUSTÉE
 		const lampHeadWidth = 1.2;
 		const lampHeadHeight = 0.4;
 		const lampHeadDepth = 0.6;
 		const lampHeadGeo = new THREE.BoxGeometry(lampHeadWidth, lampHeadHeight, lampHeadDepth);
-		// Positionner par rapport à la fin du bras horizontal
+		// Positionner par rapport à la fin du bras (Y est toujours poleTopY pour le bras)
 		lampHeadGeo.translate(armLength, poleTopY - lampHeadHeight / 2, 0);
 
-		// 6. Partie lumineuse (ampoule) - Géométrie séparée
+		// 6. Partie lumineuse (ampoule) - POSITION AJUSTÉE
 		const lightSourceWidth = lampHeadWidth * 0.8;
 		const lightSourceHeight = 0.1;
 		const lightSourceDepth = lampHeadDepth * 0.8;
 		const lightGeo = new THREE.BoxGeometry(lightSourceWidth, lightSourceHeight, lightSourceDepth);
-		// Positionner l'ampoule sous la tête de lampe
-		lightGeo.translate(armLength, poleTopY - lampHeadHeight - lightSourceHeight / 2, 0); // Position Y ajustée
+		// Positionner l'ampoule sous la tête de lampe (Y relatif à poleTopY)
+		lightGeo.translate(armLength, poleTopY - lampHeadHeight - lightSourceHeight / 2, 0);
 
-		// --- Fusion des parties grises ---
-		// **MODIFICATION : Suppression de .toNonIndexed()**
-		const greyGeos = [baseGeo, poleGeo, curveGeo, armGeo, lampHeadGeo];
-		const mergedGreyGeo = mergeGeometries(greyGeos, false); // Utiliser 'false' pour ne pas créer de groupes
+		// --- Fusion des parties grises (SANS curveGeo) ---
+		const greyGeos = [baseGeo, poleGeo, /* curveGeo retiré */ armGeo, lampHeadGeo];
+		const mergedGreyGeo = mergeGeometries(greyGeos, false);
 		if (!mergedGreyGeo) {
-			console.error("Échec critique de la fusion des géométries du lampadaire (parties grises).");
-			// Nettoyer les géométries individuelles en cas d'échec
+			console.error("Échec critique de la fusion des géométries du lampadaire (parties grises - SIMPLIFIÉ).");
 			greyGeos.forEach(g => g.dispose());
-			// Retourner des géométries vides pour éviter d'autres erreurs
-			return {
-				greyGeometry: new THREE.BufferGeometry(),
-				lightGeometry: new THREE.BufferGeometry(),
-				greyMaterial: new THREE.MeshStandardMaterial({ color: 0xff0000 }), // Rouge pour indiquer l'erreur
-				lightMaterial: new THREE.MeshStandardMaterial({ color: 0xff0000 })
-			};
+			return { /* Gérer l'erreur, retourner géométries vides */ };
 		}
+		greyGeos.forEach(g => g.dispose()); // Nettoyer après fusion
 
-		// Nettoyer les géométries individuelles après fusion réussie
-        greyGeos.forEach(g => g.dispose());
-
-        // **MODIFICATION : Suppression des computeBoundingSphere et fallbacks manuels**
-        // Laisser Three.js calculer les bounding spheres au besoin.
-
-		// Matériaux (inchangés)
+		// Matériaux (inchangés, mais on peut changer le nom pour débug)
 		const greyMaterial = new THREE.MeshStandardMaterial({
-			color: 0x606060,
-			roughness: 0.6,
-			metalness: 0.4,
-			name: "LampPostGreyMat"
+			color: 0x606060, roughness: 0.6, metalness: 0.4, name: "LampPostGreyMat_Simplified"
 		});
 		const lightMaterial = new THREE.MeshStandardMaterial({
-			color: 0xffffaa, // Jaune pâle
-			emissive: 0xffffdd, // Légèrement plus clair pour l'émission
-			emissiveIntensity: 0.0, // Commence éteint
-			name: "LampPostLightMat"
+			color: 0xffffaa, emissive: 0xffffdd, emissiveIntensity: 0.0, name: "LampPostLightMat_Simplified"
 		});
 
 		return {
 			greyGeometry: mergedGreyGeo,
-			lightGeometry: lightGeo, // Retourne la géométrie non fusionnée de l'ampoule
+			lightGeometry: lightGeo,
 			greyMaterial,
 			lightMaterial
 		};
 	}
-
+	
 	/**
 	 * Ajoute des lampadaires le long des bords des parcelles (trottoirs).
 	 */

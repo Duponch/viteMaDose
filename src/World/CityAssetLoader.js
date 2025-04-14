@@ -143,14 +143,13 @@ export default class CityAssetLoader {
         this.assetIdCounter = 0;
     }
 
-    // ----- loadAssetModel (Inchangé mais fonctionne pour 'skyscraper') -----
     async loadAssetModel(path, type, baseWidth, baseHeight, baseDepth, userScale = 1) {
         // *** AJOUT : Ignorer le type 'house' ici aussi ***
         if (type === 'house') {
             // console.log(`[${type}] Chargement ignoré pour ${path}`); // Log optionnel
             return Promise.resolve(null); // Retourne null pour ce type
         }
-        // --- Reste de la fonction inchangée ---
+        // --- Reste de la fonction inchangée JUSQU'À la fin du try/catch ---
         const modelId = `${type}_${this.assetIdCounter++}_${path.split('/').pop()}`;
         const extension = path.split('.').pop()?.toLowerCase();
         return new Promise((resolve, reject) => {
@@ -158,43 +157,78 @@ export default class CityAssetLoader {
             if (extension === 'fbx') { loader = this.fbxLoader; }
             else if (extension === 'glb' || extension === 'gltf') { loader = this.gltfLoader; }
             else {
-                return reject(new Error(`[${modelId}] Format de fichier non supporté: ${extension} pour le chemin ${path}`));
+                // Utiliser resolve(null) au lieu de reject pour ne pas bloquer Promise.all
+                console.error(`[${modelId}] Format de fichier non supporté: ${extension} pour ${path}. Asset ignoré.`);
+                return resolve(null);
+                // return reject(new Error(`[${modelId}] Format de fichier non supporté: ${extension} pour le chemin ${path}`));
             }
             loader.load(
                 path,
                 (loadedObject) => {
+                    let mergedGeometry = null; // Déclarer ici pour la portée du catch et finally
+                    const geometries = []; // Pour pouvoir la nettoyer dans le catch
                     try {
                         const modelRootObject = (extension === 'glb' || extension === 'gltf') ? loadedObject.scene : loadedObject;
                         if (!modelRootObject) {
-                            return reject(new Error(`[${modelId}] Aucun objet racine trouvé dans ${path}.`));
+                            // Utiliser resolve(null)
+                            console.error(`[${modelId}] Aucun objet racine trouvé dans ${path}. Asset ignoré.`);
+                            return resolve(null);
+                            // return reject(new Error(`[${modelId}] Aucun objet racine trouvé dans ${path}.`));
                         }
-                        let mergedGeometry = null; // Déclarer ici pour la portée du catch
-                        const geometries = []; const materials = []; let hasValidMesh = false;
+                        const materials = []; let hasValidMesh = false;
                         modelRootObject.traverse((child) => {
                             if (child.isMesh) {
-                                hasValidMesh = true; child.updateMatrixWorld(true); // Force la màj matrice monde
-                                const clonedGeom = child.geometry.clone();
-                                clonedGeom.applyMatrix4(child.matrixWorld); // Appliquer la transformation monde
-                                geometries.push(clonedGeom);
-                                // Gestion matériaux (simplifiée pour l'exemple, peut nécessiter multi-matériaux)
-                                if (child.material) {
-                                    const mats = Array.isArray(child.material) ? child.material : [child.material];
-                                    mats.forEach(m => { if (m && m.isMaterial) { materials.push(m); } });
+                                if (child.geometry && child.geometry.attributes.position) { // Vérif de base
+                                    hasValidMesh = true; child.updateMatrixWorld(true); // Force la màj matrice monde
+                                    const clonedGeom = child.geometry.clone();
+                                    clonedGeom.applyMatrix4(child.matrixWorld); // Appliquer la transformation monde
+                                    geometries.push(clonedGeom);
+                                    // Gestion matériaux (simplifiée)
+                                    if (child.material) {
+                                        const mats = Array.isArray(child.material) ? child.material : [child.material];
+                                        mats.forEach(m => { if (m && m.isMaterial) { materials.push(m); } });
+                                    }
+                                    // Ombres
+                                    child.castShadow = true; child.receiveShadow = true;
+                                } else {
+                                     console.warn(`[${modelId}] Mesh enfant ignoré car géométrie invalide ou manquante dans ${path}`);
                                 }
-                                // Ombres
-                                child.castShadow = true; child.receiveShadow = true;
                             }
                         });
-                        if (!hasValidMesh) { return reject(new Error(`[${modelId}] Aucune géométrie de mesh valide trouvée dans ${path}.`)); }
-                        if (geometries.length === 0) { return reject(new Error(`[${modelId}] Aucune géométrie collectée dans ${path}.`)); }
+                        if (!hasValidMesh) { /* resolve(null) */ console.error(`[${modelId}] Aucune géométrie de mesh valide trouvée dans ${path}. Asset ignoré.`); return resolve(null); }
+                        if (geometries.length === 0) { /* resolve(null) */ console.error(`[${modelId}] Aucune géométrie collectée dans ${path}. Asset ignoré.`); return resolve(null); }
                         // Fusionner les géométries
                         mergedGeometry = mergeGeometries(geometries, false); // 'false' pour ne pas créer de groupes
-                        if (!mergedGeometry) { geometries.forEach(g => g.dispose()); return reject(new Error(`[${modelId}] Echec de la fusion des géométries pour ${path}.`)); }
+                        if (!mergedGeometry) { /* resolve(null) */ console.error(`[${modelId}] Echec de la fusion des géométries pour ${path}. Asset ignoré.`); geometries.forEach(g => g.dispose()); return resolve(null); }
                         // Centrer la géométrie fusionnée et calculer sa BBox
                         mergedGeometry.center();
                         mergedGeometry.computeBoundingBox();
                         const bbox = mergedGeometry.boundingBox;
-                        if (!bbox) { mergedGeometry.dispose(); geometries.forEach(g => g.dispose()); return reject(new Error(`[${modelId}] Echec calcul BBox pour ${path}.`)); }
+                        if (!bbox) { /* resolve(null) */ console.error(`[${modelId}] Echec calcul BBox pour ${path}. Asset ignoré.`); mergedGeometry.dispose(); geometries.forEach(g => g.dispose()); return resolve(null); }
+
+                        // ==============================================================
+                        // --- NOUVELLE VÉRIFICATION NaN ---
+                        // ==============================================================
+                        let hasNaN = false;
+                        const positions = mergedGeometry.attributes.position.array;
+                        for (let i = 0; i < positions.length; i++) {
+                            if (isNaN(positions[i])) {
+                                hasNaN = true;
+                                break;
+                            }
+                        }
+
+                        if (hasNaN) {
+                            console.error(`!!!!!! [${modelId}] ERREUR NaN détectée dans les positions des vertices APRES fusion/centrage pour ${path}. Cet asset sera ignoré. !!!!!!`);
+                            mergedGeometry.dispose(); // Nettoyer la géométrie corrompue
+                            geometries.forEach(g => g.dispose()); // Nettoyer les intermédiaires
+                            return resolve(null); // Ignorer cet asset
+                        }
+                        // ==============================================================
+                        // --- FIN VÉRIFICATION NaN ---
+                        // ==============================================================
+
+
                         const size = new THREE.Vector3(); bbox.getSize(size);
                         const centerOffset = new THREE.Vector3(); bbox.getCenter(centerOffset); // Offset du centre après .center()
                         // Empêcher taille nulle (cause division par zéro)
@@ -207,11 +241,12 @@ export default class CityAssetLoader {
                         if (!baseMaterial || !baseMaterial.isMaterial) { baseMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc }); }
                         const finalMaterial = baseMaterial.clone(); // Cloner pour éviter modif partagée
                         if (!finalMaterial.color) { finalMaterial.color = new THREE.Color(0xcccccc); } // Assurer couleur par défaut
+                        finalMaterial.name = `AssetMat_${modelId}`; // Donner un nom au matériau final
 
                         // Résoudre la promesse avec les données traitées
                         resolve({
                             id: modelId,
-                            geometry: mergedGeometry,      // Géométrie fusionnée et centrée
+                            geometry: mergedGeometry,      // Géométrie fusionnée et centrée (et vérifiée sans NaN)
                             material: finalMaterial,       // Matériau cloné
                             fittingScaleFactor: fittingScaleFactor, // Échelle pour fitter base dims
                             userScale: userScale,          // Échelle fournie par l'utilisateur
@@ -220,23 +255,28 @@ export default class CityAssetLoader {
                         });
                         // Nettoyer les géométries intermédiaires clonées
                         geometries.forEach(g => g.dispose());
+
                     } catch(processingError) {
                          // Gestion d'erreur interne au traitement
                          console.error(`Erreur interne pendant traitement ${path} [${modelId}]:`, processingError);
                          geometries?.forEach(g => g?.dispose()); // Nettoyer si possible
                          if (mergedGeometry) mergedGeometry.dispose(); // Nettoyer si possible
-                         reject(processingError); // Rejeter la promesse principale
+                         // Utiliser resolve(null) au lieu de reject
+                         resolve(null);
+                         // reject(processingError); // Rejeter la promesse principale
                     }
                 },
                 undefined, // onProgress non utilisé ici
                 (error) => {
                     // Gestion d'erreur du loader lui-même
                     console.error(`Erreur chargement ${extension.toUpperCase()} ${path} [${modelId}]:`, error);
-                    reject(error);
+                    // Utiliser resolve(null) au lieu de reject
+                    resolve(null);
+                    // reject(error);
                 }
             );
         });
-    }
+    } // Fin loadAssetModel
 
      // ----- disposeAssets (MODIFIÉ pour s'assurer que 'house' est dans la boucle mais sera vide) -----
      disposeAssets() {
