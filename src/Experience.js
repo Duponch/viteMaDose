@@ -18,7 +18,7 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         if (instance) {
             return instance;
         }
-        super(); // <-- Appel au constructeur parent
+        super();
         instance = this;
 
         // --- Core components ---
@@ -27,31 +27,22 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.time = new Time();
         this.scene = new THREE.Scene();
 
-        // --- Ajout du Brouillard (Fog) ---
-        /* const fogColor = 0x1e2a36; // Couleur du brouillard (gris-bleu)
-        const fogNear = 200;      // Distance minimale où le brouillard commence
-        const fogFar = 900;       // Distance où le brouillard est opaque
-        this.scene.fog = new THREE.Fog(fogColor, fogNear, fogFar); */
+        // --- Fog ---
+        const fogColor = 0x1e2a36;
+        const fogDensity = 0.003;
+        this.scene.fog = new THREE.FogExp2(fogColor, fogDensity);
 
-		// --- Ajout du Brouillard Exponentiel (FogExp2) ---
-		const fogColor = 0x1e2a36;  // Couleur du brouillard (gris-bleu)
-		const fogDensity = 0.003;   // Densité du brouillard (ajustez cette valeur selon vos besoins)
-		this.scene.fog = new THREE.FogExp2(fogColor, fogDensity);
-
-        // Optionnel : faire correspondre la couleur de fond au brouillard
-        // this.scene.background = new THREE.Color(fogColor); // Décommenter si Renderer ne définit pas setClearColor
-
-        // --- Suite des composants Core ---
-        this.camera = new Camera(this);
-        this.renderer = new Renderer(this); // Renderer définira la couleur de fond (setClearColor)
+        // --- Core Components Suite ---
+        this.camera = new Camera(this); // <-- Instance Camera modifiée
+        this.renderer = new Renderer(this);
         this.world = new World(this);
 
         // --- Debug State ---
-        this.isDebugMode = false; // Initial state
+        this.isDebugMode = false;
 
-        // --- UI Components (Instantiated AFTER core components) ---
+        // --- UI Components ---
         this.timeUI = new TimeUI(this);
-        this.timeControlUI = new TimeControlUI(this); // TimeControlUI écoutera les events
+        this.timeControlUI = new TimeControlUI(this);
 
         // --- Controls & Stats ---
         this.controls = new OrbitControls(this.camera.instance, this.canvas);
@@ -60,6 +51,14 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.stats.showPanel(0);
         document.body.appendChild(this.stats.dom);
 
+        // --- Raycasting & Agent Selection --- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< NOUVEAU
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
+        this.selectedAgent = null; // Agent actuellement suivi
+        this.isFollowingAgent = false; // État du suivi caméra
+        // Définir les couches pour le raycasting (optionnel mais bonne pratique)
+        // this.raycaster.layers.set(AGENT_LAYER); // Si vous utilisez des layers
+
         // --- EventListeners ---
         this.resizeHandler = () => this.resize();
         this.sizes.addEventListener('resize', this.resizeHandler);
@@ -67,10 +66,90 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.updateHandler = () => this.update();
         this.time.addEventListener('tick', this.updateHandler);
 
+        // --- NOUVEL ÉCOUTEUR POUR LE CLIC --- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< NOUVEAU
+        this.clickHandler = (event) => this.handleCanvasClick(event);
+        this.canvas.addEventListener('click', this.clickHandler);
+        // ---------------------------------------
+
         // --- Initialisation ---
-        // Appliquer l'état de debug initial (même si false)
         this.world.setDebugMode(this.isDebugMode);
-        console.log("Experience initialisée (avec Brouillard). Mode debug:", this.isDebugMode);
+        console.log("Experience initialisée. Mode debug:", this.isDebugMode);
+    }
+
+	handleCanvasClick(event) {
+        // 1. Normaliser les coordonnées de la souris
+        this.mouse.x = (event.clientX / this.sizes.width) * 2 - 1;
+        this.mouse.y = -(event.clientY / this.sizes.height) * 2 + 1;
+
+        // 2. Mettre à jour le Raycaster
+        this.raycaster.setFromCamera(this.mouse, this.camera.instance);
+
+        // 3. Déterminer les objets à intersecter (les InstancedMesh des agents)
+        const agentManager = this.world?.agentManager;
+        if (!agentManager || !agentManager.instanceMeshes || !agentManager.agents) {
+            console.warn("Click Handler: AgentManager non prêt ou pas d'agents.");
+            return;
+        }
+
+        // Ciblez les parties visibles des agents (ex: torse, tête)
+        const objectsToIntersect = [];
+        if (agentManager.instanceMeshes.torso) objectsToIntersect.push(agentManager.instanceMeshes.torso);
+        if (agentManager.instanceMeshes.head) objectsToIntersect.push(agentManager.instanceMeshes.head);
+        // Ajoutez d'autres parties si nécessaire
+
+        if (objectsToIntersect.length === 0) {
+            console.warn("Click Handler: Aucun InstancedMesh d'agent trouvé à intersecter.");
+            return;
+        }
+
+        // 4. Lancer l'intersection
+        const intersects = this.raycaster.intersectObjects(objectsToIntersect, false); // false = ne pas tester les enfants récursivement
+
+        let agentClicked = false;
+        if (intersects.length > 0) {
+            const firstIntersect = intersects[0];
+            // Vérifier si l'intersection a un instanceId (spécifique à InstancedMesh)
+            if (firstIntersect.instanceId !== undefined) {
+                const agentInstanceId = firstIntersect.instanceId;
+                // Trouver l'agent logique correspondant
+                const clickedAgent = agentManager.agents[agentInstanceId]; // Accès direct si l'indice correspond
+
+                if (clickedAgent) {
+                    console.log(`Agent cliqué: ${clickedAgent.id} (Instance ID: ${agentInstanceId})`);
+                    this.selectAgent(clickedAgent);
+                    agentClicked = true;
+                } else {
+                    console.warn(`Agent logique non trouvé pour instanceId ${agentInstanceId}`);
+                }
+            }
+        }
+
+        // 5. Si on n'a PAS cliqué sur un agent, désélectionner
+        if (!agentClicked) {
+            this.deselectAgent();
+        }
+    }
+
+	selectAgent(agent) {
+        if (this.selectedAgent === agent) return; // Déjà sélectionné
+
+        this.selectedAgent = agent;
+        this.isFollowingAgent = true;
+        this.controls.enabled = false; // Désactiver OrbitControls
+        this.camera.followAgent(agent); // Dire à la caméra de suivre
+        console.log(`Camera following agent: ${agent.id}`);
+        // Optionnel: ajouter un indicateur visuel sur l'agent sélectionné
+    }
+
+	deselectAgent() {
+        if (!this.isFollowingAgent) return; // Déjà déselectionné
+
+        console.log(`Camera stopped following agent: ${this.selectedAgent?.id}`);
+        this.selectedAgent = null;
+        this.isFollowingAgent = false;
+        this.controls.enabled = true; // Réactiver OrbitControls
+        this.camera.stopFollowing(); // Dire à la caméra d'arrêter
+        // Optionnel: retirer l'indicateur visuel
     }
 
     // --- Les autres méthodes (enableDebugMode, disableDebugMode, toggleDebugMode, resize, update, destroy) restent inchangées ---
@@ -113,11 +192,18 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
     update() {
         this.stats.begin();
 
-        const deltaTime = this.time.delta;
+        const deltaTime = this.time.delta; // Temps écoulé depuis la dernière frame en ms
 
-        this.controls.update();
-        this.camera.update();
-        this.world.update(); // World update utilise déjà experience.time.delta
+        // Mettre à jour les contrôles Orbit SEULEMENT si on ne suit pas un agent
+        if (!this.isFollowingAgent && this.controls.enabled) {
+            this.controls.update(); // Applique le damping etc.
+        }
+
+        // La caméra se met toujours à jour (gère le suivi OU attend OrbitControls)
+        this.camera.update(deltaTime); // << Passer deltaTime à la caméra
+
+        // Mises à jour du monde et du rendu (inchangées)
+        this.world.update(); // World utilise déjà experience.time.delta
         this.renderer.update();
 
         if (this.timeUI) {
@@ -129,9 +215,12 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
     }
 
     destroy() {
+        console.log("Destroying Experience..."); // Log ajouté
+
         // --- Nettoyage EventListeners ---
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
+        this.canvas.removeEventListener('click', this.clickHandler); // << Nettoyer le listener de clic
 
         // --- Détruire les UIs ---
         if (this.timeUI) {
@@ -144,16 +233,43 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         }
 
         // --- Détruire le monde ---
-        this.world.destroy();
-
-        // --- Reste du nettoyage ---
-        this.controls.dispose();
-        this.renderer.instance.dispose();
-        if (this.stats.dom.parentNode) {
-             document.body.removeChild(this.stats.dom);
+        if (this.world) { // Vérifier si world existe
+           this.world.destroy();
+           this.world = null; // << S'assurer de nullifier world
         }
 
-        instance = null;
+
+        // --- Reste du nettoyage ---
+        if (this.controls) { // Vérifier si controls existe
+             this.controls.dispose();
+             this.controls = null; // << Nullifier controls
+        }
+        if (this.renderer) { // Vérifier si renderer existe
+            // La disposition du renderer se fait dans sa propre classe destroy potentiellement
+            // this.renderer.destroy(); // Si une méthode destroy existe
+             this.renderer.instance?.dispose(); // Dispose WebGL context
+             this.renderer = null; // << Nullifier renderer
+        }
+
+        // Caméra est gérée par Three.js, pas de dispose direct nécessaire normalement
+        this.camera = null; // << Nullifier camera
+
+        if (this.stats?.dom.parentNode) {
+             document.body.removeChild(this.stats.dom);
+        }
+        this.stats = null; // << Nullifier stats
+
+        // Nettoyer les variables de Experience
+        this.scene = null;
+        this.sizes = null;
+        this.time = null;
+        this.canvas = null;
+        this.raycaster = null;
+        this.mouse = null;
+        this.selectedAgent = null;
+
+
+        instance = null; // Très important pour le singleton
         console.log("Experience détruite.");
     }
 }
