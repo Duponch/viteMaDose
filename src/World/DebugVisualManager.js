@@ -1,6 +1,9 @@
-// src/World/DebugVisualManager.js
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'; // Pour fusion éventuelle
+// Retirer mergeGeometries si on ne l'utilise plus pour les plots
+// import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 
 /**
  * DebugVisualManager centralise la création et le nettoyage des visuels de debug.
@@ -11,11 +14,12 @@ export default class DebugVisualManager {
      * @param {THREE.Group} [parentGroup] - Le groupe auquel ajouter les visuels de debug.
      * @param {object} materials - Un objet contenant les matériaux à utiliser.
      */
-    constructor(parentGroup = null, materials = {}) {
+	constructor(parentGroup = null, materials = {}, sizes = null) {
         this.parentGroup = parentGroup || new THREE.Group();
         this.parentGroup.name = "DebugVisuals";
         this.materials = materials; // Matériaux existants
         this.debugMaterials = {}; // Pour stocker les matériaux de debug créés
+        this.sizes = sizes;
 
         // --- NOUVEAU : Définition des couleurs ---
         this.plotColors = {
@@ -46,28 +50,32 @@ export default class DebugVisualManager {
      * @param {boolean} isWireframe - Si true, crée un MeshBasicMaterial wireframe, sinon LineBasicMaterial.
      * @returns {THREE.Material}
      */
-    _getOrCreateDebugMaterial(key, color, isWireframe = false) {
-        if (!this.debugMaterials[key]) {
-            if (isWireframe) {
-                this.debugMaterials[key] = new THREE.MeshBasicMaterial({
-                    color: color,
-                    wireframe: true,
-                    depthTest: false, // Pour voir à travers d'autres objets
-                    transparent: true,
-                    opacity: 0.7
-                });
-            } else {
-                this.debugMaterials[key] = new THREE.LineBasicMaterial({
-                    color: color,
-                    linewidth: 2, // Note: peut ne pas fonctionner sur tous les GPU
-                    depthTest: false // Pour voir à travers d'autres objets
-                });
-            }
-            this.debugMaterials[key].name = `DebugMat_${key}`;
-            this.debugMaterials[key].renderOrder = 999; // Dessiner par-dessus
-        }
-        return this.debugMaterials[key];
-    }
+    _getOrCreateDebugMaterial(key, color, isWireframe = false, lineThickness = 1.0) {
+		if (!this.debugMaterials[key]) {
+			if (isWireframe) {
+				// --- MODIFICATION : Rendu Solide Transparent au lieu de Wireframe ---
+				this.debugMaterials[key] = new THREE.MeshBasicMaterial({
+					color: color,
+					// wireframe: false, // <--- Retiré ou mis à false
+					depthTest: false,
+					transparent: true,
+					opacity: 0.35, // Ajuster l'opacité pour la visibilité
+					side: THREE.DoubleSide // Pour voir l'intérieur si besoin
+				});
+				// --- FIN MODIFICATION ---
+			} else if (this.sizes) {
+				// ... (cas LineMaterial inchangé) ...
+				 this.debugMaterials[key] = new LineMaterial({ /* ... */ });
+			} else {
+				// ... (cas LineBasicMaterial fallback inchangé) ...
+				 this.debugMaterials[key] = new LineBasicMaterial({ /* ... */ });
+			}
+			this.debugMaterials[key].name = `DebugMat_${key}`;
+			this.debugMaterials[key].renderOrder = 999;
+		}
+		// ... (mise à jour résolution/linewidth inchangée) ...
+		return this.debugMaterials[key];
+	}
 
     /**
      * Ajoute un objet de debug au groupe parent.
@@ -127,57 +135,60 @@ export default class DebugVisualManager {
      * @param {Array<Plot>} plots - Tableau de parcelles (plots).
      * @param {number} [debugHeight=0.1] - Hauteur (Y) à utiliser pour les outlines.
      */
-    createPlotOutlines(plots, debugHeight = 0.1) {
-        const visualType = 'PlotOutlines';
-        this.clearDebugVisuals(visualType);
-        let plotCount = 0;
-        const geometriesByType = {};
-        // *** AJOUT LOG ***
-        console.log(`  [DVM Plot] Processing ${plots.length} plots...`);
-
-        plots.forEach(plot => {
-            // ... (calcul couleur, points, geometry) ...
-            const color = this.plotColors[plot.zoneType] || this.plotColors.default;
-            const colorHex = color.getHexString();
-            const points = [ /* ... points ... */
-                new THREE.Vector3(plot.x, debugHeight, plot.z),
-                new THREE.Vector3(plot.x + plot.width, debugHeight, plot.z),
-                new THREE.Vector3(plot.x + plot.width, debugHeight, plot.z + plot.depth),
-                new THREE.Vector3(plot.x, debugHeight, plot.z + plot.depth),
-                new THREE.Vector3(plot.x, debugHeight, plot.z)
-            ];
-            const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
-            if (!geometriesByType[colorHex]) {
-                geometriesByType[colorHex] = [];
-            }
-            geometriesByType[colorHex].push(geometry);
-            plotCount++;
-        });
-         // *** AJOUT LOG ***
-        console.log(`  [DVM Plot] Processed ${plotCount} plots. Found ${Object.keys(geometriesByType).length} color groups.`);
-
-        let addedMeshes = 0; // Compteur pour vérifier l'ajout
-        for (const colorHex in geometriesByType) {
-            if (geometriesByType[colorHex].length > 0) {
-                const mergedGeometry = mergeGeometries(geometriesByType[colorHex], false);
-                if (mergedGeometry) {
-                    const material = this._getOrCreateDebugMaterial(`plot_${colorHex}`, new THREE.Color(`#${colorHex}`), false);
-                    const lines = new THREE.LineSegments(mergedGeometry, material);
-                    lines.name = `PlotOutlines_${colorHex}`;
-                    this.addDebugVisual(lines, visualType);
-                    addedMeshes++; // Incrémenter si ajouté
-                    // *** AJOUT LOG ***
-                    // console.log(`    [DVM Plot] Added LineSegments for color #${colorHex}`);
-                } else {
-                     console.warn(`    [DVM Plot] Failed to merge plot outline geometries for color #${colorHex}`);
-                }
-                geometriesByType[colorHex].forEach(g => g.dispose());
-            }
-        }
-        // *** AJOUT LOG ***
-        console.log(`  [DVM Plot] Finished creating outlines. Added ${addedMeshes} LineSegments objects.`);
-    }
+    createPlotOutlines(plots, debugHeight = 0.1, lineThickness = 3.0) { // Ajout lineThickness
+		const visualType = 'PlotOutlines';
+		this.clearDebugVisuals(visualType);
+		let plotCount = 0;
+		// Pas besoin de fusionner, on crée une Line2 par plot
+		console.log(`  [DVM Plot Line2] Processing ${plots.length} plots...`);
+	
+		if (!this.sizes) {
+			console.error("[DVM Plot Line2] Sizes instance missing in DebugVisualManager. Cannot create thick lines.");
+			return;
+		}
+	
+		plots.forEach(plot => {
+			const color = this.plotColors[plot.zoneType] || this.plotColors.default;
+			const colorHex = color.getHexString(); // Pour la clé du matériau
+	
+			// Points du carré (X, Y, Z, X, Y, Z, ...)
+			const points = [
+				plot.x, debugHeight, plot.z,
+				plot.x + plot.width, debugHeight, plot.z,
+				plot.x + plot.width, debugHeight, plot.z + plot.depth,
+				plot.x, debugHeight, plot.z + plot.depth,
+				plot.x, debugHeight, plot.z // Retour au début pour fermer
+			];
+	
+			// Créer la géométrie spécifique pour Line2
+			const geometry = new LineGeometry();
+			geometry.setPositions(points); // Attend un tableau plat [x1, y1, z1, x2, y2, z2, ...]
+	
+			// Obtenir ou créer le matériau épais
+			// Le troisième argument 'false' indique que ce n'est pas un wireframe
+			const material = this._getOrCreateDebugMaterial(`plot_line_${colorHex}`, color, false, lineThickness);
+	
+			// Vérifier si le matériau est bien LineMaterial (sinon on ne peut pas créer Line2)
+			if (!(material instanceof LineMaterial)) {
+				 console.warn(`[DVM Plot Line2] Could not get/create LineMaterial for plot ${plot.id}. Skipping.`);
+				 geometry.dispose(); // Nettoyer la géométrie créée
+				 return; // Passer au plot suivant
+			}
+	
+	
+			// Créer l'objet Line2
+			const line = new Line2(geometry, material);
+			line.computeLineDistances(); // Important pour LineMaterial
+			line.scale.set(1, 1, 1); // Nécessaire pour LineMaterial
+			line.name = `PlotOutline_${plot.id}_${plot.zoneType}`;
+	
+			// Ajouter au groupe de debug
+			this.addDebugVisual(line, visualType);
+			plotCount++;
+		});
+	
+		console.log(`  [DVM Plot Line2] Finished creating outlines. Added ${plotCount} Line2 objects.`);
+	}
 
     // --- NOUVELLE MÉTHODE : Créer les outlines des bâtiments ---
     /**

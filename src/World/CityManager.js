@@ -232,7 +232,7 @@ export default class CityManager {
 
         // --- Instance de DebugVisualManager ---
         // Créé ici pour pouvoir être utilisé par DistrictManager
-        this.debugVisualManager = new DebugVisualManager(null, this.materials);
+		this.debugVisualManager = new DebugVisualManager(null, this.materials, this.experience.sizes); // <-- MODIFIÉ
         if (this.experience.isDebugMode || this.config.showDistrictBoundaries) {
             this.cityContainer.add(this.debugVisualManager.parentGroup);
         }
