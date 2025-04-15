@@ -46,6 +46,17 @@ export default class World {
         if (this.debugVisualManager) this.debugVisualManager.parentGroup.visible = false;
         this.debugAgentPathGroup.visible = false;
 
+		const districtH = this.debugVisualManager.districtGroundHeight || 0.005;
+        const plotH = this.debugVisualManager.plotGroundHeight || 0.01;
+
+        this.debugHeights = {
+            districtGround: 0.005,                 // Centre Y du sol district
+            plotGround: 0.015,                   // Centre Y du sol parcelle (au dessus district)
+            // plotOutline: 0.03,                // Si vous gardez les outlines
+            navGrid: 0.04,                     // NavGrid au dessus
+            agentPath: 0.05                    // Chemins au dessus
+        };
+
         this.initializeWorld();
     }
 
@@ -70,62 +81,55 @@ export default class World {
             // --- FIN CORRECTION ---
 
             if (enabled) {
-                console.log("World: Debug mode ENABLED - Creating/Updating visuals...");
-                // --- Mise à jour via DebugVisualManager ---
-                if (this.cityManager) {
-                    const plots = this.cityManager.getPlots();
-                    console.log(`  Plots available for debug: ${plots ? plots.length : 'null/undefined'}`);
+				console.log("  [World Debug] Creating/Updating visuals...");
+				if (this.cityManager) {
+					const plots = this.cityManager.getPlots();
+					const districts = this.cityManager.getDistricts();
+					const buildingInstances = this.cityManager.getBuildingInstances();
 
-                    const buildingInstances = this.cityManager.getBuildingInstances();
-                    console.log(`  Building instances available for debug: ${buildingInstances ? buildingInstances.size : 'null/undefined'}`);
+					// Création sols districts (le plus bas)
+					if (districts && districts.length > 0) {
+						this.debugVisualManager.createDistrictGroundVisuals(districts, this.debugHeights.districtGround);
+					} else { this.debugVisualManager.clearDebugVisuals('DistrictGroundVisuals'); }
 
-                    // Recréer/Mettre à jour les visuels (logique précédente)
-                    if (plots && plots.length > 0) {
-                        console.log("  Attempting to create/update plot outlines...");
-                        this.debugVisualManager.createPlotOutlines(plots);
-                    } else {
-                        console.log("  No plots to create outlines for.");
-                        this.debugVisualManager.clearDebugVisuals('PlotOutlines');
-                    }
+					// Création sols parcelles (au-dessus)
+					if (plots && plots.length > 0) {
+						this.debugVisualManager.createPlotGroundVisuals(plots, this.debugHeights.plotGround);
+					} else { this.debugVisualManager.clearDebugVisuals('PlotGroundVisuals'); }
 
-                    if (buildingInstances && buildingInstances.size > 0) {
-                        console.log("  Attempting to create/update building outlines...");
-                        this.debugVisualManager.createBuildingOutlines(buildingInstances, this.cityManager.config);
-                    } else {
-                        console.log("  No building instances to create outlines for.");
-                        this.debugVisualManager.clearDebugVisuals('BuildingOutlines');
-                    }
+					// Création outlines bâtiments (cubes opaques)
+					if (buildingInstances && buildingInstances.size > 0) {
+						 // On passe un offset Y pour que la base des cubes soit légèrement au-dessus des sols debug
+						this.debugVisualManager.createBuildingOutlines(buildingInstances, this.cityManager.config, 0.05);
+					} else { this.debugVisualManager.clearDebugVisuals('BuildingOutlines'); }
 
-                    if (this.cityManager.config.showDistrictBoundaries && this.cityManager.districts.length > 0){
-                        console.log("  Attempting to create/update district boundaries...");
-                        this.debugVisualManager.createDistrictBoundaries(this.cityManager.districts, this.cityManager.config);
-                    } else {
-                         this.debugVisualManager.clearDebugVisuals('DistrictBoundaries');
-                    }
+					// NavGrid
+					if (this.cityManager.navigationGraph) {
+						 this.clearDebugNavGrid();
+						 this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
+					} else { this.clearDebugNavGrid(); }
+					this.debugNavGridGroup.position.y = this.debugHeights.navGrid; // Positionner le groupe NavGrid
 
-                    // Recréer NavGrid si besoin
-                    if (this.cityManager.navigationGraph) {
-                        this.clearDebugNavGrid(); // Vider avant pour éviter doublons
-                        console.log("  Attempting to create NavGrid visualization...");
-                        this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
-                    }
+					// --- Optionnel: Nettoyer les outlines si redondants ---
+					this.debugVisualManager.clearDebugVisuals('PlotOutlines');
+					// this.debugVisualManager.clearDebugVisuals('ParkOutlines');
+					// this.debugVisualManager.clearDebugVisuals('DistrictBoundaries');
 
-                } else {
-                     console.warn("World: Cannot update debug visuals - CityManager missing.");
-                }
-
-            } else {
-                console.log("World: Debug mode DISABLED - Clearing visuals...");
-                // --- Nettoyage ---
-                this.debugVisualManager.clearDebugVisuals('PlotOutlines');
-                this.debugVisualManager.clearDebugVisuals('BuildingOutlines');
-                this.debugVisualManager.clearDebugVisuals('DistrictBoundaries');
-                this.clearDebugAgentPaths();
-                this.clearDebugNavGrid();
-            }
+				} // fin if (this.cityManager)
+			} else { // Debug désactivé
+				console.log("  [World Debug] Clearing visuals...");
+				this.debugVisualManager.clearDebugVisuals('DistrictGroundVisuals');
+				this.debugVisualManager.clearDebugVisuals('PlotGroundVisuals');
+				this.debugVisualManager.clearDebugVisuals('BuildingOutlines');
+				this.debugVisualManager.clearDebugVisuals('PlotOutlines'); // Nettoyer au cas où
+				this.clearDebugNavGrid();
+				this.clearDebugAgentPaths();
+			}
         } else {
              console.warn("World: Cannot manage debug visuals - DebugVisualManager or its parentGroup missing.");
         }
+
+		this.debugAgentPathGroup.position.y = this.debugHeights.agentPath; // Positionner groupe chemins agents
     }
 
     // --- Les méthodes clearDebugPlotGrid, clearDebugAgentPaths, clearDebugNavGrid restent similaires ---
