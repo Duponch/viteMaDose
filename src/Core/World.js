@@ -1,15 +1,10 @@
-/*
- * Fichier: src/Core/World.js
- * Modifications:
- * - Ajout appel `this.agentManager.initializePathfindingWorker(this.navigationGraph)`
- * après la création du NavigationGraph.
- */
 // src/Core/World.js
 import * as THREE from 'three';
 import Environment from '../World/Environment.js';
 import CityManager from '../World/CityManager.js';
 import AgentManager from '../World/AgentManager.js';
-import NavigationGraph from '../World/NavigationGraph.js'; // Assurez-vous d'importer NavigationGraph si ce n'est pas déjà fait
+// ... autres imports ...
+import DebugVisualManager from '../World/DebugVisualManager.js'; // Assurez-vous qu'il est importé
 
 export default class World {
     constructor(experience) {
@@ -21,66 +16,120 @@ export default class World {
         this.environment = new Environment(this.experience, this);
         this.agentManager = null; // Will be initialized in initializeWorld
 
-        // --- Debug Groups ---
+        // --- Debug Groups (existants) ---
         this.debugNavGridGroup = new THREE.Group();
         this.debugNavGridGroup.name = "DebugNavGrid";
         this.scene.add(this.debugNavGridGroup);
 
-        // NEW: Group for visualizing the house placement grid
-        this.debugPlotGridGroup = new THREE.Group();
-        this.debugPlotGridGroup.name = "DebugPlotGrid";
-        this.scene.add(this.debugPlotGridGroup);
-        // END NEW
+        // REMOVED : debugPlotGridGroup (maintenant géré par DebugVisualManager)
+        // REMOVED : debugAgentPathGroup (maintenant géré par DebugVisualManager ?)
+        // Ou garder debugAgentPathGroup séparé si on veut un contrôle différent
 
+        // --- NOUVEAU : Centralisation via DebugVisualManager ---
+        // Utiliser le DebugVisualManager du CityManager si possible, ou en créer un
+        this.debugVisualManager = this.cityManager.debugVisualManager; // Accès au manager centralisé
+        if (!this.debugVisualManager) {
+            console.warn("World: DebugVisualManager non trouvé dans CityManager, création locale.");
+            // Créez un DebugVisualManager local si nécessaire, mais l'approche centralisée est meilleure.
+            // this.debugVisualManager = new DebugVisualManager(null, this.cityManager.materials);
+            // this.scene.add(this.debugVisualManager.parentGroup); // Ajouter son groupe à la scène
+        }
+        // On garde un groupe séparé pour les chemins des agents pour le moment
         this.debugAgentPathGroup = new THREE.Group();
         this.debugAgentPathGroup.name = "DebugAgentPath";
         this.scene.add(this.debugAgentPathGroup);
+        // --- FIN NOUVEAU ---
+
 
         // Initial visibility
         this.debugNavGridGroup.visible = false;
-        this.debugPlotGridGroup.visible = false; // NEW: Hide by default
+        if (this.debugVisualManager) this.debugVisualManager.parentGroup.visible = false;
         this.debugAgentPathGroup.visible = false;
 
-        // Start asynchronous initialization
         this.initializeWorld();
     }
 
     setDebugMode(enabled) {
+        // Visibilité des groupes existants
         this.debugAgentPathGroup.visible = enabled;
         this.debugNavGridGroup.visible = enabled;
-        this.debugPlotGridGroup.visible = enabled; // NEW: Control visibility of the plot grid group
-
-        // Recreate NAV grid visualization if it doesn't exist and debug is enabled
-        if (enabled && this.cityManager?.navigationGraph && this.debugNavGridGroup.children.length === 0) {
-             console.log("World: Debug enabled - Generating NavGrid visualization...");
-             // this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup); // Optional to recreate
-        } else if (!enabled) {
-            // Clear ALL groups when disabling
-             this.clearDebugAgentPaths();
-             this.clearDebugNavGrid();
-             this.clearDebugPlotGrid(); // NEW: Clear the plot grid group
+        // Visibilité du groupe central de debug
+        if (this.debugVisualManager) {
+            this.debugVisualManager.parentGroup.visible = enabled;
         }
-        console.log(`World Debug Mode: ${enabled ? 'Enabled' : 'Disabled'} (PlotGrid visible: ${enabled})`);
+
+        if (enabled) {
+            console.log("World: Debug mode ENABLED - Creating/Updating visuals...");
+            // --- Mise à jour via DebugVisualManager ---
+            if (this.debugVisualManager && this.cityManager) {
+                const plots = this.cityManager.getPlots();
+                const buildingInstances = this.cityManager.getBuildingInstances(); // Récupère la Map
+
+                if (plots && plots.length > 0) {
+                     // Crée seulement si le groupe est vide pour éviter recréation constante
+                     if (this.debugVisualManager.parentGroup.children.filter(c => c.userData.visualType === 'PlotOutlines').length === 0) {
+                        this.debugVisualManager.createPlotOutlines(plots);
+                     }
+                } else {
+                    this.debugVisualManager.clearDebugVisuals('PlotOutlines');
+                }
+
+                if (buildingInstances && buildingInstances.size > 0) {
+                     if (this.debugVisualManager.parentGroup.children.filter(c => c.userData.visualType === 'BuildingOutlines').length === 0) {
+                        this.debugVisualManager.createBuildingOutlines(buildingInstances, this.cityManager.config);
+                    }
+                } else {
+                     this.debugVisualManager.clearDebugVisuals('BuildingOutlines');
+                }
+
+                 // Recréer NavGrid si besoin (logique existante)
+                 if (this.cityManager.navigationGraph && this.debugNavGridGroup.children.length === 0) {
+                     console.log("World: Debug enabled - Generating NavGrid visualization...");
+                     this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
+                 }
+                 // Ajouter d'autres visuels si nécessaire (ex: districts)
+                 if (this.cityManager.config.showDistrictBoundaries && this.cityManager.districts.length > 0){
+                     if (this.debugVisualManager.parentGroup.children.filter(c => c.userData.visualType === 'DistrictBoundaries').length === 0) {
+                        this.debugVisualManager.createDistrictBoundaries(this.cityManager.districts, this.cityManager.config);
+                     }
+                 } else {
+                     this.debugVisualManager.clearDebugVisuals('DistrictBoundaries');
+                 }
+
+            } else {
+                 console.warn("World: Cannot update debug visuals - DebugVisualManager or CityManager missing.");
+            }
+            // ----------------------------------------
+
+        } else {
+            console.log("World: Debug mode DISABLED - Clearing visuals...");
+            // --- Nettoyage via DebugVisualManager ---
+            if (this.debugVisualManager) {
+                // On ne nettoie QUE les outlines plots/buildings ici,
+                // car NavGrid et AgentPaths sont gérés par leurs groupes dédiés.
+                // Si on veut tout centraliser, il faudrait migrer NavGrid/AgentPath vers DebugVisualManager aussi.
+                this.debugVisualManager.clearDebugVisuals('PlotOutlines');
+                this.debugVisualManager.clearDebugVisuals('BuildingOutlines');
+                this.debugVisualManager.clearDebugVisuals('DistrictBoundaries'); // Nettoyer aussi les districts
+                // this.debugVisualManager.clearAllAndDisposeMaterials(); // Appel plus radical si on quitte complètement le mode debug
+            }
+            // -------------------------------------
+
+            // Nettoyage des groupes spécifiques restants
+            this.clearDebugAgentPaths();
+            this.clearDebugNavGrid();
+        }
+        console.log(`World Debug Mode: ${enabled ? 'Enabled' : 'Disabled'}`);
     }
 
-	clearDebugPlotGrid() {
-        while(this.debugPlotGridGroup.children.length > 0){
-            const obj = this.debugPlotGridGroup.children[0];
-            this.debugPlotGridGroup.remove(obj);
-            if(obj.geometry) obj.geometry.dispose();
-            // The material is shared (debugPlotGridMaterial), DO NOT dispose it here,
-            // do it in CityManager.destroy
-            // if(obj.material && obj.material.dispose) obj.material.dispose();
-        }
-        // console.log("Debug plot grid cleared.");
-    }
-
+    // --- Les méthodes clearDebugPlotGrid, clearDebugAgentPaths, clearDebugNavGrid restent similaires ---
+    // clearDebugPlotGrid n'est plus nécessaire car géré par DebugVisualManager
     clearDebugAgentPaths() {
         while(this.debugAgentPathGroup.children.length > 0){
             const obj = this.debugAgentPathGroup.children[0];
             this.debugAgentPathGroup.remove(obj);
             if(obj.geometry) obj.geometry.dispose();
-            if(obj.material) obj.material.dispose();
+            if(obj.material) obj.material.dispose(); // Les chemins agents ont des matériaux uniques
         }
          // console.log("Debug agent paths cleared.");
     }
@@ -90,26 +139,100 @@ export default class World {
 			const obj = this.debugNavGridGroup.children[0];
 			this.debugNavGridGroup.remove(obj);
 			if(obj.geometry) obj.geometry.dispose();
-			if(obj.material) { // Handle multiple or single materials
-				if (Array.isArray(obj.material)) { obj.material.forEach(m => m.dispose()); }
-				else if (obj.material.dispose) { obj.material.dispose(); }
-			}
+            // NavGrid utilise un matériau partagé (debugMaterialWalkable), NE PAS le disposer ici.
+            // La géométrie est fusionnée, donc on la dispose.
 		}
 		// console.log("Debug nav grid cleared.");
    }
 
+    // --- setAgentPathForAgent reste inchangée ---
+    setAgentPathForAgent(agentLogic, pathPoints, pathColor = 0xff00ff) {
+		if (!agentLogic || !this.debugAgentPathGroup || !this.debugAgentPathGroup.visible) { return; }
+		const agentId = agentLogic.id;
+		const agentPathName = `AgentPath_${agentId}`;
+		const existingPath = this.debugAgentPathGroup.getObjectByName(agentPathName);
+		if (existingPath) {
+			 this.debugAgentPathGroup.remove(existingPath);
+			 if (existingPath.geometry) existingPath.geometry.dispose();
+			 if (existingPath.material) existingPath.material.dispose();
+		}
+		if (pathPoints && pathPoints.length > 1) {
+			 try {
+				 const curve = new THREE.CatmullRomCurve3(pathPoints);
+				 const tubeSegments = Math.min(64, pathPoints.length * 4);
+				 const tubeRadius = 0.1;
+				 const radialSegments = 4;
+				 const closed = false;
+				 const tubeGeometry = new THREE.TubeGeometry(curve, tubeSegments, tubeRadius, radialSegments, closed);
+				 const tubeMaterial = new THREE.MeshBasicMaterial({ color: pathColor });
+				 const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+				 tubeMesh.name = agentPathName;
+                 const sidewalkHeight = this.cityManager?.config?.sidewalkHeight ?? 0.2;
+				 tubeMesh.position.y = sidewalkHeight + 0.05;
+                 tubeMesh.renderOrder = 1000; // Pour être sûr qu'il est visible
+				 this.debugAgentPathGroup.add(tubeMesh);
+			 } catch (error) {
+				 console.error(`World: Erreur création tube debug pour Agent ${agentId}:`, error);
+			 }
+		}
+   }
+
+
+    // --- destroy() ---
+    destroy() {
+        console.log("Destroying World...");
+
+        // 1. Destroy AgentManager
+        this.agentManager?.destroy();
+        this.agentManager = null;
+
+        // 2. Clean up debug groups
+        const cleanGroup = (group) => {
+             // ... (code existant pour nettoyer les enfants, géométries, matériaux NON PARTAGES)
+             // Attention à ne pas disposer les matériaux partagés (comme ceux de DebugVisualManager)
+             if (!group) return;
+             if (group.parent) group.parent.remove(group);
+             while(group.children.length > 0){
+                 const obj = group.children[0];
+                 group.remove(obj);
+                 if(obj.geometry) obj.geometry.dispose();
+                 // Dispose material only if it's not likely shared (e.g., agent path materials)
+                 if(obj.material && obj.name.startsWith('AgentPath_')) {
+                      if (obj.material.dispose) obj.material.dispose();
+                 } else if (obj.material && obj.name.startsWith('Debug_NavGrid_')) {
+                     // Don't dispose shared NavGrid material
+                 }
+             }
+        };
+        cleanGroup(this.debugNavGridGroup);
+        cleanGroup(this.debugAgentPathGroup);
+        // Le groupe de DebugVisualManager est géré par CityManager/World
+        this.debugNavGridGroup = null;
+        this.debugAgentPathGroup = null;
+
+        // 3. Destroy CityManager (qui devrait appeler clearAllAndDisposeMaterials sur son DebugVisualManager)
+        this.cityManager?.destroy(); // S'assurer que CityManager.destroy appelle debugVisualManager.clearAll...
+        this.cityManager = null;
+        this.debugVisualManager = null; // La référence locale est maintenant nulle
+
+        // 4. Destroy Environment
+        this.environment?.destroy();
+        this.environment = null;
+
+        console.log("World destroyed.");
+    }
+
+     // --- Reste de World.js (initializeWorld, createAgents, update) ---
+     // ... (code existant)
     async initializeWorld() {
         console.log("World: Initialisation asynchrone...");
         try {
-            // 1. Init Environnement
             await this.environment.initialize();
             console.log("World: Environnement initialisé.");
 
-            // 2. Générer Ville (plots, routes, etc. DANS CityManager)
-            await this.cityManager.generateCity(); // CityManager crée maintenant son propre NavGraph
+            await this.cityManager.generateCity();
             console.log("World: Ville générée.");
 
-            // === Initialisation AgentManager APRÈS génération ville ===
             const maxAgents = this.cityManager.config.maxAgents ?? 300;
             this.agentManager = new AgentManager(
                 this.scene,
@@ -119,23 +242,19 @@ export default class World {
             );
             console.log("World: AgentManager instancié.");
 
-            // === NOUVEAU : Initialiser le Worker APRÈS que NavGraph existe ===
             const navGraph = this.cityManager.getNavigationGraph();
             if (this.agentManager && navGraph) {
-                this.agentManager.initializePathfindingWorker(navGraph); // Passe le NavGraph pour extraire les données
+                this.agentManager.initializePathfindingWorker(navGraph);
                 console.log("World: Initialisation du Pathfinding Worker demandée.");
             } else {
-                 console.error("World: Echec initialisation Worker - AgentManager ou NavGraph manquant après génération ville.");
+                 console.error("World: Echec initialisation Worker - AgentManager ou NavGraph manquant.");
             }
-            // =============================================================
 
-            // 4. Créer Agents logiques (inchangé)
             this.createAgents(maxAgents);
 
-            // 5. Visualisation Debug NavGrid (Condition inchangée, mais se base sur le NavGraph de CityManager)
-            if (navGraph && this.debugNavGridGroup.visible) {
-                console.log("World: Génération visualisation NavGrid (depuis CityManager)...");
-                navGraph.createDebugVisualization(this.debugNavGridGroup);
+            // Visualisation Debug initiale si activée au démarrage
+            if (this.experience.isDebugMode) {
+                this.setDebugMode(true); // Appeler la méthode pour créer tous les visuels
             }
 
             console.log("World: Initialisation complète.");
@@ -150,20 +269,14 @@ export default class World {
              console.error("World: AgentManager non initialisé lors de createAgents.");
              return;
          }
-         // Vérification inchangée
          if (!this.cityManager?.buildingInstances || this.cityManager.buildingInstances.size === 0) {
-             console.warn("World: Aucun bâtiment enregistré par CityManager. Impossible de créer des agents avec domicile/travail initial.");
-             // On pourrait quand même créer des agents en mode IDLE si nécessaire
+             console.warn("World: Aucun bâtiment enregistré. Impossible de créer agents avec domicile/travail.");
              // return;
          }
-
         console.log(`World: Demande de création de ${numberOfAgents} agents...`);
-        let createdCount = 0;
         for (let i = 0; i < numberOfAgents; i++) {
              const agent = this.agentManager.createAgent();
-             if (agent) {
-                 createdCount++;
-             } else {
+             if (!agent) {
                  console.warn(`World: Echec création agent (max ${this.agentManager.maxAgents} atteint?).`);
                  break;
              }
@@ -171,113 +284,18 @@ export default class World {
         console.log(`World: ${this.agentManager.agents.length} agents logiques créés (demandé: ${numberOfAgents}).`);
     }
 
-    // --- Méthode setAgentPathForAgent (Utilisée par AgentManager lors du retour du worker) ---
-    /**
-     * Affiche le chemin d'un agent pour le débogage SI le mode debug est actif.
-     * @param {Agent} agentLogic - L'instance de l'agent logique.
-     * @param {THREE.Vector3[] | null} pathPoints - Les points du chemin (monde) ou null.
-     * @param {number|THREE.Color} pathColor - La couleur du chemin.
-     */
-    setAgentPathForAgent(agentLogic, pathPoints, pathColor = 0xff00ff) {
-		// Vérifier si le mode debug est actif via la visibilité du groupe
-		if (!agentLogic || !this.debugAgentPathGroup || !this.debugAgentPathGroup.visible) {
-			return;
-		}
-
-		const agentId = agentLogic.id;
-		const agentPathName = `AgentPath_${agentId}`;
-
-		// Recherche/suppression ancien chemin debug (inchangé)
-		const existingPath = this.debugAgentPathGroup.getObjectByName(agentPathName);
-		if (existingPath) {
-			 this.debugAgentPathGroup.remove(existingPath);
-			 if (existingPath.geometry) existingPath.geometry.dispose();
-			 if (existingPath.material) existingPath.material.dispose();
-		}
-
-		// Création visualisation tube chemin debug (inchangé)
-		if (pathPoints && pathPoints.length > 1) {
-			 try {
-				 const curve = new THREE.CatmullRomCurve3(pathPoints);
-				 const tubeSegments = Math.min(64, pathPoints.length * 4);
-				 const tubeRadius = 0.1;
-				 const radialSegments = 4;
-				 const closed = false;
-				 const tubeGeometry = new THREE.TubeGeometry(curve, tubeSegments, tubeRadius, radialSegments, closed);
-				 const tubeMaterial = new THREE.MeshBasicMaterial({ color: pathColor });
-				 const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
-				 tubeMesh.name = agentPathName;
-                 // Position Y ajustée (peut être retiré si les points sont déjà à la bonne hauteur)
-				 const sidewalkHeight = this.cityManager?.config?.sidewalkHeight ?? 0.2;
-				 tubeMesh.position.y = sidewalkHeight + 0.05; // Ajuster si gridToWorld donne déjà la bonne hauteur
-				 this.debugAgentPathGroup.add(tubeMesh);
-			 } catch (error) {
-				 console.error(`World: Erreur création tube debug pour Agent ${agentId}:`, error);
-			 }
-		}
-   }
-
-   update() {
+    update() {
 		const deltaTime = this.experience.time.delta;
-
-		// Mettre à jour l'environnement (pour obtenir l'heure)
 		this.environment?.update(deltaTime);
+		const currentHour = this.environment?.getCurrentHour() ?? 12;
 
-		const currentHour = this.environment?.getCurrentHour() ?? 12; // Heure par défaut si env non prêt
-
-		// --- NOUVEAU: Mettre à jour le PlotContentGenerator (via CityManager) ---
 		if (this.environment?.isInitialized && this.cityManager?.contentGenerator) {
-			// L'update des fenêtres se fait DANS PlotContentGenerator maintenant
-			this.cityManager.contentGenerator.update(currentHour);
+			this.cityManager.contentGenerator.update(currentHour); // Délégué à PlotContentGenerator
 		}
-		// --- NOUVEAU: Mettre à jour les lumières des lampadaires (via CityManager) ---
 		if(this.cityManager) {
 			this.cityManager.lampPostManager.updateLampPostLights(currentHour);
 		}
-		// --------------------------------------------------------------------
-
-		// Mettre à jour les agents
 		this.agentManager?.update(deltaTime);
 	}
 
-    destroy() {
-        console.log("Destroying World...");
-
-        // 1. Destroy AgentManager (which terminates its worker)
-        this.agentManager?.destroy();
-        this.agentManager = null;
-
-        // 2. Clean up debug groups
-        const cleanGroup = (group) => {
-             if (!group) return;
-             if (group.parent) group.parent.remove(group);
-             while(group.children.length > 0){
-                 const obj = group.children[0];
-                 group.remove(obj);
-                 if(obj.geometry) obj.geometry.dispose();
-                 // Clean material(s) ONLY if they are not shared globally
-                 // For debug groups, assume materials are specific or okay to dispose here
-                 if(obj.material) {
-                     if(Array.isArray(obj.material)) { obj.material.forEach(m => m.dispose()); }
-                     else if (obj.material.dispose) { obj.material.dispose(); }
-                 }
-             }
-        };
-        cleanGroup(this.debugNavGridGroup);
-        cleanGroup(this.debugAgentPathGroup);
-        cleanGroup(this.debugPlotGridGroup); // NEW: Clean the plot grid group
-        this.debugNavGridGroup = null;
-        this.debugAgentPathGroup = null;
-        this.debugPlotGridGroup = null; // NEW
-
-        // 3. Destroy CityManager (which cleans its own elements, NavGraph included)
-        this.cityManager?.destroy();
-        this.cityManager = null;
-
-        // 4. Destroy Environment
-        this.environment?.destroy();
-        this.environment = null;
-
-        console.log("World destroyed.");
-    }
 }
