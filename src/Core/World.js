@@ -232,7 +232,7 @@ export default class World {
 		}
 		// --- NOUVEAU: Mettre à jour les lumières des lampadaires (via CityManager) ---
 		if(this.cityManager) {
-			this.cityManager.updateLampPostLights(currentHour); // Appel de la nouvelle fonction
+			this.cityManager.lampPostManager.updateLampPostLights(currentHour);
 		}
 		// --------------------------------------------------------------------
 

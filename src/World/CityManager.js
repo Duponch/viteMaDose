@@ -4,7 +4,8 @@ import CityLayoutGenerator from './CityLayoutGenerator.js';
 import RoadNetworkGenerator from './RoadNetworkGenerator.js';
 import PlotContentGenerator from './PlotContentGenerator.js';
 import CityAssetLoader from './CityAssetLoader.js';
-import DistrictManager from './DistrictManager.js'; // Nouvelle dépendance
+import DistrictManager from './DistrictManager.js';
+import LampPostManager from './LampPostManager.js';
 import NavigationGraph from './NavigationGraph.js';
 import Pathfinder from './Pathfinder.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -73,7 +74,7 @@ export default class CityManager {
             skyscraperModelDir: "Public/Assets/Models/Skyscrapers/", 
             skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 } ],
             skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
-            // Tree Placement
+            // Placement d'arbres
             treePlacementProbabilitySidewalk: 0.3,
             treePlacementProbabilityPark: 0.04,
             // Debug
@@ -97,7 +98,7 @@ export default class CityManager {
             lampPostLightConeColor: 0xFFFF99
         };
 
-        // --- External Config Merge ---
+        // Fusion de configuration externe
         const deepMerge = (target, source) => {
             for (const key in source) {
                 if (source.hasOwnProperty(key)) {
@@ -113,7 +114,7 @@ export default class CityManager {
         };
         deepMerge(this.config, config);
 
-        // --- Materials ---
+        // --- Matériaux ---
         this.materials = {
             groundMaterial: new THREE.MeshStandardMaterial({ color: 0x272442, metalness: 0.1, roughness: 0.8 }),
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
@@ -143,39 +144,35 @@ export default class CityManager {
             })
         };
 
-        // --- Components ---
+        // --- Composants ---
         this.assetLoader = new CityAssetLoader(this.config);
         this.layoutGenerator = new CityLayoutGenerator(this.config);
         this.roadGenerator = new RoadNetworkGenerator(this.config, this.materials);
         this.contentGenerator = new PlotContentGenerator(this.config, this.materials, this.materials.debugPlotGridMaterial);
         this.navigationGraph = null;
         this.pathfinder = null;
-        this.districts = []; // Les districts seront désormais générés via DistrictManager.
+        this.districts = [];
         this.leafPlots = [];
-        
-        // --- Scene Groups ---
-        this.cityContainer = new THREE.Group(); 
+
+        // --- Groupes de scène ---
+        this.cityContainer = new THREE.Group();
         this.cityContainer.name = "CityContainer";
         this.roadGroup = null;
         this.sidewalkGroup = null;
         this.contentGroup = null;
         this.groundGroup = null;
-        this.debugGroup = new THREE.Group(); 
+        this.debugGroup = new THREE.Group();
         this.debugGroup.name = "DebugVisuals";
-        
-        // --- Registers ---
+
+        // --- Registres ---
         this.buildingInstances = new Map();
         this.citizens = new Map();
         this.nextBuildingInstanceId = 0;
 
-        this.lampPostConeGeometry = null;
-        this.lampPostMeshes = {
-            grey: null,
-            light: null,
-            lightCone: null
-        };
+        // --- Lampadaires via LampPostManager ---
+        this.lampPostManager = new LampPostManager(this.config, this.materials, this.cityContainer);
 
-        // Ajout dans la scène
+        // Ajout des groupes dans la scène
         this.scene.add(this.cityContainer);
         if (this.experience.isDebugMode || this.config.showDistrictBoundaries) {
             this.cityContainer.add(this.debugGroup);
@@ -217,7 +214,6 @@ export default class CityManager {
             occupants: []
         };
         this.buildingInstances.set(id, buildingInfo);
-        // console.log(`Building registered: ${id} (Type: ${assetType}) at`, position);
         return buildingInfo;
     }
 
@@ -295,12 +291,10 @@ export default class CityManager {
         try {
             console.log("--- Starting city generation ---");
             this.createGlobalGround();
-
             console.time("AssetLoading");
             await this.assetLoader.loadAssets();
             console.timeEnd("AssetLoading");
             this.logLoadedAssets();
-
             console.time("LayoutGeneration");
             this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
             console.timeEnd("LayoutGeneration");
@@ -321,9 +315,6 @@ export default class CityManager {
             }
             console.timeEnd("DistrictFormationAndValidation");
 
-            console.time("PlotTypeAdjustment");
-            // La logique d'ajustement de types est déjà déléguée dans DistrictManager.
-            console.timeEnd("PlotTypeAdjustment");
             this.assignDefaultTypeToUnassigned();
             this.logAdjustedZoneTypes();
 
@@ -362,7 +353,8 @@ export default class CityManager {
 
             console.log(`Total Building Instances Registered: ${this.buildingInstances.size}`);
 
-            this.addLampPosts();
+            // --- Lamp Post Generation via LampPostManager ---
+            this.lampPostManager.addLampPosts(this.leafPlots);
 
             if (this.experience.isDebugMode) {
                 console.time("DebugVisualsGeneration");
@@ -383,203 +375,6 @@ export default class CityManager {
             this.clearCity();
         } finally {
             console.timeEnd("CityGeneration");
-        }
-    }
-
-    buildLampPostGeometries() {
-        console.warn("--- Using simplified lamp post geometry ---");
-        const poleSegments = 16;
-        const baseRadiusTop = 0.4, baseRadiusBottom = 0.5, baseHeight = 0.8;
-        const poleRadius = 0.2, poleLowerHeight = 5;
-        const poleTopY = baseHeight + poleLowerHeight;
-        const armLength = 2.5;
-        const lampHeadWidth = 1.2, lampHeadHeight = 0.4, lampHeadDepth = 0.6;
-        const lightSourceWidth = lampHeadWidth * 0.8, lightSourceHeight = 0.35, lightSourceDepth = lampHeadDepth * 0.8;
-        const lightSourceCenterY = poleTopY - lampHeadHeight - lightSourceHeight / 2;
-        const coneHeight = lightSourceCenterY - (this.config.sidewalkHeight ?? 0.2) + 1;
-        const coneRadiusBottom = this.config.lampPostLightConeRadiusBottom ?? 5.0;
-        const coneRadiusTop = 0.1;
-        const coneRadialSegments = 16;
-        if (coneHeight > 0) {
-            this.lampPostConeGeometry = new THREE.ConeGeometry(coneRadiusBottom, coneHeight, coneRadialSegments, 1, true);
-            this.lampPostConeGeometry.translate(0, coneHeight / 2 - 2.5, 0);
-            this.lampPostConeGeometry.computeBoundingBox();
-            console.log(`Cone geometry created (H: ${coneHeight.toFixed(1)}, R_bottom: ${coneRadiusBottom})`);
-        } else {
-            console.error("Invalid cone height. Cannot create cone geometry.");
-            this.lampPostConeGeometry = null;
-        }
-        const baseGeo = new THREE.CylinderGeometry(baseRadiusTop, baseRadiusBottom, baseHeight, poleSegments);
-        baseGeo.translate(0, baseHeight / 2, 0);
-        const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleLowerHeight, poleSegments);
-        poleGeo.translate(0, baseHeight + poleLowerHeight / 2, 0);
-        const armGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, armLength, poleSegments);
-        armGeo.rotateZ(Math.PI / 2);
-        armGeo.translate(armLength / 2, poleTopY, 0);
-        const lampHeadGeo = new THREE.BoxGeometry(lampHeadWidth, lampHeadHeight, lampHeadDepth);
-        lampHeadGeo.translate(armLength, poleTopY - lampHeadHeight / 2, 0);
-        const lightGeo = new THREE.BoxGeometry(lightSourceWidth, lightSourceHeight, lightSourceDepth);
-        lightGeo.translate(armLength, lightSourceCenterY, 0);
-        lightGeo.computeBoundingBox();
-        const greyGeos = [baseGeo, poleGeo, armGeo, lampHeadGeo];
-        const mergedGreyGeo = mergeGeometries(greyGeos, false);
-        if (!mergedGreyGeo) {
-            console.error("Critical failure merging lamp post geometries (grey parts).");
-            greyGeos.forEach(g => g.dispose());
-            lightGeo.dispose();
-            return { greyGeometry: null, lightGeometry: null, greyMaterial: null, lightMaterial: null };
-        }
-        mergedGreyGeo.computeBoundingBox();
-        greyGeos.forEach(g => g.dispose());
-        const greyMaterial = new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.6, metalness: 0.9, name: "LampPostGreyMat_Simplified" });
-        const lightMaterial = new THREE.MeshStandardMaterial({ color: 0xffffaa, emissive: 0xffffdd, emissiveIntensity: 0.0, name: "LampPostLightMat_Simplified" });
-        return {
-            greyGeometry: mergedGreyGeo,
-            lightGeometry: lightGeo,
-            greyMaterial,
-            lightMaterial
-        };
-    }
-
-    addLampPosts() {
-        const spacing = this.config.lampPostSpacing || 20;
-        const lampData = [];
-        const sidewalkH = this.config.sidewalkHeight || 0.2;
-        console.log(`Adding lamp posts with spacing ${spacing} and corrected orientation...`);
-        const positionMap = new Map();
-        const addLampData = (x, z, angleY) => {
-            const key = `${x.toFixed(1)},${z.toFixed(1)}`;
-            if (!positionMap.has(key)) {
-                positionMap.set(key, angleY);
-                lampData.push({
-                    position: new THREE.Vector3(x, sidewalkH, z),
-                    angleY: Math.atan2(Math.sin(angleY), Math.cos(angleY))
-                });
-            }
-        };
-        this.leafPlots.forEach(plot => {
-            if (plot.zoneType === 'park' || plot.zoneType === 'unbuildable') return;
-            const plotX = plot.x;
-            const plotZ = plot.z;
-            const plotW = plot.width;
-            const plotD = plot.depth;
-            const sidewalkOffset = (this.config.sidewalkWidth || 0) / 2;
-            const angleTop = Math.PI / 2;
-            for (let x = plotX; x <= plotX + plotW; x += spacing) {
-                addLampData(x, plotZ - sidewalkOffset, angleTop);
-            }
-            const angleBottom = -Math.PI / 2;
-            for (let x = plotX; x <= plotX + plotW; x += spacing) {
-                addLampData(x, plotZ + plotD + sidewalkOffset, angleBottom);
-            }
-            const angleLeft = Math.PI;
-            for (let z = plotZ + spacing / 2; z < plotZ + plotD; z += spacing) {
-                addLampData(plotX - sidewalkOffset, z, angleLeft);
-            }
-            const angleRight = Math.PI * 2;
-            for (let z = plotZ + spacing / 2; z < plotZ + plotD; z += spacing) {
-                addLampData(plotX + plotW + sidewalkOffset, z, angleRight);
-            }
-        });
-        if (lampData.length === 0) {
-            console.log("No lamp post positions generated.");
-            return;
-        }
-        console.log(`${lampData.length} unique lamp posts to create.`);
-        this.createLampPostInstancedMeshes(lampData);
-    }
-
-    createLampPostInstancedMeshes(lampData) {
-        const { greyGeometry, lightGeometry, greyMaterial, lightMaterial } = this.buildLampPostGeometries();
-        const coneGeometry = this.lampPostConeGeometry;
-        const coneMaterial = this.materials.lampLightConeMaterial;
-        if (!greyGeometry || !lightGeometry || !greyGeometry.boundingBox || !lightGeometry.boundingBox) {
-            console.error("Failed creating InstancedMesh: invalid geometries or missing bounding boxes.");
-            return;
-        }
-        const count = lampData.length;
-        if (count === 0) return;
-        console.log(`Creating InstancedMesh for ${count} lamp posts...`);
-        const greyInstancedMesh = new THREE.InstancedMesh(greyGeometry, greyMaterial, count);
-        greyInstancedMesh.name = "LampPosts_GreyParts_Instanced";
-        const lightInstancedMesh = new THREE.InstancedMesh(lightGeometry, lightMaterial, count);
-        lightInstancedMesh.name = "LampPosts_LightParts_Instanced";
-        let coneInstancedMesh = null;
-        let coneHeight = 0;
-        if (coneGeometry && coneMaterial) {
-            coneInstancedMesh = new THREE.InstancedMesh(coneGeometry, coneMaterial, count);
-            coneInstancedMesh.name = "LampPosts_LightCones_Instanced";
-            coneInstancedMesh.visible = false;
-            coneHeight = coneGeometry.parameters.height;
-            if (!coneGeometry.boundingBox) coneGeometry.computeBoundingBox();
-        }
-        const dummy = new THREE.Object3D();
-        const coneMatrix = new THREE.Matrix4();
-        const armLength = 2.5;
-        const baseHeight = 0.8, poleLowerHeight = 5, lampHeadHeight = 0.4, lightSourceHeight = 0.35;
-        const poleTopY = baseHeight + poleLowerHeight;
-        const calculatedLightSourceCenterY = poleTopY - lampHeadHeight - lightSourceHeight / 2;
-        const lampRotation = new THREE.Quaternion();
-        const coneUpVector = new THREE.Vector3(0, 1, 0);
-        const positionOffset = new THREE.Vector3();
-        const coneScale = new THREE.Vector3(1, 1, 1);
-        for (let i = 0; i < count; i++) {
-            const data = lampData[i];
-            dummy.position.copy(data.position);
-            dummy.rotation.set(0, data.angleY, 0);
-            dummy.scale.set(1, 1, 1);
-            dummy.updateMatrix();
-            greyInstancedMesh.setMatrixAt(i, dummy.matrix);
-            lightInstancedMesh.setMatrixAt(i, dummy.matrix);
-            if (coneInstancedMesh && coneHeight > 0) {
-                const localBulbPos = new THREE.Vector3(armLength, calculatedLightSourceCenterY, 0);
-                const worldBulbPos = localBulbPos.applyMatrix4(dummy.matrix);
-                lampRotation.setFromRotationMatrix(dummy.matrix);
-                positionOffset.copy(coneUpVector).applyQuaternion(lampRotation).multiplyScalar(-coneHeight / 2);
-                const coneCenterPos = worldBulbPos.clone().add(positionOffset);
-                coneMatrix.compose(coneCenterPos, lampRotation, coneScale);
-                coneInstancedMesh.setMatrixAt(i, coneMatrix);
-            }
-        }
-        greyInstancedMesh.instanceMatrix.needsUpdate = true;
-        lightInstancedMesh.instanceMatrix.needsUpdate = true;
-        if (coneInstancedMesh) coneInstancedMesh.instanceMatrix.needsUpdate = true;
-        greyInstancedMesh.castShadow = true; greyInstancedMesh.receiveShadow = true;
-        lightInstancedMesh.castShadow = false; lightInstancedMesh.receiveShadow = false;
-        if (coneInstancedMesh) { coneInstancedMesh.castShadow = false; coneInstancedMesh.receiveShadow = false; }
-        if (this.cityContainer) {
-            this.cityContainer.add(greyInstancedMesh);
-            this.cityContainer.add(lightInstancedMesh);
-            if (coneInstancedMesh) this.cityContainer.add(coneInstancedMesh);
-            console.log("Lamp post InstancedMeshes added.");
-        }
-        this.lampPostMeshes.grey = greyInstancedMesh;
-        this.lampPostMeshes.light = lightInstancedMesh;
-        this.lampPostMeshes.lightCone = coneInstancedMesh;
-        if(this.experience?.world?.environment) {
-            this.updateLampPostLights(this.experience.world.environment.getCurrentHour());
-        } else {
-            this.updateLampPostLights(12);
-        }
-    }
-
-    updateLampPostLights(currentHour) {
-        if (!this.lampPostMeshes || (!this.lampPostMeshes.light && !this.lampPostMeshes.lightCone)) {
-            return;
-        }
-        const lightsOn = (currentHour >= 18 || currentHour < 6);
-        const lightMesh = this.lampPostMeshes.light;
-        if (lightMesh && lightMesh.material) {
-            const targetIntensity = lightsOn ? 1.8 : 0.0;
-            if (lightMesh.material.emissiveIntensity !== targetIntensity) {
-                lightMesh.material.emissiveIntensity = targetIntensity;
-            }
-        }
-        const coneMesh = this.lampPostMeshes.lightCone;
-        if (coneMesh) {
-            if (coneMesh.visible !== lightsOn) {
-                coneMesh.visible = lightsOn;
-            }
         }
     }
 
@@ -638,14 +433,14 @@ export default class CityManager {
     }
 
     clearCity() {
-        console.log("Clearing existing city (including lamp posts)...");
+        console.log("Clearing the existing city (including lamp posts)...");
         this.clearDebugVisuals();
         const disposeGroupContents = (group) => {
             if (!group) return;
-            while(group.children.length > 0){
+            while (group.children.length > 0) {
                 const obj = group.children[0];
                 group.remove(obj);
-                if(obj.geometry) obj.geometry.dispose();
+                if (obj.geometry) obj.geometry.dispose();
             }
         };
         if (this.roadGroup && this.roadGroup.parent) this.cityContainer.remove(this.roadGroup);
@@ -656,10 +451,13 @@ export default class CityManager {
         disposeGroupContents(this.contentGroup); this.contentGroup = null;
         if (this.groundGroup && this.groundGroup.parent) this.cityContainer.remove(this.groundGroup);
         disposeGroupContents(this.groundGroup); this.groundGroup = null;
-        if (this.lampPostMeshes.grey && this.lampPostMeshes.grey.parent) this.cityContainer.remove(this.lampPostMeshes.grey);
-        if (this.lampPostMeshes.light && this.lampPostMeshes.light.parent) this.cityContainer.remove(this.lampPostMeshes.light);
-        if (this.lampPostMeshes.lightCone && this.lampPostMeshes.lightCone.parent) this.cityContainer.remove(this.lampPostMeshes.lightCone);
-        this.lampPostMeshes = { grey: null, light: null, lightCone: null };
+        // Nettoyage des lampadaires via LampPostManager
+        if (this.lampPostManager && this.lampPostManager.lampPostMeshes) {
+            if (this.lampPostManager.lampPostMeshes.grey && this.lampPostManager.lampPostMeshes.grey.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.grey);
+            if (this.lampPostManager.lampPostMeshes.light && this.lampPostManager.lampPostMeshes.light.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.light);
+            if (this.lampPostManager.lampPostMeshes.lightCone && this.lampPostManager.lampPostMeshes.lightCone.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.lightCone);
+            this.lampPostManager.lampPostMeshes = { grey: null, light: null, lightCone: null };
+        }
         if (this.groundMesh && this.groundMesh.parent) this.scene.remove(this.groundMesh);
         if (this.groundMesh?.geometry) this.groundMesh.geometry.dispose();
         this.groundMesh = null;
@@ -685,9 +483,9 @@ export default class CityManager {
             }
         });
         this.materials = {};
-        if (this.lampPostConeGeometry) {
-            this.lampPostConeGeometry.dispose();
-            this.lampPostConeGeometry = null;
+        if (this.lampPostManager && this.lampPostManager.lampPostConeGeometry) {
+            this.lampPostManager.lampPostConeGeometry.dispose();
+            this.lampPostManager.lampPostConeGeometry = null;
         }
         this.assetLoader?.disposeAssets();
         this.assetLoader = null;
@@ -719,7 +517,9 @@ export default class CityManager {
 
     logLoadedAssets() {
         if (!this.assetLoader || !this.assetLoader.assets) return;
-        const counts = Object.entries(this.assetLoader.assets).map(([type, list]) => `${type}: ${list.length}`).join(', ');
+        const counts = Object.entries(this.assetLoader.assets)
+            .map(([type, list]) => `${type}: ${list.length}`)
+            .join(', ');
         console.log(`Assets loaded - ${counts}`);
     }
 
@@ -760,19 +560,11 @@ export default class CityManager {
         }
     }
 
-    disposeGroup(group) {
-        if (!group) return;
-        while(group.children.length > 0){
-            const obj = group.children[0];
-            group.remove(obj);
-            if(obj.geometry) obj.geometry.dispose();
-        }
-    }
-
     update() {
-        // Exemple : actualiser les lampadaires (par exemple en fonction de l'heure)
-        if (!this.lampPostMeshes || (!this.lampPostMeshes.light && !this.lampPostMeshes.lightCone)) return;
-        const currentHour = (this.experience?.world?.environment) ? this.experience.world.environment.getCurrentHour() : 12;
-        this.updateLampPostLights(currentHour);
+        if (!this.lampPostManager || (!this.lampPostManager.lampPostMeshes.light && !this.lampPostManager.lampPostMeshes.lightCone)) return;
+        const currentHour = (this.experience?.world?.environment)
+            ? this.experience.world.environment.getCurrentHour()
+            : 12;
+        this.lampPostManager.updateLampPostLights(currentHour);
     }
 }
