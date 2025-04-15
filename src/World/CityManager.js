@@ -8,6 +8,7 @@ import DistrictManager from './DistrictManager.js';
 import LampPostManager from './LampPostManager.js';
 import NavigationGraph from './NavigationGraph.js';
 import Pathfinder from './Pathfinder.js';
+import CitizenManager from './CitizenManager.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export default class CityManager {
@@ -28,22 +29,36 @@ export default class CityManager {
             houseZoneProbability: 0.40,
             skyscraperZoneProbability: 0.10,
             // Crosswalks
-            crosswalkWidth: 0.1, crosswalkHeight: 0.03, crosswalkStripeCount: 5, crosswalkStripeWidth: 0.6, crosswalkStripeGap: 0.5,
+            crosswalkWidth: 0.1, 
+            crosswalkHeight: 0.03, 
+            crosswalkStripeCount: 5, 
+            crosswalkStripeWidth: 0.6, 
+            crosswalkStripeGap: 0.5,
             // Districts
-            minDistrictSize: 5, maxDistrictSize: 10, forceBusinessMaxDistance: 0.15,
+            minDistrictSize: 5, 
+            maxDistrictSize: 10, 
+            forceBusinessMaxDistance: 0.15,
             districtProbabilities: {
                 business: { max: 0.15, decay: 10 },
                 industrial: { base: 0.01, threshold: 0.85, factor: 5, multiplier: 0.2 },
                 residential: { base: 0.8, peakCenter: 0.5, peakWidth: 0.2 }
             },
-            validationZoneCenterMaxDist: 0.20, validationZoneEdgeMinDist: 0.80,
-            minBusinessInCenter: 1, minIndustrialInEdge: 1,
-            strictMinIndustrialDist: 0.35, strictMaxBusinessDist: 0.60,
-            minTotalIndustrialDistricts: 1, maxTotalIndustrialDistricts: 5,
-            minTotalBusinessDistricts: 1, maxTotalBusinessDistricts: 4,
+            validationZoneCenterMaxDist: 0.20, 
+            validationZoneEdgeMinDist: 0.80,
+            minBusinessInCenter: 1, 
+            minIndustrialInEdge: 1,
+            strictMinIndustrialDist: 0.35, 
+            strictMaxBusinessDist: 0.60,
+            minTotalIndustrialDistricts: 1, 
+            maxTotalIndustrialDistricts: 5,
+            minTotalBusinessDistricts: 1, 
+            maxTotalBusinessDistricts: 4,
             maxDistrictRegenAttempts: 15,
             // Plot Content
-            sidewalkWidth: 2, sidewalkHeight: 0.2, centerlineWidth: 0.15, centerlineHeight: 0.02,
+            sidewalkWidth: 2, 
+            sidewalkHeight: 0.2, 
+            centerlineWidth: 0.15, 
+            centerlineHeight: 0.02,
             // Espacements Minimum
             minHouseSpacing: 5.0,
             minBuildingSpacing: 3.0,
@@ -58,34 +73,58 @@ export default class CityManager {
             // Assets
             houseModelDir: "Public/Assets/Models/Houses/", 
             houseModelFiles: [ { file: "House1.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 } ],
-            houseBaseWidth: 5, houseBaseHeight: 6, houseBaseDepth: 5,
+            houseBaseWidth: 5, 
+            houseBaseHeight: 6, 
+            houseBaseDepth: 5,
             buildingModelDir: "Public/Assets/Models/Buildings/", 
             buildingModelFiles: [ { file: "Building1.fbx", scale: 0.8 }, { file: "Building10.glb", scale: 0.8 } ],
-            buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
+            buildingBaseWidth: 10, 
+            buildingBaseHeight: 20, 
+            buildingBaseDepth: 10,
             industrialModelDir: "Public/Assets/Models/Industrials/", 
             industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 1 }, { file: "Factory2_glb.glb", scale: 1 }, { file: "Factory3_glb.glb", scale: 1 } ],
-            industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
+            industrialBaseWidth: 18, 
+            industrialBaseHeight: 12, 
+            industrialBaseDepth: 25,
             parkModelDir: "Public/Assets/Models/Parks/", 
             parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
-            parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
+            parkBaseWidth: 15, 
+            parkBaseHeight: 3, 
+            parkBaseDepth: 15,
             treeModelDir: "Public/Assets/Models/Trees/", 
             treeModelFiles: [{ file: "Tree2.glb", scale: 0.9 }, { file: "Tree3.glb", scale: 0.9 }, { file: "Tree4.glb", scale: 0.9 }, { file: "Tree5.glb", scale: 0.9 }, { file: "Tree6.glb", scale: 0.9 } ],
-            treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
+            treeBaseWidth: 4, 
+            treeBaseHeight: 8, 
+            treeBaseDepth: 4,
             skyscraperModelDir: "Public/Assets/Models/Skyscrapers/", 
             skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 } ],
-            skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
+            skyscraperBaseWidth: 15, 
+            skyscraperBaseHeight: 80, 
+            skyscraperBaseDepth: 15,
             // Placement d'arbres
             treePlacementProbabilitySidewalk: 0.3,
             treePlacementProbabilityPark: 0.04,
             // Debug
             showDistrictBoundaries: false,
             // Time
-            dayNightCycleEnabled: true, dayDurationMinutes: 1, startTimeOfDay: 0.25,
+            dayNightCycleEnabled: true, 
+            dayDurationMinutes: 1, 
+            startTimeOfDay: 0.25,
             // Agents
-            agentScale: 0.1, agentYOffset: 0.35, agentRotationSpeed: 20, agentWalkSpeed: 10,
-            agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7, agentSwingAmplitude: 1.2,
-            agentAnkleRotationAmplitude: Math.PI / 8, agentHandTiltAmplitude: 0.2, agentHeadNodAmplitude: 0.05,
-            agentHeadYawAmplitude: 0.1, agentHeadTiltAmplitude: 0.08, agentHeadBobAmplitude: 0.06,
+            agentScale: 0.1, 
+            agentYOffset: 0.35, 
+            agentRotationSpeed: 20, 
+            agentWalkSpeed: 10,
+            agentBobAmplitude: 0.15, 
+            agentStepLength: 1.5, 
+            agentStepHeight: 0.7, 
+            agentSwingAmplitude: 1.2,
+            agentAnkleRotationAmplitude: Math.PI / 8, 
+            agentHandTiltAmplitude: 0.2, 
+            agentHeadNodAmplitude: 0.05,
+            agentHeadYawAmplitude: 0.1, 
+            agentHeadTiltAmplitude: 0.08, 
+            agentHeadBobAmplitude: 0.06,
             agentAnimationSpeedFactor: 8,
             maxAgents: 500,
             // Capacités par défaut
@@ -164,15 +203,13 @@ export default class CityManager {
         this.debugGroup = new THREE.Group();
         this.debugGroup.name = "DebugVisuals";
 
-        // --- Registres ---
-        this.buildingInstances = new Map();
-        this.citizens = new Map();
-        this.nextBuildingInstanceId = 0;
+        // --- CitizenManager ---
+        this.citizenManager = new CitizenManager(this.config);
 
-        // --- Lampadaires via LampPostManager ---
+        // --- LampPostManager ---
         this.lampPostManager = new LampPostManager(this.config, this.materials, this.cityContainer);
 
-        // Ajout des groupes dans la scène
+        // Ajout dans la scène
         this.scene.add(this.cityContainer);
         if (this.experience.isDebugMode || this.config.showDistrictBoundaries) {
             this.cityContainer.add(this.debugGroup);
@@ -180,110 +217,31 @@ export default class CityManager {
         console.log("CityManager initialized (with park probability).");
     }
 
+    // --- Délégation vers CitizenManager ---
     registerBuildingInstance(plotId, assetType, position, capacityOverride = null) {
-        const id = `bldg_${this.nextBuildingInstanceId++}`;
-        let capacity = 0;
-        let isWorkplace = false;
-        switch (assetType) {
-            case 'house':
-                capacity = capacityOverride ?? this.config.maxCitizensPerHouse ?? 5;
-                break;
-            case 'building':
-                capacity = capacityOverride ?? this.config.maxCitizensPerBuilding ?? 10;
-                break;
-            case 'skyscraper':
-                capacity = capacityOverride ?? this.config.maxWorkersPerSkyscraper ?? 100;
-                isWorkplace = true;
-                break;
-            case 'industrial':
-                capacity = capacityOverride ?? this.config.maxWorkersPerIndustrial ?? 50;
-                isWorkplace = true;
-                break;
-            case 'park':
-            default:
-                capacity = 0;
-                break;
-        }
-        const buildingInfo = {
-            id: id,
-            plotId: plotId,
-            type: assetType,
-            position: position.clone(),
-            capacity: capacity,
-            isWorkplace: isWorkplace,
-            occupants: []
-        };
-        this.buildingInstances.set(id, buildingInfo);
-        return buildingInfo;
+        return this.citizenManager.registerBuildingInstance(plotId, assetType, position, capacityOverride);
     }
 
     registerCitizen(citizenId, agentLogic) {
-        if (this.citizens.has(citizenId)) {
-            console.warn(`Citizen ${citizenId} already registered.`);
-            return this.citizens.get(citizenId);
-        }
-        const citizenInfo = {
-            id: citizenId,
-            agentLogic: agentLogic,
-            homeBuildingId: null,
-            workBuildingId: null,
-        };
-        this.citizens.set(citizenId, citizenInfo);
-        return citizenInfo;
+        return this.citizenManager.registerCitizen(citizenId, agentLogic);
     }
 
     assignHomeToCitizen(citizenId) {
-        const citizenInfo = this.citizens.get(citizenId);
-        if (!citizenInfo || citizenInfo.homeBuildingId) return false;
-        const potentialHomes = Array.from(this.buildingInstances.values()).filter(b =>
-            (b.type === 'house' || b.type === 'building') &&
-            b.occupants.length < b.capacity
-        );
-        if (potentialHomes.length === 0) {
-            console.warn(`No available home for citizen ${citizenId}`);
-            return false;
-        }
-        const home = potentialHomes[Math.floor(Math.random() * potentialHomes.length)];
-        home.occupants.push(citizenId);
-        citizenInfo.homeBuildingId = home.id;
-        if (citizenInfo.agentLogic) {
-            citizenInfo.agentLogic.homeBuildingId = home.id;
-        } else {
-            console.warn(`Missing agent logic for citizen ${citizenId} during home assignment.`);
-        }
-        console.log(`Citizen ${citizenId} assigned home ${home.id} (Type: ${home.type})`);
-        return true;
+        return this.citizenManager.assignHomeToCitizen(citizenId);
     }
 
     assignWorkplaceToCitizen(citizenId) {
-        const citizenInfo = this.citizens.get(citizenId);
-        if (!citizenInfo || citizenInfo.workBuildingId) return false;
-        const potentialWorkplaces = Array.from(this.buildingInstances.values()).filter(b =>
-            b.isWorkplace && b.occupants.length < b.capacity
-        );
-        if (potentialWorkplaces.length === 0) {
-            console.warn(`No available workplace for citizen ${citizenId}`);
-            return false;
-        }
-        const workplace = potentialWorkplaces[Math.floor(Math.random() * potentialWorkplaces.length)];
-        workplace.occupants.push(citizenId);
-        citizenInfo.workBuildingId = workplace.id;
-        if (citizenInfo.agentLogic) {
-            citizenInfo.agentLogic.workBuildingId = workplace.id;
-        } else {
-            console.warn(`Missing agent logic for citizen ${citizenId} during work assignment.`);
-        }
-        console.log(`Citizen ${citizenId} assigned workplace ${workplace.id} (Type: ${workplace.type})`);
-        return true;
+        return this.citizenManager.assignWorkplaceToCitizen(citizenId);
     }
 
     getBuildingInfo(buildingInstanceId) {
-        return this.buildingInstances.get(buildingInstanceId);
+        return this.citizenManager.getBuildingInfo(buildingInstanceId);
     }
 
     getCitizenInfo(citizenId) {
-        return this.citizens.get(citizenId);
+        return this.citizenManager.getCitizenInfo(citizenId);
     }
+    // --- Fin délégation ---
 
     async generateCity() {
         console.time("CityGeneration");
@@ -291,10 +249,12 @@ export default class CityManager {
         try {
             console.log("--- Starting city generation ---");
             this.createGlobalGround();
+
             console.time("AssetLoading");
             await this.assetLoader.loadAssets();
             console.timeEnd("AssetLoading");
             this.logLoadedAssets();
+
             console.time("LayoutGeneration");
             this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
             console.timeEnd("LayoutGeneration");
@@ -351,7 +311,7 @@ export default class CityManager {
             this.cityContainer.add(this.groundGroup);
             console.timeEnd("ContentGeneration");
 
-            console.log(`Total Building Instances Registered: ${this.buildingInstances.size}`);
+            console.log(`Total Building Instances Registered: ${this.citizenManager.buildingInstances.size}`);
 
             // --- Lamp Post Generation via LampPostManager ---
             this.lampPostManager.addLampPosts(this.leafPlots);
@@ -451,11 +411,14 @@ export default class CityManager {
         disposeGroupContents(this.contentGroup); this.contentGroup = null;
         if (this.groundGroup && this.groundGroup.parent) this.cityContainer.remove(this.groundGroup);
         disposeGroupContents(this.groundGroup); this.groundGroup = null;
-        // Nettoyage des lampadaires via LampPostManager
+        // Clearing lamp posts via LampPostManager
         if (this.lampPostManager && this.lampPostManager.lampPostMeshes) {
-            if (this.lampPostManager.lampPostMeshes.grey && this.lampPostManager.lampPostMeshes.grey.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.grey);
-            if (this.lampPostManager.lampPostMeshes.light && this.lampPostManager.lampPostMeshes.light.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.light);
-            if (this.lampPostManager.lampPostMeshes.lightCone && this.lampPostManager.lampPostMeshes.lightCone.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.lightCone);
+            if (this.lampPostManager.lampPostMeshes.grey && this.lampPostManager.lampPostMeshes.grey.parent)
+                this.cityContainer.remove(this.lampPostManager.lampPostMeshes.grey);
+            if (this.lampPostManager.lampPostMeshes.light && this.lampPostManager.lampPostMeshes.light.parent)
+                this.cityContainer.remove(this.lampPostManager.lampPostMeshes.light);
+            if (this.lampPostManager.lampPostMeshes.lightCone && this.lampPostManager.lampPostMeshes.lightCone.parent)
+                this.cityContainer.remove(this.lampPostManager.lampPostMeshes.lightCone);
             this.lampPostManager.lampPostMeshes = { grey: null, light: null, lightCone: null };
         }
         if (this.groundMesh && this.groundMesh.parent) this.scene.remove(this.groundMesh);
@@ -464,13 +427,14 @@ export default class CityManager {
         this.roadGenerator?.reset();
         this.contentGenerator?.reset(this.assetLoader);
         this.layoutGenerator?.reset();
-        this.navigationGraph?.destroy(); this.navigationGraph = null;
+        this.navigationGraph?.destroy();
+        this.navigationGraph = null;
         this.pathfinder = null;
         this.leafPlots = [];
         this.districts = [];
-        this.buildingInstances.clear();
-        this.citizens.clear();
-        this.nextBuildingInstanceId = 0;
+        // Reset CitizenManager data
+        this.citizenManager.buildingInstances.clear();
+        this.citizenManager.citizens.clear();
         console.log("City cleared.");
     }
 
@@ -503,8 +467,9 @@ export default class CityManager {
         this.districts = null;
         this.leafPlots = null;
         this.debugGroup = null;
-        this.buildingInstances = null;
-        this.citizens = null;
+        // Destroy CitizenManager data
+        this.citizenManager.buildingInstances.clear();
+        this.citizenManager.citizens.clear();
         console.log("CityManager destroyed.");
     }
 
@@ -512,8 +477,8 @@ export default class CityManager {
     getDistricts() { return this.districts || []; }
     getNavigationGraph() { return this.navigationGraph; }
     getPathfinder() { return this.pathfinder; }
-    getBuildingInstances() { return this.buildingInstances; }
-    getCitizens() { return this.citizens; }
+    getBuildingInstances() { return this.citizenManager.buildingInstances; }
+    getCitizens() { return this.citizenManager.citizens; }
 
     logLoadedAssets() {
         if (!this.assetLoader || !this.assetLoader.assets) return;
@@ -561,10 +526,15 @@ export default class CityManager {
     }
 
     update() {
-        if (!this.lampPostManager || (!this.lampPostManager.lampPostMeshes.light && !this.lampPostManager.lampPostMeshes.lightCone)) return;
-        const currentHour = (this.experience?.world?.environment)
-            ? this.experience.world.environment.getCurrentHour()
-            : 12;
-        this.lampPostManager.updateLampPostLights(currentHour);
+        const deltaTime = this.experience.time.delta;
+        this.environment?.update(deltaTime);
+        const currentHour = this.environment?.getCurrentHour() ?? 12;
+        if (this.environment?.isInitialized && this.contentGenerator) {
+            this.contentGenerator.update(currentHour);
+        }
+        if (this.lampPostManager) {
+            this.lampPostManager.updateLampPostLights(currentHour);
+        }
+        // Les agents sont mis à jour dans AgentManager (géré dans World)
     }
 }
