@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import HouseRenderer from './HouseRenderer.js';
+import BuildingRenderer from './BuildingRenderer.js';
 
 export default class PlotContentGenerator {
     constructor(config, materials, debugPlotGridMaterial) {
@@ -33,8 +34,9 @@ export default class PlotContentGenerator {
         this.navigationGraph = null;
         this.debugPlotGridGroup = null;
 
-        // Instanciation du module dédié aux maisons
+        // Instanciation des modules dédiés aux maisons et aux immeubles
         this.houseRenderer = new HouseRenderer(config, materials);
+        this.buildingRenderer = new BuildingRenderer(config, materials);
 
         console.log("PlotContentGenerator initialized (avec stockage refs fenêtres).");
     }
@@ -386,7 +388,7 @@ export default class PlotContentGenerator {
                     }
                 }
             } else {
-                // Traitement standard pour 'building', 'industrial' et 'skyscraper'
+                // Traitement standard pour 'building', 'industrial' et 'skyscraper' via BuildingRenderer
                 for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
                     for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
                         const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + gapX)) + targetBuildingWidth / 2;
@@ -407,18 +409,21 @@ export default class PlotContentGenerator {
                             targetRotationY = Math.PI;
   
                         if (assetInfo && ['building', 'industrial', 'skyscraper'].includes(zoneType)) {
-                            const instanceMatrix = this.calculateInstanceMatrix(
-                                worldCellCenterPos.x, worldCellCenterPos.z,
-                                assetInfo.sizeAfterFitting.y,
-                                assetInfo.fittingScaleFactor,
-                                assetInfo.centerOffset,
+                            const buildingInstanceData = this.buildingRenderer.generateBuildingInstance(
+                                worldCellCenterPos,
+                                groundLevel,
+                                targetRotationY,
                                 baseScaleFactor,
-                                targetRotationY
+                                assetInfo
                             );
                             const modelId = assetInfo.id;
                             if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
-                            if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
-                            this.instanceData[zoneType][modelId].push(instanceMatrix.clone());
+                            for (const part in buildingInstanceData) {
+                                if (buildingInstanceData.hasOwnProperty(part)) {
+                                    if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
+                                    this.instanceData[zoneType][modelId].push(...buildingInstanceData[part]);
+                                }
+                            }
                             const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
                             const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition);
                             if (registeredBuilding) {
@@ -520,8 +525,9 @@ export default class PlotContentGenerator {
             skyscraper: {},
             crosswalk: {}
         };
-        // Réinitialise également le HouseRenderer
+        // Réinitialise également le HouseRenderer et le BuildingRenderer
         this.houseRenderer.reset();
+        this.buildingRenderer.reset();
 
         if (this.stripeBaseGeometry) {
             this.stripeBaseGeometry.dispose();
@@ -834,59 +840,59 @@ export default class PlotContentGenerator {
         return subZones;
     }
 
-	    /**
+    /**
      * Met à jour l'apparence des fenêtres en fonction de l'heure (allumage/extinction des lumières).
      * Les fenêtres des gratte-ciel, maisons et immeubles sont mises à jour selon leurs propriétés spécifiques.
      *
      * @param {number} currentHour - L'heure actuelle (en 24h) pour déterminer l'état lumineux.
      */
-	update(currentHour) {
-		// Les lumières sont allumées entre 18h inclus et 6h exclus
-		const lightsOn = (currentHour >= 18 || currentHour < 6);
+    update(currentHour) {
+        // Les lumières sont allumées entre 18h inclus et 6h exclus
+        const lightsOn = (currentHour >= 18 || currentHour < 6);
 
-		// Parcourt toutes les InstancedMesh des fenêtres stockées dans this.windowInstancedMeshes
-		if (!this.windowInstancedMeshes) return;
-		this.windowInstancedMeshes.forEach(mesh => {
-			if (mesh.material) {
-				const material = mesh.material;
-				let needsMaterialUpdate = false;
-				// Identification du type de fenêtre selon le nom du matériau
-				const isSkyscraperWindow = material.name === "SkyscraperWindowMat_Standard";
-				const isHouseWindow = material.name.startsWith("HouseWindowMat_Inst_");
-				const isBuildingWindow = material.name === "BuildingWindowMat";
-				// Intensité émissive par défaut (éteint)
-				let targetIntensity = 0.0;
+        // Parcourt toutes les InstancedMesh des fenêtres stockées dans this.windowInstancedMeshes
+        if (!this.windowInstancedMeshes) return;
+        this.windowInstancedMeshes.forEach(mesh => {
+            if (mesh.material) {
+                const material = mesh.material;
+                let needsMaterialUpdate = false;
+                // Identification du type de fenêtre selon le nom du matériau
+                const isSkyscraperWindow = material.name === "SkyscraperWindowMat_Standard";
+                const isHouseWindow = material.name.startsWith("HouseWindowMat_Inst_");
+                const isBuildingWindow = material.name === "BuildingWindowMat";
+                // Intensité émissive par défaut (éteint)
+                let targetIntensity = 0.0;
 
-				if (isSkyscraperWindow) {
-					// Logique spécifique pour les fenêtres de gratte-ciel
-					targetIntensity = lightsOn ? 1.17 : 0.0;
-					const targetTransmission = lightsOn ? 0.0 : 0.0; // Pas de transmission dans notre cas
-					const targetRoughness = lightsOn ? 0.8 : 0.1;
-					if (material.transmission !== targetTransmission) {
-						material.transmission = targetTransmission;
-						needsMaterialUpdate = true;
-					}
-					if (material.roughness !== targetRoughness) {
-						material.roughness = targetRoughness;
-						needsMaterialUpdate = true;
-					}
-				} else if (isHouseWindow) {
-					// Logique spécifique pour les fenêtres de maison
-					targetIntensity = lightsOn ? 1.23 : 0.0;
-				} else if (isBuildingWindow) {
-					// Logique spécifique pour les fenêtres d'immeuble
-					targetIntensity = lightsOn ? 0.88 : 0.0;
-				}
+                if (isSkyscraperWindow) {
+                    // Logique spécifique pour les fenêtres de gratte-ciel
+                    targetIntensity = lightsOn ? 1.17 : 0.0;
+                    const targetTransmission = lightsOn ? 0.0 : 0.0; // Pas de transmission dans notre cas
+                    const targetRoughness = lightsOn ? 0.8 : 0.1;
+                    if (material.transmission !== targetTransmission) {
+                        material.transmission = targetTransmission;
+                        needsMaterialUpdate = true;
+                    }
+                    if (material.roughness !== targetRoughness) {
+                        material.roughness = targetRoughness;
+                        needsMaterialUpdate = true;
+                    }
+                } else if (isHouseWindow) {
+                    // Logique spécifique pour les fenêtres de maison
+                    targetIntensity = lightsOn ? 1.23 : 0.0;
+                } else if (isBuildingWindow) {
+                    // Logique spécifique pour les fenêtres d'immeuble
+                    targetIntensity = lightsOn ? 0.88 : 0.0;
+                }
 
-				// Application de l'intensité émissive
-				if (material.emissiveIntensity !== targetIntensity) {
-					material.emissiveIntensity = targetIntensity;
-				}
-				// Mise à jour du matériau si nécessaire
-				if (needsMaterialUpdate) {
-					material.needsUpdate = true;
-				}
-			}
-		});
-	}
-}	
+                // Application de l'intensité émissive
+                if (material.emissiveIntensity !== targetIntensity) {
+                    material.emissiveIntensity = targetIntensity;
+                }
+                // Mise à jour du matériau si nécessaire
+                if (needsMaterialUpdate) {
+                    material.needsUpdate = true;
+                }
+            }
+        });
+    }
+}
