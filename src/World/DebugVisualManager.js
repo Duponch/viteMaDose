@@ -9,18 +9,20 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
  * DebugVisualManager centralise la création et le nettoyage des visuels de debug.
  */
 export default class DebugVisualManager {
-    /**
+	/**
      * Constructeur.
-     * @param {THREE.Group} [parentGroup] - Le groupe auquel ajouter les visuels de debug.
-     * @param {object} materials - Un objet contenant les matériaux à utiliser.
-     * @param {object} sizes - L'instance Sizes pour la résolution (utilisé par LineMaterial).
+     * @param {THREE.Group} [parentGroup]
+     * @param {object} materials
+     * @param {object} sizes
+     * @param {object} config
      */
-    constructor(parentGroup = null, materials = {}, sizes = null) {
-        this.parentGroup = parentGroup || new THREE.Group();
-        this.parentGroup.name = "DebugVisuals";
-        this.materials = materials;
-        this.debugMaterials = {}; // Cache pour matériaux partagés (lignes, sols transparents)
-        this.sizes = sizes;
+	constructor(parentGroup = null, materials = {}, sizes = null, config = {}) {
+		this.parentGroup = parentGroup || new THREE.Group();
+		this.parentGroup.name = "DebugVisuals";
+		this.materials = materials;
+		this.debugMaterials = {};
+		this.sizes = sizes;
+		this.config = config;
 
         // --- Couleurs (inchangées) ---
         this.zoneColors = {
@@ -318,42 +320,84 @@ export default class DebugVisualManager {
 		});
 	}
 
-    // --- NOUVELLE MÉTHODE : Créer les outlines des bâtiments ---
-    /**
-     * Crée les outlines (boîtes filaires) pour visualiser les bâtiments enregistrés.
-     * @param {Map<string, object>} buildingInstancesMap - Map des instances de bâtiments (de CitizenManager).
-     * @param {object} config - La configuration pour obtenir les tailles de base.
+	/**
+     * Crée les outlines (boîtes OPAQUES) pour visualiser les bâtiments enregistrés,
+     * en utilisant des dimensions et une réduction de taille configurables par type.
+     * @param {Map<string, object>} buildingInstancesMap
+     * @param {object} config - Passé pour info, mais utilise this.config stocké.
+     * @param {number} yOffset
      */
-    createBuildingOutlines(buildingInstancesMap, config, yOffset = 0.05) {
+    createBuildingOutlines(buildingInstancesMap, config, yOffset = 0.05) { // config n'est plus utilisé directement ici
         const visualType = 'BuildingOutlines';
         this.clearDebugVisuals(visualType);
         let buildingCount = 0;
         const matricesByTypeColor = {};
 
         buildingInstancesMap.forEach(buildingInfo => {
-            // ... (calcul dimensions et matrice inchangé)
             const type = buildingInfo.type;
             const position = buildingInfo.position;
-            let baseW = 5, baseH = 5, baseD = 5; let scaleFactor = 1.0; let isValidType = true;
+            let baseW = 5, baseH = 5, baseD = 5;
+            let scaleFactor = 1.0;
+            let isValidType = true;
+            // --- NOUVEAU: Récupérer le facteur de réduction spécifique au type ---
+            let specificDebugScaleReduction = 0.7; // Fallback
+            const debugConfig = this.config.debug || {}; // Accéder à la config stockée
+
             switch(type) {
-                case 'house': baseW = config.houseBaseWidth || 5; baseH = config.houseBaseHeight || 6; baseD = config.houseBaseDepth || 5; scaleFactor = config.gridHouseBaseScale || 1.0; break;
-                case 'building': baseW = config.buildingBaseWidth || 10; baseH = config.buildingBaseHeight || 20; baseD = config.buildingBaseDepth || 10; scaleFactor = config.gridBuildingBaseScale || 1.0; break;
-                case 'industrial': baseW = config.industrialBaseWidth || 18; baseH = config.industrialBaseHeight || 12; baseD = config.industrialBaseDepth || 25; scaleFactor = config.gridIndustrialBaseScale || 1.0; break;
-                case 'skyscraper': baseW = config.skyscraperBaseWidth || 15; baseH = config.skyscraperBaseHeight || 80; baseD = config.skyscraperBaseDepth || 15; scaleFactor = config.gridSkyscraperBaseScale || 1.0; break;
+                case 'house':
+                    baseW = this.config.houseBaseWidth || 5; baseH = this.config.houseBaseHeight || 6; baseD = this.config.houseBaseDepth || 5;
+                    scaleFactor = this.config.gridHouseBaseScale || 1.0;
+                    specificDebugScaleReduction = debugConfig.houseScaleReduction ?? 0.8; // Utiliser ?? pour fallback
+                    break;
+                case 'building':
+                    baseW = this.config.buildingBaseWidth || 10; baseH = this.config.buildingBaseHeight || 20; baseD = this.config.buildingBaseDepth || 10;
+                    scaleFactor = this.config.gridBuildingBaseScale || 1.0;
+                    specificDebugScaleReduction = debugConfig.buildingScaleReduction ?? 0.7;
+                    break;
+                case 'industrial':
+                    baseW = this.config.industrialBaseWidth || 18; baseH = this.config.industrialBaseHeight || 12; baseD = this.config.industrialBaseDepth || 25;
+                    scaleFactor = this.config.gridIndustrialBaseScale || 1.0;
+                    specificDebugScaleReduction = debugConfig.industrialScaleReduction ?? 0.6;
+                    break;
+                case 'skyscraper':
+                    baseW = this.config.skyscraperBaseWidth || 15; baseH = this.config.skyscraperBaseHeight || 80; baseD = this.config.skyscraperBaseDepth || 15;
+                    scaleFactor = this.config.gridSkyscraperBaseScale || 1.0;
+                    specificDebugScaleReduction = debugConfig.skyscraperScaleReduction ?? 0.5;
+                    break;
                 default: isValidType = false; break;
             }
+             // --- FIN NOUVEAU ---
+
             if (!isValidType) return;
-            const targetWidth = baseW * scaleFactor; const targetHeight = baseH * scaleFactor; const targetDepth = baseD * scaleFactor;
+
+            const targetWidth = baseW * scaleFactor;
+            const targetHeight = baseH * scaleFactor;
+            const targetDepth = baseD * scaleFactor;
+
             if (!isFinite(targetWidth) || !isFinite(targetHeight) || !isFinite(targetDepth) || targetWidth <= 0 || targetHeight <= 0 || targetDepth <= 0) return;
+
+            // Appliquer la réduction spécifique
+            const finalDebugWidth = targetWidth * specificDebugScaleReduction;
+            const finalDebugHeight = targetHeight * specificDebugScaleReduction;
+            const finalDebugDepth = targetDepth * specificDebugScaleReduction;
+
             const color = this.buildingColors[type] || this.buildingColors.default;
             const colorHex = color.getHexString();
             const materialKey = `building_outline_${colorHex}`;
+
             const matrix = new THREE.Matrix4();
-            const finalPosition = new THREE.Vector3( position.x, targetHeight / 2 + yOffset, position.z );
+            const finalPosition = new THREE.Vector3(
+                position.x,
+                finalDebugHeight / 2 + yOffset, // Utiliser hauteur réduite
+                position.z
+            );
             const quaternion = new THREE.Quaternion();
-            const scale = new THREE.Vector3(targetWidth, targetHeight, targetDepth);
+            const scale = new THREE.Vector3(finalDebugWidth, finalDebugHeight, finalDebugDepth); // Utiliser dimensions réduites
+
             if (!isFinite(finalPosition.x) || !isFinite(finalPosition.y) || !isFinite(finalPosition.z)) return;
+
             matrix.compose(finalPosition, quaternion, scale);
+
             if (!matricesByTypeColor[materialKey]) { matricesByTypeColor[materialKey] = { color: color, matrices: [] }; }
             matricesByTypeColor[materialKey].matrices.push(matrix);
             buildingCount++;
@@ -364,9 +408,7 @@ export default class DebugVisualManager {
              const data = matricesByTypeColor[materialKey];
              const matrices = data.matrices;
              if (matrices.length === 0) continue;
-             // --- Obtenir le matériau OPAQUE avec le bon renderOrder ---
-             const material = this._getOrCreateBuildingOutlineMaterial(materialKey, data.color); // Utilise le cache/créateur spécifique
-             // ---
+             const material = this._getOrCreateBuildingOutlineMaterial(materialKey, data.color);
              const instancedMesh = new THREE.InstancedMesh(this.sharedBuildingBoxGeometry, material, matrices.length);
              matrices.forEach((mat, index) => { instancedMesh.setMatrixAt(index, mat); });
              instancedMesh.instanceMatrix.needsUpdate = true;

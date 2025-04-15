@@ -114,7 +114,14 @@ export default class CityManager {
             treePlacementProbabilitySidewalk: 0.3,
             treePlacementProbabilityPark: 0.04,
             // Debug
-            showDistrictBoundaries: false,
+            debug: {
+                showDistrictBoundaries: false, // Gardé de l'ancienne config
+                // Facteurs de réduction pour la taille des cubes de debug des bâtiments
+                houseScaleReduction: 0.4,       // Maison debug = 80% de la taille calculée
+                buildingScaleReduction: 0.8,    // Immeuble debug = 70%
+                industrialScaleReduction: 0.4,  // Industriel debug = 60%
+                skyscraperScaleReduction: 1.01   // Gratte-ciel debug = 50%
+            },
             // Time
             dayNightCycleEnabled: true,
             dayDurationMinutes: 1,
@@ -232,7 +239,12 @@ export default class CityManager {
 
         // --- Instance de DebugVisualManager ---
         // Créé ici pour pouvoir être utilisé par DistrictManager
-		this.debugVisualManager = new DebugVisualManager(null, this.materials, this.experience.sizes); // <-- MODIFIÉ
+		this.debugVisualManager = new DebugVisualManager(
+            null,
+            this.materials,
+            this.experience.sizes,
+            this.config
+        );
         if (this.experience.isDebugMode || this.config.showDistrictBoundaries) {
             this.cityContainer.add(this.debugVisualManager.parentGroup);
         }
