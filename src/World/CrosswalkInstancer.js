@@ -62,46 +62,49 @@ export default class CrosswalkInstancer {
         const offsetDirection = new THREE.Vector3(); // Direction perpendiculaire au passage piéton
         const yAxis = new THREE.Vector3(0, 1, 0); // Axe de rotation
 
+		const baseStripeDepth = 2;
+
         crosswalkInfos.forEach(info => {
 			if (!info || !info.position || info.angle === undefined || info.length === undefined) {
 				console.warn("CrosswalkInstancer: Invalid crosswalk info object skipped:", info);
 				return;
 			}
 		
-			basePosition.copy(info.position); // Position centrale du passage piéton
+			basePosition.copy(info.position);
 		
-			// *** Utiliser EXACTEMENT la logique de l'ancienne version ***
-			const finalAngle = info.angle + Math.PI / 2; // Angle de la bande
+			// Calcul de la rotation et de la direction d'offset (corrigé précédemment)
+			const finalAngle = info.angle + Math.PI / 2;
 			quaternion.setFromAxisAngle(yAxis, finalAngle);
-		
-			// Déterminer offsetDirection basé sur finalAngle (comme avant)
-			if (Math.abs(finalAngle % Math.PI) < 0.01) { // Bandes horizontales (rotation 0 ou PI)
-				offsetDirection.set(1, 0, 0); // Décalage le long de X
-			} else { // Bandes verticales (rotation PI/2 ou -PI/2)
-				offsetDirection.set(0, 0, 1); // Décalage le long de Z
+			if (Math.abs(finalAngle % Math.PI) < 0.01) {
+				offsetDirection.set(1, 0, 0);
+			} else {
+				offsetDirection.set(0, 0, 1);
 			}
 		
-			// L'échelle reste basée sur la longueur de la bande (info.length)
-			// en supposant que la géométrie de base a une longueur de 1.
-			scale.set(1, 1, info.length);
+			// --- CORRECTION DU CALCUL DE L'ÉCHELLE ---
+			if (baseStripeDepth <= 0) {
+				console.error("CrosswalkInstancer: baseStripeDepth must be positive.");
+				return; // Éviter division par zéro
+			}
+			// Calculer le facteur d'échelle Z nécessaire
+			const scaleFactorZ = info.length / baseStripeDepth;
+			// Appliquer l'échelle (X et Y restent à 1)
+			scale.set(1, 1, scaleFactorZ);
+			// --- FIN CORRECTION ÉCHELLE ---
 		
-			// Calculer les positions des bandes (logique des offsets inchangée)
+			// Calcul des positions des bandes (inchangé)
 			for (let i = 0; i < stripeCount; i++) {
 				const currentOffset = initialOffset + i * stripeTotalWidth;
-		
-				// Calculer la position de la bande
 				stripePosition.copy(basePosition).addScaledVector(offsetDirection, currentOffset);
-				// Ajuster la hauteur Y
 				stripePosition.y = stripeHeight / 2 + yOffset;
 		
-				// Composer la matrice finale
-				matrix.compose(stripePosition, quaternion, scale); // Utilise stripePosition, la rotation (quaternion) et l'échelle
+				// Composer la matrice finale (inchangé)
+				matrix.compose(stripePosition, quaternion, scale); // Utilise maintenant la bonne échelle
 		
-				// Ajouter les données d'instance
 				instanceDataManager.addData('crosswalk', this.crosswalkStripeKey, matrix);
 				stripesAdded++;
 			}
-		}); // Fin boucle crosswalkInfos corrigée
+		}); // Fin boucle crosswalkInfos
 
         console.log(`CrosswalkInstancer: ${stripesAdded} crosswalk stripe instances added to data.`);
     }
