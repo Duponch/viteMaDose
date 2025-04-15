@@ -6,8 +6,7 @@ import PlotContentGenerator from './PlotContentGenerator.js';
 import CityAssetLoader from './CityAssetLoader.js';
 import DistrictManager from './DistrictManager.js';
 import LampPostManager from './LampPostManager.js';
-import NavigationGraph from './NavigationGraph.js';
-import Pathfinder from './Pathfinder.js';
+import NavigationManager from './NavigationManager.js'; // Utilisation de NavigationManager
 import CitizenManager from './CitizenManager.js';
 import DebugVisualManager from './DebugVisualManager.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -17,7 +16,7 @@ export default class CityManager {
         this.experience = experience;
         this.scene = this.experience.scene;
 
-        // --- Configuration Initiale ---
+        // --- Configuration initiale ---
         this.config = {
             // Map & Layout
             mapSize: 800,
@@ -127,7 +126,7 @@ export default class CityManager {
             agentHeadTiltAmplitude: 0.08, 
             agentHeadBobAmplitude: 0.06,
             agentAnimationSpeedFactor: 8,
-            maxAgents: 500,
+            maxAgents: 800,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
@@ -189,8 +188,12 @@ export default class CityManager {
         this.layoutGenerator = new CityLayoutGenerator(this.config);
         this.roadGenerator = new RoadNetworkGenerator(this.config, this.materials);
         this.contentGenerator = new PlotContentGenerator(this.config, this.materials, this.materials.debugPlotGridMaterial);
-        this.navigationGraph = null;
-        this.pathfinder = null;
+
+        // --- Navigation via NavigationManager ---
+        this.navigationManager = new NavigationManager(this.config);
+        this.navigationGraph = null; // Sera initialisé via NavigationManager
+        this.pathfinder = null;       // Sera initialisé via NavigationManager
+
         this.districts = [];
         this.leafPlots = [];
 
@@ -204,8 +207,6 @@ export default class CityManager {
 
         // --- Instance de DebugVisualManager ---
         this.debugVisualManager = new DebugVisualManager(null, this.materials);
-        // Si le mode debug est activé ou si l'on souhaite afficher les limites des districts,
-        // ajoute le groupe de DebugVisualManager à la ville.
         if (this.experience.isDebugMode || this.config.showDistrictBoundaries) {
             this.cityContainer.add(this.debugVisualManager.parentGroup);
         }
@@ -290,14 +291,22 @@ export default class CityManager {
             console.timeEnd("RoadAndCrosswalkInfoGeneration");
             console.log(`Road network generated and ${crosswalkInfos.length} crosswalk locations identified.`);
 
+            // --- NavigationManager ---
+            // Ré-instancier NavigationManager si nécessaire (car clearCity l'a détruit)
+            if (!this.navigationManager) {
+                this.navigationManager = new NavigationManager(this.config);
+            }
             console.time("NavigationGraphBuilding");
-            this.navigationGraph = new NavigationGraph(this.config);
-            this.navigationGraph.buildGraph(this.leafPlots, crosswalkInfos);
+            this.navigationManager.buildGraph(this.leafPlots, crosswalkInfos);
             console.timeEnd("NavigationGraphBuilding");
 
             console.time("PathfinderInitialization");
-            this.pathfinder = new Pathfinder(this.navigationGraph);
+            this.navigationManager.initializePathfinder();
             console.timeEnd("PathfinderInitialization");
+
+            // Assigner pour compatibilité avec l'interface existante
+            this.navigationGraph = this.navigationManager.getNavigationGraph();
+            this.pathfinder = this.navigationManager.getPathfinder();
 
             console.time("ContentGeneration");
             const debugPlotGridGroup = this.experience.world ? this.experience.world.debugPlotGridGroup : null;
@@ -324,11 +333,9 @@ export default class CityManager {
             // --- Debug Visuals via DebugVisualManager ---
             if (this.experience.isDebugMode) {
                 console.time("DebugVisualsGeneration");
-                // Assure que le groupe de debug est bien dans la scène
                 if (!this.debugVisualManager.parentGroup.parent) {
                     this.cityContainer.add(this.debugVisualManager.parentGroup);
                 }
-                // Crée les outlines pour les parcs
                 this.debugVisualManager.createParkOutlines(this.leafPlots, 15.0);
                 console.timeEnd("DebugVisualsGeneration");
             } else {
@@ -364,7 +371,6 @@ export default class CityManager {
 
     clearCity() {
         console.log("Clearing the existing city (including lamp posts)...");
-        // Efface les visuels de debug via DebugVisualManager
         if (this.debugVisualManager) {
             this.debugVisualManager.clearDebugVisuals();
         }
@@ -400,9 +406,15 @@ export default class CityManager {
         this.roadGenerator?.reset();
         this.contentGenerator?.reset(this.assetLoader);
         this.layoutGenerator?.reset();
-        this.navigationGraph?.destroy();
+
+        // Destroy navigation manager and related objects
+        if (this.navigationManager) {
+            this.navigationManager.destroy();
+            this.navigationManager = null;
+        }
         this.navigationGraph = null;
         this.pathfinder = null;
+
         this.leafPlots = [];
         this.districts = [];
         // Reset CitizenManager data
@@ -435,11 +447,9 @@ export default class CityManager {
         this.layoutGenerator = null;
         this.roadGenerator = null;
         this.contentGenerator = null;
+        this.debugVisualManager = null;
         this.navigationGraph = null;
         this.pathfinder = null;
-        this.districts = null;
-        this.leafPlots = null;
-        this.debugVisualManager = null;
         // Destroy CitizenManager data
         this.citizenManager.buildingInstances.clear();
         this.citizenManager.citizens.clear();
