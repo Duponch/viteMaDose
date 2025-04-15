@@ -5,7 +5,7 @@ export default class CitizenManager {
     /**
      * Constructeur de CitizenManager.
      * @param {object} config - La configuration générale du projet, contenant notamment
-     *                          les capacités par défaut pour les bâtiments.
+     * les capacités par défaut pour les bâtiments.
      */
     constructor(config) {
         this.config = config;
@@ -45,7 +45,7 @@ export default class CitizenManager {
                 capacity = capacityOverride ?? this.config.maxWorkersPerIndustrial ?? 50;
                 isWorkplace = true;
                 break;
-            case 'park':
+            case 'park': // Les parcs ont une capacité de 0 (pas de résidents/travailleurs)
             default:
                 capacity = 0;
                 break;
@@ -78,7 +78,7 @@ export default class CitizenManager {
         }
         const citizenInfo = {
             id: citizenId,
-            agentLogic: agentLogic,
+            agentLogic: agentLogic, // Conserve une référence à l'instance Agent
             homeBuildingId: null,
             workBuildingId: null,
         };
@@ -93,7 +93,7 @@ export default class CitizenManager {
      */
     assignHomeToCitizen(citizenId) {
         const citizenInfo = this.citizens.get(citizenId);
-        if (!citizenInfo || citizenInfo.homeBuildingId) return false; // Déjà affecté
+        if (!citizenInfo || citizenInfo.homeBuildingId) return false; // Déjà affecté ou citoyen non trouvé
 
         // Recherche les bâtiments de type 'house' ou 'building' disposant d'une capacité résiduelle.
         const potentialHomes = Array.from(this.buildingInstances.values()).filter(b =>
@@ -102,7 +102,7 @@ export default class CitizenManager {
         );
 
         if (potentialHomes.length === 0) {
-            console.warn(`No available home for citizen ${citizenId}`);
+            // console.warn(`No available home for citizen ${citizenId}`); // Message un peu verbeux
             return false;
         }
 
@@ -113,11 +113,12 @@ export default class CitizenManager {
         // Mise à jour directe de l'agent logique s'il existe.
         if (citizenInfo.agentLogic) {
             citizenInfo.agentLogic.homeBuildingId = home.id;
+            // On pourrait aussi initialiser la position de l'agent ici, mais c'est fait dans agent.initializeLifecycle
         } else {
             console.warn(`Missing agent logic for citizen ${citizenId} during home assignment.`);
         }
 
-        console.log(`Citizen ${citizenId} assigned home ${home.id} (Type: ${home.type})`);
+        // console.log(`Citizen ${citizenId} assigned home ${home.id} (Type: ${home.type})`);
         return true;
     }
 
@@ -128,7 +129,7 @@ export default class CitizenManager {
      */
     assignWorkplaceToCitizen(citizenId) {
         const citizenInfo = this.citizens.get(citizenId);
-        if (!citizenInfo || citizenInfo.workBuildingId) return false; // Déjà affecté
+        if (!citizenInfo || citizenInfo.workBuildingId) return false; // Déjà affecté ou citoyen non trouvé
 
         // Recherche des bâtiments marqués comme "workplace" avec de la place.
         const potentialWorkplaces = Array.from(this.buildingInstances.values()).filter(b =>
@@ -136,7 +137,7 @@ export default class CitizenManager {
         );
 
         if (potentialWorkplaces.length === 0) {
-            console.warn(`No available workplace for citizen ${citizenId}`);
+            // console.warn(`No available workplace for citizen ${citizenId}`); // Message un peu verbeux
             return false;
         }
 
@@ -150,7 +151,7 @@ export default class CitizenManager {
             console.warn(`Missing agent logic for citizen ${citizenId} during work assignment.`);
         }
 
-        console.log(`Citizen ${citizenId} assigned workplace ${workplace.id} (Type: ${workplace.type})`);
+        // console.log(`Citizen ${citizenId} assigned workplace ${workplace.id} (Type: ${workplace.type})`);
         return true;
     }
 
@@ -170,5 +171,16 @@ export default class CitizenManager {
      */
     getCitizenInfo(citizenId) {
         return this.citizens.get(citizenId) || null;
+    }
+
+    /**
+     * Réinitialise l'état du CitizenManager.
+     * Vide les listes de bâtiments et de citoyens et remet le compteur d'ID à zéro.
+     */
+    reset() {
+        this.buildingInstances.clear();
+        this.citizens.clear();
+        this.nextBuildingInstanceId = 0;
+        console.log("CitizenManager reset.");
     }
 }
