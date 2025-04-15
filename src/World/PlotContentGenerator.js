@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import HouseRenderer from './HouseRenderer.js';
 import BuildingRenderer from './BuildingRenderer.js';
+import SkyscraperRenderer from './SkyscraperRenderer.js';
 
 export default class PlotContentGenerator {
     constructor(config, materials, debugPlotGridMaterial) {
@@ -34,9 +35,10 @@ export default class PlotContentGenerator {
         this.navigationGraph = null;
         this.debugPlotGridGroup = null;
 
-        // Instanciation des modules dédiés aux maisons et aux immeubles
+        // Instanciation des modules dédiés aux maisons, immeubles et gratte-ciels
         this.houseRenderer = new HouseRenderer(config, materials);
         this.buildingRenderer = new BuildingRenderer(config, materials);
+        this.skyscraperRenderer = new SkyscraperRenderer(config, materials);
 
         console.log("PlotContentGenerator initialized (avec stockage refs fenêtres).");
     }
@@ -234,7 +236,7 @@ export default class PlotContentGenerator {
                 } else if (zoneType === 'industrial') {
                     baseScaleFactor = this.config.gridIndustrialBaseScale ?? 1.0;
                     minSpacing = this.config.minIndustrialSpacing ?? 0;
-                } else {
+                } else { // skyscraper
                     baseScaleFactor = this.config.gridSkyscraperBaseScale ?? 1.0;
                     minSpacing = this.config.minSkyscraperSpacing ?? 0;
                 }
@@ -388,7 +390,7 @@ export default class PlotContentGenerator {
                     }
                 }
             } else {
-                // Traitement standard pour 'building', 'industrial' et 'skyscraper' via BuildingRenderer
+                // Traitement standard pour 'building' et 'industrial' via BuildingRenderer, et pour 'skyscraper' via SkyscraperRenderer
                 for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
                     for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
                         const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + gapX)) + targetBuildingWidth / 2;
@@ -408,30 +410,59 @@ export default class PlotContentGenerator {
                         else if (Math.abs(minDist - distToBottom) < tolerance)
                             targetRotationY = Math.PI;
   
-                        if (assetInfo && ['building', 'industrial', 'skyscraper'].includes(zoneType)) {
-                            const buildingInstanceData = this.buildingRenderer.generateBuildingInstance(
-                                worldCellCenterPos,
-                                groundLevel,
-                                targetRotationY,
-                                baseScaleFactor,
-                                assetInfo
-                            );
-                            const modelId = assetInfo.id;
-                            if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
-                            for (const part in buildingInstanceData) {
-                                if (buildingInstanceData.hasOwnProperty(part)) {
-                                    if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
-                                    this.instanceData[zoneType][modelId].push(...buildingInstanceData[part]);
+                        if (assetInfo) {
+                            if (zoneType === 'skyscraper') {
+                                // Utilisation de SkyscraperRenderer pour les gratte-ciels
+                                const skyscraperInstanceData = this.skyscraperRenderer.generateSkyscraperInstance(
+                                    worldCellCenterPos,
+                                    groundLevel,
+                                    targetRotationY,
+                                    baseScaleFactor,
+                                    assetInfo
+                                );
+                                const modelId = assetInfo.id;
+                                if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
+                                if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
+                                for (const part in skyscraperInstanceData) {
+                                    if (skyscraperInstanceData.hasOwnProperty(part)) {
+                                        this.instanceData[zoneType][modelId].push(...skyscraperInstanceData[part]);
+                                    }
                                 }
-                            }
-                            const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
-                            const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition);
-                            if (registeredBuilding) {
-                                plot.addBuildingInstance({
-                                    id: registeredBuilding.id,
-                                    type: zoneType,
-                                    position: buildingPosition.clone()
-                                });
+                                const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
+                                const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition);
+                                if (registeredBuilding) {
+                                    plot.addBuildingInstance({
+                                        id: registeredBuilding.id,
+                                        type: zoneType,
+                                        position: buildingPosition.clone()
+                                    });
+                                }
+                            } else if (zoneType === 'building' || zoneType === 'industrial') {
+                                // Utilisation de BuildingRenderer pour 'building' et 'industrial'
+                                const buildingInstanceData = this.buildingRenderer.generateBuildingInstance(
+                                    worldCellCenterPos,
+                                    groundLevel,
+                                    targetRotationY,
+                                    baseScaleFactor,
+                                    assetInfo
+                                );
+                                const modelId = assetInfo.id;
+                                if (!this.instanceData[zoneType]) this.instanceData[zoneType] = {};
+                                if (!this.instanceData[zoneType][modelId]) this.instanceData[zoneType][modelId] = [];
+                                for (const part in buildingInstanceData) {
+                                    if (buildingInstanceData.hasOwnProperty(part)) {
+                                        this.instanceData[zoneType][modelId].push(...buildingInstanceData[part]);
+                                    }
+                                }
+                                const buildingPosition = worldCellCenterPos.clone().setY(this.config.sidewalkHeight);
+                                const registeredBuilding = this.cityManager.registerBuildingInstance(plot.id, zoneType, buildingPosition);
+                                if (registeredBuilding) {
+                                    plot.addBuildingInstance({
+                                        id: registeredBuilding.id,
+                                        type: zoneType,
+                                        position: buildingPosition.clone()
+                                    });
+                                }
                             }
                         }
                     }
@@ -525,9 +556,10 @@ export default class PlotContentGenerator {
             skyscraper: {},
             crosswalk: {}
         };
-        // Réinitialise également le HouseRenderer et le BuildingRenderer
+        // Réinitialise également le HouseRenderer, BuildingRenderer et SkyscraperRenderer
         this.houseRenderer.reset();
         this.buildingRenderer.reset();
+        this.skyscraperRenderer.reset();
 
         if (this.stripeBaseGeometry) {
             this.stripeBaseGeometry.dispose();
@@ -866,7 +898,7 @@ export default class PlotContentGenerator {
                 if (isSkyscraperWindow) {
                     // Logique spécifique pour les fenêtres de gratte-ciel
                     targetIntensity = lightsOn ? 1.17 : 0.0;
-                    const targetTransmission = lightsOn ? 0.0 : 0.0; // Pas de transmission dans notre cas
+                    const targetTransmission = lightsOn ? 0.0 : 0.0;
                     const targetRoughness = lightsOn ? 0.8 : 0.1;
                     if (material.transmission !== targetTransmission) {
                         material.transmission = targetTransmission;
