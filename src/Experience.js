@@ -30,15 +30,21 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         // --- Fog ---
         const fogColor = 0x1e2a36;
         const fogDensity = 0.003;
-        this.scene.fog = new THREE.FogExp2(fogColor, fogDensity);
+        // Créez l'objet fog
+        this.originalFog = new THREE.FogExp2(fogColor, fogDensity); // <-- Stocker l'instance originale
+        this.scene.fog = this.originalFog; // Appliquer initialement
 
         // --- Core Components Suite ---
-        this.camera = new Camera(this); // <-- Instance Camera modifiée
+        this.camera = new Camera(this);
         this.renderer = new Renderer(this);
         this.world = new World(this);
 
         // --- Debug State ---
         this.isDebugMode = false;
+        // Appliquer l'état initial du fog basé sur isDebugMode (facultatif, car enable/disable le feront)
+        // if (this.isDebugMode) {
+        //     this.scene.fog = null;
+        // }
 
         // --- UI Components ---
         this.timeUI = new TimeUI(this);
@@ -51,13 +57,11 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.stats.showPanel(0);
         document.body.appendChild(this.stats.dom);
 
-        // --- Raycasting & Agent Selection --- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< NOUVEAU
+        // --- Raycasting & Agent Selection ---
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
-        this.selectedAgent = null; // Agent actuellement suivi
-        this.isFollowingAgent = false; // État du suivi caméra
-        // Définir les couches pour le raycasting (optionnel mais bonne pratique)
-        // this.raycaster.layers.set(AGENT_LAYER); // Si vous utilisez des layers
+        this.selectedAgent = null;
+        this.isFollowingAgent = false;
 
         // --- EventListeners ---
         this.resizeHandler = () => this.resize();
@@ -66,13 +70,13 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.updateHandler = () => this.update();
         this.time.addEventListener('tick', this.updateHandler);
 
-        // --- NOUVEL ÉCOUTEUR POUR LE CLIC --- <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< NOUVEAU
         this.clickHandler = (event) => this.handleCanvasClick(event);
         this.canvas.addEventListener('click', this.clickHandler);
-        // ---------------------------------------
 
         // --- Initialisation ---
-        this.world.setDebugMode(this.isDebugMode);
+        // World.setDebugMode gère maintenant les visuels de debug
+        // Pas besoin d'appeler setDebugMode ici car l'état initial est false
+        // Si vous vouliez démarrer en mode debug, vous mettriez isDebugMode=true et appelleriez enableDebugMode() ici.
         console.log("Experience initialisée. Mode debug:", this.isDebugMode);
     }
 
@@ -160,7 +164,13 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         if (!this.isDebugMode) {
             this.isDebugMode = true;
             console.log("Debug Mode ENABLED");
-            this.world.setDebugMode(true);
+            // --- Désactiver le brouillard ---
+            if (this.scene) {
+                this.scene.fog = null;
+                console.log("  [Experience Debug] Fog disabled.");
+            }
+            // ---
+            this.world.setDebugMode(true); // Mettre à jour les visuels
             this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: true } }));
         }
     }
@@ -169,7 +179,13 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         if (this.isDebugMode) {
             this.isDebugMode = false;
             console.log("Debug Mode DISABLED");
-            this.world.setDebugMode(false);
+             // --- Réactiver le brouillard ---
+             if (this.scene && this.originalFog) {
+                 this.scene.fog = this.originalFog;
+                 console.log("  [Experience Debug] Fog enabled.");
+             }
+             // ---
+            this.world.setDebugMode(false); // Cacher les visuels
             this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: false } }));
         }
     }
@@ -183,7 +199,6 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
     }
     // --- End Debug Mode Methods ---
 
-
     resize() {
         this.camera.resize();
         this.renderer.resize();
@@ -191,85 +206,42 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
 
     update() {
         this.stats.begin();
-
-        const deltaTime = this.time.delta; // Temps écoulé depuis la dernière frame en ms
-
-        // Mettre à jour les contrôles Orbit SEULEMENT si on ne suit pas un agent
-        if (!this.isFollowingAgent && this.controls.enabled) {
-            this.controls.update(); // Applique le damping etc.
-        }
-
-        // La caméra se met toujours à jour (gère le suivi OU attend OrbitControls)
-        this.camera.update(deltaTime); // << Passer deltaTime à la caméra
-
-        // Mises à jour du monde et du rendu (inchangées)
-        this.world.update(); // World utilise déjà experience.time.delta
+        const deltaTime = this.time.delta;
+        if (!this.isFollowingAgent && this.controls.enabled) { this.controls.update(); }
+        this.camera.update(deltaTime);
+        this.world.update();
         this.renderer.update();
-
-        if (this.timeUI) {
-            this.timeUI.update();
-        }
-        // TimeControlUI se met à jour via les événements
-
+        if (this.timeUI) { this.timeUI.update(); }
         this.stats.end();
     }
 
     destroy() {
-        console.log("Destroying Experience..."); // Log ajouté
+        console.log("Destroying Experience...");
 
         // --- Nettoyage EventListeners ---
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
-        this.canvas.removeEventListener('click', this.clickHandler); // << Nettoyer le listener de clic
+        this.canvas.removeEventListener('click', this.clickHandler);
 
         // --- Détruire les UIs ---
-        if (this.timeUI) {
-            this.timeUI.destroy();
-            this.timeUI = null;
-        }
-        if (this.timeControlUI) {
-            this.timeControlUI.destroy();
-            this.timeControlUI = null;
-        }
+        this.timeUI?.destroy(); this.timeUI = null;
+        this.timeControlUI?.destroy(); this.timeControlUI = null;
 
         // --- Détruire le monde ---
-        if (this.world) { // Vérifier si world existe
-           this.world.destroy();
-           this.world = null; // << S'assurer de nullifier world
-        }
-
+        this.world?.destroy(); this.world = null;
 
         // --- Reste du nettoyage ---
-        if (this.controls) { // Vérifier si controls existe
-             this.controls.dispose();
-             this.controls = null; // << Nullifier controls
-        }
-        if (this.renderer) { // Vérifier si renderer existe
-            // La disposition du renderer se fait dans sa propre classe destroy potentiellement
-            // this.renderer.destroy(); // Si une méthode destroy existe
-             this.renderer.instance?.dispose(); // Dispose WebGL context
-             this.renderer = null; // << Nullifier renderer
-        }
+        this.controls?.dispose(); this.controls = null;
+        this.renderer?.instance?.dispose(); this.renderer = null;
+        this.camera = null;
+        if (this.stats?.dom.parentNode) { document.body.removeChild(this.stats.dom); }
+        this.stats = null;
+        this.scene = null; // La scène elle-même n'a pas de méthode destroy
+        this.originalFog = null; // Nettoyer la référence au fog
+        this.sizes = null; this.time = null; this.canvas = null;
+        this.raycaster = null; this.mouse = null; this.selectedAgent = null;
 
-        // Caméra est gérée par Three.js, pas de dispose direct nécessaire normalement
-        this.camera = null; // << Nullifier camera
-
-        if (this.stats?.dom.parentNode) {
-             document.body.removeChild(this.stats.dom);
-        }
-        this.stats = null; // << Nullifier stats
-
-        // Nettoyer les variables de Experience
-        this.scene = null;
-        this.sizes = null;
-        this.time = null;
-        this.canvas = null;
-        this.raycaster = null;
-        this.mouse = null;
-        this.selectedAgent = null;
-
-
-        instance = null; // Très important pour le singleton
+        instance = null;
         console.log("Experience détruite.");
     }
 }
