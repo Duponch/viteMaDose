@@ -164,16 +164,19 @@ export default class InstancedMeshManager {
                             break;
                         }
                         case 'crosswalk': {
-                             if (!this.stripeBaseGeometry || !this.materials.crosswalkMaterial) {
-                                 console.warn(`[IMM] Crosswalk geometry or material not available.`);
-                                 continue;
-                             }
-                             geometry = this.stripeBaseGeometry;
-                             material = this.materials.crosswalkMaterial;
-                             castShadow = false;
-                             receiveShadow = true;
-                             break;
-                        }
+							// Pour les passages piétons, idOrKey est généralement 'default_crosswalk_stripe'
+							// Utiliser la géométrie et le matériau prédéfinis pour les bandes
+							if (!this.stripeBaseGeometry || !this.materials.crosswalkMaterial) {
+								console.warn(`[IMM] Crosswalk geometry or material not available.`);
+								continue; // Passer à la clé suivante si les prérequis manquent
+							}
+							geometry = this.stripeBaseGeometry;
+							material = this.materials.crosswalkMaterial;
+							castShadow = false; // Les passages piétons ne projettent pas d'ombre
+							receiveShadow = true; // Ils reçoivent les ombres
+							isWindow = false; // Ce ne sont pas des fenêtres
+							break; // Sortir du switch après avoir défini geom/mat/shadows
+					    }
                         default:
                             console.warn(`[IMM] Unhandled asset type for instancing: ${type}`);
                             continue;
@@ -181,29 +184,31 @@ export default class InstancedMeshManager {
 
                     // --- Création de l'InstancedMesh ---
                     if (geometry && material) {
-                        const count = matrices.length;
-                        const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
-                        instancedMesh.castShadow = castShadow;
-                        instancedMesh.receiveShadow = receiveShadow;
-                        instancedMesh.name = meshKey; // Nom unique
-
-                        matrices.forEach((matrix, index) => {
-                            instancedMesh.setMatrixAt(index, matrix);
-                        });
-                        instancedMesh.instanceMatrix.needsUpdate = true;
-
-                        this.parentGroup.add(instancedMesh);
-                        this.instancedMeshes[meshKey] = instancedMesh;
-                        totalMeshesCreated++;
-                        totalInstancesCreated += count;
-
-                        // Ajouter aux fenêtres si applicable
-                        if (isWindow) {
-                            this.windowMeshes.push(instancedMesh);
-                        }
-                    } else {
-                         console.warn(`[IMM] Skipped mesh creation for ${meshKey} due to missing geometry or material.`);
-                    }
+						// ... (le reste du code qui crée l'InstancedMesh reste identique)
+						const count = matrices.length;
+						const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
+						instancedMesh.castShadow = castShadow;
+						instancedMesh.receiveShadow = receiveShadow;
+						instancedMesh.name = meshKey; // Nom unique
+	
+						matrices.forEach((matrix, index) => {
+							instancedMesh.setMatrixAt(index, matrix);
+						});
+						instancedMesh.instanceMatrix.needsUpdate = true;
+	
+						this.parentGroup.add(instancedMesh);
+						this.instancedMeshes[meshKey] = instancedMesh;
+						totalMeshesCreated++;
+						totalInstancesCreated += count;
+	
+						// Ajouter aux fenêtres si applicable (ne s'appliquera pas aux crosswalks)
+						if (isWindow) {
+							this.windowMeshes.push(instancedMesh);
+						}
+					} else {
+						 // Log déjà existant si geom/mat sont manquants après le switch
+						 console.warn(`[IMM] Skipped mesh creation for ${meshKey} due to missing geometry or material after switch.`);
+					}
 
                 } catch (error) {
                      console.error(`[IMM] Error processing instance data for type '${type}', key '${idOrKey}':`, error);

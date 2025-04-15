@@ -63,51 +63,45 @@ export default class CrosswalkInstancer {
         const yAxis = new THREE.Vector3(0, 1, 0); // Axe de rotation
 
         crosswalkInfos.forEach(info => {
-            if (!info || !info.position || info.angle === undefined || info.length === undefined) {
-                console.warn("CrosswalkInstancer: Invalid crosswalk info object skipped:", info);
-                return;
-            }
-
-            basePosition.copy(info.position); // Position centrale du passage piéton
-
-            // Déterminer l'orientation et la direction de décalage des bandes
-            // L'angle dans crosswalkInfo est l'angle de la *route* (0 pour Horizontale, PI/2 pour Verticale)
-            // Les bandes sont *perpendiculaires* à la route.
-            // Donc, angle = 0 (route H) => bandes Verticales (rotation PI/2) => offset en X
-            // angle = PI/2 (route V) => bandes Horizontales (rotation 0) => offset en Z
-
-            let finalAngle; // Rotation appliquée aux bandes elles-mêmes
-            if (Math.abs(info.angle) < 0.1) { // Route Horizontale (angle=0 ou PI)
-                finalAngle = Math.PI / 2;     // Bandes verticales
-                offsetDirection.set(1, 0, 0); // Décalage le long de X
-            } else {                          // Route Verticale (angle=PI/2 ou -PI/2)
-                finalAngle = 0;               // Bandes horizontales
-                offsetDirection.set(0, 0, 1); // Décalage le long de Z
-            }
-
-            quaternion.setFromAxisAngle(yAxis, finalAngle);
-
-            // Définir l'échelle : X et Y sont 1 (car la géométrie de base a la bonne largeur/hauteur), Z est la longueur
-            // Note: On suppose que InstancedMeshManager utilise une géométrie de base de (width, height, 1.0)
-             scale.set(1, 1, info.length);
-
-            // Créer les matrices pour chaque bande
-            for (let i = 0; i < stripeCount; i++) {
-                const currentOffset = initialOffset + i * stripeTotalWidth;
-
-                // Calculer la position de la bande
-                stripePosition.copy(basePosition).addScaledVector(offsetDirection, currentOffset);
-                // Ajuster la hauteur Y
-                stripePosition.y = stripeHeight / 2 + yOffset;
-
-                // Composer la matrice finale
-                matrix.compose(stripePosition, quaternion, scale);
-
-                // Ajouter les données d'instance
-                instanceDataManager.addData('crosswalk', this.crosswalkStripeKey, matrix);
-                stripesAdded++;
-            }
-        }); // Fin boucle crosswalkInfos
+			if (!info || !info.position || info.angle === undefined || info.length === undefined) {
+				console.warn("CrosswalkInstancer: Invalid crosswalk info object skipped:", info);
+				return;
+			}
+		
+			basePosition.copy(info.position); // Position centrale du passage piéton
+		
+			// *** Utiliser EXACTEMENT la logique de l'ancienne version ***
+			const finalAngle = info.angle + Math.PI / 2; // Angle de la bande
+			quaternion.setFromAxisAngle(yAxis, finalAngle);
+		
+			// Déterminer offsetDirection basé sur finalAngle (comme avant)
+			if (Math.abs(finalAngle % Math.PI) < 0.01) { // Bandes horizontales (rotation 0 ou PI)
+				offsetDirection.set(1, 0, 0); // Décalage le long de X
+			} else { // Bandes verticales (rotation PI/2 ou -PI/2)
+				offsetDirection.set(0, 0, 1); // Décalage le long de Z
+			}
+		
+			// L'échelle reste basée sur la longueur de la bande (info.length)
+			// en supposant que la géométrie de base a une longueur de 1.
+			scale.set(1, 1, info.length);
+		
+			// Calculer les positions des bandes (logique des offsets inchangée)
+			for (let i = 0; i < stripeCount; i++) {
+				const currentOffset = initialOffset + i * stripeTotalWidth;
+		
+				// Calculer la position de la bande
+				stripePosition.copy(basePosition).addScaledVector(offsetDirection, currentOffset);
+				// Ajuster la hauteur Y
+				stripePosition.y = stripeHeight / 2 + yOffset;
+		
+				// Composer la matrice finale
+				matrix.compose(stripePosition, quaternion, scale); // Utilise stripePosition, la rotation (quaternion) et l'échelle
+		
+				// Ajouter les données d'instance
+				instanceDataManager.addData('crosswalk', this.crosswalkStripeKey, matrix);
+				stripesAdded++;
+			}
+		}); // Fin boucle crosswalkInfos corrigée
 
         console.log(`CrosswalkInstancer: ${stripesAdded} crosswalk stripe instances added to data.`);
     }
