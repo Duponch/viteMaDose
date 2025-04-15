@@ -10,6 +10,7 @@ export default class HouseRenderer {
         this.baseHouseGeometries = {};
         this.baseHouseMaterials = {};
         this.houseInstanceMatrices = {};
+        this.assetIdCounter = 0; // Compteur pour générer des IDs uniques pour les maisons procédurales
         this.defineHouseBaseMaterials();
         this.defineHouseBaseGeometries();
         this.initializeHouseMatrixArrays();
@@ -69,67 +70,81 @@ export default class HouseRenderer {
      * Notez que l'épaisseur (doorDepth / windowDepth) a été réduite.
      */
     defineHouseBaseGeometries() {
-        this.baseHouseGeometries = {};
-
-        // --- Dimensions de base ---
-        const armLength = 2;
-        const armWidth = 1;
-        const armDepth = 0.5;
-        const roofPitchHeight = 0.3;
-        const roofOverhang = 0.08;
-        const doorHeight = 0.7 * armDepth;
-        const doorWidth = 0.3;
-        const doorDepth = 0.02; // Épaisseur réduite pour portes/fenêtres
-        const garageDoorHeight = 0.8 * armDepth;
-        const garageDoorWidth = 0.55;
-        const windowHeight = 0.4 * armDepth;
-        const windowWidth = 0.2;
-        const windowDepth = doorDepth;
-
-        // --- Géométries de base ---
-        this.baseHouseGeometries.base_part1 = new THREE.BoxGeometry(armLength, armDepth, armWidth);
-        this.baseHouseGeometries.base_part1.translate(armLength / 2, armDepth / 2, armWidth / 2);
-        this.baseHouseGeometries.base_part2 = new THREE.BoxGeometry(armWidth, armDepth, armLength);
-        this.baseHouseGeometries.base_part2.translate(armWidth / 2, armDepth / 2, armLength / 2);
-        this.baseHouseGeometries.base_part1.userData = { height: armDepth, minY: 0 };
-        this.baseHouseGeometries.base_part2.userData = { height: armDepth, minY: 0 };
-
-        // --- Géométrie du toit ---
-        const roofWidth = armWidth + 2 * roofOverhang;
-        const roofDepth = armLength + 2 * roofOverhang;
-        const roofHeight = roofPitchHeight;
-        const halfRoofWidth = roofWidth / 2;
-        const halfRoofDepth = roofDepth / 2;
-        const roofGeometry = new THREE.BufferGeometry();
-        const vertices = new Float32Array([
-            -halfRoofWidth, 0, -halfRoofDepth,
-             halfRoofWidth, 0, -halfRoofDepth,
-             halfRoofWidth, 0,  halfRoofDepth,
-            -halfRoofWidth, 0,  halfRoofDepth,
-             0, roofHeight, -halfRoofDepth,
-             0, roofHeight,  halfRoofDepth
-        ]);
-        const indices = new Uint16Array([
-            0, 1, 4,
-            2, 3, 5,
-            0, 3, 5,
-            0, 5, 4,
-            1, 2, 5,
-            1, 5, 4
-        ]);
-        roofGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-        roofGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
-        roofGeometry.computeVertexNormals();
-        this.baseHouseGeometries.roof = roofGeometry;
-
-        // --- Géométries pour les portes ---
-        this.baseHouseGeometries.door = new THREE.BoxGeometry(doorDepth, doorHeight, doorWidth);
-        this.baseHouseGeometries.garageDoor = new THREE.BoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth);
-
-        // --- Géométries pour les fenêtres ---
-        this.baseHouseGeometries.windowYZ = new THREE.BoxGeometry(windowDepth, windowHeight, windowWidth);
-        this.baseHouseGeometries.windowXY = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth);
-    }
+		this.baseHouseGeometries = {};
+	
+		// --- Dimensions de base ---
+		const armLength = 2;
+		const armWidth = 1;
+		const armDepth = 0.5;
+		const roofPitchHeight = 0.3;
+		const roofOverhang = 0.08;
+		const doorHeight = 0.7 * armDepth;
+		const doorWidth = 0.3;
+		const doorDepth = 0.02; // Épaisseur réduite pour portes/fenêtres
+		const garageDoorHeight = 0.8 * armDepth;
+		const garageDoorWidth = 0.55;
+		const windowHeight = 0.4 * armDepth;
+		const windowWidth = 0.2;
+		const windowDepth = doorDepth;
+	
+		// --- Géométries de base (BoxGeometry possède par défaut un attribut uv) ---
+		this.baseHouseGeometries.base_part1 = new THREE.BoxGeometry(armLength, armDepth, armWidth);
+		this.baseHouseGeometries.base_part1.translate(armLength / 2, armDepth / 2, armWidth / 2);
+		this.baseHouseGeometries.base_part2 = new THREE.BoxGeometry(armWidth, armDepth, armLength);
+		this.baseHouseGeometries.base_part2.translate(armWidth / 2, armDepth / 2, armLength / 2);
+		this.baseHouseGeometries.base_part1.userData = { height: armDepth, minY: 0 };
+		this.baseHouseGeometries.base_part2.userData = { height: armDepth, minY: 0 };
+	
+		// --- Géométrie du toit créée manuellement ---
+		const roofWidth = armWidth + 2 * roofOverhang;
+		const roofDepth = armLength + 2 * roofOverhang;
+		const roofHeight = roofPitchHeight;
+		const halfRoofWidth = roofWidth / 2;
+		const halfRoofDepth = roofDepth / 2;
+		const roofGeometry = new THREE.BufferGeometry();
+		const vertices = new Float32Array([
+			-halfRoofWidth, 0, -halfRoofDepth,
+			 halfRoofWidth, 0, -halfRoofDepth,
+			 halfRoofWidth, 0,  halfRoofDepth,
+			-halfRoofWidth, 0,  halfRoofDepth,
+			 0, roofHeight, -halfRoofDepth,
+			 0, roofHeight,  halfRoofDepth
+		]);
+		const indices = new Uint16Array([
+			0, 1, 4,
+			2, 3, 5,
+			0, 3, 5,
+			0, 5, 4,
+			1, 2, 5,
+			1, 5, 4
+		]);
+		roofGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+		roofGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
+		roofGeometry.computeVertexNormals();
+	
+		// ** Correction : ajouter un attribut 'uv' pour homogénéiser la géométrie **
+		if (!roofGeometry.attributes.uv) {
+			const count = roofGeometry.attributes.position.count; // nombre de sommets (dans ce cas 6)
+			const uvs = new Float32Array(count * 2); // 2 coordonnées par sommet
+			for (let i = 0; i < count; i++) {
+				// Vous pouvez définir ici de vraies coordonnées uv.
+				// Pour la simplicité, on attribue (0, 0) à chaque sommet.
+				uvs[i * 2] = 0;
+				uvs[i * 2 + 1] = 0;
+			}
+			roofGeometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+		}
+	
+		this.baseHouseGeometries.roof = roofGeometry;
+	
+		// --- Géométries pour les portes ---
+		this.baseHouseGeometries.door = new THREE.BoxGeometry(doorDepth, doorHeight, doorWidth);
+		this.baseHouseGeometries.garageDoor = new THREE.BoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth);
+	
+		// --- Géométries pour les fenêtres ---
+		this.baseHouseGeometries.windowYZ = new THREE.BoxGeometry(windowDepth, windowHeight, windowWidth);
+		this.baseHouseGeometries.windowXY = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth);
+	}	
 
     /**
      * Génère les matrices d'instances pour une maison et retourne un objet
@@ -317,5 +332,105 @@ export default class HouseRenderer {
         this.baseHouseGeometries = {};
         this.defineHouseBaseGeometries();
         this.initializeHouseMatrixArrays();
+    }
+
+    /**
+     * Génère un asset procédural pour la maison.
+     * Retourne un objet contenant :
+     *   - id: identifiant unique
+     *   - parts: tableau d'objets { geometry, material }
+     *   - fittingScaleFactor, userScale, centerOffset, sizeAfterFitting
+     *
+     * Ces données permettront de créer des InstancedMesh dans PlotContentGenerator.
+     */
+    generateProceduralHouse(baseWidth, baseHeight, baseDepth, userScale = 1) {
+        // Regrouper les géométries de chaque partie selon leur matériau
+        const materialMap = new Map();
+        for (const partName in this.baseHouseGeometries) {
+            if (this.baseHouseGeometries.hasOwnProperty(partName)) {
+                // Clone la géométrie de la partie
+                const geomClone = this.baseHouseGeometries[partName].clone();
+                const material = this.baseHouseMaterials[partName];
+                if (!material) {
+                    console.warn(`Matériau manquant pour la partie ${partName}.`);
+                    continue;
+                }
+                const matName = material.name;
+                if (!materialMap.has(matName)) {
+                    materialMap.set(matName, { material: material.clone(), geoms: [] });
+                }
+                materialMap.get(matName).geoms.push(geomClone);
+            }
+        }
+
+        // Fusionner les géométries de chaque groupe
+        const parts = [];
+        const allGeoms = [];
+        materialMap.forEach((groupData, key) => {
+            if (groupData.geoms.length === 0) return;
+            const mergedGeom = mergeGeometries(groupData.geoms, false);
+            if (!mergedGeom) {
+                console.error(`Échec de fusion des géométries pour le groupe "${key}".`);
+                groupData.geoms.forEach(g => g.dispose());
+                return;
+            }
+            // Conserver cette géométrie pour le calcul global
+            allGeoms.push(mergedGeom);
+            groupData.mergedGeom = mergedGeom;
+            // Libérer les géométries individuelles
+            groupData.geoms.forEach(g => g.dispose());
+            groupData.geoms = [];
+        });
+
+        // Calculer la fusion globale pour obtenir la bounding box
+        if (allGeoms.length === 0) {
+            console.error("Aucune géométrie valide pour générer la maison procédurale.");
+            return null;
+        }
+        const globalMerged = mergeGeometries(allGeoms, false);
+        globalMerged.computeBoundingBox();
+        const globalBBox = globalMerged.boundingBox;
+        const globalMin = globalBBox.min.clone();
+        const globalCenter = new THREE.Vector3();
+        globalBBox.getCenter(globalCenter);
+        const globalSize = new THREE.Vector3();
+        globalBBox.getSize(globalSize);
+        // Éviter la division par zéro
+        globalSize.x = Math.max(globalSize.x, 0.001);
+        globalSize.y = Math.max(globalSize.y, 0.001);
+        globalSize.z = Math.max(globalSize.z, 0.001);
+        const fittingScaleFactor = Math.min(baseWidth / globalSize.x, baseHeight / globalSize.y, baseDepth / globalSize.z);
+        const sizeAfterFitting = globalSize.clone().multiplyScalar(fittingScaleFactor);
+
+        // Ajuster chaque partie par rapport au centre global
+        materialMap.forEach((groupData, key) => {
+            if (groupData.mergedGeom) {
+                groupData.mergedGeom.translate(-globalCenter.x, -globalMin.y, -globalCenter.z);
+            }
+        });
+
+        // Constituer le tableau final des parties
+        materialMap.forEach((groupData, key) => {
+            if (groupData.mergedGeom) {
+                parts.push({
+                    geometry: groupData.mergedGeom,
+                    material: groupData.material
+                });
+            }
+        });
+
+        // Nettoyage final
+        allGeoms.forEach(g => g.dispose());
+        globalMerged.dispose();
+
+        const asset = {
+            id: `house_procedural_${this.assetIdCounter++}`,
+            parts: parts,
+            fittingScaleFactor: fittingScaleFactor,
+            userScale: userScale,
+            centerOffset: globalCenter,
+            sizeAfterFitting: sizeAfterFitting
+        };
+        return asset;
     }
 }
