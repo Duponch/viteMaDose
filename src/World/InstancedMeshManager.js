@@ -83,33 +83,51 @@ export default class InstancedMeshManager {
                     // --- Déterminer Géométrie et Matériau ---
                     switch (type) {
                         case 'house': {
-                            const partName = idOrKey; // Pour 'house', idOrKey est le partName
-                            geometry = this.renderers.houseRenderer?.baseHouseGeometries[partName];
-                            const baseMaterial = this.renderers.houseRenderer?.baseHouseMaterials[partName];
-
-                            if (!geometry || !baseMaterial) {
-                                console.warn(`[IMM] Missing geometry or material for house part: ${partName}`);
-                                continue; // Passer à la clé suivante
-                            }
-
-                            isWindow = (partName === 'windowXY' || partName === 'windowYZ');
-                            if (isWindow) {
-                                // Cloner et configurer le matériau fenêtre
-                                material = this.renderers.houseRenderer.baseHouseMaterials.window.clone();
-                                material.name = `Inst_HouseWindow_${partName}`; // Nom unique
-                                material.emissive = new THREE.Color(0xFFFF99); // Couleur d'émission initiale
-                                material.emissiveIntensity = 0.0; // Commence éteint
-                                if (this.experience?.scene?.environment) {
-                                    material.envMap = this.experience.scene.environment;
-                                    material.roughness = 0.05;
-                                    material.metalness = 0.9;
-                                }
-                                receiveShadow = false; // Les fenêtres ne reçoivent pas d'ombres généralement
-                            } else {
-                                material = baseMaterial; // Utiliser le matériau de base directement (non cloné)
-                            }
-                            break;
-                        }
+							const partName = idOrKey; // Pour 'house', idOrKey est le partName
+							geometry = this.renderers.houseRenderer?.baseHouseGeometries[partName];
+							// const baseMaterial = this.renderers.houseRenderer?.baseHouseMaterials[partName]; // <-- On enlève ça d'ici
+	
+							// --- MODIFICATION ---
+							// Vérifier seulement la géométrie ici. Le matériau sera géré plus bas.
+							if (!geometry) {
+								console.warn(`[IMM] Missing geometry for house part: ${partName}`);
+								continue; // Passer à la clé suivante si la géométrie manque
+							}
+							// --- FIN MODIFICATION ---
+	
+							isWindow = (partName === 'windowXY' || partName === 'windowYZ');
+							if (isWindow) {
+								// Cloner et configurer le matériau fenêtre
+								// Vérifier que le matériau de base 'window' existe
+								const baseWindowMaterial = this.renderers.houseRenderer?.baseHouseMaterials?.window;
+								if (!baseWindowMaterial) {
+									console.warn(`[IMM] Base window material not found in HouseRenderer.`);
+									continue; // Impossible de créer le matériau fenêtre
+								}
+								material = baseWindowMaterial.clone(); // Cloner depuis le matériau 'window'
+								material.name = `Inst_HouseWindow_${partName}`; // Nom unique
+								material.emissive = new THREE.Color(0xFFFF99);
+								material.emissiveIntensity = 0.0;
+								if (this.experience?.scene?.environment) {
+									material.envMap = this.experience.scene.environment;
+									material.roughness = 0.05;
+									material.metalness = 0.9;
+									// Pas besoin de material.needsUpdate = true ici, sera fait si l'intensité change
+								}
+								receiveShadow = false;
+							} else {
+								// Pour les autres parties (murs, toit, porte...), récupérer leur matériau spécifique
+								material = this.renderers.houseRenderer?.baseHouseMaterials[partName];
+								if (!material) {
+									// Si le matériau spécifique manque pour une partie non-fenêtre, on logue et on saute.
+									console.warn(`[IMM] Missing material for non-window house part: ${partName}`);
+									continue;
+								}
+								// Pour les parties non-fenêtres, receiveShadow reste true (valeur par défaut)
+							}
+							// La création de l'InstancedMesh se fera après le 'break' avec le bon 'material'
+							break; // Important de sortir du switch ici
+						} // Fin case 'house'
                         case 'building':
                         case 'skyscraper': {
                              // Clé est assetId_partName (ex: 'building_proc_0_part0')
