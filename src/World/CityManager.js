@@ -9,6 +9,7 @@ import LampPostManager from './LampPostManager.js';
 import NavigationGraph from './NavigationGraph.js';
 import Pathfinder from './Pathfinder.js';
 import CitizenManager from './CitizenManager.js';
+import DebugVisualManager from './DebugVisualManager.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export default class CityManager {
@@ -200,8 +201,14 @@ export default class CityManager {
         this.sidewalkGroup = null;
         this.contentGroup = null;
         this.groundGroup = null;
-        this.debugGroup = new THREE.Group();
-        this.debugGroup.name = "DebugVisuals";
+
+        // --- Instance de DebugVisualManager ---
+        this.debugVisualManager = new DebugVisualManager(null, this.materials);
+        // Si le mode debug est activé ou si l'on souhaite afficher les limites des districts,
+        // ajoute le groupe de DebugVisualManager à la ville.
+        if (this.experience.isDebugMode || this.config.showDistrictBoundaries) {
+            this.cityContainer.add(this.debugVisualManager.parentGroup);
+        }
 
         // --- CitizenManager ---
         this.citizenManager = new CitizenManager(this.config);
@@ -211,9 +218,7 @@ export default class CityManager {
 
         // Ajout dans la scène
         this.scene.add(this.cityContainer);
-        if (this.experience.isDebugMode || this.config.showDistrictBoundaries) {
-            this.cityContainer.add(this.debugGroup);
-        }
+
         console.log("CityManager initialized (with park probability).");
     }
 
@@ -266,7 +271,7 @@ export default class CityManager {
             // --- District Logic via DistrictManager ---
             console.time("DistrictFormationAndValidation");
             try {
-                const districtManager = new DistrictManager(this.config, this.leafPlots, this.debugGroup);
+                const districtManager = new DistrictManager(this.config, this.leafPlots, this.debugVisualManager.parentGroup);
                 districtManager.generateAndValidateDistricts();
                 this.districts = districtManager.getDistricts();
             } catch (error) {
@@ -316,17 +321,20 @@ export default class CityManager {
             // --- Lamp Post Generation via LampPostManager ---
             this.lampPostManager.addLampPosts(this.leafPlots);
 
+            // --- Debug Visuals via DebugVisualManager ---
             if (this.experience.isDebugMode) {
                 console.time("DebugVisualsGeneration");
-                if (!this.debugGroup.parent) {
-                    this.cityContainer.add(this.debugGroup);
+                // Assure que le groupe de debug est bien dans la scène
+                if (!this.debugVisualManager.parentGroup.parent) {
+                    this.cityContainer.add(this.debugVisualManager.parentGroup);
                 }
-                this.createParkDebugVisuals();
+                // Crée les outlines pour les parcs
+                this.debugVisualManager.createParkOutlines(this.leafPlots, 15.0);
                 console.timeEnd("DebugVisualsGeneration");
             } else {
-                this.clearDebugVisuals();
-                if (this.debugGroup.parent) {
-                    this.cityContainer.remove(this.debugGroup);
+                this.debugVisualManager.clearDebugVisuals();
+                if (this.debugVisualManager.parentGroup.parent) {
+                    this.cityContainer.remove(this.debugVisualManager.parentGroup);
                 }
             }
             console.log("--- City generation finished ---");
@@ -338,50 +346,12 @@ export default class CityManager {
         }
     }
 
-    clearDebugVisuals(visualType = null) {
-        const objectsToRemove = [];
-        for (let i = this.debugGroup.children.length - 1; i >= 0; i--) {
-            const child = this.debugGroup.children[i];
-            if ((visualType && child.userData.visualType === visualType) || !visualType) {
-                objectsToRemove.push(child);
-            }
-        }
-        objectsToRemove.forEach(child => {
-            this.debugGroup.remove(child);
-            if (child.geometry) child.geometry.dispose();
-        });
-    }
-
-    createParkDebugVisuals() {
-        const visualType = 'ParkOutlines';
-        this.clearDebugVisuals(visualType);
-        if (!this.experience.isDebugMode) return;
-        const debugHeight = 15.0;
-        let parkCount = 0;
-        this.leafPlots.forEach(plot => {
-            if (plot.zoneType === 'park') {
-                parkCount++;
-                const points = [
-                    new THREE.Vector3(plot.x, debugHeight, plot.z),
-                    new THREE.Vector3(plot.x + plot.width, debugHeight, plot.z),
-                    new THREE.Vector3(plot.x + plot.width, debugHeight, plot.z + plot.depth),
-                    new THREE.Vector3(plot.x, debugHeight, plot.z + plot.depth),
-                    new THREE.Vector3(plot.x, debugHeight, plot.z)
-                ];
-                const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-                const lineLoop = new THREE.Line(lineGeometry, this.materials.debugParkOutlineMaterial);
-                lineLoop.name = `ParkOutline_Plot_${plot.id}`;
-                lineLoop.userData.visualType = visualType;
-                lineLoop.renderOrder = 999;
-                this.debugGroup.add(lineLoop);
-            }
-        });
-        console.log(`Park debug visuals updated: ${parkCount} parks visualized.`);
-    }
-
     createGlobalGround() {
         if (this.groundMesh && this.groundMesh.parent) return;
-        if (this.groundMesh && !this.groundMesh.parent) { this.scene.add(this.groundMesh); return; }
+        if (this.groundMesh && !this.groundMesh.parent) { 
+            this.scene.add(this.groundMesh); 
+            return; 
+        }
         const groundGeometry = new THREE.PlaneGeometry(this.config.mapSize, this.config.mapSize);
         this.groundMesh = new THREE.Mesh(groundGeometry, this.materials.groundMaterial);
         this.groundMesh.rotation.x = -Math.PI / 2;
@@ -394,7 +364,10 @@ export default class CityManager {
 
     clearCity() {
         console.log("Clearing the existing city (including lamp posts)...");
-        this.clearDebugVisuals();
+        // Efface les visuels de debug via DebugVisualManager
+        if (this.debugVisualManager) {
+            this.debugVisualManager.clearDebugVisuals();
+        }
         const disposeGroupContents = (group) => {
             if (!group) return;
             while (group.children.length > 0) {
@@ -466,7 +439,7 @@ export default class CityManager {
         this.pathfinder = null;
         this.districts = null;
         this.leafPlots = null;
-        this.debugGroup = null;
+        this.debugVisualManager = null;
         // Destroy CitizenManager data
         this.citizenManager.buildingInstances.clear();
         this.citizenManager.citizens.clear();
