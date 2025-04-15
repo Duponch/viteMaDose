@@ -129,22 +129,22 @@ export default class DebugVisualManager {
      */
     createPlotOutlines(plots, debugHeight = 0.1) {
         const visualType = 'PlotOutlines';
-        this.clearDebugVisuals(visualType); // Nettoyer les anciennes outlines
+        this.clearDebugVisuals(visualType);
         let plotCount = 0;
-
-        const geometriesByType = {}; // Pour fusionner par couleur
+        const geometriesByType = {};
+        // *** AJOUT LOG ***
+        console.log(`  [DVM Plot] Processing ${plots.length} plots...`);
 
         plots.forEach(plot => {
+            // ... (calcul couleur, points, geometry) ...
             const color = this.plotColors[plot.zoneType] || this.plotColors.default;
-            const colorHex = color.getHexString(); // Utiliser hex comme clé
-
-            // Définir les 4 coins du carré au sol
-            const points = [
+            const colorHex = color.getHexString();
+            const points = [ /* ... points ... */
                 new THREE.Vector3(plot.x, debugHeight, plot.z),
                 new THREE.Vector3(plot.x + plot.width, debugHeight, plot.z),
                 new THREE.Vector3(plot.x + plot.width, debugHeight, plot.z + plot.depth),
                 new THREE.Vector3(plot.x, debugHeight, plot.z + plot.depth),
-                new THREE.Vector3(plot.x, debugHeight, plot.z) // Fermer la boucle
+                new THREE.Vector3(plot.x, debugHeight, plot.z)
             ];
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
@@ -154,28 +154,29 @@ export default class DebugVisualManager {
             geometriesByType[colorHex].push(geometry);
             plotCount++;
         });
+         // *** AJOUT LOG ***
+        console.log(`  [DVM Plot] Processed ${plotCount} plots. Found ${Object.keys(geometriesByType).length} color groups.`);
 
-        // Créer un LineSegments fusionné par couleur
+        let addedMeshes = 0; // Compteur pour vérifier l'ajout
         for (const colorHex in geometriesByType) {
             if (geometriesByType[colorHex].length > 0) {
                 const mergedGeometry = mergeGeometries(geometriesByType[colorHex], false);
                 if (mergedGeometry) {
                     const material = this._getOrCreateDebugMaterial(`plot_${colorHex}`, new THREE.Color(`#${colorHex}`), false);
-                    const lines = new THREE.LineSegments(mergedGeometry, material); // Utiliser LineSegments
+                    const lines = new THREE.LineSegments(mergedGeometry, material);
                     lines.name = `PlotOutlines_${colorHex}`;
                     this.addDebugVisual(lines, visualType);
+                    addedMeshes++; // Incrémenter si ajouté
+                    // *** AJOUT LOG ***
+                    // console.log(`    [DVM Plot] Added LineSegments for color #${colorHex}`);
                 } else {
-                     console.warn(`Failed to merge plot outline geometries for color #${colorHex}`);
+                     console.warn(`    [DVM Plot] Failed to merge plot outline geometries for color #${colorHex}`);
                 }
-                // Nettoyer les géométries individuelles après la fusion
                 geometriesByType[colorHex].forEach(g => g.dispose());
             }
         }
-
-
-        if (plotCount > 0) {
-            console.log(`DebugVisualManager: ${Object.keys(geometriesByType).length} plot outline mesh(es) created for ${plotCount} plots.`);
-        }
+        // *** AJOUT LOG ***
+        console.log(`  [DVM Plot] Finished creating outlines. Added ${addedMeshes} LineSegments objects.`);
     }
 
     // --- NOUVELLE MÉTHODE : Créer les outlines des bâtiments ---
@@ -186,60 +187,75 @@ export default class DebugVisualManager {
      */
     createBuildingOutlines(buildingInstancesMap, config) {
         const visualType = 'BuildingOutlines';
-        this.clearDebugVisuals(visualType); // Nettoyer les anciennes outlines
+        this.clearDebugVisuals(visualType);
         let buildingCount = 0;
-
-        // Préparer les géométries de base pour chaque type (pour éviter recréation)
         const baseGeometries = {};
-        const getBaseGeom = (type) => {
-            if (!baseGeometries[type]) {
+        const getBaseGeom = (type) => { /* ... code existant ... */
+             if (!baseGeometries[type]) {
                 let w = 5, h = 5, d = 5; // Taille par défaut
+                let valid = true;
                 switch(type) {
-                    case 'house':       w = config.houseBaseWidth * 0.8; h = config.houseBaseHeight * 0.8; d = config.houseBaseDepth * 0.8; break;
-                    case 'building':    w = config.buildingBaseWidth * 0.7; h = config.buildingBaseHeight * 0.7; d = config.buildingBaseDepth * 0.7; break;
-                    case 'industrial':  w = config.industrialBaseWidth * 0.6; h = config.industrialBaseHeight * 0.6; d = config.industrialBaseDepth * 0.6; break;
-                    case 'skyscraper':  w = config.skyscraperBaseWidth * 0.6; h = config.skyscraperBaseHeight * 0.6; d = config.skyscraperBaseDepth * 0.6; break;
-                    // Pas d'outline pour 'park' ou 'tree' pour l'instant
-                    default: return null;
+                    case 'house':       w = config.houseBaseWidth * 0.8 || 5; h = config.houseBaseHeight * 0.8 || 5; d = config.houseBaseDepth * 0.8 || 5; break;
+                    case 'building':    w = config.buildingBaseWidth * 0.7 || 8; h = config.buildingBaseHeight * 0.7 || 15; d = config.buildingBaseDepth * 0.7 || 8; break;
+                    case 'industrial':  w = config.industrialBaseWidth * 0.6 || 15; h = config.industrialBaseHeight * 0.6 || 10; d = config.industrialBaseDepth * 0.6 || 20; break;
+                    case 'skyscraper':  w = config.skyscraperBaseWidth * 0.6 || 12; h = config.skyscraperBaseHeight * 0.6 || 50; d = config.skyscraperBaseDepth * 0.6 || 12; break;
+                    default: valid = false; break; // Ne pas créer pour park, tree, etc.
                 }
+                if (!valid) return null;
+                // *** AJOUT Vérification NaN/Infinity ***
+                 if (!isFinite(w) || !isFinite(h) || !isFinite(d) || w <= 0 || h <= 0 || d <= 0) {
+                     console.warn(`  [DVM Build] Invalid dimensions calculated for type '${type}': W=${w}, H=${h}, D=${d}. Using default 5x5x5.`);
+                     w = 5; h = 5; d = 5;
+                 }
                 baseGeometries[type] = new THREE.BoxGeometry(w, h, d);
             }
             return baseGeometries[type];
         };
-
-        const matricesByTypeColor = {}; // Structure: { 'colorHex': { type: 'house', matrices: [] }, ... }
+        const matricesByTypeColor = {};
+        // *** AJOUT LOG ***
+        console.log(`  [DVM Build] Processing ${buildingInstancesMap.size} building instances...`);
 
         buildingInstancesMap.forEach(buildingInfo => {
             const geom = getBaseGeom(buildingInfo.type);
-            if (!geom) return; // Ne pas visualiser ce type
+            if (!geom) return;
 
             const color = this.buildingColors[buildingInfo.type] || this.buildingColors.default;
             const colorHex = color.getHexString();
-
-            // Calculer la matrice de transformation
             const matrix = new THREE.Matrix4();
             const position = buildingInfo.position.clone();
-            position.y = geom.parameters.height / 2 + 0.05; // Placer la base de la boîte au sol
-            const quaternion = new THREE.Quaternion(); // Pas de rotation pour les boîtes de debug
-            const scale = new THREE.Vector3(1, 1, 1); // Utiliser la taille de la géométrie de base
+             // *** AJOUT Vérification NaN/Infinity ***
+             if (!isFinite(position.x) || !isFinite(position.y) || !isFinite(position.z)) {
+                  console.warn(`  [DVM Build] Invalid position for building ${buildingInfo.id} (type ${buildingInfo.type}):`, position);
+                  return; // Ignorer ce bâtiment
+             }
+             // *** AJOUT Vérification geom.parameters ***
+             if (!geom.parameters || typeof geom.parameters.height !== 'number') {
+                 console.warn(`  [DVM Build] Geometry parameters missing for type ${buildingInfo.type}`);
+                 position.y = 2.5 + 0.05; // Fallback height guess
+             } else {
+                position.y = geom.parameters.height / 2 + 0.05;
+             }
+            const quaternion = new THREE.Quaternion();
+            const scale = new THREE.Vector3(1, 1, 1);
             matrix.compose(position, quaternion, scale);
 
-            // Stocker la matrice par couleur
             if (!matricesByTypeColor[colorHex]) {
                 matricesByTypeColor[colorHex] = { type: buildingInfo.type, matrices: [] };
             }
             matricesByTypeColor[colorHex].matrices.push(matrix);
             buildingCount++;
         });
+         // *** AJOUT LOG ***
+         console.log(`  [DVM Build] Processed ${buildingCount} valid buildings. Found ${Object.keys(matricesByTypeColor).length} type/color groups.`);
 
-         // Créer un InstancedMesh par type/couleur
+        let addedMeshes = 0; // Compteur
          for (const colorHex in matricesByTypeColor) {
              const data = matricesByTypeColor[colorHex];
-             const baseGeom = getBaseGeom(data.type);
+             const baseGeom = getBaseGeom(data.type); // Re-get (should be cached)
              const matrices = data.matrices;
 
              if (baseGeom && matrices.length > 0) {
-                 const material = this._getOrCreateDebugMaterial(`building_${colorHex}`, new THREE.Color(`#${colorHex}`), true); // Wireframe
+                 const material = this._getOrCreateDebugMaterial(`building_${colorHex}`, new THREE.Color(`#${colorHex}`), true);
                  const instancedMesh = new THREE.InstancedMesh(baseGeom, material, matrices.length);
 
                  matrices.forEach((mat, index) => {
@@ -248,18 +264,18 @@ export default class DebugVisualManager {
                  instancedMesh.instanceMatrix.needsUpdate = true;
                  instancedMesh.name = `BuildingOutlines_${data.type}_${colorHex}`;
                  this.addDebugVisual(instancedMesh, visualType);
+                 addedMeshes++; // Incrémenter
+                 // *** AJOUT LOG ***
+                 // console.log(`    [DVM Build] Added InstancedMesh for type ${data.type}, color #${colorHex}`);
+             } else {
+                 // *** AJOUT LOG ***
+                 console.warn(`    [DVM Build] Skipping InstancedMesh creation for color #${colorHex} (geom: ${!!baseGeom}, matrices: ${matrices.length})`);
              }
          }
-
-         // Nettoyer les géométries de base créées
          Object.values(baseGeometries).forEach(g => g.dispose());
-
-
-        if (buildingCount > 0) {
-            console.log(`DebugVisualManager: ${Object.keys(matricesByTypeColor).length} building outline mesh(es) created for ${buildingCount} buildings.`);
-        }
+         // *** AJOUT LOG ***
+         console.log(`  [DVM Build] Finished creating outlines. Added ${addedMeshes} InstancedMesh objects.`);
     }
-
 
     // Les méthodes createParkOutlines et createDistrictBoundaries restent inchangées
     // ... (coller le code existant de ces méthodes ici) ...

@@ -53,73 +53,79 @@ export default class World {
         // Visibilité des groupes existants
         this.debugAgentPathGroup.visible = enabled;
         this.debugNavGridGroup.visible = enabled;
-        // Visibilité du groupe central de debug
-        if (this.debugVisualManager) {
+
+        // Gérer le groupe central de debugVisualManager
+        if (this.debugVisualManager && this.debugVisualManager.parentGroup) { // Ajout vérification parentGroup
             this.debugVisualManager.parentGroup.visible = enabled;
-        }
 
-        if (enabled) {
-            console.log("World: Debug mode ENABLED - Creating/Updating visuals...");
-            // --- Mise à jour via DebugVisualManager ---
-            if (this.debugVisualManager && this.cityManager) {
-                const plots = this.cityManager.getPlots();
-                const buildingInstances = this.cityManager.getBuildingInstances(); // Récupère la Map
+            // --- CORRECTION ICI : Utiliser this.scene ---
+            const isInScene = this.debugVisualManager.parentGroup.parent === this.scene; // Vérifier si attaché à this.scene
+            if (enabled && !isInScene) {
+                this.scene.add(this.debugVisualManager.parentGroup); // Ajouter à this.scene
+                console.log("  [World Debug] Added debugVisualManager.parentGroup to scene.");
+            } else if (!enabled && isInScene) {
+                this.scene.remove(this.debugVisualManager.parentGroup); // Retirer de this.scene
+                 console.log("  [World Debug] Removed debugVisualManager.parentGroup from scene.");
+            }
+            // --- FIN CORRECTION ---
 
-                if (plots && plots.length > 0) {
-                     // Crée seulement si le groupe est vide pour éviter recréation constante
-                     if (this.debugVisualManager.parentGroup.children.filter(c => c.userData.visualType === 'PlotOutlines').length === 0) {
+            if (enabled) {
+                console.log("World: Debug mode ENABLED - Creating/Updating visuals...");
+                // --- Mise à jour via DebugVisualManager ---
+                if (this.cityManager) {
+                    const plots = this.cityManager.getPlots();
+                    console.log(`  Plots available for debug: ${plots ? plots.length : 'null/undefined'}`);
+
+                    const buildingInstances = this.cityManager.getBuildingInstances();
+                    console.log(`  Building instances available for debug: ${buildingInstances ? buildingInstances.size : 'null/undefined'}`);
+
+                    // Recréer/Mettre à jour les visuels (logique précédente)
+                    if (plots && plots.length > 0) {
+                        console.log("  Attempting to create/update plot outlines...");
                         this.debugVisualManager.createPlotOutlines(plots);
-                     }
-                } else {
-                    this.debugVisualManager.clearDebugVisuals('PlotOutlines');
-                }
-
-                if (buildingInstances && buildingInstances.size > 0) {
-                     if (this.debugVisualManager.parentGroup.children.filter(c => c.userData.visualType === 'BuildingOutlines').length === 0) {
-                        this.debugVisualManager.createBuildingOutlines(buildingInstances, this.cityManager.config);
+                    } else {
+                        console.log("  No plots to create outlines for.");
+                        this.debugVisualManager.clearDebugVisuals('PlotOutlines');
                     }
-                } else {
-                     this.debugVisualManager.clearDebugVisuals('BuildingOutlines');
-                }
 
-                 // Recréer NavGrid si besoin (logique existante)
-                 if (this.cityManager.navigationGraph && this.debugNavGridGroup.children.length === 0) {
-                     console.log("World: Debug enabled - Generating NavGrid visualization...");
-                     this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
-                 }
-                 // Ajouter d'autres visuels si nécessaire (ex: districts)
-                 if (this.cityManager.config.showDistrictBoundaries && this.cityManager.districts.length > 0){
-                     if (this.debugVisualManager.parentGroup.children.filter(c => c.userData.visualType === 'DistrictBoundaries').length === 0) {
+                    if (buildingInstances && buildingInstances.size > 0) {
+                        console.log("  Attempting to create/update building outlines...");
+                        this.debugVisualManager.createBuildingOutlines(buildingInstances, this.cityManager.config);
+                    } else {
+                        console.log("  No building instances to create outlines for.");
+                        this.debugVisualManager.clearDebugVisuals('BuildingOutlines');
+                    }
+
+                    if (this.cityManager.config.showDistrictBoundaries && this.cityManager.districts.length > 0){
+                        console.log("  Attempting to create/update district boundaries...");
                         this.debugVisualManager.createDistrictBoundaries(this.cityManager.districts, this.cityManager.config);
-                     }
-                 } else {
-                     this.debugVisualManager.clearDebugVisuals('DistrictBoundaries');
-                 }
+                    } else {
+                         this.debugVisualManager.clearDebugVisuals('DistrictBoundaries');
+                    }
+
+                    // Recréer NavGrid si besoin
+                    if (this.cityManager.navigationGraph) {
+                        this.clearDebugNavGrid(); // Vider avant pour éviter doublons
+                        console.log("  Attempting to create NavGrid visualization...");
+                        this.cityManager.navigationGraph.createDebugVisualization(this.debugNavGridGroup);
+                    }
+
+                } else {
+                     console.warn("World: Cannot update debug visuals - CityManager missing.");
+                }
 
             } else {
-                 console.warn("World: Cannot update debug visuals - DebugVisualManager or CityManager missing.");
-            }
-            // ----------------------------------------
-
-        } else {
-            console.log("World: Debug mode DISABLED - Clearing visuals...");
-            // --- Nettoyage via DebugVisualManager ---
-            if (this.debugVisualManager) {
-                // On ne nettoie QUE les outlines plots/buildings ici,
-                // car NavGrid et AgentPaths sont gérés par leurs groupes dédiés.
-                // Si on veut tout centraliser, il faudrait migrer NavGrid/AgentPath vers DebugVisualManager aussi.
+                console.log("World: Debug mode DISABLED - Clearing visuals...");
+                // --- Nettoyage ---
                 this.debugVisualManager.clearDebugVisuals('PlotOutlines');
                 this.debugVisualManager.clearDebugVisuals('BuildingOutlines');
-                this.debugVisualManager.clearDebugVisuals('DistrictBoundaries'); // Nettoyer aussi les districts
-                // this.debugVisualManager.clearAllAndDisposeMaterials(); // Appel plus radical si on quitte complètement le mode debug
+                this.debugVisualManager.clearDebugVisuals('DistrictBoundaries');
+                this.clearDebugAgentPaths();
+                this.clearDebugNavGrid();
             }
-            // -------------------------------------
-
-            // Nettoyage des groupes spécifiques restants
-            this.clearDebugAgentPaths();
-            this.clearDebugNavGrid();
+        } else {
+             console.warn("World: Cannot manage debug visuals - DebugVisualManager or its parentGroup missing.");
         }
-        console.log(`World Debug Mode: ${enabled ? 'Enabled' : 'Disabled'}`);
     }
 
     // --- Les méthodes clearDebugPlotGrid, clearDebugAgentPaths, clearDebugNavGrid restent similaires ---
