@@ -44,12 +44,16 @@ export default class Experience extends EventTarget {
         this.selectedAgent = null;
         this.isFollowingAgent = false;
 
-        // --- NOUVEAU: Variables pour détecter clic vs drag ---
+        // --- NOUVEAU: Référence à l'élément tooltip et vecteur 3D ---
+        this.tooltipElement = document.getElementById('agent-tooltip');
+        this.tooltipTargetPosition = new THREE.Vector3(); // Pour calculer la position 3D de la cible
+        // ------------------------------------------------------------
+
+        // --- Variables clic vs drag ---
         this.mouseDownTime = 0;
         this.mouseDownPosition = { x: null, y: null };
-        this.MAX_CLICK_DURATION = 200; // ms maximum pour être un clic
-        this.MAX_CLICK_DISTANCE_SQ = 25; // Distance max (au carré) pour être un clic (5*5 pixels)
-        // --------------------------------------------------
+        this.MAX_CLICK_DURATION = 200;
+        this.MAX_CLICK_DISTANCE_SQ = 25;
 
         // --- EventListeners ---
         this.resizeHandler = () => this.resize();
@@ -58,27 +62,17 @@ export default class Experience extends EventTarget {
         this.updateHandler = () => this.update();
         this.time.addEventListener('tick', this.updateHandler);
 
-        // --- MODIFIÉ: Remplacer 'click' par 'mousedown' et 'mouseup' ---
-        // this.clickHandler = (event) => this.handleCanvasClick(event); // ANCIEN
-        // this.canvas.addEventListener('click', this.clickHandler);    // ANCIEN
-
+        // --- Gestionnaires mousedown/mouseup ---
         this._boundHandleMouseDown = this._handleMouseDown.bind(this);
         this._boundHandleMouseUp = this._handleMouseUp.bind(this);
         this.canvas.addEventListener('mousedown', this._boundHandleMouseDown);
         this.canvas.addEventListener('mouseup', this._boundHandleMouseUp);
-        // --------------------------------------------------------------
 
         console.log("Experience initialisée. Mode debug:", this.isDebugMode);
     }
 
-    // --- SUPPRIMÉ: handleCanvasClick n'est plus utilisé directement ---
-    // handleCanvasClick(event) { ... ancien code ... }
-    // -----------------------------------------------------------------
-
-    // --- NOUVEAU: Gestionnaires mousedown/mouseup ---
     _handleMouseDown(event) {
-        // Enregistrer l'heure et la position de départ du clic gauche
-        if (event.button === 0) { // Bouton gauche
+        if (event.button === 0) {
             this.mouseDownTime = Date.now();
             this.mouseDownPosition.x = event.clientX;
             this.mouseDownPosition.y = event.clientY;
@@ -86,34 +80,22 @@ export default class Experience extends EventTarget {
     }
 
     _handleMouseUp(event) {
-        // Ne traiter que le relâchement du bouton gauche
         if (event.button !== 0) return;
-
         const upTime = Date.now();
         const clickDuration = upTime - this.mouseDownTime;
-
-        // Calculer la distance (au carré) parcourue par la souris
         const deltaX = event.clientX - this.mouseDownPosition.x;
         const deltaY = event.clientY - this.mouseDownPosition.y;
         const distanceSq = deltaX * deltaX + deltaY * deltaY;
 
-        // Vérifier si c'est un clic (court et peu de mouvement)
         if (clickDuration <= this.MAX_CLICK_DURATION && distanceSq <= this.MAX_CLICK_DISTANCE_SQ) {
-            // --- C'est un CLIC : Exécuter la logique de sélection/désélection ---
-            console.log("Click détecté."); // Debug
-
-            // 1. Normaliser les coordonnées de la souris (du mouseup)
+            console.log("Click détecté.");
             this.mouse.x = (event.clientX / this.sizes.width) * 2 - 1;
             this.mouse.y = -(event.clientY / this.sizes.height) * 2 + 1;
-
-            // 2. Mettre à jour le Raycaster
             this.raycaster.setFromCamera(this.mouse, this.camera.instance);
 
-            // 3. Déterminer les objets à intersecter
             const agentManager = this.world?.agentManager;
             if (!agentManager || !agentManager.instanceMeshes || !agentManager.agents) {
-                console.warn("MouseUp Handler (Click): AgentManager non prêt.");
-                this.deselectAgent(); // Désélectionner par sécurité si agent manager n'est pas prêt
+                this.deselectAgent();
                 return;
             }
             const objectsToIntersect = [];
@@ -121,14 +103,10 @@ export default class Experience extends EventTarget {
             if (agentManager.instanceMeshes.head) objectsToIntersect.push(agentManager.instanceMeshes.head);
 
             if (objectsToIntersect.length === 0) {
-                console.warn("MouseUp Handler (Click): Aucun InstancedMesh d'agent trouvé.");
                 this.deselectAgent();
                 return;
             }
-
-            // 4. Lancer l'intersection
             const intersects = this.raycaster.intersectObjects(objectsToIntersect, false);
-
             let agentClicked = false;
             if (intersects.length > 0) {
                 const firstIntersect = intersects[0];
@@ -137,54 +115,69 @@ export default class Experience extends EventTarget {
                     const clickedAgent = agentManager.agents[agentInstanceId];
                     if (clickedAgent) {
                         console.log(`Agent cliqué (via MouseUp): ${clickedAgent.id}`);
-                        this.selectAgent(clickedAgent);
+                        this.selectAgent(clickedAgent); // Sélectionne l'agent
                         agentClicked = true;
-                    } else {
-                        console.warn(`Agent logique non trouvé pour instanceId ${agentInstanceId} (via MouseUp)`);
                     }
                 }
             }
-
-            // 5. Si on n'a PAS cliqué sur un agent, désélectionner
             if (!agentClicked) {
-                this.deselectAgent();
+                this.deselectAgent(); // Désélectionne si clic dans le vide
             }
-            // --- Fin logique Clic ---
-
         } else {
-            // --- C'est un DRAG (ou clic long) ---
-            console.log("Drag détecté (ou clic long), pas de sélection/désélection."); // Debug
-            // Ne rien faire ici concernant la sélection/désélection.
-            // La rotation de la caméra pendant le drag a été gérée par les listeners de Camera.js.
+            console.log("Drag détecté (ou clic long), pas de sélection/désélection.");
         }
-
-        // Réinitialiser pour le prochain clic
         this.mouseDownTime = 0;
         this.mouseDownPosition.x = null;
         this.mouseDownPosition.y = null;
     }
-    // --- Fin NOUVEAU ---
 
-    // ... (selectAgent, deselectAgent, enableDebugMode, etc. restent identiques) ...
     selectAgent(agent) {
-        if (this.selectedAgent === agent) return; // Déjà sélectionné
+        if (this.selectedAgent === agent) return;
 
         this.selectedAgent = agent;
         this.isFollowingAgent = true;
-        this.controls.enabled = false; // Désactiver OrbitControls
-        this.camera.followAgent(agent); // Dire à la caméra de suivre
+        this.controls.enabled = false;
+        this.camera.followAgent(agent);
         console.log(`Camera following agent: ${agent.id}`);
+
+        // --- NOUVEAU: Afficher et mettre à jour le tooltip ---
+        if (this.tooltipElement) {
+            this.updateTooltipContent(agent); // Met à jour le contenu
+            this.tooltipElement.style.display = 'block'; // Rend visible
+            // La position sera mise à jour dans update()
+        }
+        // -----------------------------------------------------
     }
 
 	deselectAgent() {
-        // Ne désélectionner que s'il y a un agent sélectionné
-        if (!this.isFollowingAgent && !this.selectedAgent) return;
+        // --- NOUVEAU: Cacher le tooltip ---
+        if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
+             this.tooltipElement.style.display = 'none';
+        }
+        // ----------------------------------
 
+        // Logique existante
+        if (!this.isFollowingAgent && !this.selectedAgent) return;
         console.log(`Camera stopped following agent: ${this.selectedAgent?.id ?? 'None'}`);
         this.selectedAgent = null;
         this.isFollowingAgent = false;
-        if(this.controls) this.controls.enabled = true; // Réactiver OrbitControls (vérifier si controls existe)
-        if(this.camera) this.camera.stopFollowing(); // Dire à la caméra d'arrêter (vérifier si camera existe)
+        if(this.controls) this.controls.enabled = true;
+        if(this.camera) this.camera.stopFollowing();
+    }
+
+    // --- NOUVELLE MÉTHODE: Mettre à jour le contenu du tooltip ---
+    updateTooltipContent(agent) {
+      if (!agent || !this.tooltipElement) return;
+      const content = `
+        ID: ${agent.id}<br>
+        State: ${agent.currentState || 'N/A'}<br>
+        Home: ${agent.homeBuildingId || 'N/A'}<br>
+        Work: ${agent.workBuildingId || 'N/A'}
+      `;
+      // Ajoute une vérification pour éviter d'écrire dans le DOM si le contenu n'a pas changé
+      if (this.tooltipElement.innerHTML !== content) {
+        this.tooltipElement.innerHTML = content;
+      }
     }
 
     enableDebugMode() {
@@ -230,23 +223,67 @@ export default class Experience extends EventTarget {
         this.stats.begin();
         const deltaTime = this.time.delta;
 
-        // Mettre à jour OrbitControls uniquement si l'agent n'est pas suivi
         if (!this.isFollowingAgent && this.controls?.enabled) {
              this.controls.update();
         }
-
-        // Mettre à jour la caméra (qui gère le suivi si actif)
         if(this.camera) this.camera.update(deltaTime);
-
-        // Mettre à jour le monde et ses composants
         if(this.world) this.world.update();
-
-        // Faire le rendu
         if(this.renderer) this.renderer.update();
-
-        // Mettre à jour l'UI
         if (this.timeUI) this.timeUI.update();
-        // TimeControlUI est piloté par événements, pas besoin d'update ici a priori
+
+        // --- NOUVEAU: Mise à jour position et contenu du tooltip ---
+        if (this.selectedAgent && this.tooltipElement) {
+            // 1. Mettre à jour le contenu (au cas où l'état change)
+            this.updateTooltipContent(this.selectedAgent);
+
+            // 2. Calculer la position 3D cible (approximativement au-dessus de la tête)
+            this.tooltipTargetPosition.copy(this.selectedAgent.position);
+            // Approximation de la hauteur de la tête basée sur l'échelle et l'offset Y
+            // Ajustez la valeur '8.0' si nécessaire pour mieux correspondre à la hauteur visuelle
+            const headHeightOffset = 8.0 * this.selectedAgent.scale;
+            this.tooltipTargetPosition.y += this.selectedAgent.yOffset + headHeightOffset;
+
+            // 3. Ajouter un petit décalage vers la droite relative à l'agent
+            const rightOffset = new THREE.Vector3(1, 0, 0); // Direction locale droite
+            rightOffset.applyQuaternion(this.selectedAgent.orientation); // Tourner selon l'agent
+            rightOffset.multiplyScalar(3.0 * this.selectedAgent.scale); // Ajuster la distance de décalage
+            this.tooltipTargetPosition.add(rightOffset);
+
+
+            // 4. Projeter la position 3D en coordonnées écran 2D
+            // Cloner le vecteur avant de le projeter pour ne pas modifier l'original si réutilisé
+            const projectedPosition = this.tooltipTargetPosition.clone();
+            projectedPosition.project(this.camera.instance);
+
+            // Empêcher l'affichage si l'agent est derrière la caméra
+            if (projectedPosition.z < 1) {
+                // 5. Convertir les coordonnées normalisées (-1 à +1) en pixels
+                const screenX = (projectedPosition.x * 0.5 + 0.5) * this.sizes.width;
+                const screenY = (-projectedPosition.y * 0.5 + 0.5) * this.sizes.height;
+
+                // 6. Appliquer les styles pour positionner le tooltip
+                this.tooltipElement.style.left = `${screenX}px`;
+                this.tooltipElement.style.top = `${screenY}px`;
+
+                 // S'assurer qu'il est visible (au cas où il aurait été caché par la logique de z<1)
+                 if (this.tooltipElement.style.display === 'none') {
+                    this.tooltipElement.style.display = 'block';
+                 }
+
+            } else {
+                // Cacher le tooltip si l'agent est derrière la caméra
+                if (this.tooltipElement.style.display !== 'none') {
+                    this.tooltipElement.style.display = 'none';
+                }
+            }
+
+        } else {
+             // S'assurer qu'il est caché si aucun agent n'est sélectionné
+             if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
+                 this.tooltipElement.style.display = 'none';
+             }
+        }
+        // ----------------------------------------------------------
 
         this.stats.end();
     }
@@ -257,32 +294,27 @@ export default class Experience extends EventTarget {
         // --- Nettoyage EventListeners ---
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
-        // --- MODIFIÉ: Retirer les listeners mousedown/mouseup ---
         this.canvas.removeEventListener('mousedown', this._boundHandleMouseDown);
         this.canvas.removeEventListener('mouseup', this._boundHandleMouseUp);
-        // ------------------------------------------------------
 
-        // --- Détruire les UIs ---
-        this.timeUI?.destroy(); this.timeUI = null;
-        this.timeControlUI?.destroy(); this.timeControlUI = null;
-
-        // --- Détruire la caméra et ses listeners ---
-        this.camera?.destroy(); // Assurez-vous que destroy nettoie les listeners internes
-        this.camera = null;
-
-        // --- Détruire le monde ---
-        this.world?.destroy(); this.world = null;
+        // --- NOUVEAU: Nettoyage référence tooltip ---
+        this.tooltipElement = null;
+        // --------------------------------------------
 
         // --- Reste du nettoyage ---
+        this.timeUI?.destroy(); this.timeUI = null;
+        this.timeControlUI?.destroy(); this.timeControlUI = null;
+        this.camera?.destroy(); this.camera = null;
+        this.world?.destroy(); this.world = null;
         this.controls?.dispose(); this.controls = null;
         this.renderer?.instance?.dispose(); this.renderer = null;
-
         if (this.stats?.dom.parentNode) { document.body.removeChild(this.stats.dom); }
         this.stats = null;
         this.scene = null;
         this.originalFog = null;
         this.sizes = null; this.time = null; this.canvas = null;
         this.raycaster = null; this.mouse = null; this.selectedAgent = null;
+        this.tooltipTargetPosition = null; // Nettoyer le vecteur aussi
 
         instance = null;
         console.log("Experience détruite.");

@@ -150,3 +150,25 @@ button {
 	min-width: 40px;
 	text-align: center;
   }
+
+  .agent-tooltip {
+	position: absolute; /* Nécessaire pour le positionnement via JS */
+	display: none; /* Caché par défaut */
+	padding: 6px 10px;
+	background-color: rgba(0, 0, 0, 0.8); /* Fond noir semi-transparent */
+	color: white;
+	border-radius: 5px;
+	font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Ou autre police */
+	font-size: 1em;
+	line-height: 1.4;
+	white-space: nowrap; /* Empêche le texte de passer à la ligne */
+	pointer-events: none; /* Permet aux clics de passer à travers */
+	z-index: 100; /* S'assure qu'il est au-dessus du canvas */
+	/* Ajustement pour le positionnement :
+	   Translate de 10px vers la droite et 110% de sa hauteur vers le haut
+	   par rapport au point calculé (qui sera le dessus de la tête) */
+	transform: translate(10px, -110%);
+	/* Transition douce (optionnel) */
+	/* transition: opacity 0.2s ease-in-out; */
+  }
+  
