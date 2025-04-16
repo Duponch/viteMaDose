@@ -63,6 +63,7 @@ export default class Experience extends EventTarget {
         this.mouseDownPosition = { x: null, y: null };
         this.MAX_CLICK_DURATION = 200;
         this.MAX_CLICK_DISTANCE_SQ = 25; // pixels squared
+		this.clickHandledByTooltip = false;
 
         // --- EventListeners ---
         this.resizeHandler = () => this.resize();
@@ -224,6 +225,16 @@ export default class Experience extends EventTarget {
 
     // Gère la fin du clic : détermine si c'est un clic simple et lance le raycasting
     _handleMouseUp(event) {
+		if (this.clickHandledByTooltip) {
+			this.clickHandledByTooltip = false; // Réinitialiser le drapeau immédiatement
+			// Réinitialiser aussi l'état du clic pour éviter des effets de bord
+			this.mouseDownTime = 0;
+			this.mouseDownPosition.x = null;
+			this.mouseDownPosition.y = null;
+			// Sortir de la fonction pour ne pas exécuter le raycast/désélection
+			return;
+		}
+
         if (event.button !== 0) return; // Seulement clic gauche
 
         const upTime = Date.now();
@@ -395,6 +406,7 @@ export default class Experience extends EventTarget {
                     this.deselectAgent();
                     // Sélectionner le bâtiment trouvé
                     this.selectBuilding(buildingInfo, foundMesh, foundInstanceId);
+					this.clickHandledByTooltip = true;
                 } else {
                     console.warn(`Impossible de trouver le mesh/instance correspondant au bâtiment ${buildingId} près de la position ${targetPosition.x.toFixed(1)},${targetPosition.z.toFixed(1)}.`);
                     // Optionnel : Animer la caméra vers la position du bâtiment même si le mesh n'est pas trouvé ?
@@ -420,6 +432,7 @@ export default class Experience extends EventTarget {
                     // console.log(`Agent ${agentId} trouvé, sélection en cours...`); // Décommenter pour debug
                     this.deselectBuilding(); // Quitter la sélection bâtiment
                     this.selectAgent(agentToSelect); // Sélectionner l'agent cliqué
+					this.clickHandledByTooltip = true;
                 } else {
                     console.warn(`Agent avec ID ${agentId} non trouvé.`);
                 }
