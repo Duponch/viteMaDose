@@ -1,33 +1,40 @@
-/*
- * Fichier: src/UI/TimeControlUI.js
- * Ajouts:
- * - Création du bouton de debug.
- * - Ajout d'un écouteur pour le clic sur le bouton debug -> experience.toggleDebugMode().
- * - Ajout d'un écouteur pour l'événement 'debugmodechanged' -> met à jour l'apparence du bouton.
- * - Nettoyage des nouveaux écouteurs dans destroy().
- */
 // src/UI/TimeControlUI.js
 
 export default class TimeControlUI {
     constructor(experience) {
         this.experience = experience;
-        this.time = this.experience.time; // Accès direct à l'instance Time
+        this.time = this.experience.time;
 
         this.container = document.createElement('div');
         this.container.classList.add('time-controls');
-        document.body.appendChild(this.container); // Ajoute le conteneur au body
+        document.body.appendChild(this.container);
 
-        this.elements = {}; // Pour stocker les références aux boutons
+        this.elements = {};
+
+        // --- Conteneur pour les boutons de calques ---
+        this.debugLayersContainer = document.createElement('div');
+        this.debugLayersContainer.classList.add('debug-layers-container');
+        this.debugLayersContainer.style.display = 'none'; // Caché par défaut
+        this.debugLayersContainer.style.position = 'absolute';
+        this.debugLayersContainer.style.bottom = '70px';
+        this.debugLayersContainer.style.right = '20px';
+        // Initialement caché, display sera géré par JS
+        // this.debugLayersContainer.style.display = 'flex'; // <-- Supprimé ici, géré par l'état
+        this.debugLayersContainer.style.flexDirection = 'column';
+        this.debugLayersContainer.style.gap = '5px';
+        document.body.appendChild(this.debugLayersContainer);
 
         this.createButtons();
         this.setupEventListeners();
-        this.updateButtonStates(); // Mettre à jour l'état initial (y compris debug)
+        this.updateButtonStates();
+        this.updateLayerButtonsState();
     }
 
     createButtons() {
-        // --- Boutons existants ---
+        // --- Boutons Temps ---
         this.elements.pausePlayButton = document.createElement('button');
         this.elements.pausePlayButton.id = 'pause-play-button';
+        this.elements.pausePlayButton.textContent = this.time.isPaused ? '▶' : '⏸'; // Contenu initial
 
         this.elements.decreaseButton = document.createElement('button');
         this.elements.decreaseButton.id = 'decrease-speed-button';
@@ -39,18 +46,35 @@ export default class TimeControlUI {
 
         this.elements.speedDisplay = document.createElement('span');
         this.elements.speedDisplay.id = 'speed-display';
-        this.elements.speedDisplay.textContent = `${this.time.timeScale}x`; // Affichage initial
+        this.elements.speedDisplay.textContent = `${this.time.timeScale}x`;
 
-        // --- Nouveau Bouton Debug ---
+        // --- Bouton Debug Principal ---
         this.elements.debugToggleButton = document.createElement('button');
         this.elements.debugToggleButton.id = 'debug-toggle-button';
-        this.elements.debugToggleButton.textContent = '〄'; // Emoji insecte pour debug
-        this.elements.debugToggleButton.title = "Activer/Désactiver le mode Debug"; // Tooltip
-        // Style initial (mode debug désactivé)
-        // --------------------------
+        this.elements.debugToggleButton.textContent = '🐞';
+        this.elements.debugToggleButton.title = "Afficher/Masquer les contrôles Debug";
 
-        // --- Ajout au container (ordre peut être ajusté) ---
-        this.container.appendChild(this.elements.debugToggleButton); // Ajouté en premier
+        // --- Boutons de Calques ---
+        const layers = [
+            { id: 'districtGround', text: 'Districts' },
+            { id: 'plotGround', text: 'Plots' },
+            { id: 'buildingOutline', text: 'Buildings' },
+            { id: 'navGrid', text: 'NavGrid' },
+            { id: 'agentPath', text: 'Paths' }
+        ];
+
+        layers.forEach(layer => {
+            const button = document.createElement('button');
+            button.id = `debug-layer-${layer.id}`;
+            button.classList.add('debug-layer-button');
+            button.textContent = layer.text;
+            button.dataset.layerName = layer.id;
+            this.elements[`layerBtn_${layer.id}`] = button;
+            this.debugLayersContainer.appendChild(button);
+        });
+
+        // --- Ajout au container principal ---
+        this.container.appendChild(this.elements.debugToggleButton);
         this.container.appendChild(this.elements.speedDisplay);
         this.container.appendChild(this.elements.decreaseButton);
         this.container.appendChild(this.elements.pausePlayButton);
@@ -58,42 +82,66 @@ export default class TimeControlUI {
     }
 
     setupEventListeners() {
-        // --- Clics sur les boutons existants ---
-        this.elements.pausePlayButton.addEventListener('click', () => {
-            this.time.togglePause();
-        });
+        // --- Listeners Temps ---
+        this.elements.pausePlayButton.addEventListener('click', () => this.time.togglePause());
         this.elements.increaseButton.addEventListener('click', () => {
             this.time.increaseSpeed();
-            if(this.time.isPaused) this.time.play();
+            if(this.time.isPaused) this.time.play(); // Reprendre si en pause
         });
         this.elements.decreaseButton.addEventListener('click', () => {
             this.time.decreaseSpeed();
-            if(this.time.isPaused) this.time.play();
+            if(this.time.isPaused) this.time.play(); // Reprendre si en pause
         });
 
-        // --- Clic sur le bouton Debug ---
+        // --- Listener Bouton Debug Principal ---
         this.elements.debugToggleButton.addEventListener('click', () => {
             this.experience.toggleDebugMode();
+            // La visibilité du conteneur est gérée par l'écouteur 'debugmodechanged'
         });
-        // ------------------------------
 
-        // --- Écoute des événements de Time.js ---
+        // --- Listeners Boutons de Calques ---
+        Object.keys(this.elements).forEach(key => {
+            if (key.startsWith('layerBtn_')) {
+                const button = this.elements[key];
+                const layerName = button.dataset.layerName;
+                if (layerName) {
+                    button.addEventListener('click', () => {
+                         if (this.experience.isDebugMode) {
+                            this.experience.toggleDebugLayer(layerName);
+                         } else {
+                            console.log("Activez d'abord le mode Debug principal.");
+                         }
+                    });
+                }
+            }
+        });
+
+        // --- Écoute des événements ---
         this.pauseHandler = () => this.updateButtonStates();
         this.playHandler = () => this.updateButtonStates();
         this.speedChangeHandler = (event) => this.updateButtonStates(event.detail.scale);
-
         this.time.addEventListener('paused', this.pauseHandler);
         this.time.addEventListener('played', this.playHandler);
         this.time.addEventListener('speedchange', this.speedChangeHandler);
 
-        // --- Écoute de l'événement de Experience pour le mode debug ---
-        this.debugModeChangeHandler = (event) => this.updateButtonStates();
+        this.debugModeChangeHandler = (event) => {
+             this.updateButtonStates();
+             this.debugLayersContainer.style.display = event.detail.isEnabled ? 'flex' : 'none';
+             this.updateLayerButtonsState(); // MAJ état boutons calques
+        };
         this.experience.addEventListener('debugmodechanged', this.debugModeChangeHandler);
-        // -----------------------------------------------------------
+
+        this.debugLayerVisibilityChangeHandler = (event) => {
+            this.updateLayerButtonsState(); // MAJ état boutons calques
+        };
+        this.experience.addEventListener('debuglayervisibilitychanged', this.debugLayerVisibilityChangeHandler);
     }
 
     updateButtonStates(currentScale = this.time.timeScale) {
-        // --- Mise à jour boutons temps ---
+        // Vérifier si time existe encore (utile lors de la destruction)
+        if (!this.time) return;
+
+        // --- MàJ Boutons Temps ---
         if (this.time.isPaused) {
             this.elements.pausePlayButton.textContent = '▶'; // Icône Play
             this.elements.pausePlayButton.classList.add('paused');
@@ -107,45 +155,86 @@ export default class TimeControlUI {
         this.elements.decreaseButton.disabled = currentScale <= minSpeed;
         this.elements.increaseButton.disabled = currentScale >= maxSpeed;
 
-        // --- Mise à jour bouton debug ---
+        // --- MàJ Bouton Debug Principal ---
+        // Vérifier si experience existe encore
+        if (!this.experience) return;
         if (this.experience.isDebugMode) {
-            this.elements.debugToggleButton.style.opacity = '1.0'; // Pleinement visible
-            this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 150, 255, 0.7)'; // Fond bleu léger
+            this.elements.debugToggleButton.style.opacity = '1.0';
+            this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 150, 255, 0.7)';
         } else {
-            this.elements.debugToggleButton.style.opacity = '0.6'; // Moins visible
-            this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 0, 0, 0.6)'; // Fond sombre standard
+            this.elements.debugToggleButton.style.opacity = '0.6';
+            this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
         }
-        // ------------------------------
     }
 
-    // Optionnel: méthode update à appeler dans la boucle principale si besoin
-    update() {
-        // Généralement pas nécessaire si l'UI réagit aux événements
+    updateLayerButtonsState() {
+        // --- AJOUT DE LA VÉRIFICATION ---
+        if (!this.experience || typeof this.experience.debugLayerVisibility !== 'object') {
+            console.warn("TimeControlUI: Experience ou debugLayerVisibility non disponible pour la mise à jour de l'état des boutons de calque.");
+            // Optionnellement, désactiver tous les boutons de calque si l'état n'est pas disponible
+            Object.keys(this.elements).forEach(key => {
+                if (key.startsWith('layerBtn_')) {
+                    const button = this.elements[key];
+                    button.disabled = true;
+                    button.style.opacity = '0.5';
+                    button.style.border = '1px solid transparent';
+                    button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+                }
+            });
+            return; // Sortir de la fonction
+        }
+        // --- FIN DE L'AJOUT ---
+
+        const layerVisibility = this.experience.debugLayerVisibility; // Maintenant on sait que ça existe
+        const isGlobalDebugActive = this.experience.isDebugMode;
+
+        Object.keys(this.elements).forEach(key => {
+            if (key.startsWith('layerBtn_')) {
+                const button = this.elements[key];
+                const layerName = button.dataset.layerName;
+
+                // La vérification hasOwnProperty peut maintenant être effectuée en toute sécurité
+                if (layerName && layerVisibility.hasOwnProperty(layerName)) {
+                    const isActive = layerVisibility[layerName];
+                    // Appliquer un style si le calque est visible ET le mode debug global est actif
+                    if (isActive && isGlobalDebugActive) {
+                        button.style.border = '1px solid #00aaff';
+                        button.style.backgroundColor = 'rgba(0, 100, 180, 0.7)';
+                    } else {
+                        button.style.border = '1px solid transparent';
+                        button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)'; // Style standard
+                    }
+                    // Griser le bouton si le mode debug global n'est pas actif
+                    button.disabled = !isGlobalDebugActive;
+                    button.style.opacity = isGlobalDebugActive ? '1.0' : '0.5';
+                } else if (layerName) {
+                    // Log si un bouton existe pour un layerName non trouvé dans l'état (sécurité)
+                    console.warn(`TimeControlUI: Bouton trouvé pour un calque inconnu '${layerName}'.`);
+                    button.disabled = true;
+                    button.style.opacity = '0.5';
+                }
+            }
+        });
     }
 
     destroy() {
-        // --- Retirer les écouteurs d'événements de Time.js ---
-        this.time.removeEventListener('paused', this.pauseHandler);
-        this.time.removeEventListener('played', this.playHandler);
-        this.time.removeEventListener('speedchange', this.speedChangeHandler);
+        // --- Retirer listeners Temps & Debug ---
+        // Utiliser optional chaining pour éviter les erreurs si time/experience sont déjà null
+        this.time?.removeEventListener('paused', this.pauseHandler);
+        this.time?.removeEventListener('played', this.playHandler);
+        this.time?.removeEventListener('speedchange', this.speedChangeHandler);
+        this.experience?.removeEventListener('debugmodechanged', this.debugModeChangeHandler);
+        this.experience?.removeEventListener('debuglayervisibilitychanged', this.debugLayerVisibilityChangeHandler);
 
-        // --- Retirer l'écouteur d'événement de Experience ---
-        this.experience.removeEventListener('debugmodechanged', this.debugModeChangeHandler);
-        // ----------------------------------------------------
+        // --- Retirer les éléments du DOM ---
+        this.container?.remove(); // Méthode plus simple pour retirer l'élément
+        this.debugLayersContainer?.remove();
 
-        // Retirer les écouteurs des boutons (pas strictement nécessaire si l'élément est retiré du DOM)
-        // this.elements.pausePlayButton.removeEventListener('click', ...); // etc.
-        // this.elements.debugToggleButton.removeEventListener('click', ...);
-
-        // Retirer le conteneur du DOM
-        if (this.container && this.container.parentNode) {
-            this.container.parentNode.removeChild(this.container);
-        }
-
-        // Nettoyer les références
+        // --- Nettoyer références ---
         this.experience = null;
         this.time = null;
         this.container = null;
+        this.debugLayersContainer = null;
         this.elements = {};
         console.log("TimeControlUI destroyed.");
     }

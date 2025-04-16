@@ -58,6 +58,15 @@ export default class Experience extends EventTarget {
         this.buildingTooltipElement = document.getElementById('building-tooltip'); // Assurez-vous que cet ID existe
         this.buildingTooltipTargetPosition = new THREE.Vector3();
 
+		// --- État de Visibilité des Calques Debug ---
+        this.debugLayerVisibility = {
+            districtGround: true,
+            plotGround: true,
+            buildingOutline: true,
+            navGrid: false, // Caché par défaut ?
+            agentPath: false // Caché par défaut ?
+        };
+
         // --- Variables clic vs drag ---
         this.mouseDownTime = 0;
         this.mouseDownPosition = { x: null, y: null };
@@ -742,11 +751,47 @@ export default class Experience extends EventTarget {
     }
 
     toggleDebugMode() {
-        if (this.isDebugMode) {
-            this.disableDebugMode();
-        } else {
-            this.enableDebugMode();
+        this.isDebugMode = !this.isDebugMode;
+        console.log(`Debug Mode global ${this.isDebugMode ? 'ENABLED' : 'DISABLED'}`);
+
+        // Gérer le brouillard
+        if (this.scene) {
+            this.scene.fog = this.isDebugMode ? null : this.originalFog;
         }
+
+        // Demander au World de créer/nettoyer les visuels et appliquer les visibilités
+        if (this.world) {
+            this.world.setDebugMode(this.isDebugMode);
+        }
+
+        // Notifier l'UI du changement d'état global
+        this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: this.isDebugMode } }));
+    }
+
+	toggleDebugLayer(layerName) {
+        if (!this.debugLayerVisibility.hasOwnProperty(layerName)) {
+            console.warn(`Experience.toggleDebugLayer: Unknown layer name '${layerName}'`);
+            return;
+        }
+
+        // Inverser l'état de visibilité du calque
+        this.debugLayerVisibility[layerName] = !this.debugLayerVisibility[layerName];
+        console.log(`  Debug Layer '${layerName}' visibility toggled to: ${this.debugLayerVisibility[layerName]}`);
+
+        // Si le mode debug global est actif, mettre à jour la visibilité du groupe correspondant dans World
+        if (this.isDebugMode && this.world) {
+            this.world.setLayerVisibility(layerName, this.debugLayerVisibility[layerName]);
+        }
+
+        // Notifier l'UI (pour mettre à jour l'état des boutons de calque)
+        // On réutilise l'événement existant ou on en crée un nouveau si besoin de plus de détails
+        this.dispatchEvent(new CustomEvent('debuglayervisibilitychanged', {
+            detail: {
+                layerName: layerName,
+                isVisible: this.debugLayerVisibility[layerName],
+                allStates: { ...this.debugLayerVisibility } // Passer tous les états actuels
+            }
+        }));
     }
 
     // Gère le redimensionnement de la fenêtre

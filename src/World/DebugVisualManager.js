@@ -171,97 +171,110 @@ export default class DebugVisualManager {
         console.log("Debug materials and shared geometries disposed.");
     }
 
-	// --- NOUVEAU : Créer les "sols" des parcelles ---
-    /**
+	/**
      * Crée les plans colorés pour visualiser le sol des parcelles.
      * @param {Array<Plot>} plots - Tableau de parcelles (plots).
-     * @param {number} height - Hauteur (Y) à utiliser pour les plans des parcelles.
+     * @param {number} yPosition - Hauteur (Y) à utiliser pour les plans des parcelles.
+     * @returns {Array<THREE.InstancedMesh>} Tableau des InstancedMesh créés pour les sols des parcelles.
      */
     createPlotGroundVisuals(plots, yPosition) {
         const visualType = 'PlotGroundVisuals';
-        this.clearDebugVisuals(visualType);
+        this.clearDebugVisuals(visualType); // Garder le nettoyage
         const plotGroundHeight = this.plotGroundHeight;
         let plotGroundCount = 0;
         const matricesByTypeColor = {};
+        const createdMeshes = []; // <-- NOUVEAU: Tableau pour retourner les meshes
 
-        plots.forEach(plot => {
-            if (plot.zoneType === 'unbuildable' || plot.width <= 0 || plot.depth <= 0) return;
-            const color = this.zoneColors[plot.zoneType] || this.zoneColors.default;
-            const colorHex = color.getHexString();
-            const materialKey = `plot_ground_${colorHex}`;
-            const matrix = new THREE.Matrix4();
-            const position = new THREE.Vector3( plot.x + plot.width / 2, yPosition + plotGroundHeight / 2, plot.z + plot.depth / 2 );
-            const quaternion = new THREE.Quaternion();
-            const scale = new THREE.Vector3(plot.width, plotGroundHeight, plot.depth);
-            matrix.compose(position, quaternion, scale);
-            if (!matricesByTypeColor[materialKey]) { matricesByTypeColor[materialKey] = { color: color, matrices: [] }; }
-            matricesByTypeColor[materialKey].matrices.push(matrix);
-            plotGroundCount++;
-        });
+        // ... (logique existante pour remplir matricesByTypeColor) ...
+         plots.forEach(plot => {
+             if (plot.zoneType === 'unbuildable' || plot.width <= 0 || plot.depth <= 0) return;
+             const color = this.zoneColors[plot.zoneType] || this.zoneColors.default;
+             const colorHex = color.getHexString();
+             const materialKey = `plot_ground_${colorHex}`;
+             const matrix = new THREE.Matrix4();
+             const position = new THREE.Vector3( plot.x + plot.width / 2, yPosition + plotGroundHeight / 2, plot.z + plot.depth / 2 );
+             const quaternion = new THREE.Quaternion();
+             const scale = new THREE.Vector3(plot.width, plotGroundHeight, plot.depth);
+             matrix.compose(position, quaternion, scale);
+             if (!matricesByTypeColor[materialKey]) { matricesByTypeColor[materialKey] = { color: color, matrices: [] }; }
+             matricesByTypeColor[materialKey].matrices.push(matrix);
+             plotGroundCount++;
+         });
 
         for (const key in matricesByTypeColor) {
             const data = matricesByTypeColor[key];
             const matrices = data.matrices;
             if (matrices.length === 0) continue;
             const material = this._getOrCreateDebugMaterial(key, data.color, true, this.plotGroundOpacity);
-            // --- Assigner le renderOrder spécifique ---
-            material.renderOrder = this.renderOrders.plotGround; // <- MODIFIÉ
-            // ---
+            material.renderOrder = this.renderOrders.plotGround; // Assigner renderOrder ici
+
             const instancedMesh = new THREE.InstancedMesh(this.sharedGroundBoxGeometry, material, matrices.length);
             instancedMesh.name = `PlotGrounds_${key}`;
             matrices.forEach((mat, index) => { instancedMesh.setMatrixAt(index, mat); });
             instancedMesh.instanceMatrix.needsUpdate = true;
-            this.addDebugVisual(instancedMesh, visualType);
+            instancedMesh.userData.visualType = visualType; // <-- Garder pour le nettoyage
+
+            // NE PAS AJOUTER A parentGroup ICI
+            // this.addDebugVisual(instancedMesh, visualType); <-- RETIRÉ
+
+            createdMeshes.push(instancedMesh); // <-- AJOUTÉ: Ajouter au tableau de retour
         }
-        // ... (log inchangé)
+        console.log(`DebugVisualManager: ${createdMeshes.length} InstancedMesh de sols de parcelles créés.`);
+        return createdMeshes; // <-- AJOUTÉ: Retourner les meshes
     }
 
 	/**
      * Crée les plans colorés pour visualiser le sol des districts.
      * @param {Array<District>} districts - Tableau de districts.
-     * @param {number} height - Hauteur (Y) à utiliser pour les plans des districts.
+     * @param {number} yPosition - Hauteur (Y) à utiliser pour les plans des districts.
+     * @returns {Array<THREE.InstancedMesh>} Tableau des InstancedMesh créés pour les sols des districts.
      */
     createDistrictGroundVisuals(districts, yPosition) {
         const visualType = 'DistrictGroundVisuals';
-        this.clearDebugVisuals(visualType);
+        this.clearDebugVisuals(visualType); // Garder le nettoyage
         const districtGroundHeight = this.districtGroundHeight;
         let districtGroundCount = 0;
         const matricesByTypeColor = {};
+        const createdMeshes = []; // <-- NOUVEAU
 
-        districts.forEach(district => {
-            if (!district.plots || district.plots.length === 0) return;
-            const bounds = district.bounds; if (!bounds || bounds.isEmpty()) return;
-            const size = new THREE.Vector3(); bounds.getSize(size);
-            const center = new THREE.Vector3(); bounds.getCenter(center);
-            if (size.x <= 0 || size.z <= 0) return;
-            const color = this.zoneColors[district.type] || this.zoneColors.default;
-            const colorHex = color.getHexString();
-            const materialKey = `district_ground_${colorHex}`;
-            const matrix = new THREE.Matrix4();
-            const position = new THREE.Vector3( center.x, yPosition + districtGroundHeight / 2, center.z );
-            const quaternion = new THREE.Quaternion();
-            const scale = new THREE.Vector3(size.x, districtGroundHeight, size.z);
-            matrix.compose(position, quaternion, scale);
-            if (!matricesByTypeColor[materialKey]) { matricesByTypeColor[materialKey] = { color: color, matrices: [] }; }
-            matricesByTypeColor[materialKey].matrices.push(matrix);
-            districtGroundCount++;
-        });
+        // ... (logique existante pour remplir matricesByTypeColor) ...
+         districts.forEach(district => {
+             if (!district.plots || district.plots.length === 0) return;
+             const bounds = district.bounds; if (!bounds || bounds.isEmpty()) return;
+             const size = new THREE.Vector3(); bounds.getSize(size);
+             const center = new THREE.Vector3(); bounds.getCenter(center);
+             if (size.x <= 0 || size.z <= 0) return;
+             const color = this.zoneColors[district.type] || this.zoneColors.default;
+             const colorHex = color.getHexString();
+             const materialKey = `district_ground_${colorHex}`;
+             const matrix = new THREE.Matrix4();
+             const position = new THREE.Vector3( center.x, yPosition + districtGroundHeight / 2, center.z );
+             const quaternion = new THREE.Quaternion();
+             const scale = new THREE.Vector3(size.x, districtGroundHeight, size.z);
+             matrix.compose(position, quaternion, scale);
+             if (!matricesByTypeColor[materialKey]) { matricesByTypeColor[materialKey] = { color: color, matrices: [] }; }
+             matricesByTypeColor[materialKey].matrices.push(matrix);
+             districtGroundCount++;
+         });
 
         for (const key in matricesByTypeColor) {
             const data = matricesByTypeColor[key];
             const matrices = data.matrices;
             if (matrices.length === 0) continue;
             const material = this._getOrCreateDebugMaterial(key, data.color, true, this.districtGroundOpacity);
-             // --- Assigner le renderOrder spécifique ---
-             material.renderOrder = this.renderOrders.districtGround; // <- MODIFIÉ
-             // ---
+            material.renderOrder = this.renderOrders.districtGround; // Assigner renderOrder
+
             const instancedMesh = new THREE.InstancedMesh(this.sharedGroundBoxGeometry, material, matrices.length);
             instancedMesh.name = `DistrictGrounds_${key}`;
             matrices.forEach((mat, index) => { instancedMesh.setMatrixAt(index, mat); });
             instancedMesh.instanceMatrix.needsUpdate = true;
-            this.addDebugVisual(instancedMesh, visualType);
+             instancedMesh.userData.visualType = visualType; // <-- Garder pour le nettoyage
+
+            // this.addDebugVisual(instancedMesh, visualType); <-- RETIRÉ
+            createdMeshes.push(instancedMesh); // <-- AJOUTÉ
         }
-        // ... (log inchangé)
+         console.log(`DebugVisualManager: ${createdMeshes.length} InstancedMesh de sols de districts créés.`);
+        return createdMeshes; // <-- AJOUTÉ
     }
 
     // --- NOUVELLE MÉTHODE : Créer les outlines des parcelles ---
@@ -321,102 +334,93 @@ export default class DebugVisualManager {
 	}
 
 	/**
-     * Crée les outlines (boîtes OPAQUES) pour visualiser les bâtiments enregistrés,
-     * en utilisant des dimensions et une réduction de taille configurables par type.
-     * @param {Map<string, object>} buildingInstancesMap
-     * @param {object} config - Passé pour info, mais utilise this.config stocké.
-     * @param {number} yOffset
-     */
-    createBuildingOutlines(buildingInstancesMap, config, yOffset = 0.05) { // config n'est plus utilisé directement ici
+      * Crée les outlines (boîtes OPAQUES) pour visualiser les bâtiments enregistrés.
+      * @param {Map<string, object>} buildingInstancesMap
+      * @param {object} config - Passé pour info, mais utilise this.config stocké.
+      * @param {number} yOffset
+      * @returns {Array<THREE.InstancedMesh>} Tableau des InstancedMesh créés pour les outlines des bâtiments.
+      */
+    createBuildingOutlines(buildingInstancesMap, config, yOffset = 0.05) {
         const visualType = 'BuildingOutlines';
-        this.clearDebugVisuals(visualType);
+        this.clearDebugVisuals(visualType); // Garder le nettoyage
         let buildingCount = 0;
         const matricesByTypeColor = {};
+        const createdMeshes = []; // <-- NOUVEAU
 
+        // ... (logique existante pour remplir matricesByTypeColor) ...
         buildingInstancesMap.forEach(buildingInfo => {
-            const type = buildingInfo.type;
-            const position = buildingInfo.position;
-            let baseW = 5, baseH = 5, baseD = 5;
-            let scaleFactor = 1.0;
-            let isValidType = true;
-            // --- NOUVEAU: Récupérer le facteur de réduction spécifique au type ---
-            let specificDebugScaleReduction = 0.7; // Fallback
-            const debugConfig = this.config.debug || {}; // Accéder à la config stockée
+             const type = buildingInfo.type;
+             const position = buildingInfo.position;
+             let baseW = 5, baseH = 5, baseD = 5;
+             let scaleFactor = 1.0;
+             let isValidType = true;
+             let specificDebugScaleReduction = 0.7;
+             const debugConfig = this.config.debug || {};
 
-            switch(type) {
-                case 'house':
-                    baseW = this.config.houseBaseWidth || 5; baseH = this.config.houseBaseHeight || 6; baseD = this.config.houseBaseDepth || 5;
-                    scaleFactor = this.config.gridHouseBaseScale || 1.0;
-                    specificDebugScaleReduction = debugConfig.houseScaleReduction ?? 0.8; // Utiliser ?? pour fallback
-                    break;
-                case 'building':
-                    baseW = this.config.buildingBaseWidth || 10; baseH = this.config.buildingBaseHeight || 20; baseD = this.config.buildingBaseDepth || 10;
-                    scaleFactor = this.config.gridBuildingBaseScale || 1.0;
-                    specificDebugScaleReduction = debugConfig.buildingScaleReduction ?? 0.7;
-                    break;
-                case 'industrial':
-                    baseW = this.config.industrialBaseWidth || 18; baseH = this.config.industrialBaseHeight || 12; baseD = this.config.industrialBaseDepth || 25;
-                    scaleFactor = this.config.gridIndustrialBaseScale || 1.0;
-                    specificDebugScaleReduction = debugConfig.industrialScaleReduction ?? 0.6;
-                    break;
-                case 'skyscraper':
-                    baseW = this.config.skyscraperBaseWidth || 15; baseH = this.config.skyscraperBaseHeight || 80; baseD = this.config.skyscraperBaseDepth || 15;
-                    scaleFactor = this.config.gridSkyscraperBaseScale || 1.0;
-                    specificDebugScaleReduction = debugConfig.skyscraperScaleReduction ?? 0.5;
-                    break;
-                default: isValidType = false; break;
-            }
-             // --- FIN NOUVEAU ---
+             switch(type) { // Récupérer dimensions et scale depuis this.config
+                  case 'house':
+                      baseW = this.config.houseBaseWidth || 5; baseH = this.config.houseBaseHeight || 6; baseD = this.config.houseBaseDepth || 5;
+                      scaleFactor = this.config.gridHouseBaseScale || 1.0;
+                      specificDebugScaleReduction = debugConfig.houseScaleReduction ?? 0.8;
+                      break;
+                  case 'building':
+                      baseW = this.config.buildingBaseWidth || 10; baseH = this.config.buildingBaseHeight || 20; baseD = this.config.buildingBaseDepth || 10;
+                      scaleFactor = this.config.gridBuildingBaseScale || 1.0;
+                      specificDebugScaleReduction = debugConfig.buildingScaleReduction ?? 0.7;
+                      break;
+                  case 'industrial':
+                      baseW = this.config.industrialBaseWidth || 18; baseH = this.config.industrialBaseHeight || 12; baseD = this.config.industrialBaseDepth || 25;
+                      scaleFactor = this.config.gridIndustrialBaseScale || 1.0;
+                      specificDebugScaleReduction = debugConfig.industrialScaleReduction ?? 0.6;
+                      break;
+                  case 'skyscraper':
+                      baseW = this.config.skyscraperBaseWidth || 15; baseH = this.config.skyscraperBaseHeight || 80; baseD = this.config.skyscraperBaseDepth || 15;
+                      scaleFactor = this.config.gridSkyscraperBaseScale || 1.0;
+                      specificDebugScaleReduction = debugConfig.skyscraperScaleReduction ?? 0.5;
+                      break;
+                  default: isValidType = false; break;
+             }
+             if (!isValidType) return;
+             const targetWidth = baseW * scaleFactor;
+             const targetHeight = baseH * scaleFactor;
+             const targetDepth = baseD * scaleFactor;
+             if (!isFinite(targetWidth) || !isFinite(targetHeight) || !isFinite(targetDepth) || targetWidth <= 0 || targetHeight <= 0 || targetDepth <= 0) return;
+             const finalDebugWidth = targetWidth * specificDebugScaleReduction;
+             const finalDebugHeight = targetHeight * specificDebugScaleReduction;
+             const finalDebugDepth = targetDepth * specificDebugScaleReduction;
+             const color = this.buildingColors[type] || this.buildingColors.default;
+             const colorHex = color.getHexString();
+             const materialKey = `building_outline_${colorHex}`;
+             const matrix = new THREE.Matrix4();
+             const finalPosition = new THREE.Vector3(position.x, finalDebugHeight / 2 + yOffset, position.z);
+             const quaternion = new THREE.Quaternion();
+             const scale = new THREE.Vector3(finalDebugWidth, finalDebugHeight, finalDebugDepth);
+             if (!isFinite(finalPosition.x) || !isFinite(finalPosition.y) || !isFinite(finalPosition.z)) return;
+             matrix.compose(finalPosition, quaternion, scale);
+             if (!matricesByTypeColor[materialKey]) { matricesByTypeColor[materialKey] = { color: color, matrices: [] }; }
+             matricesByTypeColor[materialKey].matrices.push(matrix);
+             buildingCount++;
+         });
 
-            if (!isValidType) return;
 
-            const targetWidth = baseW * scaleFactor;
-            const targetHeight = baseH * scaleFactor;
-            const targetDepth = baseD * scaleFactor;
-
-            if (!isFinite(targetWidth) || !isFinite(targetHeight) || !isFinite(targetDepth) || targetWidth <= 0 || targetHeight <= 0 || targetDepth <= 0) return;
-
-            // Appliquer la réduction spécifique
-            const finalDebugWidth = targetWidth * specificDebugScaleReduction;
-            const finalDebugHeight = targetHeight * specificDebugScaleReduction;
-            const finalDebugDepth = targetDepth * specificDebugScaleReduction;
-
-            const color = this.buildingColors[type] || this.buildingColors.default;
-            const colorHex = color.getHexString();
-            const materialKey = `building_outline_${colorHex}`;
-
-            const matrix = new THREE.Matrix4();
-            const finalPosition = new THREE.Vector3(
-                position.x,
-                finalDebugHeight / 2 + yOffset, // Utiliser hauteur réduite
-                position.z
-            );
-            const quaternion = new THREE.Quaternion();
-            const scale = new THREE.Vector3(finalDebugWidth, finalDebugHeight, finalDebugDepth); // Utiliser dimensions réduites
-
-            if (!isFinite(finalPosition.x) || !isFinite(finalPosition.y) || !isFinite(finalPosition.z)) return;
-
-            matrix.compose(finalPosition, quaternion, scale);
-
-            if (!matricesByTypeColor[materialKey]) { matricesByTypeColor[materialKey] = { color: color, matrices: [] }; }
-            matricesByTypeColor[materialKey].matrices.push(matrix);
-            buildingCount++;
-        });
-
-        let addedMeshes = 0;
-         for (const materialKey in matricesByTypeColor) {
+        for (const materialKey in matricesByTypeColor) {
              const data = matricesByTypeColor[materialKey];
              const matrices = data.matrices;
              if (matrices.length === 0) continue;
-             const material = this._getOrCreateBuildingOutlineMaterial(materialKey, data.color);
+             const material = this._getOrCreateBuildingOutlineMaterial(materialKey, data.color); // Opaque
+             material.renderOrder = this.renderOrders.buildingOutline; // Assigner renderOrder
+
              const instancedMesh = new THREE.InstancedMesh(this.sharedBuildingBoxGeometry, material, matrices.length);
              matrices.forEach((mat, index) => { instancedMesh.setMatrixAt(index, mat); });
              instancedMesh.instanceMatrix.needsUpdate = true;
              instancedMesh.name = `BuildingOutlines_${data.color.getHexString()}`;
-             this.addDebugVisual(instancedMesh, visualType);
-             addedMeshes++;
-         }
-         // ... (log inchangé)
+             instancedMesh.userData.visualType = visualType; // <-- Garder pour nettoyage
+
+             // this.addDebugVisual(instancedMesh, visualType); <-- RETIRÉ
+             createdMeshes.push(instancedMesh); // <-- AJOUTÉ
+        }
+        console.log(`DebugVisualManager: ${createdMeshes.length} InstancedMesh d'outlines de bâtiments créés.`);
+        return createdMeshes; // <-- AJOUTÉ
     }
 
     // Les méthodes createParkOutlines et createDistrictBoundaries restent inchangées

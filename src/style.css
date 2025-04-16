@@ -211,3 +211,54 @@ button {
 
 /* --- Assurez-vous que le reste de votre CSS est présent --- */
 /* ... (tous les autres styles de votre fichier) ... */
+
+
+/* src/style.css */
+
+/* ... (styles existants) ... */
+
+/* Styles pour le conteneur des boutons de calques debug */
+.debug-layers-container {
+	/* Positionné via JS (absolute, bottom, right) */
+	/* display: flex; et flex-direction: column; via JS */
+	/* gap: 5px; via JS */
+	background-color: rgba(30, 30, 30, 0.7); /* Fond léger */
+	padding: 8px;
+	border-radius: 5px;
+	z-index: 100; /* Juste en dessous des contrôles de temps */
+  }
+  
+  /* Styles pour les boutons de calques debug */
+  .debug-layer-button {
+	border: 1px solid transparent; /* Bordure par défaut */
+	padding: 0.4em 0.8em;
+	font-size: 0.9em; /* Un peu plus petit */
+	font-weight: 500;
+	font-family: inherit;
+	background-color: rgba(0, 0, 0, 0.6); /* Fond standard */
+	color: white;
+	cursor: pointer;
+	transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
+	border-radius: 4px;
+	text-align: left;
+	min-width: 100px; /* Pour alignement */
+  }
+  
+  .debug-layer-button:hover:not(:disabled) {
+	background-color: rgba(255, 255, 255, 0.6);
+	color: #000000;
+  }
+  
+  .debug-layer-button:disabled {
+	cursor: not-allowed;
+	/* L'opacité est gérée par JS */
+  }
+  
+  /* Style pour bouton actif (peut être défini par JS via .style ou une classe) */
+  /* Exemple si on ajoutait une classe 'active' via JS */
+  /*
+  .debug-layer-button.active {
+	border: 1px solid #00aaff;
+	background-color: rgba(0, 100, 180, 0.7);
+  }
+  */
