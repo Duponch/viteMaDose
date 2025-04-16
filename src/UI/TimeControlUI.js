@@ -9,71 +9,129 @@ export default class TimeControlUI {
         this.container.classList.add('time-controls');
         document.body.appendChild(this.container);
 
-        this.elements = {};
+        this.elements = {}; // Stockera tous les boutons (principaux et sous-types)
 
-        // --- Conteneur pour les boutons de calques ---
+        // --- Conteneur GLOBAL pour TOUS les boutons de calques ---
+        // Reste positionné comme avant, mais contiendra les catégories et sous-menus
         this.debugLayersContainer = document.createElement('div');
         this.debugLayersContainer.classList.add('debug-layers-container');
         this.debugLayersContainer.style.display = 'none'; // Caché par défaut
         this.debugLayersContainer.style.position = 'absolute';
-        this.debugLayersContainer.style.bottom = '70px';
+        this.debugLayersContainer.style.bottom = '70px'; // Ou ajuster selon besoin
         this.debugLayersContainer.style.right = '20px';
-        // Initialement caché, display sera géré par JS
-        // this.debugLayersContainer.style.display = 'flex'; // <-- Supprimé ici, géré par l'état
+        this.debugLayersContainer.style.display = 'flex'; // Utiliser flex pour aligner verticalement
         this.debugLayersContainer.style.flexDirection = 'column';
-        this.debugLayersContainer.style.gap = '5px';
+        this.debugLayersContainer.style.gap = '8px'; // Espace entre catégories
         document.body.appendChild(this.debugLayersContainer);
 
         this.createButtons();
         this.setupEventListeners();
-        this.updateButtonStates();
-        this.updateLayerButtonsState();
+        this.updateButtonStates(); // Met à jour états initiaux
+        this.updateLayerButtonsAppearance(); // Met à jour l'apparence initiale
     }
 
     createButtons() {
-        // --- Boutons Temps ---
-        this.elements.pausePlayButton = document.createElement('button');
-        this.elements.pausePlayButton.id = 'pause-play-button';
-        this.elements.pausePlayButton.textContent = this.time.isPaused ? '▶' : '⏸'; // Contenu initial
-
-        this.elements.decreaseButton = document.createElement('button');
-        this.elements.decreaseButton.id = 'decrease-speed-button';
-        this.elements.decreaseButton.textContent = '⏮';
-
-        this.elements.increaseButton = document.createElement('button');
-        this.elements.increaseButton.id = 'increase-speed-button';
-        this.elements.increaseButton.textContent = '⏭';
-
+        // --- Boutons Temps (inchangés) ---
+        this.elements.pausePlayButton = this._createButton('pause-play-button', this.time.isPaused ? '▶' : '⏸');
+        this.elements.decreaseButton = this._createButton('decrease-speed-button', '⏮');
+        this.elements.increaseButton = this._createButton('increase-speed-button', '⏭');
         this.elements.speedDisplay = document.createElement('span');
         this.elements.speedDisplay.id = 'speed-display';
         this.elements.speedDisplay.textContent = `${this.time.timeScale}x`;
 
-        // --- Bouton Debug Principal ---
-        this.elements.debugToggleButton = document.createElement('button');
-        this.elements.debugToggleButton.id = 'debug-toggle-button';
-        this.elements.debugToggleButton.textContent = '🐞';
-        this.elements.debugToggleButton.title = "Afficher/Masquer les contrôles Debug";
+        // --- Bouton Debug Principal (inchangé) ---
+        this.elements.debugToggleButton = this._createButton('debug-toggle-button', '🐞', "Afficher/Masquer les contrôles Debug");
 
-        // --- Boutons de Calques ---
-        const layers = [
-            { id: 'districtGround', text: 'Districts' },
-            { id: 'plotGround', text: 'Plots' },
-            { id: 'buildingOutline', text: 'Buildings' },
-            { id: 'navGrid', text: 'NavGrid' },
-            { id: 'agentPath', text: 'Paths' }
-        ];
+        // --- STRUCTURE DES CALQUES ET SOUS-CALQUES ---
+        const layerStructure = {
+            district: {
+                text: 'Districts',
+                subLayers: {
+                    residential: 'Résidentiel',
+                    business: 'Affaires',
+                    industrial: 'Industriel'
+                }
+            },
+            plot: {
+                text: 'Plots',
+                subLayers: {
+                    house: 'Maisons',
+                    building: 'Immeubles',
+                    industrial: 'Industriel',
+                    skyscraper: 'Gratte-ciels',
+                    park: 'Parcs',
+                    unbuildable: 'Non-constr.' // Optionnel
+                }
+            },
+            buildingOutline: {
+                text: 'Outlines Bat.',
+                subLayers: {
+                    house: 'Maisons',
+                    building: 'Immeubles',
+                    industrial: 'Industriel',
+                    skyscraper: 'Gratte-ciels'
+                }
+            },
+            navGrid: { text: 'NavGrid', subLayers: null }, // Pas de sous-menu
+            agentPath: { text: 'Paths', subLayers: null }   // Pas de sous-menu
+        };
 
-        layers.forEach(layer => {
-            const button = document.createElement('button');
-            button.id = `debug-layer-${layer.id}`;
-            button.classList.add('debug-layer-button');
-            button.textContent = layer.text;
-            button.dataset.layerName = layer.id;
-            this.elements[`layerBtn_${layer.id}`] = button;
-            this.debugLayersContainer.appendChild(button);
-        });
+        // --- Création dynamique des boutons et sous-menus ---
+        for (const categoryName in layerStructure) {
+            const categoryData = layerStructure[categoryName];
 
-        // --- Ajout au container principal ---
+            // Conteneur pour cette catégorie (bouton + sous-menu)
+            const categoryContainer = document.createElement('div');
+            categoryContainer.classList.add('debug-category-container');
+            categoryContainer.style.display = 'flex';
+            categoryContainer.style.flexDirection = 'column';
+            categoryContainer.style.gap = '3px'; // Espace entre bouton principal et sous-menu
+
+            // Bouton principal de la catégorie
+            const mainButton = this._createButton(
+                `debug-category-${categoryName}`,
+                categoryData.text + (categoryData.subLayers ? ' ▼' : ''), // Indicateur flèche si sous-menu
+                `Afficher/Masquer ${categoryData.text}`
+            );
+            mainButton.classList.add('debug-category-button'); // Classe spécifique
+            mainButton.dataset.categoryName = categoryName;
+            this.elements[`categoryBtn_${categoryName}`] = mainButton;
+            categoryContainer.appendChild(mainButton);
+
+            // Si des sous-calques existent, créer le sous-menu
+            if (categoryData.subLayers) {
+                const subMenu = document.createElement('div');
+                subMenu.classList.add('debug-submenu');
+                subMenu.dataset.categoryName = categoryName;
+                subMenu.style.display = 'none'; // Caché par défaut
+                subMenu.style.marginLeft = '15px'; // Indentation
+                subMenu.style.display = 'flex';
+                subMenu.style.flexDirection = 'column';
+                subMenu.style.gap = '4px';
+                this.elements[`subMenu_${categoryName}`] = subMenu; // Stocker référence au sous-menu
+
+                for (const subLayerName in categoryData.subLayers) {
+                    const subLayerText = categoryData.subLayers[subLayerName];
+                    const subButton = this._createButton(
+                        `debug-sublayer-${categoryName}-${subLayerName}`,
+                        subLayerText,
+                        `Afficher/Masquer ${subLayerText}`
+                    );
+                    subButton.classList.add('debug-sublayer-button'); // Classe spécifique
+                    subButton.dataset.categoryName = categoryName;
+                    subButton.dataset.subLayerName = subLayerName;
+                    this.elements[`subLayerBtn_${categoryName}_${subLayerName}`] = subButton;
+                    subMenu.appendChild(subButton);
+                }
+                categoryContainer.appendChild(subMenu);
+            }
+
+            // Ajouter le conteneur de catégorie au conteneur principal des calques
+            this.debugLayersContainer.appendChild(categoryContainer);
+
+        } // Fin boucle sur layerStructure
+
+        // --- Ajout final au container principal de l'UI (en bas à droite) ---
         this.container.appendChild(this.elements.debugToggleButton);
         this.container.appendChild(this.elements.speedDisplay);
         this.container.appendChild(this.elements.decreaseButton);
@@ -81,42 +139,73 @@ export default class TimeControlUI {
         this.container.appendChild(this.elements.increaseButton);
     }
 
+	_createButton(id, textContent, title = '') {
+        const button = document.createElement('button');
+        button.id = id;
+        button.textContent = textContent;
+        if (title) button.title = title;
+        // Ajouter des classes de base si nécessaire
+        // button.classList.add('debug-button-base');
+        return button;
+    }
+
     setupEventListeners() {
-        // --- Listeners Temps ---
+        // --- Listeners Temps (inchangés) ---
         this.elements.pausePlayButton.addEventListener('click', () => this.time.togglePause());
         this.elements.increaseButton.addEventListener('click', () => {
             this.time.increaseSpeed();
-            if(this.time.isPaused) this.time.play(); // Reprendre si en pause
+            if(this.time.isPaused) this.time.play();
         });
         this.elements.decreaseButton.addEventListener('click', () => {
             this.time.decreaseSpeed();
-            if(this.time.isPaused) this.time.play(); // Reprendre si en pause
+            if(this.time.isPaused) this.time.play();
         });
 
-        // --- Listener Bouton Debug Principal ---
+        // --- Listener Bouton Debug Principal (inchangé) ---
         this.elements.debugToggleButton.addEventListener('click', () => {
             this.experience.toggleDebugMode();
-            // La visibilité du conteneur est gérée par l'écouteur 'debugmodechanged'
         });
 
-        // --- Listeners Boutons de Calques ---
+        // --- Listeners Boutons de Catégories et Sous-Calques ---
         Object.keys(this.elements).forEach(key => {
-            if (key.startsWith('layerBtn_')) {
-                const button = this.elements[key];
-                const layerName = button.dataset.layerName;
-                if (layerName) {
-                    button.addEventListener('click', () => {
-                         if (this.experience.isDebugMode) {
-                            this.experience.toggleDebugLayer(layerName);
-                         } else {
-                            console.log("Activez d'abord le mode Debug principal.");
-                         }
-                    });
-                }
+            const element = this.elements[key];
+
+            // Écouteur pour les boutons de catégorie principale
+            if (key.startsWith('categoryBtn_')) {
+                const categoryName = element.dataset.categoryName;
+                // Vérifier s'il a un sous-menu associé
+                const hasSubMenu = !!this.elements[`subMenu_${categoryName}`];
+
+                element.addEventListener('click', () => {
+                     if (!this.experience.isDebugMode) {
+                         console.log("Activez d'abord le mode Debug principal.");
+                         return;
+                     }
+                     if (hasSubMenu) {
+                         // Si a un sous-menu, clique dessus pour ouvrir/fermer le sous-menu
+                         this.experience.toggleSubMenu(categoryName);
+                     } else {
+                         // Si pas de sous-menu (ex: NavGrid), clique dessus pour basculer sa visibilité
+                         this.experience.toggleCategoryVisibility(categoryName);
+                     }
+                });
+            }
+            // Écouteur pour les boutons de sous-calque
+            else if (key.startsWith('subLayerBtn_')) {
+                const categoryName = element.dataset.categoryName;
+                const subLayerName = element.dataset.subLayerName;
+                element.addEventListener('click', () => {
+                     if (!this.experience.isDebugMode) {
+                         console.log("Activez d'abord le mode Debug principal.");
+                         return;
+                     }
+                    // Basculer la visibilité de ce sous-calque spécifique
+                    this.experience.toggleSubLayerVisibility(categoryName, subLayerName);
+                });
             }
         });
 
-        // --- Écoute des événements ---
+        // --- Écoute des événements Experience (modifié) ---
         this.pauseHandler = () => this.updateButtonStates();
         this.playHandler = () => this.updateButtonStates();
         this.speedChangeHandler = (event) => this.updateButtonStates(event.detail.scale);
@@ -124,29 +213,57 @@ export default class TimeControlUI {
         this.time.addEventListener('played', this.playHandler);
         this.time.addEventListener('speedchange', this.speedChangeHandler);
 
+        // Changement global du mode debug
         this.debugModeChangeHandler = (event) => {
-             this.updateButtonStates();
-             this.debugLayersContainer.style.display = event.detail.isEnabled ? 'flex' : 'none';
-             this.updateLayerButtonsState(); // MAJ état boutons calques
+             const isEnabled = event.detail.isEnabled;
+             this.debugLayersContainer.style.display = isEnabled ? 'flex' : 'none';
+             this.updateButtonStates(); // Met à jour l'état du bouton debug principal
+             this.updateLayerButtonsAppearance(); // Met à jour l'apparence de tous les boutons de calques
         };
         this.experience.addEventListener('debugmodechanged', this.debugModeChangeHandler);
 
-        this.debugLayerVisibilityChangeHandler = (event) => {
-            this.updateLayerButtonsState(); // MAJ état boutons calques
+        // Changement de visibilité d'une catégorie (groupe entier)
+        this.categoryVisibilityChangeHandler = (event) => {
+            this.updateLayerButtonsAppearance();
         };
-        this.experience.addEventListener('debuglayervisibilitychanged', this.debugLayerVisibilityChangeHandler);
+        this.experience.addEventListener('debugcategoryvisibilitychanged', this.categoryVisibilityChangeHandler);
+
+        // Changement de visibilité d'un sous-calque (mesh spécifique)
+        this.subLayerVisibilityChangeHandler = (event) => {
+            this.updateLayerButtonsAppearance();
+        };
+        this.experience.addEventListener('debugsublayervisibilitychanged', this.subLayerVisibilityChangeHandler);
+
+        // Changement de visibilité d'un sous-menu (pour affichage UI)
+        this.subMenuVisibilityChangeHandler = (event) => {
+             const { categoryName, showSubMenu } = event.detail;
+             const subMenuElement = this.elements[`subMenu_${categoryName}`];
+             if (subMenuElement) {
+                 subMenuElement.style.display = showSubMenu ? 'flex' : 'none';
+             }
+             // Mettre à jour l'apparence du bouton parent (ex: flèche)
+              const parentButton = this.elements[`categoryBtn_${categoryName}`];
+              if (parentButton && parentButton.textContent.includes('▼')) {
+                   parentButton.textContent = parentButton.textContent.replace(showSubMenu ? '▼' : '►', showSubMenu ? '►' : '▼');
+              }
+        };
+        this.experience.addEventListener('debugsubmenuvisibilitychanged', this.subMenuVisibilityChangeHandler);
     }
 
-    updateButtonStates(currentScale = this.time.timeScale) {
-        // Vérifier si time existe encore (utile lors de la destruction)
-        if (!this.time) return;
+    /**
+     * Met à jour l'état des boutons de contrôle du temps et du bouton debug principal.
+     * (Séparé de l'apparence des boutons de calques)
+     */
+    updateButtonStates(currentScale = this.time?.timeScale ?? 1.0) {
+        // Vérifier si time et experience existent encore
+        if (!this.time || !this.experience) return;
 
         // --- MàJ Boutons Temps ---
         if (this.time.isPaused) {
-            this.elements.pausePlayButton.textContent = '▶'; // Icône Play
+            this.elements.pausePlayButton.textContent = '▶';
             this.elements.pausePlayButton.classList.add('paused');
         } else {
-            this.elements.pausePlayButton.textContent = '⏸'; // Icône Pause
+            this.elements.pausePlayButton.textContent = '⏸';
             this.elements.pausePlayButton.classList.remove('paused');
         }
         this.elements.speedDisplay.textContent = `${currentScale}x`;
@@ -156,8 +273,6 @@ export default class TimeControlUI {
         this.elements.increaseButton.disabled = currentScale >= maxSpeed;
 
         // --- MàJ Bouton Debug Principal ---
-        // Vérifier si experience existe encore
-        if (!this.experience) return;
         if (this.experience.isDebugMode) {
             this.elements.debugToggleButton.style.opacity = '1.0';
             this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 150, 255, 0.7)';
@@ -165,6 +280,87 @@ export default class TimeControlUI {
             this.elements.debugToggleButton.style.opacity = '0.6';
             this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
         }
+    }
+
+	/**
+     * NOUVEAU : Met à jour l'apparence (style) de TOUS les boutons de calques
+     * (catégories et sous-calques) en fonction de l'état actuel dans Experience.
+     */
+    updateLayerButtonsAppearance() {
+        if (!this.experience || !this.experience.debugLayerVisibility) {
+            console.warn("TimeControlUI: Experience ou debugLayerVisibility non disponible.");
+            // Option: griser tous les boutons de calques
+             Object.keys(this.elements).forEach(key => {
+                if (key.startsWith('categoryBtn_') || key.startsWith('subLayerBtn_')) {
+                    this.elements[key].disabled = true;
+                    this.elements[key].style.opacity = '0.5';
+                    this.elements[key].style.border = '1px solid transparent';
+                    this.elements[key].style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+                }
+            });
+            return;
+        }
+
+        const layerStates = this.experience.debugLayerVisibility;
+        const isGlobalDebugActive = this.experience.isDebugMode;
+
+        // Parcourir tous les éléments pour trouver les boutons
+        Object.keys(this.elements).forEach(key => {
+            const button = this.elements[key];
+
+            if (key.startsWith('categoryBtn_')) {
+                const categoryName = button.dataset.categoryName;
+                if (layerStates.hasOwnProperty(categoryName)) {
+                    const categoryState = layerStates[categoryName];
+                    const isActive = categoryState._visible;
+
+                    // Style basé sur la visibilité de la catégorie ET le mode debug global
+                    if (isActive && isGlobalDebugActive) {
+                        button.style.border = '1px solid #00ccff'; // Cyan pour catégorie active
+                        button.style.backgroundColor = 'rgba(0, 120, 150, 0.7)';
+                    } else {
+                        button.style.border = '1px solid transparent';
+                        button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)'; // Style standard
+                    }
+                    button.disabled = !isGlobalDebugActive;
+                    button.style.opacity = isGlobalDebugActive ? '1.0' : '0.5';
+
+                    // Mettre à jour la flèche si sous-menu
+                    const subMenu = this.elements[`subMenu_${categoryName}`];
+                     if (subMenu && button.textContent.includes('▼') || button.textContent.includes('►') ) {
+                          const showSubMenu = categoryState._showSubMenu;
+                          button.textContent = button.textContent.replace(/[▼►]/, showSubMenu ? '►' : '▼');
+                          // Afficher/cacher le sous-menu DOM element
+                          subMenu.style.display = showSubMenu ? 'flex' : 'none';
+                     }
+
+                } else {
+                     button.disabled = true; button.style.opacity = '0.5'; // Catégorie inconnue
+                }
+
+            } else if (key.startsWith('subLayerBtn_')) {
+                const categoryName = button.dataset.categoryName;
+                const subLayerName = button.dataset.subLayerName;
+                if (layerStates.hasOwnProperty(categoryName) && layerStates[categoryName].hasOwnProperty(subLayerName)) {
+                    const categoryState = layerStates[categoryName];
+                    const isActive = categoryState[subLayerName];
+
+                    // Style basé sur la visibilité du sous-calque ET le mode debug global ET la catégorie parente visible
+                    if (isActive && isGlobalDebugActive && categoryState._visible) {
+                        button.style.border = '1px solid #00aaff'; // Bleu standard pour sous-calque actif
+                        button.style.backgroundColor = 'rgba(0, 100, 180, 0.7)';
+                    } else {
+                        button.style.border = '1px solid transparent';
+                        button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+                    }
+                    // Grisé si debug global inactif OU si catégorie parente cachée
+                    button.disabled = !isGlobalDebugActive || !categoryState._visible;
+                    button.style.opacity = (isGlobalDebugActive && categoryState._visible) ? '1.0' : '0.5';
+                } else {
+                     button.disabled = true; button.style.opacity = '0.5'; // Sous-calque inconnu
+                }
+            }
+        });
     }
 
     updateLayerButtonsState() {
@@ -219,15 +415,18 @@ export default class TimeControlUI {
 
     destroy() {
         // --- Retirer listeners Temps & Debug ---
-        // Utiliser optional chaining pour éviter les erreurs si time/experience sont déjà null
         this.time?.removeEventListener('paused', this.pauseHandler);
         this.time?.removeEventListener('played', this.playHandler);
         this.time?.removeEventListener('speedchange', this.speedChangeHandler);
         this.experience?.removeEventListener('debugmodechanged', this.debugModeChangeHandler);
-        this.experience?.removeEventListener('debuglayervisibilitychanged', this.debugLayerVisibilityChangeHandler);
+        // --- AJOUT : Retirer les nouveaux listeners ---
+        this.experience?.removeEventListener('debugcategoryvisibilitychanged', this.categoryVisibilityChangeHandler);
+        this.experience?.removeEventListener('debugsublayervisibilitychanged', this.subLayerVisibilityChangeHandler);
+        this.experience?.removeEventListener('debugsubmenuvisibilitychanged', this.subMenuVisibilityChangeHandler);
+        // ---------------------------------------------
 
         // --- Retirer les éléments du DOM ---
-        this.container?.remove(); // Méthode plus simple pour retirer l'élément
+        this.container?.remove();
         this.debugLayersContainer?.remove();
 
         // --- Nettoyer références ---

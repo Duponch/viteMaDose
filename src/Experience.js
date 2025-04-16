@@ -58,13 +58,41 @@ export default class Experience extends EventTarget {
         this.buildingTooltipElement = document.getElementById('building-tooltip'); // Assurez-vous que cet ID existe
         this.buildingTooltipTargetPosition = new THREE.Vector3();
 
-		// --- État de Visibilité des Calques Debug ---
+        // --- NOUVELLE STRUCTURE : État de Visibilité des Calques et Sous-Calques Debug ---
         this.debugLayerVisibility = {
-            districtGround: true,
-            plotGround: true,
-            buildingOutline: true,
-            navGrid: false, // Caché par défaut ?
-            agentPath: false // Caché par défaut ?
+            district: { // <- Changé de districtGround
+                _showSubMenu: false, // Pour l'état UI
+                _visible: true,      // Visibilité globale de la catégorie
+                residential: true,
+                business: true,
+                industrial: true
+                // Pas besoin de 'default' ici, géré par les types ci-dessus
+            },
+            plot: { // <- Changé de plotGround
+                _showSubMenu: false,
+                _visible: true,
+                house: true,
+                building: true,
+                industrial: true,
+                skyscraper: true,
+                park: true,
+                unbuildable: true // Optionnel: Pourrait être utile de le masquer
+            },
+            buildingOutline: { // <- Reste mais devient une catégorie
+                 _showSubMenu: false,
+                 _visible: true,
+                 house: true,
+                 building: true,
+                 industrial: true,
+                 skyscraper: true
+                 // 'park' et 'tree' n'ont pas d'outline dans ce système
+            },
+            navGrid: {
+                _visible: false // Garder simple pour les couches sans sous-types
+            },
+            agentPath: {
+                _visible: false // Garder simple
+            }
         };
 
         // --- Variables clic vs drag ---
@@ -72,7 +100,7 @@ export default class Experience extends EventTarget {
         this.mouseDownPosition = { x: null, y: null };
         this.MAX_CLICK_DURATION = 200;
         this.MAX_CLICK_DISTANCE_SQ = 25; // pixels squared
-		this.clickHandledByTooltip = false;
+        this.clickHandledByTooltip = false;
 
         // --- EventListeners ---
         this.resizeHandler = () => this.resize();
@@ -729,7 +757,6 @@ export default class Experience extends EventTarget {
         }
     }
 
-    // Gère le mode debug (visuels, brouillard)
     enableDebugMode() {
         if (!this.isDebugMode) {
             this.isDebugMode = true;
@@ -746,6 +773,12 @@ export default class Experience extends EventTarget {
             console.log("Debug Mode DISABLED");
             if (this.scene && this.originalFog) this.scene.fog = this.originalFog;
             if (this.world) this.world.setDebugMode(false);
+            // Cacher tous les sous-menus lorsque le mode debug est désactivé
+            for (const category in this.debugLayerVisibility) {
+                if (this.debugLayerVisibility[category]._showSubMenu !== undefined) {
+                    this.debugLayerVisibility[category]._showSubMenu = false;
+                }
+            }
             this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: false } }));
         }
     }
@@ -754,18 +787,161 @@ export default class Experience extends EventTarget {
         this.isDebugMode = !this.isDebugMode;
         console.log(`Debug Mode global ${this.isDebugMode ? 'ENABLED' : 'DISABLED'}`);
 
-        // Gérer le brouillard
         if (this.scene) {
             this.scene.fog = this.isDebugMode ? null : this.originalFog;
         }
 
-        // Demander au World de créer/nettoyer les visuels et appliquer les visibilités
         if (this.world) {
             this.world.setDebugMode(this.isDebugMode);
         }
 
-        // Notifier l'UI du changement d'état global
+        // Cacher les sous-menus si on désactive le mode debug
+        if (!this.isDebugMode) {
+             for (const category in this.debugLayerVisibility) {
+                 if (this.debugLayerVisibility[category]._showSubMenu !== undefined) {
+                     this.debugLayerVisibility[category]._showSubMenu = false;
+                 }
+             }
+        }
+
         this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: this.isDebugMode } }));
+    }
+
+    /**
+     * Bascule l'état d'affichage du sous-menu pour une catégorie donnée.
+     * @param {string} categoryName - Le nom de la catégorie (ex: 'district', 'plot').
+     */
+    toggleSubMenu(categoryName) {
+         if (this.debugLayerVisibility.hasOwnProperty(categoryName) && this.debugLayerVisibility[categoryName]._showSubMenu !== undefined) {
+             // Inverse l'état d'affichage du sous-menu
+             this.debugLayerVisibility[categoryName]._showSubMenu = !this.debugLayerVisibility[categoryName]._showSubMenu;
+
+             // Optionnel : Fermer les autres sous-menus quand un est ouvert
+             if (this.debugLayerVisibility[categoryName]._showSubMenu) {
+                  for (const otherCategory in this.debugLayerVisibility) {
+                      if (otherCategory !== categoryName && this.debugLayerVisibility[otherCategory]._showSubMenu !== undefined) {
+                          this.debugLayerVisibility[otherCategory]._showSubMenu = false;
+                      }
+                  }
+             }
+
+             console.log(`Submenu for '${categoryName}' toggled to ${this.debugLayerVisibility[categoryName]._showSubMenu}`);
+             // Notifier l'UI pour mettre à jour l'affichage des sous-menus
+             this.dispatchEvent(new CustomEvent('debugsubmenuvisibilitychanged', {
+                 detail: {
+                     categoryName: categoryName,
+                     showSubMenu: this.debugLayerVisibility[categoryName]._showSubMenu,
+                     allStates: { ...this.debugLayerVisibility } // Passer tous les états
+                 }
+             }));
+         } else {
+             console.warn(`Experience.toggleSubMenu: Unknown or non-submenu category '${categoryName}'`);
+         }
+    }
+
+	/**
+     * Bascule la visibilité globale d'une catégorie de debug.
+     * @param {string} categoryName - Nom de la catégorie ('district', 'plot', 'buildingOutline', 'navGrid', 'agentPath').
+     */
+    toggleCategoryVisibility(categoryName) {
+        if (!this.debugLayerVisibility.hasOwnProperty(categoryName)) {
+            console.warn(`Experience.toggleCategoryVisibility: Unknown category name '${categoryName}'`);
+            return;
+        }
+
+        const category = this.debugLayerVisibility[categoryName];
+        const currentVisibility = category._visible;
+        const newVisibility = !currentVisibility;
+        category._visible = newVisibility;
+
+        console.log(`Debug Category '${categoryName}' visibility toggled to: ${newVisibility}`);
+
+        // Appliquer la visibilité au groupe correspondant dans World
+        if (this.isDebugMode && this.world) {
+            this.world.setGroupVisibility(categoryName, newVisibility);
+        }
+
+        // Mettre à jour l'état des sous-types SI on vient de cacher la catégorie principale
+        // Si on l'affiche, on laisse les sous-types dans leur état précédent.
+        if (!newVisibility) {
+            for (const subTypeName in category) {
+                if (subTypeName !== '_visible' && subTypeName !== '_showSubMenu') {
+                     // Techniquement, on ne change pas leur état logique ici,
+                     // mais on pourrait vouloir les "griser" dans l'UI.
+                     // L'important est que le groupe parent dans World est caché.
+                     // On pourrait aussi forcer leur état logique à false :
+                     // category[subTypeName] = false; // Désactiver logiquement aussi
+                }
+            }
+        }
+        // Si on affiche la catégorie, les meshes des sous-types visibles réapparaîtront
+
+        this.dispatchEvent(new CustomEvent('debugcategoryvisibilitychanged', {
+            detail: {
+                categoryName: categoryName,
+                isVisible: newVisibility,
+                allStates: { ...this.debugLayerVisibility } // Passer tous les états
+            }
+        }));
+    }
+
+	/**
+     * Bascule la visibilité d'un sous-type spécifique dans une catégorie.
+     * @param {string} categoryName - Nom de la catégorie (ex: 'plot', 'district').
+     * @param {string} subTypeName - Nom du sous-type (ex: 'house', 'residential').
+     */
+    toggleSubLayerVisibility(categoryName, subTypeName) {
+		if (!this.debugLayerVisibility.hasOwnProperty(categoryName) ||
+			!this.debugLayerVisibility[categoryName].hasOwnProperty(subTypeName) ||
+			subTypeName.startsWith('_')) {
+			console.warn(`Experience.toggleSubLayerVisibility: Invalid category '${categoryName}' or subType '${subTypeName}'`);
+			return;
+		}
+
+		const category = this.debugLayerVisibility[categoryName];
+		const currentVisibility = category[subTypeName];
+		const newVisibility = !currentVisibility;
+		category[subTypeName] = newVisibility;
+
+		console.log(`  Debug Sub-Layer '${categoryName}.${subTypeName}' visibility toggled to: ${newVisibility}`);
+
+		// Si le mode debug global et la catégorie sont actifs, mettre à jour la visibilité du mesh correspondant
+		if (this.isDebugMode && category._visible && this.world) {
+		   this.world.setSubLayerMeshVisibility(categoryName, subTypeName, newVisibility);
+		}
+
+		// Mettre à jour l'état '_visible' de la catégorie si nécessaire
+		// Si au moins un sous-type est visible, la catégorie doit être marquée comme visible.
+		// Si tous les sous-types sont cachés, on peut marquer la catégorie comme cachée.
+		let anySubTypeVisible = false;
+		for (const key in category) {
+			if (!key.startsWith('_') && category[key]) {
+				anySubTypeVisible = true;
+				break;
+			}
+		}
+		// Optionnel : Mettre à jour l'état global de la catégorie.
+		// ATTENTION : Cela peut être contre-intuitif si l'utilisateur a explicitement caché la catégorie.
+		// On peut choisir de ne mettre à jour _visible que si on active un sous-type.
+		/*
+		if (category._visible !== anySubTypeVisible) {
+			 category._visible = anySubTypeVisible;
+			 // Optionnel: Mettre à jour aussi le groupe dans World ?
+			 if (this.isDebugMode && this.world) {
+				this.world.setGroupVisibility(categoryName, category._visible);
+			 }
+			 // On pourrait dispatcher l'événement 'debugcategoryvisibilitychanged' ici aussi
+		}
+		*/
+
+		this.dispatchEvent(new CustomEvent('debugsublayervisibilitychanged', {
+			detail: {
+				categoryName: categoryName,
+				subTypeName: subTypeName,
+				isVisible: newVisibility,
+				allStates: { ...this.debugLayerVisibility } // Passer tous les états
+			}
+		}));
     }
 
 	toggleDebugLayer(layerName) {
@@ -802,70 +978,52 @@ export default class Experience extends EventTarget {
 
     // Boucle de mise à jour principale
     update() {
-        this.stats.begin(); // Début mesure performance
-        const deltaTime = this.time.delta; // Temps écoulé depuis la dernière frame (ms)
+        this.stats.begin();
+        const deltaTime = this.time.delta;
 
-        // Mise à jour des contrôles OrbitControls si non en suivi
         if (!this.isFollowingAgent && this.controls?.enabled) {
             this.controls.update();
         }
-        // Mise à jour caméra (gère le suivi si activé)
         if (this.camera) this.camera.update(deltaTime);
-        // Mise à jour du monde (agents, environnement, etc.)
         if (this.world) this.world.update();
-        // Mise à jour du renderer (dessine la scène)
         if (this.renderer) this.renderer.update();
-        // Mise à jour de l'UI de l'heure
         if (this.timeUI) this.timeUI.update();
 
         // --- Mise à jour Tooltip Agent ---
         if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
-            this.updateTooltipContent(this.selectedAgent); // Met à jour le contenu
-
-            // Calcule la position 3D cible pour le tooltip agent
+            this.updateTooltipContent(this.selectedAgent);
             this.tooltipTargetPosition.copy(this.selectedAgent.position);
-            const headHeightOffset = 8.0 * this.selectedAgent.scale; // Approx. hauteur tête
+            const headHeightOffset = 8.0 * this.selectedAgent.scale;
             this.tooltipTargetPosition.y += this.selectedAgent.yOffset + headHeightOffset;
-            // Appelle la nouvelle fonction pour positionner l'infobulle
             this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
-
-        } else { // Cache si aucun agent sélectionné ou si bâtiment sélectionné
+        } else {
             if (this.tooltipElement && this.tooltipElement.style.display !== 'none') { this.tooltipElement.style.display = 'none'; }
         }
 
         // --- Mise à jour Tooltip Bâtiment ---
         if (this.selectedBuildingInfo && this.buildingTooltipElement) {
-            this.updateBuildingTooltipContent(); // Met à jour le contenu
-
-            // Recalcule la position 3D cible (sommet haut-droite du highlight)
+            this.updateBuildingTooltipContent();
             if (this.highlightMesh && this.highlightMesh.visible) {
-                // Utiliser la position et la géométrie du highlight pour une position plus stable
                  const highlightWorldPosition = new Vector3();
-                 this.highlightMesh.getWorldPosition(highlightWorldPosition); // Centre du highlight
-                 const highlightHeight = this.highlightMesh.scale.y; // Hauteur du highlight
-
-                 // Cible légèrement au-dessus du centre du highlight
+                 this.highlightMesh.getWorldPosition(highlightWorldPosition);
+                 const highlightHeight = this.highlightMesh.scale.y;
                  this.buildingTooltipTargetPosition.copy(highlightWorldPosition);
-                 this.buildingTooltipTargetPosition.y += highlightHeight * 0.5 + 0.5; // +0.5 pour un petit espace
-
-                // Appelle la nouvelle fonction pour positionner l'infobulle
+                 this.buildingTooltipTargetPosition.y += highlightHeight * 0.5 + 0.5;
                 this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
-
-            } else { // Cache si highlight invalide
+            } else {
                 if (this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
             }
-        } else { // Cache si aucun bâtiment sélectionné
+        } else {
             if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
         }
 
-        this.stats.end(); // Fin mesure performance
+        this.stats.end();
     }
 
     // Nettoie les ressources et écouteurs lors de la destruction
     destroy() {
         console.log("Destroying Experience...");
 
-        // Retirer TOUS les écouteurs
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
         this.canvas.removeEventListener('mousedown', this._boundHandleMouseDown);
@@ -878,7 +1036,6 @@ export default class Experience extends EventTarget {
         }
 
         // ... (reste du code destroy existant) ...
-         // Nettoyage Sélection Bâtiment
         if (this.highlightMesh) {
             this.scene.remove(this.highlightMesh);
             this.highlightMesh.geometry?.dispose();
@@ -889,13 +1046,10 @@ export default class Experience extends EventTarget {
         this.buildingTooltipTargetPosition = null;
         this.selectedBuildingInfo = null;
         this.selectedBuildingMesh = null;
-
-        // Nettoyage Sélection Agent
         this.tooltipElement = null;
         this.tooltipTargetPosition = null;
         this.selectedAgent = null;
 
-        // Destruction des composants principaux
         this.timeUI?.destroy(); this.timeUI = null;
         this.timeControlUI?.destroy(); this.timeControlUI = null;
         this.camera?.destroy(); this.camera = null;
@@ -905,13 +1059,12 @@ export default class Experience extends EventTarget {
         if (this.stats?.dom.parentNode) { document.body.removeChild(this.stats.dom); }
         this.stats = null;
 
-        // Nettoyage des références
         this.scene = null;
         this.originalFog = null;
         this.sizes = null; this.time = null; this.canvas = null;
         this.raycaster = null; this.mouse = null;
 
-        instance = null; // Réinitialise le singleton
+        instance = null;
         console.log("Experience détruite.");
     }
 }
