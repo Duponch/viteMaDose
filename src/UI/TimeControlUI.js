@@ -12,14 +12,15 @@ export default class TimeControlUI {
         this.elements = {}; // Stockera tous les boutons (principaux et sous-types)
 
         // --- Conteneur GLOBAL pour TOUS les boutons de calques ---
-        // Reste positionné comme avant, mais contiendra les catégories et sous-menus
         this.debugLayersContainer = document.createElement('div');
         this.debugLayersContainer.classList.add('debug-layers-container');
-        this.debugLayersContainer.style.display = 'none'; // Caché par défaut
+        // ----- MODIFICATION ICI -----
+        this.debugLayersContainer.style.display = 'none'; // <- Changé de 'flex' à 'none'
+        // --------------------------
         this.debugLayersContainer.style.position = 'absolute';
         this.debugLayersContainer.style.bottom = '70px'; // Ou ajuster selon besoin
         this.debugLayersContainer.style.right = '20px';
-        this.debugLayersContainer.style.display = 'flex'; // Utiliser flex pour aligner verticalement
+        // La ligne display: 'flex' a été retirée/modifiée ci-dessus
         this.debugLayersContainer.style.flexDirection = 'column';
         this.debugLayersContainer.style.gap = '8px'; // Espace entre catégories
         document.body.appendChild(this.debugLayersContainer);
@@ -27,7 +28,9 @@ export default class TimeControlUI {
         this.createButtons();
         this.setupEventListeners();
         this.updateButtonStates(); // Met à jour états initiaux
-        this.updateLayerButtonsAppearance(); // Met à jour l'apparence initiale
+        // L'appel initial à updateLayerButtonsAppearance est ok,
+        // même si le container est caché, il mettra juste le style des boutons.
+        this.updateLayerButtonsAppearance();
     }
 
     createButtons() {
