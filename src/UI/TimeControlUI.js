@@ -4,7 +4,6 @@ export default class TimeControlUI {
     constructor(experience) {
         this.experience = experience;
         this.time = this.experience.time;
-
         this.container = document.createElement('div');
         this.container.classList.add('time-controls');
         document.body.appendChild(this.container);
@@ -43,12 +42,12 @@ export default class TimeControlUI {
         this.elements.speedDisplay.textContent = `${this.time.timeScale}x`;
 
         // --- Bouton Debug Principal (inchangé) ---
-        this.elements.debugToggleButton = this._createButton('debug-toggle-button', '🐞', "Afficher/Masquer les contrôles Debug");
+        this.elements.debugToggleButton = this._createButton('debug-toggle-button', '♣', "Afficher/Masquer les contrôles Debug");
 
         // --- STRUCTURE DES CALQUES ET SOUS-CALQUES ---
         const layerStructure = {
             district: {
-                text: 'Districts',
+                text: 'Quartiers',
                 subLayers: {
                     residential: 'Résidentiel',
                     business: 'Affaires',
@@ -56,22 +55,22 @@ export default class TimeControlUI {
                 }
             },
             plot: {
-                text: 'Plots',
+                text: 'Parcelles',
                 subLayers: {
                     house: 'Maisons',
                     building: 'Immeubles',
-                    industrial: 'Industriel',
+                    industrial: 'Industriels',
                     skyscraper: 'Gratte-ciels',
                     park: 'Parcs',
                     unbuildable: 'Non-constr.' // Optionnel
                 }
             },
             buildingOutline: {
-                text: 'Outlines Bat.',
+                text: 'Constructions',
                 subLayers: {
                     house: 'Maisons',
                     building: 'Immeubles',
-                    industrial: 'Industriel',
+                    industrial: 'Industriels',
                     skyscraper: 'Gratte-ciels'
                 }
             },
@@ -93,7 +92,8 @@ export default class TimeControlUI {
             // Bouton principal de la catégorie
             const mainButton = this._createButton(
                 `debug-category-${categoryName}`,
-                categoryData.text + (categoryData.subLayers ? ' ▼' : ''), // Indicateur flèche si sous-menu
+                //categoryData.text + (categoryData.subLayers ? ' ▼' : ''), // Indicateur flèche si sous-menu
+				categoryData.text, // Juste le texte
                 `Afficher/Masquer ${categoryData.text}`
             );
             mainButton.classList.add('debug-category-button'); // Classe spécifique
@@ -173,11 +173,10 @@ export default class TimeControlUI {
         Object.keys(this.elements).forEach(key => {
             const element = this.elements[key];
 
-            // Écouteur pour les boutons de catégorie principale
+            // --- MODIFICATION Listener Catégorie ---
             if (key.startsWith('categoryBtn_')) {
                 const categoryName = element.dataset.categoryName;
-                // Vérifier s'il a un sous-menu associé
-                const hasSubMenu = !!this.elements[`subMenu_${categoryName}`];
+                const hasSubMenu = !!this.elements[`subMenu_${categoryName}`]; // Vérifier s'il y a des enfants
 
                 element.addEventListener('click', () => {
                      if (!this.experience.isDebugMode) {
@@ -185,15 +184,17 @@ export default class TimeControlUI {
                          return;
                      }
                      if (hasSubMenu) {
-                         // Si a un sous-menu, clique dessus pour ouvrir/fermer le sous-menu
-                         this.experience.toggleSubMenu(categoryName);
+                         // NOUVEAU: Appeler la méthode pour basculer tous les enfants
+                         this.experience.toggleAllSubLayersInCategory(categoryName);
                      } else {
-                         // Si pas de sous-menu (ex: NavGrid), clique dessus pour basculer sa visibilité
+                         // COMPORTEMENT ORIGINAL: Basculer la catégorie elle-même si pas d'enfants
                          this.experience.toggleCategoryVisibility(categoryName);
                      }
                 });
             }
-            // Écouteur pour les boutons de sous-calque
+            // --- FIN MODIFICATION Listener Catégorie ---
+
+            // Listener Sous-calque (inchangé)
             else if (key.startsWith('subLayerBtn_')) {
                 const categoryName = element.dataset.categoryName;
                 const subLayerName = element.dataset.subLayerName;
@@ -202,7 +203,6 @@ export default class TimeControlUI {
                          console.log("Activez d'abord le mode Debug principal.");
                          return;
                      }
-                    // Basculer la visibilité de ce sous-calque spécifique
                     this.experience.toggleSubLayerVisibility(categoryName, subLayerName);
                 });
             }
@@ -220,6 +220,11 @@ export default class TimeControlUI {
         this.debugModeChangeHandler = (event) => {
              const isEnabled = event.detail.isEnabled;
              this.debugLayersContainer.style.display = isEnabled ? 'flex' : 'none';
+			 for (const key in this.elements) {
+				if (key.startsWith('subMenu_')) {
+					this.elements[key].style.display = isEnabled ? 'flex' : 'none';
+				}
+			}
              this.updateButtonStates(); // Met à jour l'état du bouton debug principal
              this.updateLayerButtonsAppearance(); // Met à jour l'apparence de tous les boutons de calques
         };
@@ -278,7 +283,7 @@ export default class TimeControlUI {
         // --- MàJ Bouton Debug Principal ---
         if (this.experience.isDebugMode) {
             this.elements.debugToggleButton.style.opacity = '1.0';
-            this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 150, 255, 0.7)';
+            this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 120, 150, 0.7)';
         } else {
             this.elements.debugToggleButton.style.opacity = '0.6';
             this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
@@ -315,27 +320,30 @@ export default class TimeControlUI {
                 const categoryName = button.dataset.categoryName;
                 if (layerStates.hasOwnProperty(categoryName)) {
                     const categoryState = layerStates[categoryName];
-                    const isActive = categoryState._visible;
+                    // --- MODIFICATION: L'état "actif" dépend maintenant si *tous* les enfants sont actifs ---
+                    // Ou plus simplement, on colore différemment si la catégorie est visible globalement (_visible).
+                    const isCategoryVisible = categoryState._visible;
 
                     // Style basé sur la visibilité de la catégorie ET le mode debug global
-                    if (isActive && isGlobalDebugActive) {
-                        button.style.border = '1px solid #00ccff'; // Cyan pour catégorie active
+                    if (isCategoryVisible && isGlobalDebugActive) {
+                        //button.style.border = '1px solid #00ccff';
                         button.style.backgroundColor = 'rgba(0, 120, 150, 0.7)';
                     } else {
-                        button.style.border = '1px solid transparent';
-                        button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)'; // Style standard
+                        //button.style.border = '1px solid transparent';
+                        button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
                     }
                     button.disabled = !isGlobalDebugActive;
                     button.style.opacity = isGlobalDebugActive ? '1.0' : '0.5';
+                    //button.style.opacity = isGlobalDebugActive ? '1.0' : '0.5';
 
                     // Mettre à jour la flèche si sous-menu
-                    const subMenu = this.elements[`subMenu_${categoryName}`];
+                    /* const subMenu = this.elements[`subMenu_${categoryName}`];
                      if (subMenu && button.textContent.includes('▼') || button.textContent.includes('►') ) {
                           const showSubMenu = categoryState._showSubMenu;
                           button.textContent = button.textContent.replace(/[▼►]/, showSubMenu ? '►' : '▼');
                           // Afficher/cacher le sous-menu DOM element
                           subMenu.style.display = showSubMenu ? 'flex' : 'none';
-                     }
+                     } */
 
                 } else {
                      button.disabled = true; button.style.opacity = '0.5'; // Catégorie inconnue
@@ -346,21 +354,21 @@ export default class TimeControlUI {
                 const subLayerName = button.dataset.subLayerName;
                 if (layerStates.hasOwnProperty(categoryName) && layerStates[categoryName].hasOwnProperty(subLayerName)) {
                     const categoryState = layerStates[categoryName];
-                    const isActive = categoryState[subLayerName];
+                    const isSubLayerActive = categoryState[subLayerName]; // État logique du sous-calque
 
-                    // Style basé sur la visibilité du sous-calque ET le mode debug global ET la catégorie parente visible
-                    if (isActive && isGlobalDebugActive && categoryState._visible) {
-                        button.style.border = '1px solid #00aaff'; // Bleu standard pour sous-calque actif
-                        button.style.backgroundColor = 'rgba(0, 100, 180, 0.7)';
+                    // Style basé sur l'état logique du sous-calque ET si debug global est actif ET si la catégorie parente est visible
+                    if (isSubLayerActive && isGlobalDebugActive && categoryState._visible) {
+                        //button.style.border = '1px solid #00aaff';
+                        button.style.backgroundColor = 'rgba(0, 120, 150, 0.7)';
                     } else {
-                        button.style.border = '1px solid transparent';
+                        //button.style.border = '1px solid transparent';
                         button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
                     }
                     // Grisé si debug global inactif OU si catégorie parente cachée
                     button.disabled = !isGlobalDebugActive || !categoryState._visible;
                     button.style.opacity = (isGlobalDebugActive && categoryState._visible) ? '1.0' : '0.5';
                 } else {
-                     button.disabled = true; button.style.opacity = '0.5'; // Sous-calque inconnu
+                     button.disabled = true; button.style.opacity = '0.5';
                 }
             }
         });
@@ -425,7 +433,8 @@ export default class TimeControlUI {
         // --- AJOUT : Retirer les nouveaux listeners ---
         this.experience?.removeEventListener('debugcategoryvisibilitychanged', this.categoryVisibilityChangeHandler);
         this.experience?.removeEventListener('debugsublayervisibilitychanged', this.subLayerVisibilityChangeHandler);
-        this.experience?.removeEventListener('debugsubmenuvisibilitychanged', this.subMenuVisibilityChangeHandler);
+		this.experience?.removeEventListener('debugcategorychildrenchanged', this.categoryChildrenChangeHandler);
+		//this.experience?.removeEventListener('debugsubmenuvisibilitychanged', this.subMenuVisibilityChangeHandler);
         // ---------------------------------------------
 
         // --- Retirer les éléments du DOM ---

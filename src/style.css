@@ -216,17 +216,7 @@ button {
 /* src/style.css */
 
 /* ... (styles existants) ... */
-
 /* Styles pour le conteneur des boutons de calques debug */
-.debug-layers-container {
-	/* Positionné via JS (absolute, bottom, right) */
-	/* display: flex; et flex-direction: column; via JS */
-	/* gap: 5px; via JS */
-	background-color: rgba(30, 30, 30, 0.7); /* Fond léger */
-	padding: 8px;
-	border-radius: 5px;
-	z-index: 100; /* Juste en dessous des contrôles de temps */
-  }
   
   /* Styles pour les boutons de calques debug */
   .debug-layer-button {
@@ -235,18 +225,18 @@ button {
 	font-size: 0.9em; /* Un peu plus petit */
 	font-weight: 500;
 	font-family: inherit;
-	background-color: rgba(0, 0, 0, 0.6); /* Fond standard */
+    background-color: rgba(0, 0, 0, 0.8);
 	color: white;
 	cursor: pointer;
 	transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
-	border-radius: 4px;
+	border-radius: 10px;
 	text-align: left;
 	min-width: 100px; /* Pour alignement */
   }
   
   .debug-layer-button:hover:not(:disabled) {
 	background-color: rgba(255, 255, 255, 0.6);
-	color: #000000;
+	/* color: #000000; */
   }
   
   .debug-layer-button:disabled {
@@ -270,7 +260,7 @@ button {
 
 /* Styles pour le conteneur global des calques debug */
 .debug-layers-container {
-    background-color: rgba(30, 30, 30, 0.7);
+    background-color: rgba(0, 0, 0, 0.5);
     padding: 8px;
     border-radius: 5px;
     z-index: 100;
@@ -289,7 +279,7 @@ button {
     font-size: 0.95em;
     font-weight: 600; /* Un peu plus gras */
     font-family: inherit;
-    background-color: rgba(0, 0, 0, 0.6);
+    background-color: rgba(0, 0, 0, 0.8);
     color: white;
     cursor: pointer;
     transition: background-color 0.2s, border-color 0.2s, opacity 0.2s;
