@@ -12,6 +12,7 @@
     "vite": "^6.2.0"
   },
   "dependencies": {
+    "chart.js": "^4.4.9",
     "pathfinding": "^0.4.18",
     "simplex-noise": "^4.0.3",
     "stats.js": "^0.17.0",

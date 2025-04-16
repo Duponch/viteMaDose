@@ -9,6 +9,7 @@ import World from './Core/World.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import TimeUI from './UI/TimeUI.js';
 import TimeControlUI from './UI/TimeControlUI.js';
+import AgentStatsUI from './UI/AgentStatsUI.js';
 // Import nécessaire pour la recherche de mesh par position
 import { Matrix4, Vector3 } from 'three';
 
@@ -36,6 +37,7 @@ export default class Experience extends EventTarget {
         this.isDebugMode = false;
         this.timeUI = new TimeUI(this);
         this.timeControlUI = new TimeControlUI(this);
+		this.agentStatsUI = new AgentStatsUI(this); // <--- INSTANCIER LA NOUVELLE UI
         this.controls = new OrbitControls(this.camera.instance, this.canvas);
         this.controls.enableDamping = true;
         this.stats = new Stats();
@@ -1024,6 +1026,14 @@ export default class Experience extends EventTarget {
         if (this.renderer) this.renderer.update();
         if (this.timeUI) this.timeUI.update();
 
+		// Optionnel : Mettre à jour l'UI des stats si elle est visible
+        // if (this.agentStatsUI && this.agentStatsUI.isVisible) {
+        //    this.agentStatsUI.update(); // Met à jour liste + graphiques
+        // }
+        // Note: L'update automatique est désactivée par défaut dans AgentStatsUI,
+        // elle se met à jour quand on l'ouvre. Vous pouvez décommenter l'appel
+        // ici si vous préférez une mise à jour continue lorsqu'elle est ouverte.
+
         // --- Mise à jour Tooltip Agent ---
         if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
             this.updateTooltipContent(this.selectedAgent);
@@ -1085,6 +1095,7 @@ export default class Experience extends EventTarget {
         this.tooltipTargetPosition = null;
         this.selectedAgent = null;
 
+		this.agentStatsUI?.destroy(); this.agentStatsUI = null;
         this.timeUI?.destroy(); this.timeUI = null;
         this.timeControlUI?.destroy(); this.timeControlUI = null;
         this.camera?.destroy(); this.camera = null;

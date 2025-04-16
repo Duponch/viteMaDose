@@ -345,3 +345,41 @@ button {
     border: 1px solid #00aaff;
     background-color: rgba(0, 100, 180, 0.7);
 } */
+
+/* src/style.css */
+
+/* ... (vos styles existants) ... */
+
+#agent-stats-toggle {
+    /* Styles pour correspondre à vos autres boutons UI si nécessaire */
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    border: 1px solid #555;
+    border-radius: 5px;
+}
+
+#agent-stats-panel {
+    box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+    /* Autres styles déjà définis en ligne, peuvent être mis ici */
+}
+
+#agent-stats-panel h3,
+#agent-stats-panel h4 {
+    color: #a7c5eb; /* Couleur pour les titres */
+}
+
+#agent-stats-panel ul {
+    list-style: none;
+    padding-left: 10px;
+    margin-top: 5px;
+}
+
+#agent-stats-panel li {
+    margin-bottom: 4px;
+    font-size: 0.95em;
+    word-break: break-all; /* Pour couper les longues listes d'IDs */
+}
+
+#agent-stats-panel b {
+    color: #eee;
+}
