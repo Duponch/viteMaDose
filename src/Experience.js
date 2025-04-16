@@ -111,54 +111,43 @@ export default class Experience extends EventTarget {
         const deltaY = event.clientY - this.mouseDownPosition.y;
         const distanceSq = deltaX * deltaX + deltaY * deltaY;
 
-        // Vérifier si c'est un clic court et sans déplacement majeur
         if (clickDuration <= this.MAX_CLICK_DURATION && distanceSq <= this.MAX_CLICK_DISTANCE_SQ) {
-            console.log("Click détecté.");
+            // console.log("Click détecté."); // Garder pour debug si besoin
             this.mouse.x = (event.clientX / this.sizes.width) * 2 - 1;
             this.mouse.y = -(event.clientY / this.sizes.height) * 2 + 1;
             this.raycaster.setFromCamera(this.mouse, this.camera.instance);
 
-            // --- Objets à Intersecter ---
             const objectsToIntersect = [];
-
-            // 1. Ajouter les agents (existant)
             const agentManager = this.world?.agentManager;
+            // const instancedMeshManager = this.world?.contentGenerator?.instancedMeshManager; // Corrigé l'accès
+            const instancedMeshManager = this.world?.cityManager?.contentGenerator?.instancedMeshManager;
+
+
             if (agentManager?.instanceMeshes?.torso) objectsToIntersect.push(agentManager.instanceMeshes.torso);
             if (agentManager?.instanceMeshes?.head) objectsToIntersect.push(agentManager.instanceMeshes.head);
 
-            // 2. Ajouter les bâtiments
-            // Accès via InstancedMeshManager semble le plus propre
-            const instancedMeshManager = this.world.cityManager.contentGenerator.instancedMeshManager;
-
             if (instancedMeshManager?.instancedMeshes) {
                 for (const key in instancedMeshManager.instancedMeshes) {
-                    // Exclure les fenêtres ou autres éléments non cliquables si nécessaire
                     if (key.startsWith('house_') || key.startsWith('building_') || key.startsWith('skyscraper_') || key.startsWith('industrial_')) {
-                       if (!key.includes('Window')) { // Exclure les fenêtres des clics ? Optionnel
-                          objectsToIntersect.push(instancedMeshManager.instancedMeshes[key]);
-                       }
+                       // Inclure toutes les parties principales pour le clic (on pourrait être plus spécifique si besoin)
+                       objectsToIntersect.push(instancedMeshManager.instancedMeshes[key]);
                     }
                 }
             }
-            // --- Fin Objets à Intersecter ---
 
             if (objectsToIntersect.length === 0) {
-                 console.log("Aucun objet (agent/bâtiment) à tester pour l'intersection.");
                  this.deselectAgent();
-                 this.deselectBuilding(); // Désélectionner aussi le bâtiment
+                 this.deselectBuilding();
                  return;
             }
 
-            const intersects = this.raycaster.intersectObjects(objectsToIntersect, false); // false = ne pas tester les enfants récursivement
-
-			console.log(objectsToIntersect);
+            const intersects = this.raycaster.intersectObjects(objectsToIntersect, false);
             let clickedOnSomething = false;
 
             if (intersects.length > 0) {
                 const firstIntersect = intersects[0];
-                const clickedObject = firstIntersect.object; // Le THREE.InstancedMesh lui-même
+                const clickedObject = firstIntersect.object;
 
-                // Est-ce un AGENT ? (Logique existante)
                 if (agentManager && agentManager.agents &&
                    (clickedObject === agentManager.instanceMeshes.torso || clickedObject === agentManager.instanceMeshes.head) &&
                    firstIntersect.instanceId !== undefined)
@@ -166,20 +155,16 @@ export default class Experience extends EventTarget {
                     const agentInstanceId = firstIntersect.instanceId;
                     const clickedAgent = agentManager.agents[agentInstanceId];
                     if (clickedAgent) {
-                        console.log(`Agent cliqué (via MouseUp): ${clickedAgent.id}`);
-                        this.deselectBuilding(); // Désélectionner bâtiment si on clique sur agent
+                        // console.log(`Agent cliqué (via MouseUp): ${clickedAgent.id}`);
+                        this.deselectBuilding();
                         this.selectAgent(clickedAgent);
                         clickedOnSomething = true;
                     }
                 }
-                // Est-ce un BÂTIMENT ? (Nouvelle Logique)
                 else if (instancedMeshManager && firstIntersect.instanceId !== undefined && clickedObject instanceof THREE.InstancedMesh)
                 {
                     const instanceId = firstIntersect.instanceId;
-                    const clickedMesh = clickedObject; // Renommer pour clarté
-
-                    // --- Trouver le BuildingInfo correspondant ---
-                    // Stratégie : Extraire la position de la matrice de l'instance et trouver le bâtiment le plus proche
+                    const clickedMesh = clickedObject;
                     const tempMatrix = new THREE.Matrix4();
                     clickedMesh.getMatrixAt(instanceId, tempMatrix);
                     const worldPosition = new THREE.Vector3();
@@ -188,13 +173,32 @@ export default class Experience extends EventTarget {
                     const citizenManager = this.world?.cityManager?.citizenManager;
                     let closestBuilding = null;
                     let minDistSq = Infinity;
-                    const toleranceSq = 1.0; // Tolérance pour considérer comme le même bâtiment (ajuster si besoin)
+
+                    // --- MODIFICATION ICI ---
+                    // Augmenter la tolérance. 5.0 * 5.0 = 25.0 (distance de 5 unités)
+                    // Ajustez cette valeur si nécessaire. Commencez avec une valeur plus grande
+                    // et réduisez si cela cause des sélections incorrectes sur des bâtiments proches.
+                    const toleranceSq = 25.0; // Anciennement 1.0
+                    // --- FIN MODIFICATION ---
 
                     if (citizenManager?.buildingInstances) {
+                        // --- AJOUT LOGS POUR DEBUG ---
+                        // console.log(`--- Recherche bâtiment pour clic à ${worldPosition.x.toFixed(1)}, ${worldPosition.y.toFixed(1)}, ${worldPosition.z.toFixed(1)} (ToleranceSq: ${toleranceSq}) ---`);
+                        // --- FIN AJOUT LOGS ---
+
                         citizenManager.buildingInstances.forEach(buildingInfo => {
-                            // Comparer la position de l'instance cliquée avec la position enregistrée du bâtiment
                             const distSq = worldPosition.distanceToSquared(buildingInfo.position);
+
+                            // --- AJOUT LOGS POUR DEBUG ---
+                            // if(distSq < 50) { // Loguer seulement les bâtiments raisonnablement proches
+                            //      console.log(`  -> Test bâtiment ID ${buildingInfo.id} (Type: ${buildingInfo.type}) à ${buildingInfo.position.x.toFixed(1)}, ${buildingInfo.position.y.toFixed(1)}, ${buildingInfo.position.z.toFixed(1)} | DistSq: ${distSq.toFixed(2)}`);
+                            // }
+                            // --- FIN AJOUT LOGS ---
+
                             if (distSq < minDistSq && distSq < toleranceSq) {
+                                // --- AJOUT LOGS POUR DEBUG ---
+                                // console.log(`      --> Nouveau candidat le plus proche trouvé ! (Précédent minDistSq: ${minDistSq.toFixed(2)})`);
+                                // --- FIN AJOUT LOGS ---
                                 minDistSq = distSq;
                                 closestBuilding = buildingInfo;
                             }
@@ -203,29 +207,25 @@ export default class Experience extends EventTarget {
 
                     if (closestBuilding) {
                         console.log(`Bâtiment cliqué: ID=${closestBuilding.id}, Type=${closestBuilding.type}`);
-                        this.deselectAgent(); // Désélectionner agent si on clique sur bâtiment
+                        this.deselectAgent();
                         this.selectBuilding(closestBuilding, clickedMesh, instanceId);
                         clickedOnSomething = true;
                     } else {
-                         console.log("Clic sur un mesh de bâtiment, mais impossible de lier à un BuildingInfo.");
+                         console.log(`Clic sur mesh (${clickedMesh.name}, instance ${instanceId}), mais impossible de lier à un BuildingInfo à pos (${worldPosition.x.toFixed(1)}, ${worldPosition.z.toFixed(1)}).`);
                     }
-                    // -----------------------------------------
                 }
             }
 
-            // Si on n'a cliqué sur rien d'intéressant (ni agent, ni bâtiment identifiable)
             if (!clickedOnSomething) {
-                console.log("Clic dans le vide.");
+                // console.log("Clic dans le vide."); // Garder pour debug
                 this.deselectAgent();
                 this.deselectBuilding();
             }
 
         } else {
-            // Ce n'était pas un clic (drag ou clic long)
-            // console.log("Drag détecté (ou clic long), pas de sélection/désélection.");
+            // Drag ou clic long
         }
 
-        // Réinitialiser l'état du clic
         this.mouseDownTime = 0;
         this.mouseDownPosition.x = null;
         this.mouseDownPosition.y = null;
