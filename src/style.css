@@ -151,27 +151,6 @@ button {
 	text-align: center;
   }
 
-  .agent-tooltip, .building-tooltip {
-	position: absolute; /* Nécessaire pour le positionnement via JS */
-	display: none; /* Caché par défaut */
-	padding: 15px 15px;
-	background-color: rgba(0, 0, 0, 0.8); /* Fond noir semi-transparent */
-	color: white;
-	border-radius: 10px;
-	font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* Ou autre police */
-	font-size: 1em;
-	line-height: 1.4;
-	white-space: nowrap; /* Empêche le texte de passer à la ligne */
-	pointer-events: none; /* Permet aux clics de passer à travers */
-	z-index: 100; /* S'assure qu'il est au-dessus du canvas */
-	/* Ajustement pour le positionnement :
-	   Translate de 10px vers la droite et 110% de sa hauteur vers le haut
-	   par rapport au point calculé (qui sera le dessus de la tête) */
-	transform: translate(10px, -110%);
-	/* Transition douce (optionnel) */
-	/* transition: opacity 0.2s ease-in-out; */
-  }
-
   /* --- NOUVEAU: Styles pour les IDs d'agents cliquables --- */
 .building-tooltip .resident-id-link {
 	color: #90caf9; /* Bleu clair pour se démarquer */
@@ -191,26 +170,44 @@ button {
 
 /* Styles existants ... */
 
+/* src/style.css */
+
 .agent-tooltip, .building-tooltip {
-	/* Styles existants ... */
-	pointer-events: none; /* Le tooltip global ne capture pas les clics */
-	/* Styles existants ... */
+    position: absolute;
+    display: none;
+    padding: 10px 15px;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    border-radius: 8px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 0.95em;
+    line-height: 1.4;
+    white-space: normal;
+    max-width: 350px;
+    overflow-wrap: break-word;
+    pointer-events: none;
+    z-index: 100;
+    /* La ligne transform est supprimée */
+    /* transition: opacity 0.2s ease-in-out; */
 }
 
-/* --- NOUVEAU: Styles pour les IDs cliquables DANS les tooltips --- */
+/* ... (le reste de votre CSS) ... */
+
+/* Styles pour les liens cliquables (inchangés) */
 .agent-tooltip .building-id-link,
-.building-tooltip .resident-id-link { /* Applique aussi à l'autre tooltip */
-	color: #90caf9; /* Bleu clair (ou autre couleur de lien) */
-	cursor: pointer;
-	text-decoration: none; /* Pas de soulignement par défaut */
-	transition: color 0.2s ease, text-decoration 0.2s ease;
-	/* Rétablir les événements pointeur UNIQUEMENT pour les liens */
-	pointer-events: auto; /* TRÈS IMPORTANT */
+.building-tooltip .resident-id-link {
+    color: #90caf9;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.2s ease, text-decoration 0.2s ease;
+    pointer-events: auto; /* TRÈS IMPORTANT */
 }
 
 .agent-tooltip .building-id-link:hover,
 .building-tooltip .resident-id-link:hover {
-	color: #bbdefb; /* Bleu plus clair au survol */
-	text-decoration: underline;
+    color: #bbdefb;
+    text-decoration: underline;
 }
-/* --- FIN NOUVEAU --- */
+
+/* --- Assurez-vous que le reste de votre CSS est présent --- */
+/* ... (tous les autres styles de votre fichier) ... */

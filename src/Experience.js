@@ -94,6 +94,108 @@ export default class Experience extends EventTarget {
         console.log("Experience initialisée. Mode debug:", this.isDebugMode);
     }
 
+	/**
+     * Helper function to calculate and apply clamped tooltip position.
+     * @param {HTMLElement} tooltipElement - The tooltip DOM element.
+     * @param {THREE.Vector3} targetPosition3D - The 3D world position to track.
+     */
+    _updateTooltipPosition(tooltipElement, targetPosition3D) {
+        if (!tooltipElement || !targetPosition3D || tooltipElement.style.display === 'none') {
+            return; // Ne rien faire si caché ou invalide
+        }
+
+        // 1. Projection 3D -> 2D
+        const projectedPosition = targetPosition3D.clone().project(this.camera.instance);
+
+        // 2. Vérifier si la cible est derrière la caméra
+        if (projectedPosition.z >= 1) {
+            tooltipElement.style.display = 'none'; // Cache si derrière
+            return;
+        }
+
+        // 3. Conversion en coordonnées écran (pixels)
+        // Le point projeté (0,0) est au centre, (-1, -1) en bas à gauche, (1, 1) en haut à droite
+        const baseScreenX = (projectedPosition.x * 0.5 + 0.5) * this.sizes.width;
+        const baseScreenY = (-projectedPosition.y * 0.5 + 0.5) * this.sizes.height;
+
+        // 4. Obtenir les dimensions de l'infobulle (nécessite qu'elle soit visible ou ait des dimensions définies)
+        // Note: offsetWidth/Height peut être 0 si l'élément est display:none.
+        // Il faut s'assurer que le display est mis à 'block' AVANT cette mesure,
+        // même si c'est juste pour une frame et qu'on le recache si hors écran.
+        // On force l'affichage ici pour la mesure, puis on le recache si nécessaire plus tard.
+        const wasHidden = tooltipElement.style.display === 'none';
+        if (wasHidden) {
+           tooltipElement.style.visibility = 'hidden'; // Rendre invisible mais mesurable
+           tooltipElement.style.display = 'block';
+        }
+        const tooltipWidth = tooltipElement.offsetWidth;
+        const tooltipHeight = tooltipElement.offsetHeight;
+        if (wasHidden) {
+            tooltipElement.style.display = 'none'; // Restaurer display:none
+            tooltipElement.style.visibility = 'visible'; // Rendre visible pour le prochain affichage
+        }
+
+        // Si les dimensions ne sont pas valides, on ne peut pas calculer les limites
+        if (tooltipWidth <= 0 || tooltipHeight <= 0) {
+             // console.warn("Tooltip dimensions invalid, cannot clamp position.");
+             // On positionne quand même au point de base
+             tooltipElement.style.left = `${baseScreenX}px`;
+             tooltipElement.style.top = `${baseScreenY}px`;
+             // Assurer qu'il est visible si la projection était valide
+             if (projectedPosition.z < 1) tooltipElement.style.display = 'block';
+             return;
+        }
+
+        // 5. Calculer la position désirée initiale (au-dessus)
+		const desiredOffsetX = 15;
+		let desiredScreenY = baseScreenY - tooltipHeight - 10; // Position 'top' désirée
+		let finalScreenX = baseScreenX + desiredOffsetX; // Calcul X comme avant
+
+		// 6. Vérifier et contraindre les limites de l'écran
+		const margin = 10;
+
+		// Clamp horizontal (inchangé)
+		if (finalScreenX + tooltipWidth > this.sizes.width - margin) {
+			finalScreenX = this.sizes.width - tooltipWidth - margin;
+		}
+		if (finalScreenX < margin) {
+			finalScreenX = margin;
+		}
+
+		// --- Nouvelle Logique Verticale ---
+		let finalScreenY = desiredScreenY; // Commencer avec la position désirée (au-dessus)
+
+		// Vérifier si la position AU-DESSUS dépasse en HAUT
+		if (finalScreenY < margin) {
+			// Si oui, essayer de la mettre EN DESSOUS du point d'ancrage
+			finalScreenY = baseScreenY + 20; // Nouvelle position désirée (en dessous)
+		}
+
+		// Maintenant, vérifier si la position ACTUELLE (au-dessus ou en dessous) dépasse en BAS
+		if (finalScreenY + tooltipHeight > this.sizes.height - margin) {
+			// Si oui, la coller au bord bas
+			finalScreenY = this.sizes.height - tooltipHeight - margin;
+		}
+
+		// Re-vérifier si coller en bas n'a pas fait dépasser en HAUT (sécurité, peu probable)
+		if (finalScreenY < margin) {
+			finalScreenY = margin;
+		}
+		// --- Fin Nouvelle Logique Verticale ---
+
+
+		// 7. Appliquer la position finale
+		tooltipElement.style.left = `${Math.round(finalScreenX)}px`;
+		tooltipElement.style.top = `${Math.round(finalScreenY)}px`;
+
+        // 8. Assurer la visibilité (si la projection 3D était valide)
+         if (projectedPosition.z < 1) {
+             tooltipElement.style.display = 'block';
+         } else {
+             tooltipElement.style.display = 'none'; // Double vérification
+         }
+    }
+
     // Crée le mesh utilisé pour surligner le bâtiment sélectionné
     createHighlightMesh() {
         const highlightGeometry = new THREE.BoxGeometry(1.05, 1.05, 1.05); // Légèrement plus grand
@@ -548,30 +650,16 @@ export default class Experience extends EventTarget {
         if (this.timeUI) this.timeUI.update();
 
         // --- Mise à jour Tooltip Agent ---
-        if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) { // Afficher seulement si pas de bâtiment sélectionné
+        if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
             this.updateTooltipContent(this.selectedAgent); // Met à jour le contenu
+
             // Calcule la position 3D cible pour le tooltip agent
             this.tooltipTargetPosition.copy(this.selectedAgent.position);
             const headHeightOffset = 8.0 * this.selectedAgent.scale; // Approx. hauteur tête
             this.tooltipTargetPosition.y += this.selectedAgent.yOffset + headHeightOffset;
-            const rightOffset = new THREE.Vector3(1, 0, 0);
-            rightOffset.applyQuaternion(this.selectedAgent.orientation); // Décalage relatif à l'orientation
-            rightOffset.multiplyScalar(3.0 * this.selectedAgent.scale);
-            this.tooltipTargetPosition.add(rightOffset);
+            // Appelle la nouvelle fonction pour positionner l'infobulle
+            this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
 
-            // Projette la position 3D en 2D écran
-            const projectedPositionAgent = this.tooltipTargetPosition.clone().project(this.camera.instance);
-
-            if (projectedPositionAgent.z < 1) { // Vérifie si devant la caméra
-                const screenX = (projectedPositionAgent.x * 0.5 + 0.5) * this.sizes.width;
-                const screenY = (-projectedPositionAgent.y * 0.5 + 0.5) * this.sizes.height;
-                // Positionne le tooltip
-                this.tooltipElement.style.left = `${screenX}px`;
-                this.tooltipElement.style.top = `${screenY}px`;
-                if (this.tooltipElement.style.display === 'none') { this.tooltipElement.style.display = 'block'; }
-            } else { // Cache si derrière
-                if (this.tooltipElement.style.display !== 'none') { this.tooltipElement.style.display = 'none'; }
-            }
         } else { // Cache si aucun agent sélectionné ou si bâtiment sélectionné
             if (this.tooltipElement && this.tooltipElement.style.display !== 'none') { this.tooltipElement.style.display = 'none'; }
         }
@@ -579,55 +667,22 @@ export default class Experience extends EventTarget {
         // --- Mise à jour Tooltip Bâtiment ---
         if (this.selectedBuildingInfo && this.buildingTooltipElement) {
             this.updateBuildingTooltipContent(); // Met à jour le contenu
-            // Recalcule la position 3D cible (sommet haut-droite)
-            if (this.selectedBuildingMesh && this.selectedBuildingInstanceId !== -1) {
-                const instanceMatrix = new THREE.Matrix4();
-                this.selectedBuildingMesh.getMatrixAt(this.selectedBuildingInstanceId, instanceMatrix);
-                const position = new THREE.Vector3();
-                const quaternion = new THREE.Quaternion();
-                const scale = new THREE.Vector3();
-                instanceMatrix.decompose(position, quaternion, scale);
 
-                // Calcule les dimensions locales de la géométrie de base
-                const baseGeometry = this.selectedBuildingMesh.geometry;
-                if (!baseGeometry.boundingBox) { baseGeometry.computeBoundingBox(); }
-                let localHeight = 1, localWidth = 1, localDepth = 1;
-                if (baseGeometry.boundingBox) {
-                    localHeight = baseGeometry.boundingBox.max.y - baseGeometry.boundingBox.min.y;
-                    localWidth = baseGeometry.boundingBox.max.x - baseGeometry.boundingBox.min.x;
-                    localDepth = baseGeometry.boundingBox.max.z - baseGeometry.boundingBox.min.z;
-                }
-                const scaledHeight = localHeight * scale.y;
-                const scaledWidth = localWidth * scale.x;
-                const scaledDepth = localDepth * scale.z;
+            // Recalcule la position 3D cible (sommet haut-droite du highlight)
+            if (this.highlightMesh && this.highlightMesh.visible) {
+                // Utiliser la position et la géométrie du highlight pour une position plus stable
+                 const highlightWorldPosition = new Vector3();
+                 this.highlightMesh.getWorldPosition(highlightWorldPosition); // Centre du highlight
+                 const highlightHeight = this.highlightMesh.scale.y; // Hauteur du highlight
 
-                // Calcule le décalage local du sommet cible
-                const localSummitOffset = new THREE.Vector3(scaledWidth / 2, scaledHeight / 2, -scaledDepth / 2);
-                localSummitOffset.applyQuaternion(quaternion); // Applique la rotation de l'instance
+                 // Cible légèrement au-dessus du centre du highlight
+                 this.buildingTooltipTargetPosition.copy(highlightWorldPosition);
+                 this.buildingTooltipTargetPosition.y += highlightHeight * 0.5 + 0.5; // +0.5 pour un petit espace
 
-                // Calcule la position mondiale du sommet
-                this.buildingTooltipTargetPosition.copy(position).add(localSummitOffset);
+                // Appelle la nouvelle fonction pour positionner l'infobulle
+                this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
 
-                // Ajoute un petit décalage visuel
-                const offsetAmount = 1.5;
-                const rightDir = new THREE.Vector3(1, 0, 0).applyQuaternion(quaternion);
-                this.buildingTooltipTargetPosition.addScaledVector(rightDir, offsetAmount);
-                this.buildingTooltipTargetPosition.y += offsetAmount * 0.5;
-
-                // Projette en 2D écran
-                const projectedPositionBuilding = this.buildingTooltipTargetPosition.clone().project(this.camera.instance);
-
-                if (projectedPositionBuilding.z < 1) { // Si devant la caméra
-                    const screenX = (projectedPositionBuilding.x * 0.5 + 0.5) * this.sizes.width;
-                    const screenY = (-projectedPositionBuilding.y * 0.5 + 0.5) * this.sizes.height;
-                    // Positionne le tooltip
-                    this.buildingTooltipElement.style.left = `${screenX}px`;
-                    this.buildingTooltipElement.style.top = `${screenY}px`;
-                    if (this.buildingTooltipElement.style.display === 'none') { this.buildingTooltipElement.style.display = 'block'; }
-                } else { // Cache si derrière
-                    if (this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
-                }
-            } else { // Cache si données instance invalides
+            } else { // Cache si highlight invalide
                 if (this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
             }
         } else { // Cache si aucun bâtiment sélectionné
@@ -641,7 +696,7 @@ export default class Experience extends EventTarget {
     destroy() {
         console.log("Destroying Experience...");
 
-        // Nettoyage EventListeners
+        // Retirer TOUS les écouteurs
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
         this.canvas.removeEventListener('mousedown', this._boundHandleMouseDown);
@@ -649,13 +704,12 @@ export default class Experience extends EventTarget {
         if (this.buildingTooltipElement) {
             this.buildingTooltipElement.removeEventListener('click', this._boundHandleBuildingTooltipClick);
         }
-        // ---> NOUVEAU : Retirer l'écouteur de l'infobulle agent <---
         if (this.tooltipElement) {
             this.tooltipElement.removeEventListener('click', this._boundHandleAgentTooltipClick);
         }
-        // --->
 
-        // Nettoyage Sélection Bâtiment
+        // ... (reste du code destroy existant) ...
+         // Nettoyage Sélection Bâtiment
         if (this.highlightMesh) {
             this.scene.remove(this.highlightMesh);
             this.highlightMesh.geometry?.dispose();
