@@ -35,11 +35,12 @@ export default class Camera {
         // --- NOUVEAU : État et cibles pour l'animation "moveToTarget" ---
         this.isMovingToTarget = false;
         this.moveStartTime = 0;
-        this.moveDuration = 200; // Durée par défaut de l'animation (ms)
+        this.moveDuration = 1000; // Durée par défaut
         this.moveStartPosition = new THREE.Vector3();
-        this.moveStartLookAt = new THREE.Vector3(); // Pour interpoler le lookAt aussi
+        this.moveStartLookAt = new THREE.Vector3();
         this.moveToTargetPosition = new THREE.Vector3();
         this.moveLookAtTargetPosition = new THREE.Vector3();
+        this.agentToFollowAfterMove = null; // <-- NOUVELLE PROPRIÉTÉ
         // --- FIN NOUVEAU ---
 
         this.setInstance();
@@ -73,81 +74,110 @@ export default class Camera {
         this.instance.updateProjectionMatrix();
     }
 
-    // --- NOUVELLE MÉTHODE ---
-    /**
+   /**
      * Démarre une animation pour déplacer la caméra vers une cible.
      * @param {THREE.Vector3} targetCamPos Position cible de la caméra.
      * @param {THREE.Vector3} targetLookAt Point cible que la caméra doit regarder.
      * @param {number} [duration=1000] Durée de l'animation en millisecondes.
+     * @param {object | null} [agentToFollow=null] L'agent à suivre après la fin de l'animation.
      */
-    moveToTarget(targetCamPos, targetLookAt, duration = 1000) {
-        console.log("Camera: Starting move to target.");
-        this.isMovingToTarget = true;
-        this.isFollowing = false; // Arrêter le suivi d'agent si actif
-        this.targetAgent = null; // Désélectionner l'agent suivi
-        this._removeEventListeners(); // Arrêter la rotation souris pendant l'anim
+   moveToTarget(targetCamPos, targetLookAt, duration = 1000, agentToFollow = null) { // <-- AJOUT agentToFollow
+		console.log(`Camera: Starting move to target. Follow after: ${agentToFollow ? agentToFollow.id : 'None'}`);
+		this.isMovingToTarget = true;
+		this.isFollowing = false; // Arrêter le suivi d'agent si actif
+		this.targetAgent = null; // Désélectionner l'agent suivi actuel
+		this.agentToFollowAfterMove = agentToFollow; // <-- STOCKER l'agent à suivre
+		this._removeEventListeners(); // Arrêter la rotation souris pendant l'anim
 
-        this.moveStartTime = this.experience.time.current; // Utilise le temps de Experience
-        this.moveDuration = duration;
+		this.moveStartTime = this.experience.time.current;
+		this.moveDuration = duration > 0 ? duration : 1; // Éviter durée 0
 
-        this.moveStartPosition.copy(this.instance.position); // Position de départ actuelle
-        // Pour le point de départ du lookAt, on prend la cible actuelle des OrbitControls
-        // ou le point que la caméra regarde si les contrôles ne sont pas actifs
-        if (this.experience.controls && this.experience.controls.enabled) {
-             this.moveStartLookAt.copy(this.experience.controls.target);
-        } else {
-             // Calculer le point regardé actuel si pas d'OrbitControls target
-             const lookDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(this.instance.quaternion);
-             this.moveStartLookAt.copy(this.instance.position).add(lookDirection.multiplyScalar(10)); // Point arbitraire devant
-        }
+		this.moveStartPosition.copy(this.instance.position);
 
+		// Calcul point de départ LookAt (inchangé)
+		if (this.experience.controls && this.experience.controls.enabled) {
+			this.moveStartLookAt.copy(this.experience.controls.target);
+		} else {
+			const lookDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(this.instance.quaternion);
+			// Calculer un point plus précis si possible
+			if (this.targetLookAtPosition) { // Si on avait une cible précédente (ex: suivi agent)
+				this.moveStartLookAt.copy(this.targetLookAtPosition);
+			} else { // Sinon, un point devant
+				this.moveStartLookAt.copy(this.instance.position).add(lookDirection.multiplyScalar(10));
+			}
+		}
 
-        this.moveToTargetPosition.copy(targetCamPos);
-        this.moveLookAtTargetPosition.copy(targetLookAt);
+		this.moveToTargetPosition.copy(targetCamPos);
+		this.moveLookAtTargetPosition.copy(targetLookAt);
 
-        // Réactiver OrbitControls pour que l'utilisateur puisse reprendre la main après
-        if (this.experience.controls) {
-             this.experience.controls.enabled = true;
-             // Optionnel : Désactiver le damping temporairement ?
-             // this.experience.controls.enableDamping = false;
-        }
-    }
+		// Ne PAS réactiver OrbitControls ici, on le fera seulement si on ne suit pas après
+		// if (this.experience.controls) {
+		//      this.experience.controls.enabled = true; // <- Supprimé ici
+		// }
+	}
     // --- FIN NOUVELLE MÉTHODE ---
 
     followAgent(agent) {
         if (!agent) return;
-        console.log("Camera: Starting follow agent.");
+        // Si on est déjà en train de suivre cet agent, ne rien faire
+        if (this.isFollowing && this.targetAgent === agent) return;
+
+        console.log(`Camera: Setting up follow for agent ${agent.id}.`);
         this.targetAgent = agent;
         this.isFollowing = true;
-        this.isMovingToTarget = false; // Arrêter l'animation si active
+        this.isMovingToTarget = false; // S'assurer que l'autre mode est arrêté
+        this.agentToFollowAfterMove = null; // Nettoyer au cas où
         this.isMouseLookingActive = true;
         this.isLeftMouseDown = false;
 
-        // ... (reste du code followAgent existant) ...
+        // Désactiver OrbitControls explicitement
+        if (this.experience.controls) {
+             this.experience.controls.enabled = false;
+        }
+
+        // Calculer le yaw/pitch initial basé sur la position ACTUELLE de la caméra
+        // (après moveToTarget) et la position de l'agent.
         const direction = new THREE.Vector3().subVectors(this.instance.position, agent.position).normalize();
         this.mouseYaw = Math.atan2(direction.x, direction.z);
         this.mousePitch = Math.asin(THREE.MathUtils.clamp(direction.y, -1, 1));
         this.mousePitch = THREE.MathUtils.clamp(this.mousePitch, this.minPitch, this.maxPitch);
 
-        this.updateFollowLogic(1.0); // Snap initial
-        this.instance.position.copy(this.currentPosition);
-        this.instance.lookAt(this.targetLookAtPosition);
+        // IMPORTANT: Ne PAS faire de 'snap' initial ici avec updateFollowLogic(1.0)
+        // car la caméra est déjà positionnée par moveToTarget.
+        // On met juste à jour targetLookAtPosition pour le premier LERP dans update().
+        this.targetLookAtPosition.copy(agent.position).add(new THREE.Vector3(0, 1.0, 0));
 
+        // Ajouter les listeners pour le contrôle souris pendant le suivi
         this._addEventListeners();
     }
 
     stopFollowing() {
-        console.log("Camera: Stopping follow.");
+        // Se déclenche si on désélectionne l'agent ou si l'on sélectionne autre chose
+        if (!this.isFollowing && !this.isMovingToTarget) {
+            // Si ni en suivi, ni en transition, vérifier quand même l'état des contrôles
+            if (this.experience.controls && !this.experience.controls.enabled) {
+                console.log("Camera.stopFollowing: Controls were disabled, re-enabling.");
+                 this.experience.controls.enabled = true;
+            }
+            return; // Rien à arrêter
+        }
+
+        console.log("Camera: Stopping follow/move sequence.");
         this.targetAgent = null;
         this.isFollowing = false;
         this.isMouseLookingActive = false;
         this.isLeftMouseDown = false;
-        this.isMovingToTarget = false; // Assurer que l'animation est aussi arrêtée
-        this._removeEventListeners();
-        // Réactiver OrbitControls quand on arrête de suivre
+        this.isMovingToTarget = false; // Assurer que l'animation moveToTarget est aussi arrêtée
+        this.agentToFollowAfterMove = null; // Nettoyer l'agent potentiel
+        this._removeEventListeners(); // Retirer les listeners souris
+
+        // Réactiver OrbitControls
         if (this.experience.controls) {
              this.experience.controls.enabled = true;
-             // this.experience.controls.enableDamping = true; // Réactiver si désactivé
+             console.log("Camera.stopFollowing: OrbitControls enabled.");
+             // Peut-être recentrer la cible des contrôles ?
+             // this.experience.controls.target.copy(this.instance.position).add(this.instance.getWorldDirection(new THREE.Vector3()).multiplyScalar(10));
+             // this.experience.controls.update(); // Forcer MAJ si besoin
         }
     }
 
@@ -228,18 +258,16 @@ export default class Camera {
             const elapsedTime = currentTime - this.moveStartTime;
             let progress = Math.min(1.0, elapsedTime / this.moveDuration);
 
-            // --- Optionnel: Ajouter un easing (ex: easeOutQuart) ---
+            // --- Optionnel: Easing (inchangé) ---
             // progress = 1 - Math.pow(1 - progress, 4);
 
-            // Interpolation linéaire (LERP) pour la position
+            // Interpolation position et lookAt (inchangé)
             this.instance.position.lerpVectors(this.moveStartPosition, this.moveToTargetPosition, progress);
-
-            // Interpolation linéaire (LERP) pour le point regardé
             const currentLookAt = new THREE.Vector3().lerpVectors(this.moveStartLookAt, this.moveLookAtTargetPosition, progress);
             this.instance.lookAt(currentLookAt);
 
-             // Mettre à jour la cible des OrbitControls pendant l'animation
-             if (this.experience.controls) {
+            // Mettre à jour la cible des OrbitControls PENDANT l'animation (inchangé)
+            if (this.experience.controls) {
                 this.experience.controls.target.copy(currentLookAt);
              }
 
@@ -247,23 +275,43 @@ export default class Camera {
             if (progress >= 1.0) {
                 this.isMovingToTarget = false;
                 console.log("Camera: Move to target finished.");
-                // Assurer la position et la cible finales
+
+                // Assurer la position et la cible finales (inchangé)
                 this.instance.position.copy(this.moveToTargetPosition);
                 this.instance.lookAt(this.moveLookAtTargetPosition);
                 if (this.experience.controls) {
-                    this.experience.controls.target.copy(this.moveLookAtTargetPosition); // Cible finale pour controls
-                    // this.experience.controls.enableDamping = true; // Réactiver damping si désactivé
+                    this.experience.controls.target.copy(this.moveLookAtTargetPosition);
                 }
+
+                // --- NOUVEAU : Démarrer le suivi si un agent est spécifié ---
+                if (this.agentToFollowAfterMove) {
+                    console.log(`Camera: Transition finished, starting follow for agent ${this.agentToFollowAfterMove.id}`);
+                    const agentToFollow = this.agentToFollowAfterMove;
+                    this.agentToFollowAfterMove = null; // Réinitialiser
+
+                    // Appeler followAgent pour configurer le mode suivi
+                    // (followAgent désactive les controls et active les listeners)
+                    this.followAgent(agentToFollow);
+
+                } else {
+                    // Si aucun agent n'est à suivre, réactiver OrbitControls
+                    console.log("Camera: Transition finished, no agent to follow, enabling OrbitControls.");
+                    if (this.experience.controls) {
+                        this.experience.controls.enabled = true;
+                         // Assurer que la cible des contrôles est correcte
+                         this.experience.controls.target.copy(this.moveLookAtTargetPosition);
+                    }
+                }
+                // --- FIN NOUVEAU ---
             }
         }
-        // Priorité 2: Suivi d'agent (si pas en animation)
+        // Priorité 2: Suivi d'agent (si pas en animation `moveToTarget`)
         else if (this.isFollowing && this.targetAgent) {
             const deltaTimeSeconds = deltaTime / 1000.0;
             this.updateFollowLogic(deltaTimeSeconds);
-             // OrbitControls est désactivé pendant le suivi
+            // OrbitControls est désactivé pendant le suivi par followAgent()
         }
-        // Priorité 3: OrbitControls (si ni animation, ni suivi)
-        // Note: OrbitControls.update() est appelé dans Experience.js pour ne pas interférer ici
+        // Priorité 3: OrbitControls (géré dans Experience.js)
     }
     // --- FIN MODIFICATION ---
 
