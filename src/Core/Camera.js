@@ -119,10 +119,10 @@ export default class Camera {
 
     followAgent(agent) {
         if (!agent) return;
-        // Si on est déjà en train de suivre cet agent, ne rien faire
-        if (this.isFollowing && this.targetAgent === agent) return;
+        // Si on est déjà en train de suivre cet agent, ne rien faire (peut être retiré si moveToTarget désactive toujours le suivi avant)
+        // if (this.isFollowing && this.targetAgent === agent) return;
 
-        console.log(`Camera: Setting up follow for agent ${agent.id}.`);
+        console.log(`Camera: Initializing follow for agent ${agent.id}.`);
         this.targetAgent = agent;
         this.isFollowing = true;
         this.isMovingToTarget = false; // S'assurer que l'autre mode est arrêté
@@ -135,20 +135,46 @@ export default class Camera {
              this.experience.controls.enabled = false;
         }
 
-        // Calculer le yaw/pitch initial basé sur la position ACTUELLE de la caméra
-        // (après moveToTarget) et la position de l'agent.
-        const direction = new THREE.Vector3().subVectors(this.instance.position, agent.position).normalize();
+        // --- CORRECTION START ---
+        // 1. Obtenir la position ACTUELLE de l'agent
+        this.worldAgentPosition.copy(this.targetAgent.position);
+
+        // 2. Calculer la cible du regard (légèrement au-dessus de l'agent)
+        this.targetLookAtPosition.copy(this.worldAgentPosition).add(new THREE.Vector3(0, 1.0, 0)); // 1.0 est un offset arbitraire
+
+        // 3. Calculer le yaw/pitch initial basé sur la position FINALE de la caméra
+        //    (là où moveToTarget vient de se terminer) et la position ACTUELLE de l'agent.
+        const direction = new THREE.Vector3().subVectors(this.instance.position, this.targetLookAtPosition).normalize();
         this.mouseYaw = Math.atan2(direction.x, direction.z);
+        // Clamp pitch initial pour éviter problèmes aux pôles
         this.mousePitch = Math.asin(THREE.MathUtils.clamp(direction.y, -1, 1));
         this.mousePitch = THREE.MathUtils.clamp(this.mousePitch, this.minPitch, this.maxPitch);
 
-        // IMPORTANT: Ne PAS faire de 'snap' initial ici avec updateFollowLogic(1.0)
-        // car la caméra est déjà positionnée par moveToTarget.
-        // On met juste à jour targetLookAtPosition pour le premier LERP dans update().
-        this.targetLookAtPosition.copy(agent.position).add(new THREE.Vector3(0, 1.0, 0));
+        // 4. Calculer IMMÉDIATEMENT la position désirée de la caméra pour le suivi
+        //    en utilisant la logique de updateFollowLogic mais sans LERP.
+        const offsetX = this.followDistance * Math.sin(this.mouseYaw) * Math.cos(this.mousePitch);
+        const offsetY = this.followDistance * Math.sin(this.mousePitch);
+        const offsetZ = this.followDistance * Math.cos(this.mouseYaw) * Math.cos(this.mousePitch);
+        // La position désirée est relative à la CIBLE du REGARD (targetLookAtPosition)
+        this.desiredCameraPosition.copy(this.targetLookAtPosition).add(new THREE.Vector3(offsetX, offsetY, offsetZ));
+
+        // 5. Appliquer DIRECTEMENT cette position à la caméra et à l'état interne currentPosition
+        //    Cela évite le LERP initial dans la première frame de updateFollowLogic.
+        this.instance.position.copy(this.desiredCameraPosition);
+        this.currentPosition.copy(this.desiredCameraPosition); // Synchroniser l'état interne
+
+        // 6. Faire regarder la caméra immédiatement vers la cible
+        this.instance.lookAt(this.targetLookAtPosition);
+
+        // 7. Mettre à jour la cible OrbitControls pour une transition douce si on arrête le suivi
+        if (this.experience.controls) {
+           this.experience.controls.target.copy(this.targetLookAtPosition);
+        }
+        // --- CORRECTION END ---
 
         // Ajouter les listeners pour le contrôle souris pendant le suivi
         this._addEventListeners();
+        console.log(`Camera: Now following agent ${agent.id} from calculated position.`);
     }
 
     stopFollowing() {
