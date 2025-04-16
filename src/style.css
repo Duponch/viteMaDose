@@ -206,7 +206,7 @@ button {
 .agent-tooltip .building-id-link:hover,
 .building-tooltip .resident-id-link:hover {
     color: #bbdefb;
-    text-decoration: underline;
+    text-decoration: none;
 }
 
 /* --- Assurez-vous que le reste de votre CSS est présent --- */

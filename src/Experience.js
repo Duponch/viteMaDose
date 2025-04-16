@@ -101,100 +101,95 @@ export default class Experience extends EventTarget {
      * @param {THREE.Vector3} targetPosition3D - The 3D world position to track.
      */
     _updateTooltipPosition(tooltipElement, targetPosition3D) {
-        if (!tooltipElement || !targetPosition3D || tooltipElement.style.display === 'none') {
-            return; // Ne rien faire si caché ou invalide
+        if (!tooltipElement || !targetPosition3D) {
+             if (tooltipElement && tooltipElement.style.display !== 'none') tooltipElement.style.display = 'none';
+            return;
         }
 
         // 1. Projection 3D -> 2D
         const projectedPosition = targetPosition3D.clone().project(this.camera.instance);
 
-        // 2. Vérifier si la cible est derrière la caméra
+        // 2. Vérifier si la cible est derrière la caméra ou trop proche (z >= 1)
         if (projectedPosition.z >= 1) {
-            tooltipElement.style.display = 'none'; // Cache si derrière
+            if (tooltipElement.style.display !== 'none') tooltipElement.style.display = 'none'; // Cache si derrière
             return;
         }
 
         // 3. Conversion en coordonnées écran (pixels)
-        // Le point projeté (0,0) est au centre, (-1, -1) en bas à gauche, (1, 1) en haut à droite
         const baseScreenX = (projectedPosition.x * 0.5 + 0.5) * this.sizes.width;
         const baseScreenY = (-projectedPosition.y * 0.5 + 0.5) * this.sizes.height;
 
-        // 4. Obtenir les dimensions de l'infobulle (nécessite qu'elle soit visible ou ait des dimensions définies)
-        // Note: offsetWidth/Height peut être 0 si l'élément est display:none.
-        // Il faut s'assurer que le display est mis à 'block' AVANT cette mesure,
-        // même si c'est juste pour une frame et qu'on le recache si hors écran.
-        // On force l'affichage ici pour la mesure, puis on le recache si nécessaire plus tard.
-        const wasHidden = tooltipElement.style.display === 'none';
-        if (wasHidden) {
-           tooltipElement.style.visibility = 'hidden'; // Rendre invisible mais mesurable
-           tooltipElement.style.display = 'block';
-        }
+        // 4. Obtenir les dimensions de l'infobulle
+        // Sauvegarde de l'état actuel de display pour le restaurer si la mesure échoue
+        const initialDisplay = tooltipElement.style.display;
+        tooltipElement.style.visibility = 'hidden'; // Rendre invisible mais mesurable
+        tooltipElement.style.display = 'block';     // Forcer l'affichage pour la mesure
+
         const tooltipWidth = tooltipElement.offsetWidth;
         const tooltipHeight = tooltipElement.offsetHeight;
-        if (wasHidden) {
-            tooltipElement.style.display = 'none'; // Restaurer display:none
-            tooltipElement.style.visibility = 'visible'; // Rendre visible pour le prochain affichage
-        }
 
-        // Si les dimensions ne sont pas valides, on ne peut pas calculer les limites
+        // Remettre display à son état initial APRÈS mesure, mais garder invisible pour l'instant
+        tooltipElement.style.display = initialDisplay;
+
+        // Si les dimensions ne sont pas valides (mesure a échoué)
         if (tooltipWidth <= 0 || tooltipHeight <= 0) {
-             // console.warn("Tooltip dimensions invalid, cannot clamp position.");
-             // On positionne quand même au point de base
-             tooltipElement.style.left = `${baseScreenX}px`;
-             tooltipElement.style.top = `${baseScreenY}px`;
-             // Assurer qu'il est visible si la projection était valide
-             if (projectedPosition.z < 1) tooltipElement.style.display = 'block';
-             return;
+            // Tenter de positionner au point de base, MAIS ne pas forcer l'affichage
+            // car les étapes suivantes pourraient le cacher à nouveau.
+            // Le display final sera géré à la toute fin.
+            tooltipElement.style.left = `${Math.round(baseScreenX)}px`;
+            tooltipElement.style.top = `${Math.round(baseScreenY)}px`;
+            tooltipElement.style.visibility = 'visible'; // Rendre visible si on quitte ici
+            // NE PAS faire display = 'block' ici, car il faut vérifier les autres conditions
+            // Si l'élément était caché initialement, il le restera (ce qui est peut-être le problème)
+             // --> Correction: On doit le rendre visible si la projection est bonne
+             if (projectedPosition.z < 1 && initialDisplay === 'none') {
+                // On le rend visible uniquement s'il était caché ET que la projection est valide
+                // Mais on le laisse à la position de base car on n'a pas pu le clamper
+                 tooltipElement.style.display = 'block';
+             } else if (projectedPosition.z < 1) {
+                 // S'il n'était pas caché, on le laisse affiché
+                 tooltipElement.style.display = 'block';
+             }
+            return;
         }
 
-        // 5. Calculer la position désirée initiale (au-dessus)
-		const desiredOffsetX = 15;
-		let desiredScreenY = baseScreenY - tooltipHeight - 10; // Position 'top' désirée
-		let finalScreenX = baseScreenX + desiredOffsetX; // Calcul X comme avant
+        // 5. Calculer la position désirée (au-dessus du point)
+        const desiredOffsetX = 15;
+        let desiredTopY = baseScreenY - tooltipHeight - 10; // Position 'top' désirée
+        let finalScreenX = baseScreenX + desiredOffsetX; // Calcul X
 
-		// 6. Vérifier et contraindre les limites de l'écran
-		const margin = 10;
+        // 6. Vérifier et contraindre les limites de l'écran
+        const margin = 10;
 
-		// Clamp horizontal (inchangé)
-		if (finalScreenX + tooltipWidth > this.sizes.width - margin) {
-			finalScreenX = this.sizes.width - tooltipWidth - margin;
-		}
-		if (finalScreenX < margin) {
-			finalScreenX = margin;
-		}
+        // Clamp horizontal (inchangé)
+        if (finalScreenX + tooltipWidth > this.sizes.width - margin) {
+            finalScreenX = this.sizes.width - tooltipWidth - margin;
+        } else if (finalScreenX < margin) { // Utiliser else if pour éviter double ajustement
+            finalScreenX = margin;
+        }
 
-		// --- Nouvelle Logique Verticale ---
-		let finalScreenY = desiredScreenY; // Commencer avec la position désirée (au-dessus)
+        // Clamp vertical (logique corrigée)
+        let finalScreenY = desiredTopY;
 
-		// Vérifier si la position AU-DESSUS dépasse en HAUT
-		if (finalScreenY < margin) {
-			// Si oui, essayer de la mettre EN DESSOUS du point d'ancrage
-			finalScreenY = baseScreenY + 20; // Nouvelle position désirée (en dessous)
-		}
+        if (finalScreenY < margin) { // Dépasse en haut ?
+            finalScreenY = baseScreenY + 20; // Essayer en dessous
+        }
+        // Vérifier si la position actuelle (au-dessus ou en dessous) dépasse en bas
+        if (finalScreenY + tooltipHeight > this.sizes.height - margin) {
+            finalScreenY = this.sizes.height - tooltipHeight - margin; // Coller en bas
+        }
+         // Re-vérifier le haut après avoir potentiellement collé en bas
+        if (finalScreenY < margin) {
+             finalScreenY = margin; // Coller en haut
+        }
 
-		// Maintenant, vérifier si la position ACTUELLE (au-dessus ou en dessous) dépasse en BAS
-		if (finalScreenY + tooltipHeight > this.sizes.height - margin) {
-			// Si oui, la coller au bord bas
-			finalScreenY = this.sizes.height - tooltipHeight - margin;
-		}
+        // 7. Appliquer la position finale
+        tooltipElement.style.left = `${Math.round(finalScreenX)}px`;
+        tooltipElement.style.top = `${Math.round(finalScreenY)}px`;
 
-		// Re-vérifier si coller en bas n'a pas fait dépasser en HAUT (sécurité, peu probable)
-		if (finalScreenY < margin) {
-			finalScreenY = margin;
-		}
-		// --- Fin Nouvelle Logique Verticale ---
-
-
-		// 7. Appliquer la position finale
-		tooltipElement.style.left = `${Math.round(finalScreenX)}px`;
-		tooltipElement.style.top = `${Math.round(finalScreenY)}px`;
-
-        // 8. Assurer la visibilité (si la projection 3D était valide)
-         if (projectedPosition.z < 1) {
-             tooltipElement.style.display = 'block';
-         } else {
-             tooltipElement.style.display = 'none'; // Double vérification
-         }
+        // 8. Assurer la visibilité et le bon 'display' FINALEMENT
+        tooltipElement.style.visibility = 'visible'; // Rendre visible
+        tooltipElement.style.display = 'block';      // Assurer qu'il est affiché
     }
 
     // Crée le mesh utilisé pour surligner le bâtiment sélectionné
@@ -442,20 +437,65 @@ export default class Experience extends EventTarget {
 
     // Sélectionne un agent et active le suivi caméra/tooltip
     selectAgent(agent) {
+        if (!agent) return;
         if (this.selectedAgent === agent) return;
-        this.deselectBuilding(); // Toujours désélectionner bâtiment si on sélectionne agent
-        this.selectedAgent = agent;
-        this.isFollowingAgent = true;
-        this.controls.enabled = false;
-        this.camera.followAgent(agent);
-        // S'assurer que le tooltip bâtiment est caché
+
+        this.deselectBuilding(); // Désélectionner bâtiment avant
+
+        const agentIsInside = agent.currentState === 'AT_HOME' || agent.currentState === 'AT_WORK';
+        const citizenManager = this.world?.cityManager?.citizenManager;
+
+        if (agentIsInside && citizenManager) {
+            // Agent est à l'intérieur : trouver le bâtiment et déplacer la caméra au-dessus
+            const buildingId = agent.currentState === 'AT_HOME' ? agent.homeBuildingId : agent.workBuildingId;
+            const buildingInfo = citizenManager.getBuildingInfo(buildingId);
+
+            if (buildingInfo) {
+                 console.log(`Agent ${agent.id} is inside ${buildingInfo.type} ${buildingId}. Moving camera above building.`);
+                 this.selectedAgent = agent; // Sélectionner l'agent logiquement
+                 this.isFollowingAgent = false; // MAIS NE PAS activer le suivi caméra
+                 this.controls.enabled = true; // Garder OrbitControls activé
+
+                 // Calculer la position cible de la caméra au-dessus du bâtiment
+                 const buildingPos = buildingInfo.position;
+                 const camTargetPos = new THREE.Vector3(buildingPos.x, buildingPos.y + 60, buildingPos.z + 40); // Ajustez offset X,Y,Z au besoin
+                 const camLookAt = buildingPos.clone(); // Regarder le bâtiment
+
+                 this.camera.moveToTarget(camTargetPos, camLookAt, 250); // Animation de 1.2s
+
+                 // Afficher l'infobulle de l'agent sélectionné (même s'il est caché)
+                 if (this.tooltipElement) {
+                    this.updateTooltipContent(agent);
+                    // La position de l'infobulle sera mise à jour dans update() vers la position 3D de l'agent
+                 }
+
+            } else {
+                 // Fallback: Impossible de trouver le bâtiment, lancer le suivi normal
+                 console.warn(`Could not find building info for ${buildingId}. Falling back to agent follow.`);
+                 this.selectedAgent = agent;
+                 this.isFollowingAgent = true;
+                 this.controls.enabled = false; // Désactiver OrbitControls pour le suivi
+                 this.camera.followAgent(agent); // Démarrer le suivi caméra normal
+                 if (this.tooltipElement) {
+                     this.updateTooltipContent(agent);
+                 }
+            }
+
+        } else {
+            // Agent est à l'extérieur : lancer le suivi normal
+            console.log(`Agent ${agent.id} is outside. Following agent.`);
+            this.selectedAgent = agent;
+            this.isFollowingAgent = true;
+            this.controls.enabled = false; // Désactiver OrbitControls pour le suivi
+            this.camera.followAgent(agent);
+            if (this.tooltipElement) {
+                this.updateTooltipContent(agent);
+            }
+        }
+
+         // Cacher l'infobulle bâtiment dans tous les cas de sélection d'agent
         if (this.buildingTooltipElement) {
             this.buildingTooltipElement.style.display = 'none';
-        }
-        // Afficher et mettre à jour le tooltip agent
-        if (this.tooltipElement) {
-            this.updateTooltipContent(agent);
-            this.tooltipElement.style.display = 'block';
         }
     }
 
@@ -464,47 +504,73 @@ export default class Experience extends EventTarget {
         if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
             this.tooltipElement.style.display = 'none';
         }
-        if (!this.isFollowingAgent && !this.selectedAgent) return;
+        if (!this.selectedAgent) return; // Si aucun agent n'était sélectionné, ne rien faire
+
+        const wasFollowing = this.isFollowingAgent; // Vérifier si on suivait activement
+
         this.selectedAgent = null;
-        this.isFollowingAgent = false;
-        if (this.controls) this.controls.enabled = true;
-        if (this.camera) this.camera.stopFollowing();
+        this.isFollowingAgent = false; // Arrêter le suivi logique
+
+        // Si on suivait activement, arrêter la caméra et réactiver OrbitControls
+        if (wasFollowing) {
+             if (this.camera) this.camera.stopFollowing(); // Arrête le suivi ET active les controls
+        } else {
+             // Si on ne suivait pas (juste sélectionné pendant qu'il était dedans),
+             // s'assurer que les controls sont activés
+             if (this.controls) this.controls.enabled = true;
+        }
     }
 
     // Sélectionne un bâtiment, active le highlight et le tooltip bâtiment
     selectBuilding(buildingInfo, mesh, instanceId) {
+        if (!buildingInfo) return;
         if (this.selectedBuildingInfo && this.selectedBuildingInfo.id === buildingInfo.id) {
-            return; // Ne rien faire si déjà sélectionné
+            return; // Déjà sélectionné
         }
-        this.deselectAgent(); // Toujours désélectionner agent si on sélectionne bâtiment
+
+        this.deselectAgent(); // Désélectionner agent si on sélectionne bâtiment
+
         this.selectedBuildingInfo = buildingInfo;
         this.selectedBuildingMesh = mesh;
         this.selectedBuildingInstanceId = instanceId;
 
-        // Activer et positionner le highlight
+        // Activer et positionner le highlight (code existant)
         if (this.highlightMesh && this.selectedBuildingMesh && this.selectedBuildingInstanceId !== -1) {
-            const instanceMatrix = new THREE.Matrix4();
-            this.selectedBuildingMesh.getMatrixAt(this.selectedBuildingInstanceId, instanceMatrix);
-            const position = new THREE.Vector3();
-            const quaternion = new THREE.Quaternion();
-            const scale = new THREE.Vector3();
-            instanceMatrix.decompose(position, quaternion, scale);
-            const highlightScaleFactor = 1.02;
-            this.highlightMesh.scale.set(scale.x * highlightScaleFactor, scale.y * highlightScaleFactor, scale.z * highlightScaleFactor);
-            this.highlightMesh.position.copy(position);
-            this.highlightMesh.quaternion.copy(quaternion);
-            this.highlightMesh.visible = true;
-            this.highlightMesh.updateMatrixWorld(true);
+            // ... (logique de positionnement du highlight existante) ...
+             const instanceMatrix = new THREE.Matrix4();
+             this.selectedBuildingMesh.getMatrixAt(this.selectedBuildingInstanceId, instanceMatrix);
+             const position = new THREE.Vector3();
+             const quaternion = new THREE.Quaternion();
+             const scale = new THREE.Vector3();
+             instanceMatrix.decompose(position, quaternion, scale);
+             const highlightScaleFactor = 1.02;
+             this.highlightMesh.scale.set(scale.x * highlightScaleFactor, scale.y * highlightScaleFactor, scale.z * highlightScaleFactor);
+             this.highlightMesh.position.copy(position);
+             this.highlightMesh.quaternion.copy(quaternion);
+             this.highlightMesh.visible = true;
+             this.highlightMesh.updateMatrixWorld(true);
         }
 
-        // S'assurer que le tooltip agent est caché
+        // --- NOUVEAU : Déplacer la caméra au-dessus du bâtiment ---
+        const buildingPos = buildingInfo.position;
+        // Définir une hauteur et un décalage Z pour la caméra
+        // Ajustez ces valeurs pour obtenir le cadrage souhaité
+        const cameraHeightAboveBuilding = 150 + (buildingInfo.type === 'skyscraper' ? 50 : 0); // Plus haut pour gratte-ciels
+        const cameraZOffset = 200 + (buildingInfo.type === 'skyscraper' ? 25 : 0);
+        const cameraTargetPos = new THREE.Vector3(buildingPos.x, buildingPos.y + cameraHeightAboveBuilding, buildingPos.z + cameraZOffset);
+        const cameraLookAt = buildingPos.clone(); // Regarder le bâtiment
+
+        this.camera.moveToTarget(cameraTargetPos, cameraLookAt, 250); // Animation de 1s
+        // --- FIN NOUVEAU ---
+
+        // Cacher l'infobulle agent
         if (this.tooltipElement) {
             this.tooltipElement.style.display = 'none';
         }
         // Afficher et mettre à jour le tooltip bâtiment
         if (this.buildingTooltipElement) {
             this.updateBuildingTooltipContent(); // Met à jour immédiatement
-            this.buildingTooltipElement.style.display = 'block';
+             // La position sera définie dans update()
         }
     }
 
@@ -520,6 +586,12 @@ export default class Experience extends EventTarget {
         if (this.buildingTooltipElement) {
             this.buildingTooltipElement.style.display = 'none';
         }
+         // S'assurer qu'OrbitControls est actif quand rien n'est sélectionné
+         // (sauf si un agent extérieur est sélectionné juste après)
+         // C'est géré dans selectAgent/deselectAgent maintenant.
+         // if (this.controls && !this.isFollowingAgent) { // Vérifier si on ne suit pas déjà un agent
+         //    this.controls.enabled = true;
+         // }
     }
 
     // --- MODIFIÉ : Met à jour le contenu HTML du tooltip agent AVEC liens ---
