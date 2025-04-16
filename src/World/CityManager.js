@@ -124,7 +124,7 @@ export default class CityManager {
             },
             // Time
             dayNightCycleEnabled: true,
-            dayDurationMinutes: 1,
+            dayDurationMinutes: 20,
             startTimeOfDay: 0.25,
             // Agents
             agentScale: 0.1,
