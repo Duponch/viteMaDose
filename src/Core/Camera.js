@@ -1,34 +1,48 @@
+// src/Core/Camera.js
 import * as THREE from 'three';
 
+// IMPORTANT: Pas de 'let instance = null;' ici, le singleton est géré dans Experience.js
+
 export default class Camera {
-    constructor(experience) {
+    constructor(experience) { // Le constructeur reçoit l'instance 'experience'
+        // PAS d'appel à super() ici car Camera n'hérite de rien nativement
+        // PAS de logique de singleton ici
+
+        // --- Initialisation des propriétés spécifiques à Camera ---
         this.experience = experience;
         this.sizes = this.experience.sizes;
         this.scene = this.experience.scene;
         this.canvas = this.experience.canvas;
 
-        // --- NOUVEAU: État et cibles de suivi ---
+        // --- État et cibles de suivi ---
         this.isFollowing = false;
         this.targetAgent = null;
-        this.followSpeed = 4.0; // Vitesse de l'interpolation (plus haut = plus rapide)
+        this.followSpeed = 4.0;
 
-        // Vecteurs pour le calcul du suivi
-        //this.idealOffset = new THREE.Vector3(0, 3, -6); // Offset souhaité derrière l'agent (local)
-		this.idealOffset = new THREE.Vector3(0, 3, 6);
+        // --- Contrôle Souris Pendant Suivi ---
+        this.isMouseLookingActive = false;
+        this.mouseYaw = 0;
+        this.mousePitch = 0.3;
+        this.mouseSensitivityX = 0.005;
+        this.mouseSensitivityY = 0.005;
+        this.followDistance = 8;
+        this.minPitch = -Math.PI / 2 + 0.1;
+        this.maxPitch = Math.PI / 2 - 0.1;
+        this.isLeftMouseDown = false; // Pour le clic maintenu
 
-        //this.idealLookAt = new THREE.Vector3(0, 1.5, 0); // Point à regarder (local, tête/haut du corps)
-		this.idealLookAt = new THREE.Vector3(0, 1.5, -10);
-
-        this.currentPosition = new THREE.Vector3(); // Où la caméra est actuellement
-        this.currentLookAt = new THREE.Vector3(); // Où la caméra regarde actuellement
-
+        // --- Vecteurs temporaires ---
+        this.currentPosition = new THREE.Vector3();
+        this.targetLookAtPosition = new THREE.Vector3();
         this.worldAgentPosition = new THREE.Vector3();
-        this.worldAgentOrientation = new THREE.Quaternion();
-        this.worldCameraPosition = new THREE.Vector3();
-        this.worldLookAtPosition = new THREE.Vector3();
-        // ----------------------------------------
+        this.desiredCameraPosition = new THREE.Vector3();
 
+        // --- Initialisation de l'instance de caméra THREE.js ---
         this.setInstance();
+
+        // --- Binding des méthodes pour les listeners ---
+        this._boundHandleMouseMove = this._handleMouseMove.bind(this);
+        this._boundHandleMouseDown = this._handleMouseDown.bind(this);
+        this._boundHandleMouseUp = this._handleMouseUp.bind(this);
     }
 
     setInstance() {
@@ -38,15 +52,15 @@ export default class Camera {
             0.1,
             3000
         );
-        // Position initiale de la caméra (ajustée pour une meilleure vue)
-        this.instance.position.set(80, 80, 80); // Un peu plus loin/haut
+        // Position initiale de la caméra
+        this.instance.position.set(80, 80, 80);
         this.scene.add(this.instance);
 
-        // Initialiser currentPosition/LookAt avec la position initiale de la caméra
+        // Initialiser currentPosition avec la position initiale
         this.currentPosition.copy(this.instance.position);
-        // Pour currentLookAt, on peut viser l'origine ou un point au sol
-        this.currentLookAt.set(0, 0, 0);
-        this.instance.lookAt(this.currentLookAt); // S'assurer que la caméra regarde bien au début
+        // Initialiser targetLookAtPosition (la cible sera mise à jour dans update)
+        this.targetLookAtPosition.set(0, 0, 0);
+        this.instance.lookAt(this.targetLookAtPosition);
     }
 
     resize() {
@@ -54,65 +68,100 @@ export default class Camera {
         this.instance.updateProjectionMatrix();
     }
 
-	followAgent(agent) {
+    followAgent(agent) {
         if (!agent) return;
         this.targetAgent = agent;
         this.isFollowing = true;
-        // Optionnel: définir la position/lookat initiale directement pour un snap plus rapide
-        // this.updateFollowLogic(0.1); // Appeler une fois avec un grand delta pour se rapprocher vite
-        // this.instance.position.copy(this.currentPosition);
-        // this.instance.lookAt(this.currentLookAt);
+        this.isMouseLookingActive = true;
+        this.isLeftMouseDown = false; // Réinitialiser
+
+        // Initialiser Yaw/Pitch basé sur la position actuelle
+        const direction = new THREE.Vector3().subVectors(this.instance.position, agent.position).normalize();
+        this.mouseYaw = Math.atan2(direction.x, direction.z);
+        this.mousePitch = Math.asin(THREE.MathUtils.clamp(direction.y, -1, 1));
+        this.mousePitch = THREE.MathUtils.clamp(this.mousePitch, this.minPitch, this.maxPitch);
+
+        // Snap initial
+        this.updateFollowLogic(1.0); // Appeler une fois avec un grand delta
+        this.instance.position.copy(this.currentPosition);
+        this.instance.lookAt(this.targetLookAtPosition);
+
+        this._addEventListeners();
     }
 
-	stopFollowing() {
+    stopFollowing() {
         this.targetAgent = null;
         this.isFollowing = false;
-        // La position/lookAt de la caméra restent où ils sont,
-        // OrbitControls reprendra le contrôle à partir de là.
+        this.isMouseLookingActive = false;
+        this.isLeftMouseDown = false; // Assurer la réinitialisation
+        this._removeEventListeners();
     }
 
-	updateFollowLogic(deltaTimeSeconds) {
+    _addEventListeners() {
+        document.addEventListener('mousemove', this._boundHandleMouseMove, false);
+        document.addEventListener('mousedown', this._boundHandleMouseDown, false);
+        document.addEventListener('mouseup', this._boundHandleMouseUp, false);
+    }
+
+    _removeEventListeners() {
+        document.removeEventListener('mousemove', this._boundHandleMouseMove, false);
+        document.removeEventListener('mousedown', this._boundHandleMouseDown, false);
+        document.removeEventListener('mouseup', this._boundHandleMouseUp, false);
+    }
+
+     _handleMouseDown(event) {
+        if (this.isMouseLookingActive && this.isFollowing && event.button === 0) {
+            this.isLeftMouseDown = true;
+        }
+    }
+
+    _handleMouseUp(event) {
+        if (this.isMouseLookingActive && this.isFollowing && event.button === 0) {
+            this.isLeftMouseDown = false;
+        }
+    }
+
+    _handleMouseMove(event) {
+        if (!this.isMouseLookingActive || !this.isFollowing || !this.isLeftMouseDown) {
+            return;
+        }
+
+        const deltaX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+        const deltaY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+
+        this.mouseYaw -= deltaX * this.mouseSensitivityX;
+        this.mousePitch -= deltaY * this.mouseSensitivityY;
+        this.mousePitch = THREE.MathUtils.clamp(this.mousePitch, this.minPitch, this.maxPitch);
+    }
+
+    updateFollowLogic(deltaTimeSeconds) {
         if (!this.targetAgent) return;
 
-        // 1. Obtenir la position et l'orientation MONDE de l'agent
         this.worldAgentPosition.copy(this.targetAgent.position);
-        this.worldAgentOrientation.copy(this.targetAgent.orientation);
+        this.targetLookAtPosition.copy(this.worldAgentPosition).add(new THREE.Vector3(0, 1.0, 0));
 
-        // 2. Calculer la position IDÉALE de la caméra dans le monde
-        // Partir de l'offset local, l'orienter comme l'agent, puis l'ajouter à la position de l'agent
-        this.worldCameraPosition.copy(this.idealOffset);
-        this.worldCameraPosition.applyQuaternion(this.worldAgentOrientation);
-        this.worldCameraPosition.add(this.worldAgentPosition);
+        const offsetX = this.followDistance * Math.sin(this.mouseYaw) * Math.cos(this.mousePitch);
+        const offsetY = this.followDistance * Math.sin(this.mousePitch);
+        const offsetZ = this.followDistance * Math.cos(this.mouseYaw) * Math.cos(this.mousePitch);
 
-        // 3. Calculer le point IDÉAL que la caméra doit regarder dans le monde
-        // Partir du point local à regarder, l'orienter, puis l'ajouter à la position de l'agent
-        this.worldLookAtPosition.copy(this.idealLookAt);
-        this.worldLookAtPosition.applyQuaternion(this.worldAgentOrientation);
-        this.worldLookAtPosition.add(this.worldAgentPosition);
+        this.desiredCameraPosition.copy(this.targetLookAtPosition).add(new THREE.Vector3(offsetX, offsetY, offsetZ));
 
-        // 4. Interpoler la position ACTUELLE de la caméra vers la position IDÉALE
-        // Utilisation de lerp pour une interpolation simple.
-        // Un facteur plus petit rend le suivi plus "lâche", plus grand le rend plus serré.
-        // Calculer un alpha dépendant du temps pour une interpolation indépendante du framerate
         const lerpAlpha = 1.0 - Math.exp(-this.followSpeed * deltaTimeSeconds);
-        this.currentPosition.lerp(this.worldCameraPosition, lerpAlpha);
+        this.currentPosition.lerp(this.desiredCameraPosition, lerpAlpha);
 
-        // 5. Interpoler le point ACTUEL que la caméra regarde vers le point IDÉAL
-        this.currentLookAt.lerp(this.worldLookAtPosition, lerpAlpha);
-
-        // 6. Appliquer la position et le lookAt à la caméra THREE
         this.instance.position.copy(this.currentPosition);
-        this.instance.lookAt(this.currentLookAt);
+        this.instance.lookAt(this.targetLookAtPosition);
     }
 
-	update(deltaTime) { // deltaTime est maintenant passé depuis Experience (en ms)
-        // Si la caméra est en mode suivi, exécuter la logique de suivi
+    update(deltaTime) {
         if (this.isFollowing && this.targetAgent) {
-             // Convertir deltaTime (ms) en secondes pour les calculs basés sur le temps
              const deltaTimeSeconds = deltaTime / 1000.0;
              this.updateFollowLogic(deltaTimeSeconds);
         }
-        // Si !this.isFollowing, OrbitControls (géré dans Experience.update)
-        // s'occupe de la caméra, donc cette fonction ne fait rien d'autre.
     }
+
+     destroy() {
+         this._removeEventListeners();
+         console.log("Camera listeners removed.");
+     }
 }

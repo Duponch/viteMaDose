@@ -12,7 +12,7 @@ import TimeControlUI from './UI/TimeControlUI.js';
 
 let instance = null;
 
-export default class Experience extends EventTarget { // <-- Hériter de EventTarget
+export default class Experience extends EventTarget {
     constructor(canvas) {
         // --- Singleton ---
         if (instance) {
@@ -26,42 +26,30 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.sizes = new Sizes();
         this.time = new Time();
         this.scene = new THREE.Scene();
-
-        // --- Fog ---
-        const fogColor = 0x1e2a36;
-        const fogDensity = 0.003;
-        // Créez l'objet fog
-        this.originalFog = new THREE.FogExp2(fogColor, fogDensity); // <-- Stocker l'instance originale
-        this.scene.fog = this.originalFog; // Appliquer initialement
-
-        // --- Core Components Suite ---
+        this.originalFog = new THREE.FogExp2(0x1e2a36, 0.003);
+        this.scene.fog = this.originalFog;
         this.camera = new Camera(this);
         this.renderer = new Renderer(this);
         this.world = new World(this);
-
-        // --- Debug State ---
         this.isDebugMode = false;
-        // Appliquer l'état initial du fog basé sur isDebugMode (facultatif, car enable/disable le feront)
-        // if (this.isDebugMode) {
-        //     this.scene.fog = null;
-        // }
-
-        // --- UI Components ---
         this.timeUI = new TimeUI(this);
         this.timeControlUI = new TimeControlUI(this);
-
-        // --- Controls & Stats ---
         this.controls = new OrbitControls(this.camera.instance, this.canvas);
         this.controls.enableDamping = true;
         this.stats = new Stats();
         this.stats.showPanel(0);
         document.body.appendChild(this.stats.dom);
-
-        // --- Raycasting & Agent Selection ---
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
         this.selectedAgent = null;
         this.isFollowingAgent = false;
+
+        // --- NOUVEAU: Variables pour détecter clic vs drag ---
+        this.mouseDownTime = 0;
+        this.mouseDownPosition = { x: null, y: null };
+        this.MAX_CLICK_DURATION = 200; // ms maximum pour être un clic
+        this.MAX_CLICK_DISTANCE_SQ = 25; // Distance max (au carré) pour être un clic (5*5 pixels)
+        // --------------------------------------------------
 
         // --- EventListeners ---
         this.resizeHandler = () => this.resize();
@@ -70,71 +58,115 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.updateHandler = () => this.update();
         this.time.addEventListener('tick', this.updateHandler);
 
-        this.clickHandler = (event) => this.handleCanvasClick(event);
-        this.canvas.addEventListener('click', this.clickHandler);
+        // --- MODIFIÉ: Remplacer 'click' par 'mousedown' et 'mouseup' ---
+        // this.clickHandler = (event) => this.handleCanvasClick(event); // ANCIEN
+        // this.canvas.addEventListener('click', this.clickHandler);    // ANCIEN
 
-        // --- Initialisation ---
-        // World.setDebugMode gère maintenant les visuels de debug
-        // Pas besoin d'appeler setDebugMode ici car l'état initial est false
-        // Si vous vouliez démarrer en mode debug, vous mettriez isDebugMode=true et appelleriez enableDebugMode() ici.
+        this._boundHandleMouseDown = this._handleMouseDown.bind(this);
+        this._boundHandleMouseUp = this._handleMouseUp.bind(this);
+        this.canvas.addEventListener('mousedown', this._boundHandleMouseDown);
+        this.canvas.addEventListener('mouseup', this._boundHandleMouseUp);
+        // --------------------------------------------------------------
+
         console.log("Experience initialisée. Mode debug:", this.isDebugMode);
     }
 
-	handleCanvasClick(event) {
-        // 1. Normaliser les coordonnées de la souris
-        this.mouse.x = (event.clientX / this.sizes.width) * 2 - 1;
-        this.mouse.y = -(event.clientY / this.sizes.height) * 2 + 1;
+    // --- SUPPRIMÉ: handleCanvasClick n'est plus utilisé directement ---
+    // handleCanvasClick(event) { ... ancien code ... }
+    // -----------------------------------------------------------------
 
-        // 2. Mettre à jour le Raycaster
-        this.raycaster.setFromCamera(this.mouse, this.camera.instance);
-
-        // 3. Déterminer les objets à intersecter (les InstancedMesh des agents)
-        const agentManager = this.world?.agentManager;
-        if (!agentManager || !agentManager.instanceMeshes || !agentManager.agents) {
-            console.warn("Click Handler: AgentManager non prêt ou pas d'agents.");
-            return;
-        }
-
-        // Ciblez les parties visibles des agents (ex: torse, tête)
-        const objectsToIntersect = [];
-        if (agentManager.instanceMeshes.torso) objectsToIntersect.push(agentManager.instanceMeshes.torso);
-        if (agentManager.instanceMeshes.head) objectsToIntersect.push(agentManager.instanceMeshes.head);
-        // Ajoutez d'autres parties si nécessaire
-
-        if (objectsToIntersect.length === 0) {
-            console.warn("Click Handler: Aucun InstancedMesh d'agent trouvé à intersecter.");
-            return;
-        }
-
-        // 4. Lancer l'intersection
-        const intersects = this.raycaster.intersectObjects(objectsToIntersect, false); // false = ne pas tester les enfants récursivement
-
-        let agentClicked = false;
-        if (intersects.length > 0) {
-            const firstIntersect = intersects[0];
-            // Vérifier si l'intersection a un instanceId (spécifique à InstancedMesh)
-            if (firstIntersect.instanceId !== undefined) {
-                const agentInstanceId = firstIntersect.instanceId;
-                // Trouver l'agent logique correspondant
-                const clickedAgent = agentManager.agents[agentInstanceId]; // Accès direct si l'indice correspond
-
-                if (clickedAgent) {
-                    console.log(`Agent cliqué: ${clickedAgent.id} (Instance ID: ${agentInstanceId})`);
-                    this.selectAgent(clickedAgent);
-                    agentClicked = true;
-                } else {
-                    console.warn(`Agent logique non trouvé pour instanceId ${agentInstanceId}`);
-                }
-            }
-        }
-
-        // 5. Si on n'a PAS cliqué sur un agent, désélectionner
-        if (!agentClicked) {
-            this.deselectAgent();
+    // --- NOUVEAU: Gestionnaires mousedown/mouseup ---
+    _handleMouseDown(event) {
+        // Enregistrer l'heure et la position de départ du clic gauche
+        if (event.button === 0) { // Bouton gauche
+            this.mouseDownTime = Date.now();
+            this.mouseDownPosition.x = event.clientX;
+            this.mouseDownPosition.y = event.clientY;
         }
     }
 
-	selectAgent(agent) {
+    _handleMouseUp(event) {
+        // Ne traiter que le relâchement du bouton gauche
+        if (event.button !== 0) return;
+
+        const upTime = Date.now();
+        const clickDuration = upTime - this.mouseDownTime;
+
+        // Calculer la distance (au carré) parcourue par la souris
+        const deltaX = event.clientX - this.mouseDownPosition.x;
+        const deltaY = event.clientY - this.mouseDownPosition.y;
+        const distanceSq = deltaX * deltaX + deltaY * deltaY;
+
+        // Vérifier si c'est un clic (court et peu de mouvement)
+        if (clickDuration <= this.MAX_CLICK_DURATION && distanceSq <= this.MAX_CLICK_DISTANCE_SQ) {
+            // --- C'est un CLIC : Exécuter la logique de sélection/désélection ---
+            console.log("Click détecté."); // Debug
+
+            // 1. Normaliser les coordonnées de la souris (du mouseup)
+            this.mouse.x = (event.clientX / this.sizes.width) * 2 - 1;
+            this.mouse.y = -(event.clientY / this.sizes.height) * 2 + 1;
+
+            // 2. Mettre à jour le Raycaster
+            this.raycaster.setFromCamera(this.mouse, this.camera.instance);
+
+            // 3. Déterminer les objets à intersecter
+            const agentManager = this.world?.agentManager;
+            if (!agentManager || !agentManager.instanceMeshes || !agentManager.agents) {
+                console.warn("MouseUp Handler (Click): AgentManager non prêt.");
+                this.deselectAgent(); // Désélectionner par sécurité si agent manager n'est pas prêt
+                return;
+            }
+            const objectsToIntersect = [];
+            if (agentManager.instanceMeshes.torso) objectsToIntersect.push(agentManager.instanceMeshes.torso);
+            if (agentManager.instanceMeshes.head) objectsToIntersect.push(agentManager.instanceMeshes.head);
+
+            if (objectsToIntersect.length === 0) {
+                console.warn("MouseUp Handler (Click): Aucun InstancedMesh d'agent trouvé.");
+                this.deselectAgent();
+                return;
+            }
+
+            // 4. Lancer l'intersection
+            const intersects = this.raycaster.intersectObjects(objectsToIntersect, false);
+
+            let agentClicked = false;
+            if (intersects.length > 0) {
+                const firstIntersect = intersects[0];
+                if (firstIntersect.instanceId !== undefined) {
+                    const agentInstanceId = firstIntersect.instanceId;
+                    const clickedAgent = agentManager.agents[agentInstanceId];
+                    if (clickedAgent) {
+                        console.log(`Agent cliqué (via MouseUp): ${clickedAgent.id}`);
+                        this.selectAgent(clickedAgent);
+                        agentClicked = true;
+                    } else {
+                        console.warn(`Agent logique non trouvé pour instanceId ${agentInstanceId} (via MouseUp)`);
+                    }
+                }
+            }
+
+            // 5. Si on n'a PAS cliqué sur un agent, désélectionner
+            if (!agentClicked) {
+                this.deselectAgent();
+            }
+            // --- Fin logique Clic ---
+
+        } else {
+            // --- C'est un DRAG (ou clic long) ---
+            console.log("Drag détecté (ou clic long), pas de sélection/désélection."); // Debug
+            // Ne rien faire ici concernant la sélection/désélection.
+            // La rotation de la caméra pendant le drag a été gérée par les listeners de Camera.js.
+        }
+
+        // Réinitialiser pour le prochain clic
+        this.mouseDownTime = 0;
+        this.mouseDownPosition.x = null;
+        this.mouseDownPosition.y = null;
+    }
+    // --- Fin NOUVEAU ---
+
+    // ... (selectAgent, deselectAgent, enableDebugMode, etc. restent identiques) ...
+    selectAgent(agent) {
         if (this.selectedAgent === agent) return; // Déjà sélectionné
 
         this.selectedAgent = agent;
@@ -142,35 +174,28 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         this.controls.enabled = false; // Désactiver OrbitControls
         this.camera.followAgent(agent); // Dire à la caméra de suivre
         console.log(`Camera following agent: ${agent.id}`);
-        // Optionnel: ajouter un indicateur visuel sur l'agent sélectionné
     }
 
 	deselectAgent() {
-        if (!this.isFollowingAgent) return; // Déjà déselectionné
+        // Ne désélectionner que s'il y a un agent sélectionné
+        if (!this.isFollowingAgent && !this.selectedAgent) return;
 
-        console.log(`Camera stopped following agent: ${this.selectedAgent?.id}`);
+        console.log(`Camera stopped following agent: ${this.selectedAgent?.id ?? 'None'}`);
         this.selectedAgent = null;
         this.isFollowingAgent = false;
-        this.controls.enabled = true; // Réactiver OrbitControls
-        this.camera.stopFollowing(); // Dire à la caméra d'arrêter
-        // Optionnel: retirer l'indicateur visuel
+        if(this.controls) this.controls.enabled = true; // Réactiver OrbitControls (vérifier si controls existe)
+        if(this.camera) this.camera.stopFollowing(); // Dire à la caméra d'arrêter (vérifier si camera existe)
     }
 
-    // --- Les autres méthodes (enableDebugMode, disableDebugMode, toggleDebugMode, resize, update, destroy) restent inchangées ---
-    // ... (elles ne sont pas incluses ici car inchangées)
-
-    // --- Debug Mode Methods ---
     enableDebugMode() {
         if (!this.isDebugMode) {
             this.isDebugMode = true;
             console.log("Debug Mode ENABLED");
-            // --- Désactiver le brouillard ---
             if (this.scene) {
                 this.scene.fog = null;
                 console.log("  [Experience Debug] Fog disabled.");
             }
-            // ---
-            this.world.setDebugMode(true); // Mettre à jour les visuels
+            if(this.world) this.world.setDebugMode(true);
             this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: true } }));
         }
     }
@@ -179,13 +204,11 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         if (this.isDebugMode) {
             this.isDebugMode = false;
             console.log("Debug Mode DISABLED");
-             // --- Réactiver le brouillard ---
              if (this.scene && this.originalFog) {
                  this.scene.fog = this.originalFog;
                  console.log("  [Experience Debug] Fog enabled.");
              }
-             // ---
-            this.world.setDebugMode(false); // Cacher les visuels
+            if(this.world) this.world.setDebugMode(false);
             this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: false } }));
         }
     }
@@ -197,21 +220,34 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
             this.enableDebugMode();
         }
     }
-    // --- End Debug Mode Methods ---
 
     resize() {
-        this.camera.resize();
-        this.renderer.resize();
+        if(this.camera) this.camera.resize();
+        if(this.renderer) this.renderer.resize();
     }
 
     update() {
         this.stats.begin();
         const deltaTime = this.time.delta;
-        if (!this.isFollowingAgent && this.controls.enabled) { this.controls.update(); }
-        this.camera.update(deltaTime);
-        this.world.update();
-        this.renderer.update();
-        if (this.timeUI) { this.timeUI.update(); }
+
+        // Mettre à jour OrbitControls uniquement si l'agent n'est pas suivi
+        if (!this.isFollowingAgent && this.controls?.enabled) {
+             this.controls.update();
+        }
+
+        // Mettre à jour la caméra (qui gère le suivi si actif)
+        if(this.camera) this.camera.update(deltaTime);
+
+        // Mettre à jour le monde et ses composants
+        if(this.world) this.world.update();
+
+        // Faire le rendu
+        if(this.renderer) this.renderer.update();
+
+        // Mettre à jour l'UI
+        if (this.timeUI) this.timeUI.update();
+        // TimeControlUI est piloté par événements, pas besoin d'update ici a priori
+
         this.stats.end();
     }
 
@@ -221,11 +257,18 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         // --- Nettoyage EventListeners ---
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
-        this.canvas.removeEventListener('click', this.clickHandler);
+        // --- MODIFIÉ: Retirer les listeners mousedown/mouseup ---
+        this.canvas.removeEventListener('mousedown', this._boundHandleMouseDown);
+        this.canvas.removeEventListener('mouseup', this._boundHandleMouseUp);
+        // ------------------------------------------------------
 
         // --- Détruire les UIs ---
         this.timeUI?.destroy(); this.timeUI = null;
         this.timeControlUI?.destroy(); this.timeControlUI = null;
+
+        // --- Détruire la caméra et ses listeners ---
+        this.camera?.destroy(); // Assurez-vous que destroy nettoie les listeners internes
+        this.camera = null;
 
         // --- Détruire le monde ---
         this.world?.destroy(); this.world = null;
@@ -233,11 +276,11 @@ export default class Experience extends EventTarget { // <-- Hériter de EventTa
         // --- Reste du nettoyage ---
         this.controls?.dispose(); this.controls = null;
         this.renderer?.instance?.dispose(); this.renderer = null;
-        this.camera = null;
+
         if (this.stats?.dom.parentNode) { document.body.removeChild(this.stats.dom); }
         this.stats = null;
-        this.scene = null; // La scène elle-même n'a pas de méthode destroy
-        this.originalFog = null; // Nettoyer la référence au fog
+        this.scene = null;
+        this.originalFog = null;
         this.sizes = null; this.time = null; this.canvas = null;
         this.raycaster = null; this.mouse = null; this.selectedAgent = null;
 
