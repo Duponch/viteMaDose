@@ -156,13 +156,13 @@ button {
 	color: #90caf9; /* Bleu clair pour se démarquer */
 	cursor: pointer;
 	text-decoration: none; /* Pas de soulignement par défaut */
-	transition: color 0.2s ease, text-decoration 0.2s ease;
+	transition: color 0.05s ease, text-decoration 0.05s ease;
 	/* Rétablir les événements pointeur pour les liens */
 	pointer-events: auto; /* IMPORTANT */
   }
   
   .building-tooltip .resident-id-link:hover {
-	color: #bbdefb; /* Bleu encore plus clair au survol */
+	color: #ffffff!important; /* Bleu encore plus clair au survol */
 	text-decoration: underline;
   }
   

@@ -599,7 +599,7 @@ export default class Experience extends EventTarget {
         const cameraTargetPos = new THREE.Vector3(buildingPos.x, buildingPos.y + cameraHeightAboveBuilding, buildingPos.z + cameraZOffset);
         const cameraLookAt = buildingPos.clone(); // Regarder le bâtiment
 
-        this.camera.moveToTarget(cameraTargetPos, cameraLookAt, 250); // Animation de 1s
+        this.camera.moveToTarget(cameraTargetPos, cameraLookAt, 1000); // Animation de 1s
         // --- FIN NOUVEAU ---
 
         // Cacher l'infobulle agent
@@ -688,10 +688,10 @@ export default class Experience extends EventTarget {
                     // Ajoute à la liste appropriée (résidents OU employés)
                     if (!building.isWorkplace && agent.homeBuildingId === building.id) {
                         occupantsList.push(occupantId);
-                        listLabel = "Residents";
+                        listLabel = "Habitants ";
                     } else if (building.isWorkplace && agent.workBuildingId === building.id) {
                         occupantsList.push(occupantId);
-                        listLabel = "Employees";
+                        listLabel = "Employés ";
                     }
                 }
             });
@@ -702,16 +702,16 @@ export default class Experience extends EventTarget {
         if (occupantsList.length > 0) {
             occupantsListHTML = occupantsList.map(id =>
                 `<span class="resident-id-link" data-agent-id="${id}">${id}</span>` // Garde la classe pour la fonctionnalité de clic
-            ).join(', ');
+            ).join(' | ');
         }
 
         // Construit le contenu final du tooltip
         const content = `
-          ID: ${building.id}<br>
-          Type: ${building.type}<br>
-          Capacity: ${totalCapacity}<br>
-          Inside Now: ${currentOccupantsInside}<br>
-          ${listLabel}: ${occupantsListHTML}
+          ID : ${building.id}<br>
+          Type : ${building.type}<br>
+          Capacité : ${totalCapacity}<br>
+          Actuellement à l'intérieur : ${currentOccupantsInside}<br>
+          ${listLabel}: <br>${occupantsListHTML}
         `;
 
         // Met à jour le DOM seulement si nécessaire
