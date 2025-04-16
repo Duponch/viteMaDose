@@ -172,3 +172,20 @@ button {
 	/* transition: opacity 0.2s ease-in-out; */
   }
   
+  .building-tooltip {
+	position: absolute;
+	display: none; /* Caché par défaut */
+	padding: 8px 12px;
+	background-color: rgba(15, 30, 60, 0.85); /* Fond bleu foncé semi-transparent */
+	color: #e0f2ff; /* Texte bleu très clair */
+	border: 1px solid #00aaff; /* Bordure bleu vif */
+	border-radius: 6px;
+	font-family: 'Consolas', 'Courier New', monospace;
+	font-size: 1em;
+	line-height: 1.5;
+	white-space: nowrap;
+	pointer-events: none;
+	z-index: 101; /* Légèrement au-dessus du tooltip agent si besoin */
+	/* Le transform sera calculé dynamiquement en JS */
+	/* transition: opacity 0.2s ease-in-out; */ /* Optionnel */
+  }
