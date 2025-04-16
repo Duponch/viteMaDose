@@ -154,7 +154,7 @@ button {
   .agent-tooltip, .building-tooltip {
 	position: absolute; /* Nécessaire pour le positionnement via JS */
 	display: none; /* Caché par défaut */
-	padding: 6px 10px;
+	padding: 15px 15px;
 	background-color: rgba(0, 0, 0, 0.8); /* Fond noir semi-transparent */
 	color: white;
 	border-radius: 10px;
@@ -187,21 +187,3 @@ button {
 	text-decoration: underline;
   }
   
-  /* Ajustement pour le tooltip principal: retirer pointer-events: none */
-  .building-tooltip {
-	position: absolute;
-	display: none; /* Caché par défaut */
-	padding: 8px 12px;
-	background-color: rgba(15, 30, 60, 0.85);
-	color: #e0f2ff;
-	border: 1px solid #00aaff;
-	border-radius: 6px;
-	font-family: 'Consolas', 'Courier New', monospace;
-	font-size: 0.9em;
-	line-height: 1.5;
-	white-space: nowrap;
-	/* pointer-events: none; */ /* <-- SUPPRIMER OU COMMENTER CETTE LIGNE */
-	z-index: 101;
-  }
-  
-  /* --- FIN NOUVEAUX Styles --- */
