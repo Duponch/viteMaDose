@@ -12,12 +12,18 @@ export default class Pathfinder {
         }
 
         // Configurer le Finder A*
-        this.finder = new PF.AStarFinder({
+        /* this.finder = new PF.AStarFinder({
             allowDiagonal: true,    // Permettre mouvements en diagonale
             dontCrossCorners: true, // Éviter de couper les coins des obstacles
             heuristic: PF.Heuristic.manhattan, // Heuristique (manhattan, euclidean, chebyshev)
             weight: 1               // Poids de l'heuristique (1 = équilibré)
-        });
+        }); */
+		this.finder = new PF.JumpPointFinder({ // NOUVELLE LIGNE
+			allowDiagonal: true,
+			dontCrossCorners: true,
+			heuristic: PF.Heuristic.manhattan // Ou une autre heuristique, JPS fonctionne bien avec plusieurs
+			// Ajoutez d'autres options si disponibles pour JPS
+		});
 
         console.log("Pathfinder: Initialisé avec PF.AStarFinder.");
     }

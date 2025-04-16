@@ -45,12 +45,18 @@ self.onmessage = function(event) {
                     // Crée la matrice pour PF.Grid (0=walkable, 1=obstacle)
                     const matrix = nodesWalkable.map(row => row.map(walkable => walkable ? 0 : 1));
                     pfGrid = new PF.Grid(matrix);
-                    finder = new PF.AStarFinder({ // Recréer le finder ici
+                    /* finder = new PF.AStarFinder({ // Recréer le finder ici
                         allowDiagonal: true,
                         dontCrossCorners: true,
                         heuristic: PF.Heuristic.manhattan,
                         weight: 1
-                    });
+                    }); */
+					finder = new PF.JumpPointFinder({ // NOUVELLE LIGNE
+						allowDiagonal: true,
+						dontCrossCorners: true,
+						heuristic: PF.Heuristic.manhattan // Ou une autre heuristique, JPS fonctionne bien avec plusieurs
+						// Ajoutez d'autres options si disponibles pour JPS
+					});
                     console.log(`[Worker] Grille ${width}x${height} et params conversion initialisés.`);
                     self.postMessage({ type: 'initComplete' });
                 } else {
