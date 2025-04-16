@@ -353,29 +353,49 @@ export default class Experience extends EventTarget {
         const building = this.selectedBuildingInfo;
         const totalCapacity = building.capacity || 0;
 
-        // Calculer les habitants actuels
+        // --- CALCUL HABITANTS ACTUELS (garde la logique précédente) ---
         let currentInhabitants = 0;
         const agentManager = this.world?.agentManager;
         if (agentManager?.agents) {
             agentManager.agents.forEach(agent => {
-                // Compter ceux qui sont à la maison dans ce bâtiment
-                if (agent.homeBuildingId === building.id && agent.currentState === 'AT_HOME') {
-                    currentInhabitants++;
-                }
-                // Compter ceux qui sont au travail dans ce bâtiment
-                else if (agent.workBuildingId === building.id && agent.currentState === 'AT_WORK') {
+                const isAtHomeHere = agent.homeBuildingId === building.id && agent.currentState === 'AT_HOME';
+                const isAtWorkHere = agent.workBuildingId === building.id && agent.currentState === 'AT_WORK';
+                if (isAtHomeHere || isAtWorkHere) {
                     currentInhabitants++;
                 }
             });
         }
+        // --- FIN CALCUL HABITANTS ACTUELS ---
 
+
+        // --- NOUVEAU: OBTENIR LA LISTE DES RÉSIDENTS ASSIGNÉS ---
+        const residentsIds = [];
+        // Vérifier si on a accès aux agents et si le bâtiment a des occupants assignés
+        if (agentManager?.agents && building.occupants && building.occupants.length > 0) {
+            building.occupants.forEach(occupantId => {
+                // Trouver l'agent correspondant à l'ID
+                const agent = agentManager.agents.find(a => a.id === occupantId);
+                // Vérifier si l'agent existe ET si ce bâtiment est son domicile assigné
+                if (agent && agent.homeBuildingId === building.id) {
+                    residentsIds.push(occupantId); // Ajouter l'ID à la liste des résidents
+                }
+            });
+        }
+
+        // Formatter la liste des résidents pour l'affichage
+        const residentsListString = residentsIds.length > 0
+            ? residentsIds.join(', ')
+            : 'None';
+        // --- FIN NOUVELLE LOGIQUE RÉSIDENTS ---
+
+        // Construire le contenu HTML final
         const content = `
           ID: ${building.id}<br>
           Type: ${building.type}<br>
           Capacity: ${totalCapacity}<br>
-          Inside: ${currentInhabitants}
-        `;
+          Inside Now: ${currentInhabitants}<br> Residents: ${residentsListString}  `;
 
+        // Mettre à jour le HTML seulement s'il a changé
         if (this.buildingTooltipElement.innerHTML !== content) {
             this.buildingTooltipElement.innerHTML = content;
         }
