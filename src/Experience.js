@@ -9,8 +9,8 @@ import World from './Core/World.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import TimeUI from './UI/TimeUI.js';
 import TimeControlUI from './UI/TimeControlUI.js';
-// Import Box3 and Box3Helper if needed later, not strictly for current features
-// import { Box3, Box3Helper } from 'three';
+// Import nécessaire pour la recherche de mesh par position
+import { Matrix4, Vector3 } from 'three';
 
 let instance = null;
 
@@ -47,7 +47,7 @@ export default class Experience extends EventTarget {
         // --- Sélection Agent ---
         this.selectedAgent = null;
         this.isFollowingAgent = false;
-        this.tooltipElement = document.getElementById('agent-tooltip');
+        this.tooltipElement = document.getElementById('agent-tooltip'); // Assurez-vous que cet ID existe
         this.tooltipTargetPosition = new THREE.Vector3();
 
         // --- Sélection Bâtiment ---
@@ -55,7 +55,7 @@ export default class Experience extends EventTarget {
         this.selectedBuildingMesh = null;
         this.selectedBuildingInstanceId = -1;
         this.highlightMesh = null;
-        this.buildingTooltipElement = document.getElementById('building-tooltip');
+        this.buildingTooltipElement = document.getElementById('building-tooltip'); // Assurez-vous que cet ID existe
         this.buildingTooltipTargetPosition = new THREE.Vector3();
 
         // --- Variables clic vs drag ---
@@ -77,11 +77,18 @@ export default class Experience extends EventTarget {
         this.canvas.addEventListener('mousedown', this._boundHandleMouseDown);
         this.canvas.addEventListener('mouseup', this._boundHandleMouseUp);
 
-        // --- Gestionnaire pour les clics dans le tooltip bâtiment ---
+        // --- Gestionnaire pour les clics DANS l'infobulle BÂTIMENT (EXISTANT) ---
         this._boundHandleBuildingTooltipClick = this._handleBuildingTooltipClick.bind(this);
         if (this.buildingTooltipElement) {
             this.buildingTooltipElement.addEventListener('click', this._boundHandleBuildingTooltipClick);
         }
+
+        // --- NOUVEAU : Gestionnaire pour les clics DANS l'infobulle AGENT ---
+        this._boundHandleAgentTooltipClick = this._handleAgentTooltipClick.bind(this);
+        if (this.tooltipElement) {
+            this.tooltipElement.addEventListener('click', this._boundHandleAgentTooltipClick);
+        }
+        // --- FIN NOUVEAU ---
 
         this.createHighlightMesh(); // Créer le mesh de surbrillance
         console.log("Experience initialisée. Mode debug:", this.isDebugMode);
@@ -145,7 +152,7 @@ export default class Experience extends EventTarget {
                     if (key.startsWith('house_') || key.startsWith('building_') || key.startsWith('skyscraper_') || key.startsWith('industrial_')) {
                         // Exclure éventuellement les fenêtres si elles sont séparées et non cliquables
                         // if (!key.includes('Window')) {
-                            objectsToIntersect.push(instancedMeshManager.instancedMeshes[key]);
+                        objectsToIntersect.push(instancedMeshManager.instancedMeshes[key]);
                         // }
                     }
                 }
@@ -167,9 +174,8 @@ export default class Experience extends EventTarget {
 
                 // --- Vérifier si un Agent a été cliqué ---
                 if (agentManager && agentManager.agents &&
-                   (clickedObject === agentManager.instanceMeshes.torso || clickedObject === agentManager.instanceMeshes.head) &&
-                   firstIntersect.instanceId !== undefined)
-                {
+                    (clickedObject === agentManager.instanceMeshes.torso || clickedObject === agentManager.instanceMeshes.head) &&
+                    firstIntersect.instanceId !== undefined) {
                     const agentInstanceId = firstIntersect.instanceId;
                     const clickedAgent = agentManager.agents[agentInstanceId];
                     if (clickedAgent) {
@@ -179,8 +185,7 @@ export default class Experience extends EventTarget {
                     }
                 }
                 // --- Vérifier si un Bâtiment a été cliqué ---
-                else if (instancedMeshManager && firstIntersect.instanceId !== undefined && clickedObject instanceof THREE.InstancedMesh)
-                {
+                else if (instancedMeshManager && firstIntersect.instanceId !== undefined && clickedObject instanceof THREE.InstancedMesh) {
                     const instanceId = firstIntersect.instanceId;
                     const clickedMesh = clickedObject;
                     const tempMatrix = new THREE.Matrix4();
@@ -209,7 +214,7 @@ export default class Experience extends EventTarget {
                         this.selectBuilding(closestBuilding, clickedMesh, instanceId);
                         clickedOnSomething = true;
                     } else {
-                         console.log(`Clic sur mesh (${clickedMesh.name}, instance ${instanceId}), mais impossible de lier à un BuildingInfo.`);
+                        console.log(`Clic sur mesh (${clickedMesh.name}, instance ${instanceId}), mais impossible de lier à un BuildingInfo.`);
                     }
                 }
             }
@@ -227,13 +232,86 @@ export default class Experience extends EventTarget {
         this.mouseDownPosition.y = null;
     }
 
-    // Gère les clics à l'intérieur du tooltip du bâtiment (délégation)
+    // --- NOUVEAU : Gère les clics dans l'infobulle AGENT ---
+    _handleAgentTooltipClick(event) {
+        const clickedLink = event.target.closest('.building-id-link');
+        if (clickedLink) {
+            const buildingId = clickedLink.dataset.buildingId;
+            if (buildingId && buildingId !== 'N/A') {
+                console.log(`Agent Tooltip: Clic sur l'ID bâtiment: ${buildingId}`);
+                const citizenManager = this.world?.cityManager?.citizenManager;
+                const instancedMeshManager = this.world?.cityManager?.contentGenerator?.instancedMeshManager;
+
+                if (!citizenManager || !instancedMeshManager) {
+                    console.error("Impossible de trouver CitizenManager ou InstancedMeshManager.");
+                    return;
+                }
+
+                // 1. Trouver les infos du bâtiment
+                const buildingInfo = citizenManager.getBuildingInfo(buildingId);
+                if (!buildingInfo) {
+                    console.warn(`Impossible de trouver les informations pour le bâtiment ${buildingId}`);
+                    return;
+                }
+
+                // 2. Trouver le mesh et l'instanceId correspondants (Méthode approximative par position)
+                //    NOTE: C'est la partie la plus délicate car buildingInfo ne contient pas
+                //    directement le lien vers le mesh/instanceId.
+                let foundMesh = null;
+                let foundInstanceId = -1;
+                let minDistanceSq = Infinity;
+                const targetPosition = buildingInfo.position;
+                // Augmentation de la tolérance car la position enregistrée peut différer légèrement de la position de l'instance
+                const searchToleranceSq = 50.0; // Tolérance au carré pour trouver l'instance
+
+                const tempMatrix = new Matrix4(); // Réutiliser pour la performance
+                const instancePosition = new Vector3();
+
+                // Itérer sur les meshes pertinents
+                for (const key in instancedMeshManager.instancedMeshes) {
+                    // Simplification : on cherche dans tous les types de bâtiments/maisons etc.
+                    if (key.startsWith('house_') || key.startsWith('building_') || key.startsWith('skyscraper_') || key.startsWith('industrial_')) {
+                        const mesh = instancedMeshManager.instancedMeshes[key];
+                        for (let i = 0; i < mesh.count; i++) {
+                            mesh.getMatrixAt(i, tempMatrix);
+                            instancePosition.setFromMatrixPosition(tempMatrix);
+                            const distSq = instancePosition.distanceToSquared(targetPosition);
+
+                            if (distSq < minDistanceSq && distSq < searchToleranceSq) {
+                                minDistanceSq = distSq;
+                                foundMesh = mesh;
+                                foundInstanceId = i;
+                            }
+                        }
+                    }
+                }
+
+                // 3. Sélectionner le bâtiment si trouvé
+                if (foundMesh && foundInstanceId !== -1) {
+                    console.log(`Bâtiment ${buildingId} trouvé : Mesh ${foundMesh.name}, Instance ${foundInstanceId}`);
+                    // Désélectionner l'agent actuel (car on sélectionne un bâtiment)
+                    this.deselectAgent();
+                    // Sélectionner le bâtiment trouvé
+                    this.selectBuilding(buildingInfo, foundMesh, foundInstanceId);
+                } else {
+                    console.warn(`Impossible de trouver le mesh/instance correspondant au bâtiment ${buildingId} près de la position ${targetPosition.x.toFixed(1)},${targetPosition.z.toFixed(1)}.`);
+                    // Optionnel : Animer la caméra vers la position du bâtiment même si le mesh n'est pas trouvé ?
+                    // if (this.controls && buildingInfo.position) {
+                    //     this.controls.target.copy(buildingInfo.position);
+                    // }
+                }
+            }
+        }
+    }
+    // --- FIN NOUVELLE MÉTHODE ---
+
+    // Gère les clics à l'intérieur du tooltip du BÂTIMENT (délégation)
     _handleBuildingTooltipClick(event) {
         const clickedLink = event.target.closest('.resident-id-link');
         if (clickedLink) {
             const agentId = clickedLink.dataset.agentId;
             if (agentId) {
-                // console.log(`Clic sur l'ID résident: ${agentId}`); // Décommenter pour debug
+                // console.log(`Clic sur l'ID résident/employé: ${agentId}`); // Décommenter pour debug
                 const agentManager = this.world?.agentManager;
                 const agentToSelect = agentManager?.agents.find(a => a.id === agentId);
                 if (agentToSelect) {
@@ -255,8 +333,13 @@ export default class Experience extends EventTarget {
         this.isFollowingAgent = true;
         this.controls.enabled = false;
         this.camera.followAgent(agent);
+        // S'assurer que le tooltip bâtiment est caché
+        if (this.buildingTooltipElement) {
+            this.buildingTooltipElement.style.display = 'none';
+        }
+        // Afficher et mettre à jour le tooltip agent
         if (this.tooltipElement) {
-            this.updateTooltipContent(agent); // Met à jour le contenu agent
+            this.updateTooltipContent(agent);
             this.tooltipElement.style.display = 'block';
         }
     }
@@ -264,21 +347,21 @@ export default class Experience extends EventTarget {
     // Désélectionne l'agent et désactive le suivi
     deselectAgent() {
         if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
-             this.tooltipElement.style.display = 'none';
+            this.tooltipElement.style.display = 'none';
         }
         if (!this.isFollowingAgent && !this.selectedAgent) return;
         this.selectedAgent = null;
         this.isFollowingAgent = false;
-        if(this.controls) this.controls.enabled = true;
-        if(this.camera) this.camera.stopFollowing();
+        if (this.controls) this.controls.enabled = true;
+        if (this.camera) this.camera.stopFollowing();
     }
 
     // Sélectionne un bâtiment, active le highlight et le tooltip bâtiment
     selectBuilding(buildingInfo, mesh, instanceId) {
         if (this.selectedBuildingInfo && this.selectedBuildingInfo.id === buildingInfo.id) {
-             return; // Ne rien faire si déjà sélectionné
+            return; // Ne rien faire si déjà sélectionné
         }
-        this.deselectBuilding(); // Désélectionner l'ancien avant
+        this.deselectAgent(); // Toujours désélectionner agent si on sélectionne bâtiment
         this.selectedBuildingInfo = buildingInfo;
         this.selectedBuildingMesh = mesh;
         this.selectedBuildingInstanceId = instanceId;
@@ -299,10 +382,14 @@ export default class Experience extends EventTarget {
             this.highlightMesh.updateMatrixWorld(true);
         }
 
-        // Afficher le tooltip bâtiment
+        // S'assurer que le tooltip agent est caché
+        if (this.tooltipElement) {
+            this.tooltipElement.style.display = 'none';
+        }
+        // Afficher et mettre à jour le tooltip bâtiment
         if (this.buildingTooltipElement) {
+            this.updateBuildingTooltipContent(); // Met à jour immédiatement
             this.buildingTooltipElement.style.display = 'block';
-            this.updateBuildingTooltipContent(); // Met à jour le contenu immédiatement
         }
     }
 
@@ -320,57 +407,75 @@ export default class Experience extends EventTarget {
         }
     }
 
-    // Met à jour le contenu HTML du tooltip agent
+    // --- MODIFIÉ : Met à jour le contenu HTML du tooltip agent AVEC liens ---
     updateTooltipContent(agent) {
-      if (!agent || !this.tooltipElement) return;
-      const content = `
-        ID: ${agent.id}<br>
-        State: ${agent.currentState || 'N/A'}<br>
-        Home: ${agent.homeBuildingId || 'N/A'}<br>
-        Work: ${agent.workBuildingId || 'N/A'}
-      `;
-      if (this.tooltipElement.innerHTML !== content) {
-        this.tooltipElement.innerHTML = content;
-      }
-    }
+        if (!agent || !this.tooltipElement) return;
 
-    // Met à jour le contenu HTML du tooltip bâtiment
+        // Fonction interne pour créer les liens
+        const createBuildingLink = (buildingId) => {
+            if (buildingId) {
+                // Utilise la classe 'building-id-link' pour le JS et le CSS
+                return `<span class="building-id-link" data-building-id="${buildingId}">${buildingId}</span>`;
+            } else {
+                return 'N/A';
+            }
+        };
+
+        const homeLink = createBuildingLink(agent.homeBuildingId);
+        const workLink = createBuildingLink(agent.workBuildingId);
+
+        const content = `
+          ID: ${agent.id}<br>
+          State: ${agent.currentState || 'N/A'}<br>
+          Home: ${homeLink}<br>
+          Work: ${workLink}
+        `;
+        if (this.tooltipElement.innerHTML !== content) {
+            this.tooltipElement.innerHTML = content;
+        }
+    }
+    // --- FIN MODIFICATION updateTooltipContent ---
+
+    // Met à jour le contenu HTML du tooltip bâtiment (adapté pour afficher employés si nécessaire)
     updateBuildingTooltipContent() {
         if (!this.selectedBuildingInfo || !this.buildingTooltipElement) return;
 
         const building = this.selectedBuildingInfo;
         const totalCapacity = building.capacity || 0;
-        let currentOccupantsInside = 0; // Renommé pour plus de clarté
-        // ---> NOUVEAU : Liste pour les employés <---
-        const employeeIds = [];
+        let currentOccupantsInside = 0;
+        const occupantsList = []; // Pourra contenir résidents OU employés
+        let listLabel = "Occupants"; // Label par défaut
+
         const agentManager = this.world?.agentManager;
 
         if (agentManager?.agents && building.occupants && building.occupants.length > 0) {
             building.occupants.forEach(occupantId => {
                 const agent = agentManager.agents.find(a => a.id === occupantId);
                 if (agent) {
-                    // Compte ceux à l'intérieur (basé sur l'état AT_WORK)
+                    // Compte ceux à l'intérieur
+                    const isAtHomeHere = agent.homeBuildingId === building.id && agent.currentState === 'AT_HOME';
                     const isAtWorkHere = agent.workBuildingId === building.id && agent.currentState === 'AT_WORK';
-                    // On peut aussi compter ceux à la maison si le bâtiment peut être les deux (non applicable ici pour gratte-ciel)
-                    // const isAtHomeHere = agent.homeBuildingId === building.id && agent.currentState === 'AT_HOME';
-                    if (isAtWorkHere /* || isAtHomeHere */) {
+                    if (isAtHomeHere || isAtWorkHere) {
                         currentOccupantsInside++;
                     }
 
-                    // ---> MODIFIÉ : Vérifie si c'est le lieu de travail de l'agent <---
-                    if (agent.workBuildingId === building.id) {
-                        employeeIds.push(occupantId); // Ajoute à la liste des employés
+                    // Ajoute à la liste appropriée (résidents OU employés)
+                    if (!building.isWorkplace && agent.homeBuildingId === building.id) {
+                        occupantsList.push(occupantId);
+                        listLabel = "Residents";
+                    } else if (building.isWorkplace && agent.workBuildingId === building.id) {
+                        occupantsList.push(occupantId);
+                        listLabel = "Employees";
                     }
                 }
             });
         }
 
-        // ---> MODIFIÉ : Génère le HTML pour la liste des employés <---
-        let employeesListHTML = 'None';
-        if (employeeIds.length > 0) {
-            employeesListHTML = employeeIds.map(id =>
-                // Garde la classe 'resident-id-link' pour la fonctionnalité de clic ou renommer si nécessaire
-                `<span class="resident-id-link" data-agent-id="${id}">${id}</span>`
+        // Génère le HTML pour la liste (cliquable)
+        let occupantsListHTML = 'None';
+        if (occupantsList.length > 0) {
+            occupantsListHTML = occupantsList.map(id =>
+                `<span class="resident-id-link" data-agent-id="${id}">${id}</span>` // Garde la classe pour la fonctionnalité de clic
             ).join(', ');
         }
 
@@ -380,7 +485,7 @@ export default class Experience extends EventTarget {
           Type: ${building.type}<br>
           Capacity: ${totalCapacity}<br>
           Inside Now: ${currentOccupantsInside}<br>
-          Employees: ${employeesListHTML}
+          ${listLabel}: ${occupantsListHTML}
         `;
 
         // Met à jour le DOM seulement si nécessaire
@@ -395,7 +500,7 @@ export default class Experience extends EventTarget {
             this.isDebugMode = true;
             console.log("Debug Mode ENABLED");
             if (this.scene) this.scene.fog = null;
-            if(this.world) this.world.setDebugMode(true);
+            if (this.world) this.world.setDebugMode(true);
             this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: true } }));
         }
     }
@@ -405,7 +510,7 @@ export default class Experience extends EventTarget {
             this.isDebugMode = false;
             console.log("Debug Mode DISABLED");
             if (this.scene && this.originalFog) this.scene.fog = this.originalFog;
-            if(this.world) this.world.setDebugMode(false);
+            if (this.world) this.world.setDebugMode(false);
             this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: false } }));
         }
     }
@@ -420,8 +525,8 @@ export default class Experience extends EventTarget {
 
     // Gère le redimensionnement de la fenêtre
     resize() {
-        if(this.camera) this.camera.resize();
-        if(this.renderer) this.renderer.resize();
+        if (this.camera) this.camera.resize();
+        if (this.renderer) this.renderer.resize();
     }
 
     // Boucle de mise à jour principale
@@ -431,19 +536,19 @@ export default class Experience extends EventTarget {
 
         // Mise à jour des contrôles OrbitControls si non en suivi
         if (!this.isFollowingAgent && this.controls?.enabled) {
-             this.controls.update();
+            this.controls.update();
         }
         // Mise à jour caméra (gère le suivi si activé)
-        if(this.camera) this.camera.update(deltaTime);
+        if (this.camera) this.camera.update(deltaTime);
         // Mise à jour du monde (agents, environnement, etc.)
-        if(this.world) this.world.update();
+        if (this.world) this.world.update();
         // Mise à jour du renderer (dessine la scène)
-        if(this.renderer) this.renderer.update();
+        if (this.renderer) this.renderer.update();
         // Mise à jour de l'UI de l'heure
         if (this.timeUI) this.timeUI.update();
 
         // --- Mise à jour Tooltip Agent ---
-        if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
+        if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) { // Afficher seulement si pas de bâtiment sélectionné
             this.updateTooltipContent(this.selectedAgent); // Met à jour le contenu
             // Calcule la position 3D cible pour le tooltip agent
             this.tooltipTargetPosition.copy(this.selectedAgent.position);
@@ -468,13 +573,12 @@ export default class Experience extends EventTarget {
                 if (this.tooltipElement.style.display !== 'none') { this.tooltipElement.style.display = 'none'; }
             }
         } else { // Cache si aucun agent sélectionné ou si bâtiment sélectionné
-             if (this.tooltipElement && this.tooltipElement.style.display !== 'none') { this.tooltipElement.style.display = 'none'; }
+            if (this.tooltipElement && this.tooltipElement.style.display !== 'none') { this.tooltipElement.style.display = 'none'; }
         }
 
         // --- Mise à jour Tooltip Bâtiment ---
         if (this.selectedBuildingInfo && this.buildingTooltipElement) {
             this.updateBuildingTooltipContent(); // Met à jour le contenu
-
             // Recalcule la position 3D cible (sommet haut-droite)
             if (this.selectedBuildingMesh && this.selectedBuildingInstanceId !== -1) {
                 const instanceMatrix = new THREE.Matrix4();
@@ -524,10 +628,10 @@ export default class Experience extends EventTarget {
                     if (this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
                 }
             } else { // Cache si données instance invalides
-                 if (this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
+                if (this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
             }
         } else { // Cache si aucun bâtiment sélectionné
-             if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
+            if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
         }
 
         this.stats.end(); // Fin mesure performance
@@ -545,6 +649,11 @@ export default class Experience extends EventTarget {
         if (this.buildingTooltipElement) {
             this.buildingTooltipElement.removeEventListener('click', this._boundHandleBuildingTooltipClick);
         }
+        // ---> NOUVEAU : Retirer l'écouteur de l'infobulle agent <---
+        if (this.tooltipElement) {
+            this.tooltipElement.removeEventListener('click', this._boundHandleAgentTooltipClick);
+        }
+        // --->
 
         // Nettoyage Sélection Bâtiment
         if (this.highlightMesh) {

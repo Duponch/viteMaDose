@@ -187,3 +187,30 @@ button {
 	text-decoration: underline;
   }
   
+  /* src/style.css */
+
+/* Styles existants ... */
+
+.agent-tooltip, .building-tooltip {
+	/* Styles existants ... */
+	pointer-events: none; /* Le tooltip global ne capture pas les clics */
+	/* Styles existants ... */
+}
+
+/* --- NOUVEAU: Styles pour les IDs cliquables DANS les tooltips --- */
+.agent-tooltip .building-id-link,
+.building-tooltip .resident-id-link { /* Applique aussi à l'autre tooltip */
+	color: #90caf9; /* Bleu clair (ou autre couleur de lien) */
+	cursor: pointer;
+	text-decoration: none; /* Pas de soulignement par défaut */
+	transition: color 0.2s ease, text-decoration 0.2s ease;
+	/* Rétablir les événements pointeur UNIQUEMENT pour les liens */
+	pointer-events: auto; /* TRÈS IMPORTANT */
+}
+
+.agent-tooltip .building-id-link:hover,
+.building-tooltip .resident-id-link:hover {
+	color: #bbdefb; /* Bleu plus clair au survol */
+	text-decoration: underline;
+}
+/* --- FIN NOUVEAU --- */
