@@ -340,32 +340,36 @@ export default class Experience extends EventTarget {
 
         const building = this.selectedBuildingInfo;
         const totalCapacity = building.capacity || 0;
-        let currentInhabitants = 0;
-        const residentsIds = [];
+        let currentOccupantsInside = 0; // Renommé pour plus de clarté
+        // ---> NOUVEAU : Liste pour les employés <---
+        const employeeIds = [];
         const agentManager = this.world?.agentManager;
 
         if (agentManager?.agents && building.occupants && building.occupants.length > 0) {
             building.occupants.forEach(occupantId => {
                 const agent = agentManager.agents.find(a => a.id === occupantId);
                 if (agent) {
-                    // Compte ceux à l'intérieur
-                    const isAtHomeHere = agent.homeBuildingId === building.id && agent.currentState === 'AT_HOME';
+                    // Compte ceux à l'intérieur (basé sur l'état AT_WORK)
                     const isAtWorkHere = agent.workBuildingId === building.id && agent.currentState === 'AT_WORK';
-                    if (isAtHomeHere || isAtWorkHere) {
-                        currentInhabitants++;
+                    // On peut aussi compter ceux à la maison si le bâtiment peut être les deux (non applicable ici pour gratte-ciel)
+                    // const isAtHomeHere = agent.homeBuildingId === building.id && agent.currentState === 'AT_HOME';
+                    if (isAtWorkHere /* || isAtHomeHere */) {
+                        currentOccupantsInside++;
                     }
-                    // Ajoute à la liste des résidents si c'est leur domicile
-                    if (agent.homeBuildingId === building.id) {
-                        residentsIds.push(occupantId);
+
+                    // ---> MODIFIÉ : Vérifie si c'est le lieu de travail de l'agent <---
+                    if (agent.workBuildingId === building.id) {
+                        employeeIds.push(occupantId); // Ajoute à la liste des employés
                     }
                 }
             });
         }
 
-        // Génère le HTML pour la liste des résidents (cliquable)
-        let residentsListHTML = 'None';
-        if (residentsIds.length > 0) {
-            residentsListHTML = residentsIds.map(id =>
+        // ---> MODIFIÉ : Génère le HTML pour la liste des employés <---
+        let employeesListHTML = 'None';
+        if (employeeIds.length > 0) {
+            employeesListHTML = employeeIds.map(id =>
+                // Garde la classe 'resident-id-link' pour la fonctionnalité de clic ou renommer si nécessaire
                 `<span class="resident-id-link" data-agent-id="${id}">${id}</span>`
             ).join(', ');
         }
@@ -375,8 +379,8 @@ export default class Experience extends EventTarget {
           ID: ${building.id}<br>
           Type: ${building.type}<br>
           Capacity: ${totalCapacity}<br>
-          Inside Now: ${currentInhabitants}<br>
-          Residents: ${residentsListHTML}
+          Inside Now: ${currentOccupantsInside}<br>
+          Employees: ${employeesListHTML}
         `;
 
         // Met à jour le DOM seulement si nécessaire
