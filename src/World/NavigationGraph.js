@@ -183,67 +183,54 @@ export default class NavigationGraph {
     // Fonction getClosestWalkableNode OPTIMISÉE
     // ==============================================================
     getClosestWalkableNode(worldPos) {
-        if (!this.grid) return null;
-
-        // Convertir la position monde en coordonnées grille initiales
-        const startGrid = this.worldToGrid(worldPos.x, worldPos.z);
-        let bestNode = null;
-        let minGridDistSq = Infinity; // Distance au carré EN GRILLE
-
-        // 1. Vérifier le point de départ exact
-        if (this.isValidGridCoord(startGrid.x, startGrid.y) && this.grid.isWalkableAt(startGrid.x, startGrid.y)) {
-            // Si la cellule de départ est directement marchable, c'est la meilleure.
-            return startGrid; // Retourne {x, y}
-        }
-
-        // 2. Recherche en spirale si le point de départ n'est pas marchable
-        // Rayon de recherche max (en cellules de grille)
-        const maxSearchRadius = Math.max(15, Math.ceil(this.config.sidewalkWidth * 2 * this.gridScale));
-
-        for (let r = 1; r <= maxSearchRadius; r++) {
-            let foundInRadius = false; // Optimisation: arrêter si on trouve dans un rayon
-            for (let dx = -r; dx <= r; dx++) {
-                for (let dy = -r; dy <= r; dy++) {
-                    // Considérer seulement le périmètre extérieur du carré de recherche
-                    if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-
-                    const cx = startGrid.x + dx; // Coordonnée X candidate
-                    const cy = startGrid.y + dy; // Coordonnée Y candidate
-
-                    // Vérifier si la cellule candidate est valide et marchable
-                    if (this.isValidGridCoord(cx, cy) && this.grid.isWalkableAt(cx, cy)) {
-
-                        // *** OPTIMISATION: Calcul de distance en grille ***
-                        // Calcule la distance au carré entre la grille de départ (startGrid)
-                        // et la grille candidate (cx, cy).
-                        const gridDistSq = dx * dx + dy * dy;
-                        // ***********************************************
-
-                        // Si cette cellule est plus proche que la meilleure trouvée jusqu'à présent
-                        if (gridDistSq < minGridDistSq) {
-                            minGridDistSq = gridDistSq; // Mettre à jour la distance min
-                            bestNode = { x: cx, y: cy }; // Stocker les coordonnées grille
-                            foundInRadius = true;
-                        }
-                    }
-                }
-            }
-            // OPTIMISATION POSSIBLE (agressive): Si on a trouvé un nœud dans ce rayon,
-            // on peut considérer que c'est un bon candidat et arrêter la recherche.
-            // Cela ne garantit pas le *plus* proche au sens strict Euclidien monde,
-            // mais trouve un nœud marchable proche rapidement.
-            // if (foundInRadius) break;
-            // Pour l'instant, on continue jusqu'au rayon max pour trouver le plus proche dans ce rayon.
-        }
-
-        // Si aucun nœud n'a été trouvé dans le rayon de recherche
-        if (!bestNode) {
-            console.warn("NavigationGraph: Aucun nœud marchable trouvé près de", worldPos, `(Grille: ${startGrid.x},${startGrid.y}) dans le rayon ${maxSearchRadius}.`);
-        }
-
-        // Retourne les coordonnées {x, y} du meilleur nœud trouvé, ou null.
-        return bestNode;
-    }
+		if (!this.grid) return null;
+	
+		// 1) Position « brute » en grille
+		const startGrid = this.worldToGrid(worldPos.x, worldPos.z);
+	
+		// Si cette cellule est déjà marchable on la renvoie tout de suite
+		if (this.isValidGridCoord(startGrid.x, startGrid.y)
+		 && this.grid.isWalkableAt(startGrid.x, startGrid.y)) {
+			return startGrid;
+		}
+	
+		// 2) Recherche en spirale — on prend toute la grille comme rayon max
+		const maxSearchRadius = Math.max(this.gridWidth, this.gridHeight);
+	
+		let bestNode = null;
+		let minGridDistSq = Infinity;
+	
+		for (let r = 1; r <= maxSearchRadius; r++) {
+			for (let dx = -r; dx <= r; dx++) {
+				for (let dy = -r; dy <= r; dy++) {
+					if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+	
+					const x = startGrid.x + dx, y = startGrid.y + dy;
+					if (!this.isValidGridCoord(x, y) || !this.grid.isWalkableAt(x,y)) continue;
+	
+					const d2 = dx*dx + dy*dy;
+					if (d2 < minGridDistSq) {
+						minGridDistSq = d2;
+						bestNode     = { x, y };
+					}
+				}
+			}
+			// **optionnel** : si on a trouvé au moins un nœud à ce rayon, on peut break
+			if (bestNode) break;
+		}
+	
+		if (!bestNode) {
+			// Aucune cellule marchable trouvée sur toute la grille :  
+			// on la remplace par le point d’origine en grille pour éviter le null
+			console.warn(
+			  `NavigationGraph: Aucun nœud marchable trouvé près de`, 
+			  worldPos, `(Grille: ${startGrid.x},${startGrid.y})`
+			);
+			return startGrid;
+		}
+	
+		return bestNode;
+	}	
     // ==============================================================
     // FIN Fonction getClosestWalkableNode OPTIMISÉE
     // ==============================================================
