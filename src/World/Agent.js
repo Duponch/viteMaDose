@@ -68,6 +68,10 @@ export default class Agent {
         this.exactWorkDepartureTimeGame = -1;
         this.exactHomeDepartureTimeGame = -1;
 
+		this.lastArrivalTimeHome = 0; // Temps de jeu (ms) de la dernière arrivée AT_HOME (0 initialement)
+		this.lastArrivalTimeWork = -1; // Temps de jeu (ms) de la dernière arrivée AT_WORK
+		this.requestedPathForDepartureTime = -1; // Pour éviter requêtes multiples pour le même départ
+
         // --- Animation Visuelle ---
         this.currentAnimationMatrix = {
             head: new THREE.Matrix4(), torso: new THREE.Matrix4(),
@@ -221,189 +225,311 @@ export default class Agent {
         }
     }
 
-    setPath(pathPoints, pathLengthWorld) {
+	setPath(pathPoints, pathLengthWorld) {
+        // Détermine l'état dans lequel l'agent se trouvait LORSQU'IL A DEMANDÉ le chemin
         const wasRequestingWork = this.currentState === AgentState.REQUESTING_PATH_FOR_WORK;
         const wasRequestingHome = this.currentState === AgentState.REQUESTING_PATH_FOR_HOME;
 
-       if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 0 && pathLengthWorld > 0.1) {
-           this.currentPathPoints = pathPoints.map(p => p.clone());
-           this.currentPathLengthWorld = pathLengthWorld; // <- STOCKER LA LONGUEUR
+        // --- Cas 1: Chemin Valide Reçu ---
+        // Vérifie si le chemin existe, est un tableau non vide, et a une longueur significative.
+        if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 0 && pathLengthWorld > 0.1) {
 
-           const travelSecondsGame = pathLengthWorld / this.agentBaseSpeed;
-           const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
-           if (dayDurationMs > 0) {
-               const travelRatioOfDay = travelSecondsGame / (dayDurationMs / 1000);
-               this.calculatedTravelDurationGame = travelRatioOfDay * dayDurationMs;
-           } else {
-               console.error(`Agent ${this.id}: dayDurationMs invalide (${dayDurationMs}), impossible de calculer la durée du trajet.`);
-               this.calculatedTravelDurationGame = 10 * 60 * 1000; // Fallback
-               this.currentPathLengthWorld = 0; // Invalider longueur si durée fallback
-           }
+            this.currentPathPoints = pathPoints.map(p => p.clone()); // Stocker une copie
+            this.currentPathLengthWorld = pathLengthWorld;           // Stocker la longueur
 
-           if (wasRequestingWork) {
-               this.currentState = AgentState.READY_TO_LEAVE_FOR_WORK;
-           } else if (wasRequestingHome) {
-               this.currentState = AgentState.READY_TO_LEAVE_FOR_HOME;
-           } else {
-                console.warn(`Agent ${this.id}: Reçu path alors qu'en état ${this.currentState}. Path stocké.`);
-           }
-            // console.log(`Agent ${this.id}: Path processed. Length=${this.currentPathLengthWorld.toFixed(1)}, Duration=${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s game. State: ${this.currentState}`);
+            // Calculer la durée du trajet en temps de jeu basé sur la longueur et la vitesse de base
+            const travelSecondsGame = pathLengthWorld / this.agentBaseSpeed;
+            const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
 
-       } else {
-           console.warn(`Agent ${this.id}: setPath reçu avec chemin invalide ou longueur ${pathLengthWorld}.`);
-           this.currentPathPoints = null;
-           this.calculatedTravelDurationGame = 0;
-           this.currentPathLengthWorld = 0; // Réinitialiser longueur
-           this.departureTimeGame = -1;
-           this.arrivalTmeGame = -1;
+            if (dayDurationMs > 0) {
+                // Convertir les secondes de jeu en millisecondes de jeu
+                const travelRatioOfDay = travelSecondsGame / (dayDurationMs / 1000); // Ratio du trajet par rapport à une journée en secondes
+                this.calculatedTravelDurationGame = travelRatioOfDay * dayDurationMs; // Durée en ms de jeu
+            } else {
+                // Fallback si la durée du jour est invalide (ne devrait pas arriver si l'env est prêt)
+                console.error(`Agent ${this.id}: dayDurationMs invalide (${dayDurationMs}) lors du calcul de la durée du trajet. Utilisation d'un fallback.`);
+                this.calculatedTravelDurationGame = 10 * 60 * 1000; // Fallback (ex: 10 minutes jeu)
+                this.currentPathLengthWorld = 0; // Considérer longueur comme invalide si durée fallback
+            }
 
-           if (wasRequestingWork || wasRequestingHome) {
-               this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
-               console.warn(`Agent ${this.id}: Pathfinding failed or invalid path, returning to ${this.currentState}.`);
-           }
-            this.isVisible = (this.currentState !== AgentState.AT_HOME && this.currentState !== AgentState.AT_WORK);
-       }
-   }
+            // Transitionner vers l'état "Prêt à partir" correspondant
+            if (wasRequestingWork) {
+                this.currentState = AgentState.READY_TO_LEAVE_FOR_WORK;
+            } else if (wasRequestingHome) {
+                this.currentState = AgentState.READY_TO_LEAVE_FOR_HOME;
+            } else {
+                // Cas étrange : on reçoit un chemin sans l'avoir demandé récemment
+                console.warn(`Agent ${this.id}: Reçu path alors qu'en état ${this.currentState}. Path stocké, mais état inchangé.`);
+                // On garde le chemin mais on ne change pas l'état immédiatement
+            }
+            // console.log(`Agent ${this.id}: Path reçu et traité. Length=${this.currentPathLengthWorld.toFixed(1)}, Duration=${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s game. Nouvel état: ${this.currentState}`);
 
-   updateState(deltaTime, currentHour, currentGameTime) {
-		// deltaTime n'est pas directement utilisé ici, tout est basé sur currentGameTime
+        }
+        // --- Cas 2: Chemin Invalide ou Échec Pathfinding ---
+        else {
+            console.warn(`Agent ${this.id}: setPath reçu avec chemin invalide (path: ${pathPoints ? 'Array['+pathPoints.length+']' : 'null'}) ou longueur ${pathLengthWorld}.`);
 
-		// Récupérer les heures planifiées (au cas où elles auraient été recalculées)
-		const prepareWorkTime = this.prepareWorkDepartureTimeGame;
-		const departWorkTime = this.exactWorkDepartureTimeGame;
-		const prepareHomeTime = this.prepareHomeDepartureTimeGame;
-		const departHomeTime = this.exactHomeDepartureTimeGame;
-		const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
+            // Réinitialiser toutes les variables liées au chemin
+            this.currentPathPoints = null;
+            this.calculatedTravelDurationGame = 0;
+            this.currentPathLengthWorld = 0;
+            this.departureTimeGame = -1;
+            this.arrivalTmeGame = -1;
 
-		// Gérer le cas où les temps ne sont pas valides
-		if (prepareWorkTime < 0 || departWorkTime < 0 || prepareHomeTime < 0 || departHomeTime < 0 || !dayDurationMs) {
-			if (this.currentState !== AgentState.IDLE) {
-				// console.warn(`Agent ${this.id}: Temps planifiés invalides, passage en IDLE.`);
-				this.currentState = AgentState.IDLE;
-			}
-			return; // Ne peut rien faire sans planification
-		}
+            // --- **CORRECTION LOGIQUE D'ÉTAT D'ÉCHEC** ---
+            if (wasRequestingHome) {
+                // Si la demande de chemin pour RENTRER échoue, l'agent doit revenir à l'état AT_WORK.
+                this.currentState = AgentState.AT_WORK;
+                console.warn(`Agent ${this.id}: Pathfinding HOME failed, returning to AT_WORK.`);
+                this.isVisible = false; // Agent est de retour à l'intérieur du travail
+            } else if (wasRequestingWork) {
+                // Si la demande de chemin pour ALLER AU TRAVAIL échoue, l'agent revient à AT_HOME (ou IDLE).
+                this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+                console.warn(`Agent ${this.id}: Pathfinding TO WORK failed, returning to ${this.currentState}.`);
+                this.isVisible = false; // Agent est de retour à l'intérieur de la maison ou disparaît
+            }
+            // Si on reçoit un chemin invalide sans être en état REQUESTING, on logue l'avertissement
+            // mais on ne change pas l'état actuel de l'agent.
+             else {
+                  console.warn(`Agent ${this.id}: Reçu path invalide alors qu'en état ${this.currentState}. État inchangé.`);
+             }
+            // --- **FIN CORRECTION** ---
+        }
+    } // Fin setPath
 
-		// Logique de la machine d'état basée sur currentGameTime modulo la durée du jour
-		const timeInCurrentDayCycle = currentGameTime % dayDurationMs;
+	updateState(deltaTime, currentHour, currentGameTime) {
+        // Récupérer les heures de départ planifiées et la durée du jour
+        const departWorkTime = this.exactWorkDepartureTimeGame;
+        const departHomeTime = this.exactHomeDepartureTimeGame;
+        const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
 
-		switch (this.currentState) {
-			case AgentState.AT_HOME:
-				// Vérifier s'il est temps de se préparer à partir travailler
-				// Gérer le cas où l'heure de préparation est le jour précédent (ex: préparer à 23:55 pour partir à 00:00)
-				let effectivePrepareWorkTime = prepareWorkTime;
-				// Si l'heure actuelle est "avant" l'heure de départ mais "après" l'heure de prépa qui était la veille
-				if (timeInCurrentDayCycle < departWorkTime && prepareWorkTime > departWorkTime) {
-				effectivePrepareWorkTime = prepareWorkTime - dayDurationMs; // Temps de prépa ramené au début du cycle actuel
-				}
-				// Si l'heure actuelle est entre l'heure de prépa et l'heure de départ
-				if (this.workPosition && this.homeGridNode && this.workGridNode &&
-					timeInCurrentDayCycle >= effectivePrepareWorkTime && timeInCurrentDayCycle < departWorkTime)
-				{
-					// console.log(`Agent ${this.id}: Time to prepare for work (Current: ${timeInCurrentDayCycle.toFixed(0)}, Prepare: ${prepareWorkTime.toFixed(0)})`);
-					this.requestPath(this.homePosition, this.workPosition, this.homeGridNode, this.workGridNode, AgentState.READY_TO_LEAVE_FOR_WORK);
-					// L'état passe à REQUESTING_PATH_FOR_WORK dans requestPath
-				}
-				break;
+        // Vérification initiale de la validité des temps planifiés et de l'environnement
+        if (!dayDurationMs || dayDurationMs <= 0 || departWorkTime < 0 || departHomeTime < 0 ) {
+            if (this.currentState !== AgentState.IDLE) {
+                // console.warn(`Agent ${this.id}: Temps planifiés invalides (${departWorkTime}, ${departHomeTime}) ou environnement non prêt (dayDur: ${dayDurationMs}), passage en IDLE.`);
+                this.currentState = AgentState.IDLE;
+                this.isVisible = false;
+            }
+            return; // Impossible de continuer sans planification valide
+        }
 
-			case AgentState.READY_TO_LEAVE_FOR_WORK:
-				// Le chemin est prêt, on attend l'heure H pour partir
-				// Gérer le passage de minuit entre la préparation et le départ
-				let effectiveDepartWorkTime = departWorkTime;
-				// Si l'heure de départ est "tôt" (ex: 0h) et que l'heure actuelle est "tard" (ex: 23h59)
-				if (departWorkTime < timeInCurrentDayCycle && departWorkTime < prepareWorkTime) {
-					// Ce cas est complexe, mais signifie qu'on a déjà dépassé l'heure de départ pour ce cycle
-					// On devrait peut-être forcer le départ si on est dans cet état ?
-					// Ou considérer l'heure de départ du *prochain* cycle.
-					// Simplifions: Si on est prêt et qu'on dépasse l'heure, on part.
-					// effectiveDepartWorkTime += dayDurationMs; // Non, on compare au temps modulo dayDurationMs
-				}
+        // Initialisation paresseuse des temps d'arrivée si nécessaire (pour le premier cycle)
+        if (this.lastArrivalTimeHome === undefined) this.lastArrivalTimeHome = 0;
+        if (this.lastArrivalTimeWork === undefined) this.lastArrivalTimeWork = -1; // Pas encore arrivé au travail initialement
+        if (this.requestedPathForDepartureTime === undefined) this.requestedPathForDepartureTime = -1;
 
-				if (timeInCurrentDayCycle >= departWorkTime) {
-					// console.log(`Agent ${this.id}: Departing for work at ${currentGameTime.toFixed(0)} (Target: ${departWorkTime.toFixed(0)})`);
-					this.departureTimeGame = currentGameTime; // Enregistrer l'heure de départ réelle (ou departWorkTime?)
-					this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
-					this.currentState = AgentState.IN_TRANSIT_TO_WORK;
-					this.isVisible = true; // Devient visible en partant
-					this.currentPathIndexVisual = 0; // Prêt pour l'interpolation visuelle
-					this.visualInterpolationProgress = 0;
-				}
-				break;
+        // --- Machine d'état ---
+        switch (this.currentState) {
+            case AgentState.AT_HOME:
+                this.isVisible = false; // Assurer invisibilité
 
-			case AgentState.IN_TRANSIT_TO_WORK:
-				// Vérifier si l'heure d'arrivée est atteinte
-				if (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
-					// console.log(`Agent ${this.id}: Arrived at work at ${currentGameTime.toFixed(0)} (Scheduled: ${this.arrivalTmeGame.toFixed(0)})`);
-					this.currentState = AgentState.AT_WORK;
-					this.isVisible = false; // Disparaît en arrivant
-					this.position.copy(this.workPosition); // Snap visuel final
-					this.position.y += this.yOffset;
-					// Réinitialiser les infos de trajet
-					this.currentPathPoints = null;
-					this.departureTimeGame = -1;
-					this.arrivalTmeGame = -1;
-					this.calculatedTravelDurationGame = 0;
-					// TODO: Notifier CitizenManager ou autre système de l'arrivée pour stats
-				}
-				break;
+                // 1. Trouver la PROCHAINE heure de départ pour le travail prévue
+                //    qui est strictement APRÈS la dernière arrivée enregistrée à la maison.
+                let nextScheduledDepartureWork = departWorkTime;
+                while (nextScheduledDepartureWork <= this.lastArrivalTimeHome) {
+                    nextScheduledDepartureWork += dayDurationMs;
+                }
 
-			case AgentState.AT_WORK:
-				// Vérifier s'il est temps de se préparer à rentrer
-				let effectivePrepareHomeTime = prepareHomeTime;
-				if (timeInCurrentDayCycle < departHomeTime && prepareHomeTime > departHomeTime) {
-					effectivePrepareHomeTime = prepareHomeTime - dayDurationMs;
-				}
+                // 2. Vérifier si le temps actuel a DÉPASSÉ cette prochaine heure de départ
+                if (currentGameTime >= nextScheduledDepartureWork) {
+                    // 3. Vérifier si une requête a DÉJÀ été faite pour CE départ spécifique
+                    if (this.requestedPathForDepartureTime < nextScheduledDepartureWork) {
+                        // 4. Vérifier les prérequis pour la requête (destination, nœuds valides)
+                        if (this.workPosition && this.homeGridNode && this.workGridNode) {
+                            // console.log(`Agent ${this.id}: Work departure time ${nextScheduledDepartureWork.toFixed(0)} passed at ${currentGameTime.toFixed(0)}. Requesting path.`);
+                            // Marquer la requête pour ce départ
+                            this.requestedPathForDepartureTime = nextScheduledDepartureWork;
+                            // Demander le chemin (l'état passera à REQUESTING...)
+                            this.requestPath(this.homePosition, this.workPosition, this.homeGridNode, this.workGridNode, AgentState.READY_TO_LEAVE_FOR_WORK);
+                        } else {
+                            // Ne peut pas demander si nœuds/destination manquants. Reste AT_HOME.
+                            // Marquer pour éviter spam de logs pour ce cycle.
+                            if(this.requestedPathForDepartureTime < nextScheduledDepartureWork) {
+                                console.warn(`Agent ${this.id}: Cannot request work path for departure ${nextScheduledDepartureWork.toFixed(0)} due to missing nodes/position.`);
+                                this.requestedPathForDepartureTime = nextScheduledDepartureWork;
+                            }
+                        }
+                    }
+                    // else : Chemin déjà demandé pour ce départ ou départ déjà effectué.
+                }
+                // else : Pas encore l'heure pour le prochain départ travail.
+                break;
 
-				if (this.homePosition && this.workGridNode && this.homeGridNode &&
-					timeInCurrentDayCycle >= effectivePrepareHomeTime && timeInCurrentDayCycle < departHomeTime)
-				{
-					// console.log(`Agent ${this.id}: Time to prepare for home (Current: ${timeInCurrentDayCycle.toFixed(0)}, Prepare: ${prepareHomeTime.toFixed(0)})`);
-					this.requestPath(this.workPosition, this.homePosition, this.workGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME);
-				}
-				break;
+            case AgentState.AT_WORK:
+                this.isVisible = false; // Assurer invisibilité
 
-			case AgentState.READY_TO_LEAVE_FOR_HOME:
-				// Attendre l'heure H pour partir de travail
-				let effectiveDepartHomeTime = departHomeTime;
-				// ... (gestion passage minuit si nécessaire, similaire à work) ...
+                // Gérer le cas où l'agent n'a pas encore de temps d'arrivée au travail enregistré
+                 if (this.lastArrivalTimeWork < 0) {
+                    // Si on est AT_WORK sans heure d'arrivée, c'est probablement l'état initial
+                    // ou une situation anormale. On utilise 0 ou currentGameTime comme référence ?
+                    // Utilisons currentGameTime pour éviter boucle infinie si on arrive AT_WORK avant departHomeTime
+                    this.lastArrivalTimeWork = currentGameTime;
+                    console.warn(`Agent ${this.id}: Setting lastArrivalTimeWork to current time (${currentGameTime.toFixed(0)}) as it was uninitialized.`);
+                 }
 
-				if (timeInCurrentDayCycle >= departHomeTime) {
-					// console.log(`Agent ${this.id}: Departing for home at ${currentGameTime.toFixed(0)} (Target: ${departHomeTime.toFixed(0)})`);
-					this.departureTimeGame = currentGameTime;
-					this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
-					this.currentState = AgentState.IN_TRANSIT_TO_HOME;
-					this.isVisible = true;
-					this.currentPathIndexVisual = 0;
-					this.visualInterpolationProgress = 0;
-				}
-				break;
+                // 1. Trouver la PROCHAINE heure de départ pour la maison prévue
+                //    qui est strictement APRÈS la dernière arrivée enregistrée au travail.
+                let nextScheduledDepartureHome = departHomeTime;
+                while (nextScheduledDepartureHome <= this.lastArrivalTimeWork) {
+                    nextScheduledDepartureHome += dayDurationMs;
+                }
 
-			case AgentState.IN_TRANSIT_TO_HOME:
-				// Vérifier si l'heure d'arrivée est atteinte
-				if (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
-					// console.log(`Agent ${this.id}: Arrived home at ${currentGameTime.toFixed(0)} (Scheduled: ${this.arrivalTmeGame.toFixed(0)})`);
-					this.currentState = AgentState.AT_HOME;
-					this.isVisible = false;
-					this.position.copy(this.homePosition); // Snap visuel final
-					this.position.y += this.yOffset;
-					// Réinitialiser
-					this.currentPathPoints = null;
-					this.departureTimeGame = -1;
-					this.arrivalTmeGame = -1;
-					this.calculatedTravelDurationGame = 0;
-					// TODO: Notifier CitizenManager ou autre système
-				}
-				break;
+                // 2. Vérifier si le temps actuel a DÉPASSÉ cette prochaine heure de départ
+                if (currentGameTime >= nextScheduledDepartureHome) {
+                    // 3. Vérifier si une requête a DÉJÀ été faite pour CE départ spécifique
+                    if (this.requestedPathForDepartureTime < nextScheduledDepartureHome) {
+                        // 4. Vérifier les prérequis
+                        if (this.homePosition && this.workGridNode && this.homeGridNode) {
+                            // console.log(`Agent ${this.id}: Home departure time ${nextScheduledDepartureHome.toFixed(0)} passed at ${currentGameTime.toFixed(0)}. Requesting path.`);
+                            this.requestedPathForDepartureTime = nextScheduledDepartureHome;
+                            this.requestPath(this.workPosition, this.homePosition, this.workGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME);
+                        } else {
+                             if(this.requestedPathForDepartureTime < nextScheduledDepartureHome) {
+                                console.warn(`Agent ${this.id}: Cannot request home path for departure ${nextScheduledDepartureHome.toFixed(0)} due to missing nodes/position.`);
+                                this.requestedPathForDepartureTime = nextScheduledDepartureHome;
+                            }
+                        }
+                    }
+                }
+                break;
 
-			// Cas IDLE, REQUESTING_PATH... : ne font rien dans la boucle de state principale
-			case AgentState.IDLE:
-			case AgentState.PREPARING_TO_LEAVE_FOR_WORK: // Ces états sont transitoires ou gérés par d'autres logiques
-			case AgentState.REQUESTING_PATH_FOR_WORK:
-			case AgentState.PREPARING_TO_LEAVE_FOR_HOME:
-			case AgentState.REQUESTING_PATH_FOR_HOME:
-				break;
-		}
-	}
+             // --- États liés à la réception du chemin et au départ effectif ---
+            case AgentState.REQUESTING_PATH_FOR_WORK:
+            case AgentState.REQUESTING_PATH_FOR_HOME:
+                this.isVisible = false; // Reste caché pendant la requête
+                // Attend passivement l'appel à setPath par AgentManager
+                break;
+
+            case AgentState.READY_TO_LEAVE_FOR_WORK:
+                this.isVisible = false; // Reste caché jusqu'au départ
+
+                // Vérifier si le chemin est valide (sécurité)
+                if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) {
+                    console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_WORK but path invalid. Reverting to AT_HOME.`);
+                    this.currentState = AgentState.AT_HOME; // Retour état stable précédent
+                    this.lastArrivalTimeHome = currentGameTime; // Considérer arrivé maintenant pour éviter boucle
+                    this.requestedPathForDepartureTime = -1; // Réinitialiser la demande
+                    break;
+                }
+
+                // Trouver l'heure de départ planifiée la plus récente <= temps actuel
+                const cyclesW = Math.floor((currentGameTime - this.exactWorkDepartureTimeGame) / dayDurationMs);
+                const lastSchedDepW = this.exactWorkDepartureTimeGame + cyclesW * dayDurationMs;
+                let effectiveDepTimeW = lastSchedDepW;
+                // S'assurer qu'on ne prend pas une heure dans le futur (ne devrait pas arriver si on est READY)
+                if (effectiveDepTimeW > currentGameTime) effectiveDepTimeW -= dayDurationMs;
+                // Ne pas partir avant le tout premier horaire prévu
+                effectiveDepTimeW = Math.max(effectiveDepTimeW, this.exactWorkDepartureTimeGame);
+
+                // Si l'heure actuelle >= l'heure effective de départ calculée (basée sur schedule)
+                // Note: On est déjà dans READY, donc la condition de temps est forcément passée
+                //       On part dès qu'on a le chemin ET que l'heure est passée.
+                 if (currentGameTime >= effectiveDepTimeW) { // Cette condition est techniquement redondante si on arrive ici
+                    // console.log(`Agent ${this.id}: Departing for work now. Game Time: ${currentGameTime.toFixed(0)} (Departure based on scheduled: ${effectiveDepTimeW.toFixed(0)})`);
+                    this.departureTimeGame = effectiveDepTimeW; // Utiliser le temps basé sur le schedule
+                    this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
+                    this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                    this.isVisible = true;
+                    this.currentPathIndexVisual = 0;
+                    this.visualInterpolationProgress = 0;
+
+                    // Incrémenter stats (utilisation de l'heure effective de départ)
+                    const departHourW = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24));
+                    const agentManagerW = this.experience.world?.agentManager;
+                    if (agentManagerW?.stats?.pathsToWorkByHour) {
+                        agentManagerW.stats.pathsToWorkByHour[departHourW] = (agentManagerW.stats.pathsToWorkByHour[departHourW] || 0) + 1;
+                    }
+                }
+                break;
+
+            case AgentState.READY_TO_LEAVE_FOR_HOME:
+                this.isVisible = false;
+
+                 // Vérifier si le chemin est valide
+                if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) {
+                    console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_HOME but path invalid. Reverting to AT_WORK.`);
+                    this.currentState = AgentState.AT_WORK;
+                    this.lastArrivalTimeWork = currentGameTime;
+                    this.requestedPathForDepartureTime = -1;
+                    break;
+                }
+
+                // Trouver l'heure de départ planifiée la plus récente <= temps actuel
+                const cyclesH = Math.floor((currentGameTime - this.exactHomeDepartureTimeGame) / dayDurationMs);
+                const lastSchedDepH = this.exactHomeDepartureTimeGame + cyclesH * dayDurationMs;
+                 let effectiveDepTimeH = lastSchedDepH;
+                 if (effectiveDepTimeH > currentGameTime) effectiveDepTimeH -= dayDurationMs;
+                 effectiveDepTimeH = Math.max(effectiveDepTimeH, this.exactHomeDepartureTimeGame);
+
+                // Si l'heure actuelle >= l'heure effective de départ calculée
+                if (currentGameTime >= effectiveDepTimeH) {
+                    // console.log(`Agent ${this.id}: Departing for home now. Game Time: ${currentGameTime.toFixed(0)} (Departure based on scheduled: ${effectiveDepTimeH.toFixed(0)})`);
+                    this.departureTimeGame = effectiveDepTimeH; // Utiliser le temps basé sur le schedule
+                    this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
+                    this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                    this.isVisible = true;
+                    this.currentPathIndexVisual = 0;
+                    this.visualInterpolationProgress = 0;
+
+                    // Incrémenter stats
+                    const departHourH = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24));
+                    const agentManagerH = this.experience.world?.agentManager;
+                     if (agentManagerH?.stats?.pathsToHomeByHour) {
+                        agentManagerH.stats.pathsToHomeByHour[departHourH] = (agentManagerH.stats.pathsToHomeByHour[departHourH] || 0) + 1;
+                    }
+                }
+                break;
+
+            // --- États de Transit (vérification arrivée) ---
+            case AgentState.IN_TRANSIT_TO_WORK:
+                this.isVisible = true; // Assurer visibilité
+
+                // Vérifier si l'heure d'arrivée (basée sur départ planifié) est atteinte
+                if (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
+                    // console.log(`Agent ${this.id}: Arrived at work. Game Time: ${currentGameTime.toFixed(0)} (Scheduled Arrival: ${this.arrivalTmeGame.toFixed(0)})`);
+                    this.currentState = AgentState.AT_WORK;
+                    this.lastArrivalTimeWork = this.arrivalTmeGame; // Enregistrer l'heure d'arrivée
+                    this.requestedPathForDepartureTime = -1; // Réinitialiser pour le prochain départ (maison)
+                    this.isVisible = false;
+                    if (this.workPosition) {
+                        this.position.copy(this.workPosition);
+                        this.position.y += this.yOffset;
+                    }
+                    // Réinitialiser les données de trajet
+                    this.currentPathPoints = null; this.departureTimeGame = -1; this.arrivalTmeGame = -1;
+                    this.calculatedTravelDurationGame = 0; this.currentPathLengthWorld = 0;
+                }
+                // Le déplacement visuel est géré dans updateVisuals
+                break;
+
+            case AgentState.IN_TRANSIT_TO_HOME:
+                this.isVisible = true;
+
+                // Vérifier si l'heure d'arrivée est atteinte
+                if (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
+                    // console.log(`Agent ${this.id}: Arrived home. Game Time: ${currentGameTime.toFixed(0)} (Scheduled Arrival: ${this.arrivalTmeGame.toFixed(0)})`);
+                    this.currentState = AgentState.AT_HOME;
+                    this.lastArrivalTimeHome = this.arrivalTmeGame; // Enregistrer l'heure d'arrivée
+                    this.requestedPathForDepartureTime = -1; // Réinitialiser pour le prochain départ (travail)
+                    this.isVisible = false;
+                    if (this.homePosition) {
+                        this.position.copy(this.homePosition);
+                        this.position.y += this.yOffset;
+                    }
+                    // Réinitialiser les données de trajet
+                    this.currentPathPoints = null; this.departureTimeGame = -1; this.arrivalTmeGame = -1;
+                    this.calculatedTravelDurationGame = 0; this.currentPathLengthWorld = 0;
+                }
+                // Le déplacement visuel est géré dans updateVisuals
+                break;
+
+            case AgentState.IDLE:
+                // Reste IDLE, ne fait rien activement ici. Pourrait tenter de s'initialiser si besoin.
+                this.isVisible = false;
+                break;
+
+        } // Fin switch(this.currentState)
+    } // Fin updateState
 
 	updateVisuals(deltaTime, currentGameTime) {
         if (this.currentState !== AgentState.IN_TRANSIT_TO_WORK && this.currentState !== AgentState.IN_TRANSIT_TO_HOME) {
@@ -472,9 +598,6 @@ export default class Agent {
         }
 
         // Calculer animation de marche (inchangé)
-		console.log("AAAAAAAAAAA");
-
-		console.log(this.experience.world);
         const effectiveAnimationSpeed = this.visualSpeed * (this.experience.world.cityManager.config.agentAnimationSpeedFactor ?? 1.0);
         const walkTime = currentGameTime / 1000 * effectiveAnimationSpeed;
         this._updateWalkAnimation(walkTime);

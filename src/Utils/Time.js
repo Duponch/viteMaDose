@@ -14,7 +14,7 @@ export default class Time extends EventTarget {
         // Contrôle du temps
         this.timeScale = 1.0; // Échelle de temps (1.0 = vitesse normale)
         this._isPaused = false;
-        this.speedSteps = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16, 32, 64, 128]; // Vitesses prédéfinies
+        this.speedSteps = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096]; // Vitesses prédéfinies
 
         // Lancement de la boucle de tick dès l'instanciation
         window.requestAnimationFrame(() => {
