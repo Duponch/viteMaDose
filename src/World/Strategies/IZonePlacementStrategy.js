@@ -163,15 +163,13 @@ export default class IZonePlacementStrategy {
              return null;
         }
 
-        // Calculer l'espace restant et la taille des gaps
-        const totalUsedWidth = numItemsX * itemWidth + (numItemsX - 1) * minSpacing;
-        const remainingWidth = plot.width - totalUsedWidth;
-        const gapX = (numItemsX > 0) ? Math.max(0, remainingWidth / (numItemsX + 1)) : 0; // Évite division par zéro si numItemsX=0
+        // calcul de l'espace occupé par les items + espacement minimal
+		const totalUsedWidth = numItemsX * itemWidth + (numItemsX - 1) * minSpacing;
+		const totalUsedDepth = numItemsY * itemDepth + (numItemsY - 1) * minSpacing;
 
-        const totalUsedDepth = numItemsY * itemDepth + (numItemsY - 1) * minSpacing;
-        const remainingDepth = plot.depth - totalUsedDepth;
-        const gapZ = (numItemsY > 0) ? Math.max(0, remainingDepth / (numItemsY + 1)) : 0; // Évite division par zéro si numItemsY=0
-
+		// moitié de l'espace restant : c'est la marge qu'on applique en début de grille
+		const gapX = Math.max(0, (plot.width  - totalUsedWidth ) / 2);
+		const gapZ = Math.max(0, (plot.depth  - totalUsedDepth) / 2);
 
         return { numItemsX, numItemsY, gapX, gapZ };
     }
