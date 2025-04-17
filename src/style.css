@@ -350,19 +350,33 @@ button {
 
 /* ... (vos styles existants) ... */
 
+.time-controls button {
+	border-radius: 100px;
+	background-color: rgba(0, 0, 0, 0.6);
+	color: white;
+	width: 40px;
+	height: 40px;
+	font-size: 1.2em;
+	line-height: 1;
+	padding: 5px 10px;
+	/* z-index: 1000; <-- Pas nécessaire ici si le parent a le bon z-index */
+  }
+
 #agent-stats-toggle {
     position: absolute;
     bottom: 20px;
     left: 20px; /* Position en bas à gauche */
     z-index: 101;
-    padding: 8px 12px;
     cursor: pointer;
-    background-color: rgba(0, 0, 0, 0.6);
-    color: white;
-    border-radius: 100px;
     font-family: inherit; /* Hérite de body/root */
-    font-size: 1em;     /* Hérite de body/root */
     transition: background-color 0.2s ease; /* Effet au survol */
+	border-radius: 100px;
+	background-color: rgba(0, 0, 0, 0.6);
+	color: white;
+	width: 40px;
+	height: 40px;
+	font-size: 1.2em;
+	padding: 0;
 }
 
 #agent-stats-toggle:hover {
@@ -425,6 +439,9 @@ button {
     margin-bottom: 6px;
     font-size: 0.95em;
     word-break: break-word; /* Coupe les mots/IDs longs */
+    background-color: rgba(255, 255, 255, 0.07); /* Léger fond pour voir la zone */
+	padding: 10px;
+	border-radius: 5px;
 }
 
 #agent-list-section li b {
@@ -446,8 +463,8 @@ button {
 /* Canvas des Graphiques */
 #agent-stats-panel canvas {
     width: 100%; /* Prend toute la largeur dispo */
-    height: 180px; /* Hauteur fixe */
+    height: 160px; /* Hauteur fixe */
     display: block; /* Évite les espaces étranges */
-    background-color: rgba(0, 0, 0, 0.1); /* Léger fond pour voir la zone */
+    background-color: rgba(0, 0, 0, 0.5); /* Léger fond pour voir la zone */
     border-radius: 4px;
 }

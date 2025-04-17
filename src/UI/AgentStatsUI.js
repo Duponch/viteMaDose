@@ -49,7 +49,7 @@ export default class AgentStatsUI {
 		// --- Bouton pour ouvrir/fermer ---
 		this.elements.toggleButton = document.createElement('button');
 		this.elements.toggleButton.id = 'agent-stats-toggle'; // ID pour CSS
-		this.elements.toggleButton.textContent = '📊 Stats Agents';
+		this.elements.toggleButton.textContent = '🗠';
 		this.elements.toggleButton.title = 'Afficher/Masquer les statistiques des agents';
 		this.elements.toggleButton.dataset.uiInteractive = 'true'; // Garder pour la logique de clic
 		this.container.appendChild(this.elements.toggleButton);
