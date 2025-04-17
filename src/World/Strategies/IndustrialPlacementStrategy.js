@@ -73,6 +73,9 @@ export default class IndustrialPlacementStrategy extends IZonePlacementStrategy 
 
         for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
             for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
+				if (rowIndex > 0 && rowIndex < numItemsY - 1 && colIndex > 0 && colIndex < numItemsX - 1) {
+					continue;
+				}
                 const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + minSpacing)) + targetBuildingWidth / 2;
                 const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + minSpacing)) + targetBuildingDepth / 2;
 

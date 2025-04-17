@@ -142,7 +142,7 @@ export default class CityManager {
             agentHeadTiltAmplitude: 0.08,
             agentHeadBobAmplitude: 0.06,
             agentAnimationSpeedFactor: 8,
-            maxAgents: 20,
+            maxAgents: 500,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
