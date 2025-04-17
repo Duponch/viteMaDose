@@ -10,21 +10,31 @@ export default class AgentStatsUI {
         this.updateInterval = 1000;
         this.intervalId = null;
 
-        // --- NOUVEAU: Liaison pour le gestionnaire de clic extérieur ---
-        this._boundHandleOutsideClick = this._handleOutsideClick.bind(this);
+        // --- NOUVEAU: États pour détecter clic vs drag ---
+        this.isPointerDown = false;
+        this.pointerDownTime = 0;
+        this.pointerDownPosition = { x: 0, y: 0 };
+        this.MAX_CLICK_DURATION = 200; // ms (Doit correspondre à Experience.js)
+        this.MAX_CLICK_DISTANCE_SQ = 25; // pixels au carré (Doit correspondre à Experience.js)
         // --- FIN NOUVEAU ---
 
-        // Vérification AgentManager (pas besoin du getter ici, on le fera plus tard)
-        if (!this.experience.world?.agentManager) {
-            console.error("AgentStatsUI: AgentManager non trouvé lors de l'initialisation ! L'UI ne fonctionnera pas.");
-            // Ne pas arrêter complètement, permet au moins d'afficher le bouton
-        }
+        // Liaisons des gestionnaires
+        this._boundHandleMouseDown = this._handleMouseDown.bind(this);
+        this._boundHandleMouseUp = this._handleMouseUp.bind(this); // Renommé pour clarté
 
+        // ... (vérification AgentManager) ...
         this._createElements();
         this._setupEventListeners();
+        // ... (vérification World) ...
+    }
 
-        if (!this.experience.world) {
-             console.error("AgentStatsUI: World n'est pas disponible dans Experience !");
+	_handleMouseDown(event) {
+        // Enregistrer l'état seulement si le bouton principal (gauche) est pressé
+        if (event.button === 0) {
+            this.isPointerDown = true;
+            this.pointerDownTime = Date.now();
+            this.pointerDownPosition.x = event.clientX;
+            this.pointerDownPosition.y = event.clientY;
         }
     }
 
@@ -86,25 +96,42 @@ export default class AgentStatsUI {
 	}
 
     // --- NOUVEAU : Gestionnaire pour les clics en dehors du panneau ---
-    _handleOutsideClick(event) {
-		// Vérifier si le panneau est visible
-		if (!this.isVisible) return;
-	
-		// --- MODIFICATION : Vérifier si le clic a eu lieu sur un élément UI marqué ---
-		// event.target.closest vérifie si l'élément cliqué OU un de ses parents
-		// possède l'attribut spécifié.
-		const clickedOnInteractiveUI = event.target.closest('[data-ui-interactive="true"]');
-	
-		// Si le clic N'A PAS eu lieu sur un élément UI interactif, alors on ferme.
-		if (!clickedOnInteractiveUI) {
-			console.log("Outside click detected, closing stats panel."); // Debug
-			this.hide();
-		} else {
-			// Optionnel: log pour voir quel élément UI a été cliqué
-			// console.log("Clicked on interactive UI:", clickedOnInteractiveUI);
-		}
-		// --- FIN MODIFICATION ---
-	}
+    _handleMouseUp(event) {
+        // 1. Vérifier si le panneau est visible ET si un mousedown avait été enregistré par CETTE UI
+        if (!this.isVisible || !this.isPointerDown || event.button !== 0) {
+            this.isPointerDown = false; // Réinitialiser au cas où
+            return;
+        }
+
+        // Marquer que le bouton est relâché
+        this.isPointerDown = false;
+
+        // 2. Calculer durée et distance
+        const clickDuration = Date.now() - this.pointerDownTime;
+        const deltaX = event.clientX - this.pointerDownPosition.x;
+        const deltaY = event.clientY - this.pointerDownPosition.y;
+        const distanceSq = deltaX * deltaX + deltaY * deltaY;
+
+        // 3. Vérifier si c'était un "vrai" clic (court et sans bouger)
+        const isRealClick = clickDuration <= this.MAX_CLICK_DURATION && distanceSq <= this.MAX_CLICK_DISTANCE_SQ;
+
+        // 4. Si ce n'était PAS un vrai clic (c'était un drag ou un clic long), ne rien faire
+        if (!isRealClick) {
+            // console.log("MouseUp ignored (drag or long press). Duration:", clickDuration, "DistSq:", distanceSq); // Debug
+            return;
+        }
+
+        // 5. Si c'était un vrai clic, vérifier s'il était en dehors de l'UI interactive
+        const clickedOnInteractiveUI = event.target.closest('[data-ui-interactive="true"]');
+
+        // 6. Si clic valide ET en dehors de l'UI -> Fermer
+        if (!clickedOnInteractiveUI) {
+            // console.log("Valid outside click detected, closing stats panel."); // Debug
+            this.hide();
+        } else {
+            // console.log("Valid click detected, but inside UI:", clickedOnInteractiveUI); // Debug
+        }
+    }
     // --- FIN NOUVEAU ---
 
     _setupEventListeners() {
@@ -116,45 +143,36 @@ export default class AgentStatsUI {
         // Note: L'ajout/suppression de l'écouteur 'outsideClick' se fait dans show/hide
     }
 
-    // --- NOUVELLE METHODE : Pour cacher le panneau ---
     hide() {
-        if (!this.isVisible) return; // Déjà caché
-
+        if (!this.isVisible) return;
         this.isVisible = false;
         this.elements.statsPanel.style.display = 'none';
-
-        // Arrêter l'intervalle de mise à jour
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
         }
-        // Retirer l'écouteur de clic extérieur
-        document.removeEventListener('click', this._boundHandleOutsideClick, true); // Utiliser capture phase pour intercepter avant d'autres clics
-        console.log("AgentStatsUI hidden, interval stopped, outside click listener removed.");
+        // Retirer les écouteurs globaux
+        document.removeEventListener('mousedown', this._boundHandleMouseDown, true); // Capture phase
+        document.removeEventListener('mouseup', this._boundHandleMouseUp, true);     // Capture phase
+        // console.log("AgentStatsUI hidden, listeners removed."); // Debug
     }
-    // --- FIN NOUVELLE METHODE ---
 
-    // --- NOUVELLE METHODE : Pour afficher le panneau ---
     show() {
-        if (this.isVisible) return; // Déjà visible
-
+        if (this.isVisible) return;
         this.isVisible = true;
         this.elements.statsPanel.style.display = 'block';
-        this.update(); // Mise à jour immédiate à l'ouverture
-
-        // Démarrer l'intervalle de mise à jour
-        if (this.intervalId) clearInterval(this.intervalId); // Sécurité
+        this.update();
+        if (this.intervalId) clearInterval(this.intervalId);
         this.intervalId = setInterval(() => this.update(), this.updateInterval);
-
-        // Ajouter l'écouteur de clic extérieur (léger délai pour éviter qu'il se déclenche avec le clic d'ouverture)
+        // Ajouter les écouteurs globaux (léger délai pour éviter fermeture immédiate)
+        // Utiliser la phase de capture (true) pour intercepter avant OrbitControls
         setTimeout(() => {
-            document.addEventListener('click', this._boundHandleOutsideClick, true); // Utiliser capture phase
-            console.log("AgentStatsUI shown, interval started, outside click listener added.");
+            document.addEventListener('mousedown', this._boundHandleMouseDown, true);
+            document.addEventListener('mouseup', this._boundHandleMouseUp, true);
+            // console.log("AgentStatsUI shown, listeners added."); // Debug
         }, 0);
     }
-    // --- FIN NOUVELLE METHODE ---
 
-    // --- MODIFIÉ : toggleVisibility utilise show/hide ---
     toggleVisibility() {
         if (this.isVisible) {
             this.hide();
@@ -162,7 +180,6 @@ export default class AgentStatsUI {
             this.show();
         }
     }
-    // --- FIN MODIFICATION ---
 
     update() {
         // ... (code de la méthode update inchangé - utilise le getter agentManager) ...
@@ -261,17 +278,17 @@ export default class AgentStatsUI {
 
     destroy() {
         console.log("Destroying AgentStatsUI...");
-        // --- MODIFIÉ : Assurer le nettoyage de l'écouteur extérieur ---
         if (this.intervalId) clearInterval(this.intervalId);
-        document.removeEventListener('click', this._boundHandleOutsideClick, true); // Nettoyer l'écouteur
-        // --- FIN MODIFICATION ---
+        // Retirer les écouteurs globaux
+        document.removeEventListener('mousedown', this._boundHandleMouseDown, true);
+        document.removeEventListener('mouseup', this._boundHandleMouseUp, true);
 
+        // ... (reste du destroy : charts, éléments DOM, références) ...
         if (this.charts.workChart) this.charts.workChart.destroy();
         if (this.charts.homeChart) this.charts.homeChart.destroy();
         this.elements.toggleButton?.remove();
         this.elements.statsPanel?.remove();
         this.experience = null;
-        // agentManager n'est pas stocké directement, pas besoin de le nullifier
         this.container = null;
         this.elements = {};
         console.log("AgentStatsUI destroyed.");

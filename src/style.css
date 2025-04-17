@@ -433,8 +433,6 @@ button {
     min-width: 150px; /* Alignement des : */
 }
 
-#agent-work-chart {}
-
 /* Titres des Graphiques */
 #agent-stats-panel h4#agent-work-chart-title,
 #agent-stats-panel h4#agent-home-chart-title {
