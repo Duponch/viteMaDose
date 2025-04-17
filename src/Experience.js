@@ -1056,20 +1056,31 @@ export default class Experience extends EventTarget {
         if (this.timeUI) this.timeUI.update(); // Utilise environment.cycleTime qui est MAJ par env.update()
         // AgentStatsUI est mis à jour par son propre intervalle
 
-        // --- 4. Tooltips (Logique de positionnement inchangée) ---
-         if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
-             this.tooltipTargetPosition.copy(this.selectedAgent.position).add(new THREE.Vector3(0, this.selectedAgent.scale * 8, 0)); // Offset basé sur scale agent
-             this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
-         } else if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
-             this.tooltipElement.style.display = 'none';
-         }
-         if (this.selectedBuildingInfo && this.buildingTooltipElement && this.highlightMesh?.visible) {
-             this.buildingTooltipTargetPosition.copy(this.highlightMesh.position).add(new THREE.Vector3(0, this.highlightMesh.scale.y / 2 + 2, 0)); // Au dessus du highlight
-             this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
-         } else if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') {
-             this.buildingTooltipElement.style.display = 'none';
-         }
+        // --- 4. Tooltips : rafraîchir CONTENU + position tant que la bulle reste ouverte ---
+        if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
+			// 4a. mettre à jour le HTML de la bulle
+			this.updateTooltipContent(this.selectedAgent);
+			// 4b. positionner la bulle
+			this.tooltipTargetPosition
+				.copy(this.selectedAgent.position)
+				.add(new THREE.Vector3(0, this.selectedAgent.scale * 8, 0));
+			this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
+		} else if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
+			// plus d'agent sélectionné → masquer la bulle
+			this.tooltipElement.style.display = 'none';
+		}
 
+		if (this.selectedBuildingInfo && this.buildingTooltipElement && this.highlightMesh?.visible) {
+			// 4c. mettre à jour le HTML de la bulle bâtiment
+			this.updateBuildingTooltipContent();
+			// 4d. positionner la bulle bâtiment
+			this.buildingTooltipTargetPosition
+				.copy(this.highlightMesh.position)
+				.add(new THREE.Vector3(0, this.highlightMesh.scale.y / 2 + 2, 0));
+			this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
+		} else if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') {
+			this.buildingTooltipElement.style.display = 'none';
+		}
 
         // --- 5. Rendu ---
         if (this.renderer) this.renderer.update();
