@@ -466,21 +466,32 @@ export default class AgentManager {
         // 3. Appliquer les mises à jour GPU pour les InstancedMesh (inchangé)
         if (needsBodyMatrixUpdate) {
             ['head', 'torso', 'hand', 'shoe'].forEach(k => {
-                if(this.instanceMeshes[k]?.instanceMatrix) this.instanceMeshes[k].instanceMatrix.needsUpdate = true;
+                if(this.instanceMeshes[k]?.instanceMatrix) {
+                     this.instanceMeshes[k].instanceMatrix.needsUpdate = true;
+                     // --> AJOUTER ICI : Mise à jour du bounding volume
+                     if (k === 'head' || k === 'torso') { // Recalculer seulement pour les parties cliquables
+                         this.instanceMeshes[k].computeBoundingSphere(); // Ou computeBoundingBox()
+                     }
+                     // <-- FIN AJOUT
+                }
             });
         }
         if (needsColorUpdate && this.instanceMeshes.torso.instanceColor) {
             this.instanceMeshes.torso.instanceColor.needsUpdate = true;
         }
-        if (needsAgentMarkerUpdate && this.instanceMeshes.agentMarker?.instanceMatrix) {
-            this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
-        }
-        if (needsHomeMarkerUpdate && this.instanceMeshes.homeMarker?.instanceMatrix) {
-            this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
-        }
-        if (needsWorkMarkerUpdate && this.instanceMeshes.workMarker?.instanceMatrix) {
-            this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
-        }
+        // ... (Mise à jour des markers debug) ...
+		if (needsAgentMarkerUpdate && this.instanceMeshes.agentMarker?.instanceMatrix) {
+		this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
+			//this.instanceMeshes.agentMarker.computeBoundingSphere(); // Optionnel pour les markers
+		}
+		if (needsHomeMarkerUpdate && this.instanceMeshes.homeMarker?.instanceMatrix) {
+			this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
+			// this.instanceMeshes.homeMarker.computeBoundingSphere(); // Optionnel pour les markers
+		}
+		if (needsWorkMarkerUpdate && this.instanceMeshes.workMarker?.instanceMatrix) {
+			this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
+			// this.instanceMeshes.workMarker.computeBoundingSphere(); // Optionnel pour les markers
+		}
     }
 
     destroy() {
