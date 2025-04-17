@@ -351,35 +351,105 @@ button {
 /* ... (vos styles existants) ... */
 
 #agent-stats-toggle {
-    /* Styles pour correspondre à vos autres boutons UI si nécessaire */
+    position: absolute;
+    bottom: 20px;
+    left: 20px; /* Position en bas à gauche */
+    z-index: 101;
+    padding: 8px 12px;
+    cursor: pointer;
     background-color: rgba(0, 0, 0, 0.6);
     color: white;
-    border: 1px solid #555;
-    border-radius: 5px;
+    border-radius: 100px;
+    font-family: inherit; /* Hérite de body/root */
+    font-size: 1em;     /* Hérite de body/root */
+    transition: background-color 0.2s ease; /* Effet au survol */
 }
 
+#agent-stats-toggle:hover {
+    background-color: #eee;
+	color: #000000;
+}
+
+/* Panneau Principal des Statistiques */
 #agent-stats-panel {
-    box-shadow: 0 5px 15px rgba(0,0,0,0.4);
-    /* Autres styles déjà définis en ligne, peuvent être mis ici */
-}
-
-#agent-stats-panel h3,
-#agent-stats-panel h4 {
-    color: #a7c5eb; /* Couleur pour les titres */
-}
-
-#agent-stats-panel ul {
-    list-style: none;
-    padding-left: 10px;
-    margin-top: 5px;
-}
-
-#agent-stats-panel li {
-    margin-bottom: 4px;
-    font-size: 0.95em;
-    word-break: break-all; /* Pour couper les longues listes d'IDs */
-}
-
-#agent-stats-panel b {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Centrage parfait */
+    width: clamp(400px, 60vw, 700px); /* Largeur responsive */
+    max-height: 75vh; /* Hauteur max responsive */
+    overflow-y: auto; /* Scroll vertical si nécessaire */
+    background-color: rgba(0, 0, 0, 0.85);
+    border-radius: 15px;
+    padding: 20px;
     color: #eee;
+    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif; /* Police système */
+    font-size: 1em;
+    z-index: 110;
+    /* display: none; est géré par JS via .style */
+}
+
+/* Titre du Panneau */
+#agent-stats-panel h3#agent-stats-title {
+    margin-top: 0;
+    margin-bottom: 15px; /* Espacement après le titre */
+    padding-bottom: 10px;
+    text-align: center;
+    font-size: 1.3em; /* Taille du titre */
+    color: #a7c5eb;
+    border-bottom: 1px solid #555;
+}
+
+/* Section Liste des Agents */
+#agent-list-section {
+    margin-bottom: 25px; /* Plus d'espace avant les graphiques */
+}
+
+#agent-list-section h4 {
+    margin-bottom: 10px;
+    color: #a7c5eb;
+}
+
+#agent-list-section ul {
+    list-style: none;
+    padding-left: 0; /* Pas de puce */
+    margin-top: 5px;
+    /* Mise en colonnes pour lisibilité si la liste est longue */
+    columns: 2;
+    -webkit-columns: 2;
+    -moz-columns: 2;
+    column-gap: 20px;
+}
+
+#agent-list-section li {
+    margin-bottom: 6px;
+    font-size: 0.95em;
+    word-break: break-word; /* Coupe les mots/IDs longs */
+}
+
+#agent-list-section li b {
+    color: #eee; /* Met en évidence l'état et le compte */
+    display: inline-block;
+    min-width: 150px; /* Alignement des : */
+}
+
+#agent-work-chart {}
+
+/* Titres des Graphiques */
+#agent-stats-panel h4#agent-work-chart-title,
+#agent-stats-panel h4#agent-home-chart-title {
+    margin-bottom: 8px;
+    margin-top: 20px; /* Espace avant le titre du graphique */
+    font-size: 1.1em;
+    color: #a7c5eb;
+    text-align: center;
+}
+
+/* Canvas des Graphiques */
+#agent-stats-panel canvas {
+    width: 100%; /* Prend toute la largeur dispo */
+    height: 180px; /* Hauteur fixe */
+    display: block; /* Évite les espaces étranges */
+    background-color: rgba(0, 0, 0, 0.1); /* Léger fond pour voir la zone */
+    border-radius: 4px;
 }

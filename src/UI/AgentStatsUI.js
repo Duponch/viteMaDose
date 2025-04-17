@@ -1,246 +1,277 @@
 // src/UI/AgentStatsUI.js
-import Chart from 'chart.js/auto'; // Importe Chart.js
+import Chart from 'chart.js/auto';
 
 export default class AgentStatsUI {
     constructor(experience) {
         this.experience = experience;
-
-        // Le reste du constructeur reste presque identique...
-        this.container = document.body;
         this.isVisible = false;
         this.elements = {};
         this.charts = { workChart: null, homeChart: null };
-
-		this.updateInterval = 1000; // Mettre à jour toutes les secondes (ajustable)
+        this.updateInterval = 1000;
         this.intervalId = null;
+
+        // --- NOUVEAU: Liaison pour le gestionnaire de clic extérieur ---
+        this._boundHandleOutsideClick = this._handleOutsideClick.bind(this);
+        // --- FIN NOUVEAU ---
+
+        // Vérification AgentManager (pas besoin du getter ici, on le fera plus tard)
+        if (!this.experience.world?.agentManager) {
+            console.error("AgentStatsUI: AgentManager non trouvé lors de l'initialisation ! L'UI ne fonctionnera pas.");
+            // Ne pas arrêter complètement, permet au moins d'afficher le bouton
+        }
 
         this._createElements();
         this._setupEventListeners();
 
-        // Ajout d'une vérification au cas où l'UI est créée mais World échoue
         if (!this.experience.world) {
              console.error("AgentStatsUI: World n'est pas disponible dans Experience !");
         }
     }
 
-	get agentManager() {
-        // Accède dynamiquement à agentManager quand nécessaire
+    // Getter pour AgentManager (inchangé)
+    get agentManager() {
         return this.experience.world?.agentManager;
     }
 
     _createElements() {
-        // --- Bouton pour ouvrir/fermer ---
-        this.elements.toggleButton = document.createElement('button');
-        this.elements.toggleButton.id = 'agent-stats-toggle';
-        this.elements.toggleButton.textContent = '📊 Stats Agents'; // Texte ou icône
-        this.elements.toggleButton.title = 'Afficher/Masquer les statistiques des agents';
-        // Style (ajuster selon votre CSS existant, ex: time-controls)
-        this.elements.toggleButton.style.position = 'absolute';
-        this.elements.toggleButton.style.bottom = '20px'; // Positionner près des contrôles de temps
-        this.elements.toggleButton.style.right = '240px'; // Ajuster pour ne pas chevaucher
-        this.elements.toggleButton.style.zIndex = '101';
-        this.elements.toggleButton.style.padding = '8px 12px';
-        this.elements.toggleButton.style.cursor = 'pointer';
-        this.container.appendChild(this.elements.toggleButton);
+		this.container = document.body;
+	
+		// --- Bouton pour ouvrir/fermer ---
+		this.elements.toggleButton = document.createElement('button');
+		this.elements.toggleButton.id = 'agent-stats-toggle'; // ID pour CSS
+		this.elements.toggleButton.textContent = '📊 Stats Agents';
+		this.elements.toggleButton.title = 'Afficher/Masquer les statistiques des agents';
+		this.elements.toggleButton.dataset.uiInteractive = 'true'; // Garder pour la logique de clic
+		this.container.appendChild(this.elements.toggleButton);
+	
+		// --- Panneau des statistiques ---
+		this.elements.statsPanel = document.createElement('div');
+		this.elements.statsPanel.id = 'agent-stats-panel'; // ID pour CSS
+		this.elements.statsPanel.dataset.uiInteractive = 'true'; // Garder pour la logique de clic
+		// --- IMPORTANT: Garder display:none ici pour le contrôle initial ---
+		this.elements.statsPanel.style.display = 'none';
+		// --- FIN IMPORTANT ---
+		this.container.appendChild(this.elements.statsPanel);
+	
+		// --- Contenu du panneau (Structure DOM uniquement) ---
+		const title = document.createElement('h3');
+		title.id = 'agent-stats-title'; // ID optionnel pour CSS
+		title.textContent = 'Statistiques des Agents';
+		this.elements.statsPanel.appendChild(title);
+	
+		this.elements.agentListSection = document.createElement('div');
+		this.elements.agentListSection.id = 'agent-list-section'; // ID pour CSS & JS update
+		// L'innerHTML sera défini dans _updateAgentList
+		this.elements.statsPanel.appendChild(this.elements.agentListSection);
+	
+		const workChartTitle = document.createElement('h4');
+		workChartTitle.id = 'agent-work-chart-title'; // ID optionnel pour CSS
+		workChartTitle.textContent = 'Agents allant au travail (par heure)';
+		this.elements.statsPanel.appendChild(workChartTitle);
+	
+		this.elements.workChartCanvas = document.createElement('canvas');
+		this.elements.workChartCanvas.id = 'agent-work-chart'; // ID pour JS (Chart.js) & CSS
+		this.elements.statsPanel.appendChild(this.elements.workChartCanvas);
+	
+		const homeChartTitle = document.createElement('h4');
+		homeChartTitle.id = 'agent-home-chart-title'; // ID optionnel pour CSS
+		homeChartTitle.textContent = 'Agents rentrant à la maison (par heure)';
+		this.elements.statsPanel.appendChild(homeChartTitle);
+	
+		this.elements.homeChartCanvas = document.createElement('canvas');
+		this.elements.homeChartCanvas.id = 'agent-home-chart'; // ID pour JS (Chart.js) & CSS
+		this.elements.statsPanel.appendChild(this.elements.homeChartCanvas);
+	
+		console.log("AgentStatsUI elements created (styles moved to CSS).");
+	}
 
-        // --- Panneau des statistiques ---
-        this.elements.statsPanel = document.createElement('div');
-        this.elements.statsPanel.id = 'agent-stats-panel';
-        // Style (position, taille, fond, etc.) - À adapter dans style.css
-        this.elements.statsPanel.style.position = 'absolute';
-        this.elements.statsPanel.style.bottom = '70px'; // Au-dessus du bouton
-        this.elements.statsPanel.style.right = '20px';
-        this.elements.statsPanel.style.width = '450px'; // Largeur ajustable
-        this.elements.statsPanel.style.maxHeight = '400px'; // Hauteur max avec scroll
-        this.elements.statsPanel.style.overflowY = 'auto'; // Scroll si contenu dépasse
-        this.elements.statsPanel.style.backgroundColor = 'rgba(30, 30, 40, 0.9)';
-        this.elements.statsPanel.style.border = '1px solid #555';
-        this.elements.statsPanel.style.borderRadius = '8px';
-        this.elements.statsPanel.style.padding = '15px';
-        this.elements.statsPanel.style.color = '#eee';
-        this.elements.statsPanel.style.fontFamily = 'sans-serif';
-        this.elements.statsPanel.style.fontSize = '0.9em';
-        this.elements.statsPanel.style.zIndex = '110'; // Au-dessus des autres UI
-        this.elements.statsPanel.style.display = 'none'; // Caché par défaut
-        this.container.appendChild(this.elements.statsPanel);
-
-        // --- Contenu du panneau ---
-        // Titre
-        const title = document.createElement('h3');
-        title.textContent = 'Statistiques des Agents';
-        title.style.marginTop = '0';
-        title.style.borderBottom = '1px solid #555';
-        title.style.paddingBottom = '5px';
-        this.elements.statsPanel.appendChild(title);
-
-        // Section Liste Agents par État
-        this.elements.agentListSection = document.createElement('div');
-        this.elements.agentListSection.id = 'agent-list-section';
-        this.elements.agentListSection.style.marginBottom = '15px';
-        this.elements.statsPanel.appendChild(this.elements.agentListSection);
-
-        // Section Graphique "Au Travail"
-        const workChartTitle = document.createElement('h4');
-        workChartTitle.textContent = 'Agents allant au travail (par heure)';
-        workChartTitle.style.marginBottom = '5px';
-        this.elements.statsPanel.appendChild(workChartTitle);
-        this.elements.workChartCanvas = document.createElement('canvas');
-        this.elements.workChartCanvas.id = 'agent-work-chart';
-        this.elements.workChartCanvas.style.width = '100%'; // Prendra la largeur du panel
-        this.elements.workChartCanvas.style.height = '150px'; // Hauteur fixe
-        this.elements.statsPanel.appendChild(this.elements.workChartCanvas);
-
-        // Section Graphique "À la Maison"
-        const homeChartTitle = document.createElement('h4');
-        homeChartTitle.textContent = 'Agents rentrant à la maison (par heure)';
-        homeChartTitle.style.marginTop = '15px';
-        homeChartTitle.style.marginBottom = '5px';
-        this.elements.statsPanel.appendChild(homeChartTitle);
-        this.elements.homeChartCanvas = document.createElement('canvas');
-        this.elements.homeChartCanvas.id = 'agent-home-chart';
-        this.elements.homeChartCanvas.style.width = '100%';
-        this.elements.homeChartCanvas.style.height = '150px';
-        this.elements.statsPanel.appendChild(this.elements.homeChartCanvas);
-    }
+    // --- NOUVEAU : Gestionnaire pour les clics en dehors du panneau ---
+    _handleOutsideClick(event) {
+		// Vérifier si le panneau est visible
+		if (!this.isVisible) return;
+	
+		// --- MODIFICATION : Vérifier si le clic a eu lieu sur un élément UI marqué ---
+		// event.target.closest vérifie si l'élément cliqué OU un de ses parents
+		// possède l'attribut spécifié.
+		const clickedOnInteractiveUI = event.target.closest('[data-ui-interactive="true"]');
+	
+		// Si le clic N'A PAS eu lieu sur un élément UI interactif, alors on ferme.
+		if (!clickedOnInteractiveUI) {
+			console.log("Outside click detected, closing stats panel."); // Debug
+			this.hide();
+		} else {
+			// Optionnel: log pour voir quel élément UI a été cliqué
+			// console.log("Clicked on interactive UI:", clickedOnInteractiveUI);
+		}
+		// --- FIN MODIFICATION ---
+	}
+    // --- FIN NOUVEAU ---
 
     _setupEventListeners() {
+        // Clic sur le bouton toggle (inchangé)
         this.elements.toggleButton.addEventListener('click', () => {
             this.toggleVisibility();
         });
 
-        // Optionnel: Écouter l'événement personnalisé si vous l'avez ajouté dans AgentManager
-        // this.experience.addEventListener('agentstatsupdated', () => {
-        //     if (this.isVisible) {
-        //         this.update();
-        //     }
-        // });
+        // Note: L'ajout/suppression de l'écouteur 'outsideClick' se fait dans show/hide
     }
 
-    toggleVisibility() {
-        this.isVisible = !this.isVisible;
-        this.elements.statsPanel.style.display = this.isVisible ? 'block' : 'none';
+    // --- NOUVELLE METHODE : Pour cacher le panneau ---
+    hide() {
+        if (!this.isVisible) return; // Déjà caché
 
-        if (this.isVisible) {
-            this.update(); // Mise à jour immédiate à l'ouverture
-            // --- NOUVEAU : Démarrer l'intervalle ---
-            if (this.intervalId) clearInterval(this.intervalId); // Sécurité: nettoyer ancien intervalle
-            this.intervalId = setInterval(() => this.update(), this.updateInterval);
-            // --- FIN NOUVEAU ---
-        } else {
-            // --- NOUVEAU : Arrêter l'intervalle ---
-            if (this.intervalId) {
-                clearInterval(this.intervalId);
-                this.intervalId = null;
-            }
-            // --- FIN NOUVEAU ---
-        }
-    }
+        this.isVisible = false;
+        this.elements.statsPanel.style.display = 'none';
 
-	update() {
-        // --- MODIFIÉ : Ne plus vérifier isVisible ici, car l'intervalle le gère ---
-        const agentManager = this.agentManager;
-        if (!agentManager) {
-            // Si agentManager disparaît pendant que le panneau est ouvert (peu probable mais possible)
-             if (this.intervalId) { // Arrêter l'intervalle si les données ne sont plus accessibles
-                 clearInterval(this.intervalId);
-                 this.intervalId = null;
-             }
-            return;
-        }
-        // --- FIN MODIFICATION ---
-
-
-        const stats = agentManager.getAgentStats();
-
-        this._updateAgentList(stats.agentsByState);
-        this._updateChart(this.charts.workChart, this.elements.workChartCanvas, stats.pathsToWorkByHour, 'Agents allant au travail');
-        this._updateChart(this.charts.homeChart, this.elements.homeChartCanvas, stats.pathsToHomeByHour, 'Agents rentrant à la maison');
-
-         // La ligne setTimeout est supprimée, géré par setInterval maintenant
-    }
-
-    _updateAgentList(agentsByState) {
-        let html = '<h4>Agents par État :</h4><ul>';
-        for (const state in agentsByState) {
-            const agentIds = agentsByState[state];
-            const count = agentIds.length;
-            // Limiter l'affichage des IDs si la liste est très longue
-            const displayIds = agentIds.slice(0, 15).join(', ') + (count > 15 ? '...' : '');
-            html += `<li><b>${state} (${count})</b>: ${count > 0 ? displayIds : 'Aucun'}</li>`;
-        }
-        html += '</ul>';
-        this.elements.agentListSection.innerHTML = html;
-    }
-
-    _updateChart(chartInstance, canvasElement, dataByHour, label) {
-        // ... (préparation ctx, labels, data - inchangé) ...
-        const ctx = canvasElement.getContext('2d');
-        if (!ctx) return;
-        const labels = Array.from({ length: 24 }, (_, i) => `${i}h`);
-        const data = labels.map((_, hour) => dataByHour[hour] || 0);
-
-        const chartData = {
-            labels: labels,
-            datasets: [{
-                label: label,
-                data: data,
-                backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                borderColor: 'rgba(75, 192, 192, 1)',
-                borderWidth: 1
-            }]
-        };
-
-        // --- OPTIONNEL : Désactiver les animations pour plus de fluidité ---
-        const chartOptions = {
-            animation: false, // <-- Désactiver toutes les animations
-            // Vous pouvez aussi cibler des animations spécifiques si besoin
-            // animation: {
-            //     duration: 0 // Durée d'animation à 0
-            // },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { stepSize: 1 }
-                }
-            },
-            responsive: true,
-            maintainAspectRatio: false
-        };
-        // --- FIN OPTIONNEL ---
-
-        const chartKey = (canvasElement.id === 'agent-work-chart') ? 'workChart' : 'homeChart';
-        if (!this.charts[chartKey]) {
-            this.charts[chartKey] = new Chart(ctx, {
-                type: 'bar',
-                data: chartData,
-                options: chartOptions // Utiliser les options (avec ou sans animation: false)
-            });
-        } else {
-            this.charts[chartKey].data = chartData;
-            // --- MODIFIÉ : Option pour mettre à jour sans animation ---
-            // this.charts[chartKey].update(); // Mise à jour standard (avec animations par défaut si non désactivées dans options)
-            this.charts[chartKey].update('none'); // <-- Tente de mettre à jour sans animation de transition
-            // Alternative: this.charts[chartKey].update({duration: 0});
-            // --- FIN MODIFICATION ---
-        }
-    }
-
-    destroy() {
-        console.log("Destroying AgentStatsUI...");
-        // --- NOUVEAU : Nettoyer l'intervalle ---
+        // Arrêter l'intervalle de mise à jour
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
         }
-         // --- FIN NOUVEAU ---
+        // Retirer l'écouteur de clic extérieur
+        document.removeEventListener('click', this._boundHandleOutsideClick, true); // Utiliser capture phase pour intercepter avant d'autres clics
+        console.log("AgentStatsUI hidden, interval stopped, outside click listener removed.");
+    }
+    // --- FIN NOUVELLE METHODE ---
 
-        // ... (reste du code destroy : charts, éléments DOM, références) ...
+    // --- NOUVELLE METHODE : Pour afficher le panneau ---
+    show() {
+        if (this.isVisible) return; // Déjà visible
+
+        this.isVisible = true;
+        this.elements.statsPanel.style.display = 'block';
+        this.update(); // Mise à jour immédiate à l'ouverture
+
+        // Démarrer l'intervalle de mise à jour
+        if (this.intervalId) clearInterval(this.intervalId); // Sécurité
+        this.intervalId = setInterval(() => this.update(), this.updateInterval);
+
+        // Ajouter l'écouteur de clic extérieur (léger délai pour éviter qu'il se déclenche avec le clic d'ouverture)
+        setTimeout(() => {
+            document.addEventListener('click', this._boundHandleOutsideClick, true); // Utiliser capture phase
+            console.log("AgentStatsUI shown, interval started, outside click listener added.");
+        }, 0);
+    }
+    // --- FIN NOUVELLE METHODE ---
+
+    // --- MODIFIÉ : toggleVisibility utilise show/hide ---
+    toggleVisibility() {
+        if (this.isVisible) {
+            this.hide();
+        } else {
+            this.show();
+        }
+    }
+    // --- FIN MODIFICATION ---
+
+    update() {
+        // ... (code de la méthode update inchangé - utilise le getter agentManager) ...
+         const agentManager = this.agentManager;
+         if (!agentManager) {
+              if (this.intervalId) {
+                  clearInterval(this.intervalId);
+                  this.intervalId = null;
+              }
+             return;
+         }
+         const stats = agentManager.getAgentStats();
+         this._updateAgentList(stats.agentsByState);
+         this._updateChart(this.charts.workChart, this.elements.workChartCanvas, stats.pathsToWorkByHour, 'Agents allant au travail');
+         this._updateChart(this.charts.homeChart, this.elements.homeChartCanvas, stats.pathsToHomeByHour, 'Agents rentrant à la maison');
+    }
+
+    _updateAgentList(agentsByState) {
+        // ... (code inchangé) ...
+         let html = '<h4>Agents par État :</h4><ul style="padding-left: 20px; columns: 2; -webkit-columns: 2; -moz-columns: 2;">'; // Style colonnes
+         for (const state in agentsByState) {
+             const agentIds = agentsByState[state];
+             const count = agentIds.length;
+             const displayIds = agentIds.slice(0, 10).join(', ') + (count > 10 ? '...' : ''); // Moins d'IDs par ligne
+             html += `<li style="margin-bottom: 5px;"><b style="color: #a7c5eb;">${state} (${count})</b>: ${count > 0 ? displayIds : 'Aucun'}</li>`; // Un peu de couleur
+         }
+         html += '</ul>';
+         this.elements.agentListSection.innerHTML = html;
+    }
+
+    _updateChart(chartInstance, canvasElement, dataByHour, label) {
+        // ... (code inchangé, incluant animation: false et update('none')) ...
+         if (!canvasElement) return;
+         const ctx = canvasElement.getContext('2d');
+         if (!ctx) return;
+         const labels = Array.from({ length: 24 }, (_, i) => `${i}h`);
+         const data = labels.map((_, hour) => dataByHour[hour] || 0);
+         const chartData = {
+             labels: labels,
+             datasets: [{
+                 label: label,
+                 data: data,
+                 backgroundColor: 'rgba(75, 192, 192, 0.7)', // Teal un peu transparent
+                 borderColor: 'rgba(75, 192, 192, 1)',
+                 borderWidth: 1,
+                 barPercentage: 0.8, // Rendre les barres un peu moins larges
+                 categoryPercentage: 0.7
+             }]
+         };
+         const chartOptions = {
+             animation: false,
+             plugins: { // Position de la légende
+                 legend: {
+                     position: 'bottom',
+                     labels: {
+                         color: '#ddd' // Couleur du texte de la légende
+                     }
+                 }
+             },
+             scales: {
+                 y: {
+                     beginAtZero: true,
+                     ticks: {
+                         stepSize: 1,
+                         color: '#bbb' // Couleur des ticks Y
+                      },
+                     grid: {
+                         color: 'rgba(255, 255, 255, 0.1)' // Couleur grille Y
+                     }
+                 },
+                 x: {
+                     ticks: {
+                         color: '#bbb' // Couleur des ticks X
+                     },
+                     grid: {
+                         display: false // Cacher grille verticale
+                     }
+                 }
+             },
+             responsive: true,
+             maintainAspectRatio: true
+         };
+         const chartKey = (canvasElement.id === 'agent-work-chart') ? 'workChart' : 'homeChart';
+         if (!this.charts[chartKey]) {
+             this.charts[chartKey] = new Chart(ctx, {
+                 type: 'bar',
+                 data: chartData,
+                 options: chartOptions
+             });
+         } else {
+             this.charts[chartKey].data = chartData;
+             this.charts[chartKey].options = chartOptions; // S'assurer que les options sont à jour aussi
+             this.charts[chartKey].update('none');
+         }
+    }
+
+    destroy() {
+        console.log("Destroying AgentStatsUI...");
+        // --- MODIFIÉ : Assurer le nettoyage de l'écouteur extérieur ---
+        if (this.intervalId) clearInterval(this.intervalId);
+        document.removeEventListener('click', this._boundHandleOutsideClick, true); // Nettoyer l'écouteur
+        // --- FIN MODIFICATION ---
+
         if (this.charts.workChart) this.charts.workChart.destroy();
         if (this.charts.homeChart) this.charts.homeChart.destroy();
         this.elements.toggleButton?.remove();
         this.elements.statsPanel?.remove();
         this.experience = null;
-        this.agentManager = null;
+        // agentManager n'est pas stocké directement, pas besoin de le nullifier
         this.container = null;
         this.elements = {};
         console.log("AgentStatsUI destroyed.");

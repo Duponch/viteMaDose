@@ -6,6 +6,7 @@ export default class TimeControlUI {
         this.time = this.experience.time;
         this.container = document.createElement('div');
         this.container.classList.add('time-controls');
+		this.container.dataset.uiInteractive = 'true';
         document.body.appendChild(this.container);
 
         this.elements = {}; // Stockera tous les boutons (principaux et sous-types)
@@ -13,6 +14,7 @@ export default class TimeControlUI {
         // --- Conteneur GLOBAL pour TOUS les boutons de calques ---
         this.debugLayersContainer = document.createElement('div');
         this.debugLayersContainer.classList.add('debug-layers-container');
+		this.debugLayersContainer.dataset.uiInteractive = 'true';
         // ----- MODIFICATION ICI -----
         this.debugLayersContainer.style.display = 'none'; // <- Changé de 'flex' à 'none'
         // --------------------------

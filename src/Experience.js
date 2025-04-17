@@ -50,7 +50,10 @@ export default class Experience extends EventTarget {
         this.selectedAgent = null;
         this.isFollowingAgent = false;
         this.tooltipElement = document.getElementById('agent-tooltip'); // Assurez-vous que cet ID existe
-        this.tooltipTargetPosition = new THREE.Vector3();
+        if (this.tooltipElement) {
+			this.tooltipElement.dataset.uiInteractive = 'true';
+		}	
+		this.tooltipTargetPosition = new THREE.Vector3();
 
         // --- Sélection Bâtiment ---
         this.selectedBuildingInfo = null;
@@ -58,7 +61,10 @@ export default class Experience extends EventTarget {
         this.selectedBuildingInstanceId = -1;
         this.highlightMesh = null;
         this.buildingTooltipElement = document.getElementById('building-tooltip'); // Assurez-vous que cet ID existe
-        this.buildingTooltipTargetPosition = new THREE.Vector3();
+        if (this.buildingTooltipElement) {
+			this.buildingTooltipElement.dataset.uiInteractive = 'true'; // <-- AJOUTER
+		}
+		this.buildingTooltipTargetPosition = new THREE.Vector3();
 
         // --- NOUVELLE STRUCTURE : État de Visibilité des Calques et Sous-Calques Debug ---
         this.debugLayerVisibility = {
