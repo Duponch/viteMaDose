@@ -159,11 +159,11 @@ export default class TimeControlUI {
         this.elements.pausePlayButton.addEventListener('click', () => this.time.togglePause());
         this.elements.increaseButton.addEventListener('click', () => {
             this.time.increaseSpeed();
-            if(this.time.isPaused) this.time.play();
+            //if(this.time.isPaused) this.time.play();
         });
         this.elements.decreaseButton.addEventListener('click', () => {
             this.time.decreaseSpeed();
-            if(this.time.isPaused) this.time.play();
+            //if(this.time.isPaused) this.time.play();
         });
 
         // --- Listener Bouton Debug Principal (inchangé) ---
