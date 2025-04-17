@@ -27,9 +27,9 @@ export default class Environment {
 
         // --- Propriétés Cycle Jour/Nuit --- (INCHANGÉ)
         this.cycleEnabled = this.config.dayNightCycleEnabled;
-        this.dayDurationMs = this.config.dayDurationMinutes * 60 * 1000;
-        const initialNormalizedTime = this.config.startTimeOfDay !== undefined ? this.config.startTimeOfDay : 0.25;
-        this.cycleTime = (this.dayDurationMs * initialNormalizedTime) % this.dayDurationMs;
+        this.dayDurationMs = (this.config.dayDurationMinutes ?? 20) * 60 * 1000; // Assurer initialisation
+        const initialNormalizedTime = this.config.startTimeOfDay ?? 0.25;
+		this.cycleTime = (this.dayDurationMs > 0) ? (this.experience.time.elapsed % this.dayDurationMs) : 0; // Initialiser basé sur temps global
         this.sunDistance = 0;
 
         // --- Lumières Soleil & Ambiante & Couleurs Ciel --- (INCHANGÉ)
@@ -80,17 +80,22 @@ export default class Environment {
         this.setCloudMaterial(); // Crée le matériau partagé
     }
 
+	getdayDurationMs() {
+        // Recalculer si la config peut changer dynamiquement, sinon retourner la valeur stockée
+         return (this.config.dayDurationMinutes ?? 20) * 60 * 1000;
+    }
+
 	getCurrentHour() {
-        // Gérer le cas où le cycle est désactivé ou non initialisé
         if (!this.isInitialized || !this.cycleEnabled || this.dayDurationMs <= 0) {
-             // Quelle heure retourner ? L'heure de départ ou midi ?
              const initialNormalizedTime = this.config.startTimeOfDay ?? 0.25;
-             return Math.floor(initialNormalizedTime * 24); // Retourne l'heure de départ configurée
-             // return 12; // Ou retourner midi par défaut
+             return Math.floor(initialNormalizedTime * 24);
         }
-        // Calculer l'heure basée sur le temps de cycle actuel
-        const normalizedTime = (this.cycleTime % this.dayDurationMs) / this.dayDurationMs;
-        return Math.floor(normalizedTime * 24); // Heure entière de 0 à 23
+        // Utiliser le temps global scaled du jeu (en ms)
+        const currentGameTimeMs = this.experience.time.elapsed;
+        // Calculer l'heure basée sur le temps DANS le cycle actuel
+        const timeInCycleMs = currentGameTimeMs % this.dayDurationMs;
+        const normalizedTimeInCycle = timeInCycleMs / this.dayDurationMs;
+        return Math.floor(normalizedTimeInCycle * 24); // Heure entière 0-23
     }
 
     async initialize() {
@@ -416,78 +421,116 @@ export default class Environment {
         console.log("Stars Points créés.");
     }
 
-    updateDayNightCycle(deltaTime) {
-        if (!this.isInitialized || !this.cycleEnabled || this.dayDurationMs <= 0) return;
+    updateDayNightCycle() { // Suppression du paramètre deltaTime
+        // Vérifications initiales
+        if (!this.isInitialized || !this.cycleEnabled || !this.dayDurationMs || this.dayDurationMs <= 0) {
+            // Si le cycle est désactivé ou non prêt, ne rien faire ou appliquer un état fixe
+             if (!this.cycleEnabled && this.isInitialized) {
+                 // Appliquer l'état de départ fixe si le cycle est désactivé
+                 const initialNormalizedTime = this.config.startTimeOfDay ?? 0.25;
+                 this.cycleTime = (this.dayDurationMs * initialNormalizedTime) % this.dayDurationMs;
+                 // Appeler toute la logique ci-dessous avec initialNormalizedTime ?
+                 // C'est une option, mais pour l'instant on quitte pour éviter calculs inutiles.
+             }
+            return;
+        }
 
-        this.cycleTime += deltaTime;
-        this.cycleTime %= this.dayDurationMs;
-        const normalizedTime = this.cycleTime / this.dayDurationMs;
+        // Obtenir le temps de jeu global actuel (scaled) en ms
+        const currentGameTimeMs = this.experience.time.elapsed;
+
+        // Calculer le temps actuel dans le cycle journalier (pour les visuels)
+        this.cycleTime = currentGameTimeMs % this.dayDurationMs;
+        const normalizedTime = this.cycleTime / this.dayDurationMs; // Temps normalisé [0, 1]
 
         // --- Position Soleil ---
-        const sunAngle = normalizedTime * Math.PI * 2 - Math.PI / 2; // Angle basé sur le temps normalisé
+        // Angle basé sur le temps normalisé (0 = minuit bas, 0.25 = lever est, 0.5 = midi haut, 0.75 = coucher ouest)
+        const sunAngle = normalizedTime * Math.PI * 2 - (Math.PI / 2); // Commence à -PI/2 (minuit en bas)
         const sunX = Math.cos(sunAngle) * this.sunDistance;
-        const sunY = Math.sin(sunAngle) * this.sunDistance;
-        const sunZ = this.sunDistance * 0.1; // Légèrement décalé pour varier
-        this.sunLight.position.set(sunX, sunY, sunZ);
+        const sunY = Math.sin(sunAngle) * this.sunDistance; // Hauteur basée sur sin
+        const sunZ = this.sunDistance * 0.1; // Léger décalage Z pour varier
+        if (this.sunLight) {
+            this.sunLight.position.set(sunX, sunY, sunZ);
+        } else { console.warn("updateDayNightCycle: sunLight non défini."); }
 
-        // --- NOUVEAU : Position Lune (opposée au soleil) ---
-        const moonAngle = sunAngle + Math.PI; // Ajoute 180 degrés à l'angle du soleil
+        // --- Position Lune ---
+        const moonAngle = sunAngle + Math.PI; // Opposé au soleil
         const moonX = Math.cos(moonAngle) * this.moonDistance;
         const moonY = Math.sin(moonAngle) * this.moonDistance;
-        const moonZ = -this.moonDistance * 0.1; // Position Z opposée à celle du soleil
-        if (this.moonLight) this.moonLight.position.set(moonX, moonY, moonZ);
-        if (this.moonMesh) this.moonMesh.position.set(moonX, moonY, moonZ); // Positionne aussi le mesh
-        // ----------------------------------------------------
+        const moonZ = -this.moonDistance * 0.1; // Z opposé
+        if (this.moonLight) {
+            this.moonLight.position.set(moonX, moonY, moonZ);
+        }
+        if (this.moonMesh) {
+            this.moonMesh.position.set(moonX, moonY, moonZ);
+        }
 
-        // --- Calcul du facteur Jour/Nuit ---
-        const sunHeightFactor = sunY / this.sunDistance; // Hauteur normalisée du soleil (-1 à +1)
+        // --- Calcul du Facteur Jour/Nuit (pour les interpolations) ---
+        // Basé sur la hauteur normalisée du soleil (Y / distance)
+        const sunHeightFactor = this.sunDistance > 0 ? sunY / this.sunDistance : 0; // -1 (bas) à +1 (haut)
+        // Transition douce entre nuit (-0.15 et avant -> 0) et jour (0.15 et après -> 1)
         const dayNightFactor = THREE.MathUtils.smoothstep(sunHeightFactor, -0.15, 0.15); // 0=Nuit, 1=Jour
 
         // --- Mise à jour Lumière Soleil ---
-        // ... (code inchangé)
-        this.sunLight.intensity = THREE.MathUtils.lerp(this.sunIntensity.night, this.sunIntensity.day, dayNightFactor);
-        let sunColorTarget = new THREE.Color();
-        const phaseTime = normalizedTime * 4;
-        if (normalizedTime < 0.25) { sunColorTarget.lerpColors(this.sunColors.night, this.sunColors.dawn, phaseTime); }
-        else if (normalizedTime < 0.5) { sunColorTarget.lerpColors(this.sunColors.dawn, this.sunColors.day, phaseTime - 1); }
-        else if (normalizedTime < 0.75) { sunColorTarget.lerpColors(this.sunColors.day, this.sunColors.dusk, phaseTime - 2); }
-        else { sunColorTarget.lerpColors(this.sunColors.dusk, this.sunColors.night, phaseTime - 3); }
-        this.sunLight.color.copy(sunColorTarget);
+        if (this.sunLight) {
+            this.sunLight.intensity = THREE.MathUtils.lerp(this.sunIntensity.night, this.sunIntensity.day, dayNightFactor);
 
+            // Interpolation de couleur plus complexe basée sur les 4 phases
+            let sunColorTarget = new THREE.Color();
+            const phaseTime = normalizedTime * 4; // Pour mapping [0, 4]
+            if (normalizedTime < 0.25) { // Phase 1: Nuit -> Aube (0 -> 1)
+                sunColorTarget.lerpColors(this.sunColors.night, this.sunColors.dawn, phaseTime);
+            } else if (normalizedTime < 0.5) { // Phase 2: Aube -> Jour (1 -> 2)
+                sunColorTarget.lerpColors(this.sunColors.dawn, this.sunColors.day, phaseTime - 1);
+            } else if (normalizedTime < 0.75) { // Phase 3: Jour -> Crépuscule (2 -> 3)
+                sunColorTarget.lerpColors(this.sunColors.day, this.sunColors.dusk, phaseTime - 2);
+            } else { // Phase 4: Crépuscule -> Nuit (3 -> 4)
+                sunColorTarget.lerpColors(this.sunColors.dusk, this.sunColors.night, phaseTime - 3);
+            }
+            this.sunLight.color.copy(sunColorTarget);
+        }
 
         // --- Mise à jour Lumière Ambiante ---
-        // ... (code inchangé)
-         this.ambientLight.intensity = THREE.MathUtils.lerp(this.ambientIntensity.night, this.ambientIntensity.day, dayNightFactor);
-         this.ambientLight.color.lerpColors(this.ambientColors.night, this.ambientColors.day, dayNightFactor);
+        if (this.ambientLight) {
+            this.ambientLight.intensity = THREE.MathUtils.lerp(this.ambientIntensity.night, this.ambientIntensity.day, dayNightFactor);
+            // Interpolation simple entre couleur nuit et jour
+            this.ambientLight.color.lerpColors(this.ambientColors.night, this.ambientColors.day, dayNightFactor);
+        }
 
-        // --- NOUVEAU : Mise à jour Lumière Lune & Mesh ---
-        const nightFactor = 1.0 - dayNightFactor; // Facteur inverse : 1=Nuit, 0=Jour
+        // --- Mise à jour Lumière Lune & Mesh ---
+        const nightFactor = 1.0 - dayNightFactor; // Inverse : 1=Nuit, 0=Jour
         if (this.moonLight) {
-            // Interpole l'intensité de la lune en fonction de 'nightFactor'
             this.moonLight.intensity = THREE.MathUtils.lerp(this.moonIntensity.min, this.moonIntensity.max, nightFactor);
         }
         if (this.moonMesh) {
-            // Rend le mesh de la lune visible seulement quand il fait assez nuit
-            this.moonMesh.visible = nightFactor > 0.1; // Petit seuil pour éviter l'affichage au crépuscule/aube
+            // Afficher la lune seulement quand il fait suffisamment nuit
+            this.moonMesh.visible = nightFactor > 0.1;
         }
-        // --------------------------------------------------
 
-        // --- Mise à jour Ciel (Skybox Shader) ---
-        // ... (code inchangé - interpolation simple)
-         this.skyUniforms.uCurrentZenithColor.value.lerpColors(this.nightZenithColor, this.dayZenithColor, dayNightFactor);
-         this.skyUniforms.uCurrentMiddleColor.value.lerpColors(this.nightMiddleColor, this.dayMiddleColor, dayNightFactor);
-         this.skyUniforms.uCurrentHorizonColor.value.lerpColors(this.nightHorizonColor, this.dayHorizonColor, dayNightFactor);
-         this.skyUniforms.uSunDirection.value.copy(this.sunLight.position).normalize();
-         this.skyUniforms.uDayFactor.value = dayNightFactor;
+        // --- Mise à jour Ciel (Skybox Shader Uniforms) ---
+        if (this.skyBox && this.skyBox.material.uniforms) {
+             // Interpolation des couleurs du ciel
+            this.skyUniforms.uCurrentZenithColor.value.lerpColors(this.nightZenithColor, this.dayZenithColor, dayNightFactor);
+            this.skyUniforms.uCurrentMiddleColor.value.lerpColors(this.nightMiddleColor, this.dayMiddleColor, dayNightFactor);
+            this.skyUniforms.uCurrentHorizonColor.value.lerpColors(this.nightHorizonColor, this.dayHorizonColor, dayNightFactor);
+
+             // Direction du soleil pour le shader
+             if (this.sunLight) {
+                this.skyUniforms.uSunDirection.value.copy(this.sunLight.position).normalize();
+             }
+            // Facteur jour/nuit pour le shader
+            this.skyUniforms.uDayFactor.value = dayNightFactor;
+             // La couleur d'influence du soleil (uSunInfluenceColor) est généralement fixe
+        }
 
         // --- Mise à jour Étoiles ---
-        // ... (code inchangé)
-         if (this.starsMesh) {
-             const starsOpacity = 1.0 - dayNightFactor;
-             this.starsMesh.material.opacity = THREE.MathUtils.smoothstep(starsOpacity, 0.0, 0.8);
-             this.starsMesh.visible = this.starsMesh.material.opacity > 0.01;
-         }
-    }
+        if (this.starsMesh && this.starsMesh.material) {
+            // Opacité inverse du facteur jour/nuit
+            const starsOpacity = nightFactor; // 1 la nuit, 0 le jour
+            // Transition douce de l'opacité
+            this.starsMesh.material.opacity = THREE.MathUtils.smoothstep(starsOpacity, 0.0, 0.8); // Rend les étoiles visibles graduellement
+            this.starsMesh.visible = this.starsMesh.material.opacity > 0.01; // Cacher si quasi invisible
+        }
+    } // Fin updateDayNightCycle
 
     createOuterGround() {
         // ... (code inchangé)
@@ -592,7 +635,7 @@ export default class Environment {
 
             // 1. Mettre à jour le cycle Jour/Nuit (calcul couleurs, positions soleil/lune)
             // Cette fonction utilise deltaTime pour faire avancer this.cycleTime
-            this.updateDayNightCycle(deltaTime);
+			this.updateDayNightCycle(); // Utilise le temps global depuis experience.time
 
             // 2. Animer les éléments (ex: nuages)
             // Vérifier si des nuages instanciés existent

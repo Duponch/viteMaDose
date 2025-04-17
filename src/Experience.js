@@ -1019,41 +1019,63 @@ export default class Experience extends EventTarget {
         if (this.renderer) this.renderer.resize();
     }
 
-    // Boucle de mise à jour principale
     update() {
-		this.stats.begin();
-		const deltaTime = this.time.delta;
-	
-		// --- Contrôles et Caméra ---
-		if (!this.isFollowingAgent && this.controls?.enabled) {
-			this.controls.update();
-		}
-		if (this.camera) this.camera.update(deltaTime); // Camera update gère suivi/move
-	
-		// --- Monde et UI standard ---
-		if (this.world) this.world.update(); // Update Environnement, Agents, CityManager(fenêtres, lampes)
-		if (this.renderer) this.renderer.update();
-		if (this.timeUI) this.timeUI.update();
-	
-		// --- Tooltips (inchangé) ---
-		// Mise à jour Tooltip Agent
-		if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
-			// ... (logique tooltip agent) ...
-			 this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
-		} else {
-			 if (this.tooltipElement && this.tooltipElement.style.display !== 'none') { this.tooltipElement.style.display = 'none'; }
-		}
-		// Mise à jour Tooltip Bâtiment
-		if (this.selectedBuildingInfo && this.buildingTooltipElement) {
-			// ... (logique tooltip bâtiment) ...
-			 this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
-		} else {
-			 if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
-		}
-		// --- Fin Tooltips ---
-	
-		this.stats.end();
-	}
+        this.stats.begin();
+        const deltaTime = this.time.delta; // Delta temps JEU (scaled) en ms
+        const currentGameTime = this.time.elapsed; // Temps JEU total (scaled) en ms
+        const currentHour = this.world?.environment?.getCurrentHour() ?? 12; // Heure JEU actuelle
+
+        // --- 1. Mettre à jour la logique de Contrôles/Caméra (si non suivie) ---
+        if (!this.isFollowingAgent && this.controls?.enabled) {
+            this.controls.update();
+        }
+        // La caméra gère son propre update pour le suivi ou moveToTarget
+        if (this.camera) this.camera.update(deltaTime);
+
+        // --- 2. Mettre à jour le Monde ---
+        if (this.world) {
+            // 2a. Mettre à jour l'environnement (soleil, lune, nuages)
+            //     Utilise deltaTime pour l'animation des nuages
+            this.world.environment?.update(deltaTime);
+
+            // 2b. Mettre à jour CityManager (fenêtres, lampadaires)
+            if (this.world.cityManager) {
+                this.world.cityManager.contentGenerator?.update(currentHour); // Fenêtres
+                this.world.cityManager.lampPostManager?.updateLampPostLights(currentHour); // Lampes
+            }
+
+            // 2c. Mettre à jour les Agents (Logique d'état PUIS Visuel)
+            if (this.world.agentManager) {
+                // --- APPEL SÉPARÉ ---
+                this.world.agentManager.update(deltaTime); // Appelle updateState puis updateVisuals DANS agentManager
+                // --------------------
+            }
+        }
+
+        // --- 3. Mettre à jour les UI ---
+        if (this.timeUI) this.timeUI.update(); // Utilise environment.cycleTime qui est MAJ par env.update()
+        // AgentStatsUI est mis à jour par son propre intervalle
+
+        // --- 4. Tooltips (Logique de positionnement inchangée) ---
+         if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
+             this.tooltipTargetPosition.copy(this.selectedAgent.position).add(new THREE.Vector3(0, this.selectedAgent.scale * 8, 0)); // Offset basé sur scale agent
+             this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
+         } else if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
+             this.tooltipElement.style.display = 'none';
+         }
+         if (this.selectedBuildingInfo && this.buildingTooltipElement && this.highlightMesh?.visible) {
+             this.buildingTooltipTargetPosition.copy(this.highlightMesh.position).add(new THREE.Vector3(0, this.highlightMesh.scale.y / 2 + 2, 0)); // Au dessus du highlight
+             this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
+         } else if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') {
+             this.buildingTooltipElement.style.display = 'none';
+         }
+
+
+        // --- 5. Rendu ---
+        if (this.renderer) this.renderer.update();
+
+        this.stats.end();
+    }
 
     // Nettoie les ressources et écouteurs lors de la destruction
     destroy() {

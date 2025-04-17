@@ -42,7 +42,6 @@ export default class AgentManager {
         this.tempMatrix = new THREE.Matrix4();
         this.agentMatrix = new THREE.Matrix4();
         this.partOffsetMatrix = new THREE.Matrix4();
-        this.animationMatrix = new THREE.Matrix4();
         this.finalPartMatrix = new THREE.Matrix4();
         this.tempPosition = new THREE.Vector3();
         this.tempQuaternion = new THREE.Quaternion();
@@ -127,76 +126,57 @@ export default class AgentManager {
     }
     // --- FIN NOUVELLE MÉTHODE ---
 
-    // --- NOUVELLE MÉTHODE : Gère les messages du Worker ---
     _handleWorkerMessage(event) {
         const { type, data, error } = event.data;
-        // console.log("AgentManager: Message reçu du worker:", type, data); // Décommenter pour debug
+        // console.log("AgentManager: Message reçu du worker:", type, data); // Debug
 
         if (type === 'initComplete') {
             this.isWorkerInitialized = true;
             console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
 
         } else if (type === 'pathResult') {
-            // Vérifie si les données nécessaires sont présentes
-            if (data && data.agentId && data.path !== undefined) {
-                // Extrait les données reçues
-                const { agentId, path: worldPathData } = data;
-                // Trouve l'agent correspondant
+            // Vérifier si les données nécessaires sont présentes (y compris pathLengthWorld)
+            if (data && data.agentId && data.path !== undefined && data.pathLengthWorld !== undefined) {
+                const { agentId, path: worldPathData, pathLengthWorld } = data; // Extraire la longueur
                 const agent = this.getAgentById(agentId);
 
                 if (agent) {
                     let finalWorldPath = null;
-                    // Vérifie si le chemin reçu est valide et non vide
+                    // Reconstruire les Vector3 (inchangé)
                     if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) {
                         try {
-                            // Reconstruit les objets THREE.Vector3 sur le thread principal
                             finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
-                            // console.log(`Agent ${agentId}: Chemin monde reçu et Vector3 reconstruits (${finalWorldPath.length} points).`); // Debug
                         } catch (vecError) {
-                            console.error(`Agent ${agentId}: Erreur reconstruction Vector3 depuis données chemin:`, vecError);
-                            finalWorldPath = null; // Assure null en cas d'erreur
+                            console.error(`Agent ${agentId}: Erreur reconstruction Vector3:`, vecError);
+                            finalWorldPath = null;
                         }
                     } else {
-                        // console.log(`Agent ${agentId}: Chemin vide ou null reçu du worker.`); // Debug
                         finalWorldPath = null;
                     }
 
-                    // **** LOGIQUE STATS RETIRÉE D'ICI ****
-                    // La détermination du but et le comptage sont maintenant dans Agent.setPath()
+                    // Passer le chemin ET la longueur à l'agent
+                    agent.setPath(finalWorldPath, pathLengthWorld);
 
-                    // Envoyer le chemin Vector3 final (ou null) à l'agent.
-                    // C'est Agent.setPath qui mettra à jour l'état ET enregistrera la statistique.
-                    agent.setPath(finalWorldPath);
-
-                    // Mettre à jour la visualisation debug du chemin si nécessaire (inchangé)
-                    if (finalWorldPath && this.experience.isDebugMode) {
-                        const world = this.experience.world;
-                        if (world?.setAgentPathForAgent) {
-                            world.setAgentPathForAgent(agent, agent.path, agent.debugPathColor);
-                        }
+                    // Mise à jour debug (optionnel, peut utiliser agent.currentPathPoints)
+                    if (finalWorldPath && this.experience.isDebugMode && this.experience.world?.setAgentPathForAgent) {
+                        this.experience.world.setAgentPathForAgent(agent, finalWorldPath, agent.debugPathColor);
                     }
                 } else {
-                    // Agent non trouvé (peut arriver s'il a été détruit entre la requête et la réponse)
                     console.warn(`AgentManager: Agent ${agentId} non trouvé pour le résultat du chemin.`);
                 }
             } else {
-                // Message reçu incomplet ou mal formé
                 console.warn("AgentManager: Message 'pathResult' incomplet reçu du worker:", event.data);
             }
         } else if (type === 'workerError') {
-            // Gère les erreurs explicitement envoyées par le worker
             console.error("AgentManager: Erreur rapportée par le worker:", error, "Data associée:", data);
-            // Optionnel : Tenter de retrouver l'agent concerné si l'erreur contient agentId
              if (data?.agentId) {
                  const agentWithError = this.getAgentById(data.agentId);
-                 if(agentWithError && agentWithError.currentState === 'WAITING_FOR_PATH') {
-                     // Remettre l'agent dans un état stable
-                     agentWithError.setPath(null); // setPath gère le retour à AT_HOME ou IDLE
+                 // Si l'agent attendait spécifiquement un chemin
+                 if(agentWithError && (agentWithError.currentState === 'REQUESTING_PATH_FOR_WORK' || agentWithError.currentState === 'REQUESTING_PATH_FOR_HOME')) {
+                     agentWithError.setPath(null, 0); // Force l'échec et le retour à un état stable
                  }
              }
-
         } else {
-            // Gère les types de messages inconnus
             console.warn("AgentManager: Type de message inconnu reçu du worker:", type);
         }
     }
@@ -362,157 +342,184 @@ export default class AgentManager {
         return this.animationMatrix;
      }
 
-     _getPartLocalOffsetMatrix(partType) {
-        this.partOffsetMatrix.identity();
-        const headY = 6.0, handX = 3.0, handY = 1.0, handBaseRotZ = Math.PI / 12;
-        const footX = 1.8, footY = -3.5, footZ = 0.5;
-        switch (partType) {
-            case 'head': this.partOffsetMatrix.makeTranslation(0, headY, 0); break; case 'torso': break;
-            case 'leftHand': this.tempPosition.set(-handX, handY, 0); this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, -handBaseRotZ)); this.tempScale.set(1,1,1); this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); break;
-            case 'rightHand': this.tempPosition.set(handX, handY, 0); this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, handBaseRotZ)); this.tempScale.set(1,1,1); this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); break;
-            case 'leftFoot': this.partOffsetMatrix.makeTranslation(-footX, footY, footZ); break; case 'rightFoot': this.partOffsetMatrix.makeTranslation(footX, footY, footZ); break;
-        } return this.partOffsetMatrix;
-     }
+	 _getPartLocalOffsetMatrix(partType) {
+		this.partOffsetMatrix.identity();
+		const headY = 6.0, handX = 3.0, handY = 1.0, handBaseRotZ = Math.PI / 12;
+		const footX = 1.8, footY = -3.5, footZ = 0.5;
+		switch (partType) {
+			case 'head': this.partOffsetMatrix.makeTranslation(0, headY, 0); break; case 'torso': break;
+			case 'leftHand': this.tempPosition.set(-handX, handY, 0); this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, -handBaseRotZ)); this.tempScale.set(1,1,1); this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); break;
+			case 'rightHand': this.tempPosition.set(handX, handY, 0); this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, handBaseRotZ)); this.tempScale.set(1,1,1); this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); break;
+			case 'leftFoot': this.partOffsetMatrix.makeTranslation(-footX, footY, footZ); break; case 'rightFoot': this.partOffsetMatrix.makeTranslation(footX, footY, footZ); break;
+		} return this.partOffsetMatrix;
+    }
 
-	 update(deltaTime) {
+	update(deltaTime) {
         if (!this.experience?.world?.environment?.isInitialized) return;
         const environment = this.experience.world.environment;
         const currentHour = environment.getCurrentHour();
-        const elapsedTime = this.experience.time.elapsed / 1000;
+        // Utiliser le temps global scaled du jeu fourni par Time.js
+        const currentGameTime = this.experience.time.elapsed; // Temps total écoulé en ms (scaled)
         const isDebug = this.experience.isDebugMode;
-        const debugMarkerScale = isDebug ? 1.0 : 0; const fixedMarkerYOffset = 5.0;
-        let needsBodyMatrixUpdate = false, needsColorUpdate = this.instanceMeshes.torso.instanceColor?.needsUpdate || false;
-        let needsAgentMarkerUpdate = false, needsHomeMarkerUpdate = false, needsWorkMarkerUpdate = false;
+        const debugMarkerScale = isDebug ? 1.0 : 0;
+        const fixedMarkerYOffset = 5.0; // Pour les markers debug
 
-        // --- RETIRÉ : Traitement local de la file d'attente ---
-        /*
-        let calculationsDone = 0;
-        const pathfinder = this.experience.world?.cityManager?.getPathfinder(); // Old pathfinder
-        if (pathfinder) {
-            while (this.pathQueue.length > 0 && calculationsDone < this.maxPathCalculationsPerFrame) {
-                const request = this.pathQueue.shift();
-                const agent = this.getAgentById(request.agentId);
-                if (agent) {
-                    //const path = pathfinder.findPathRaw(request.startNode, request.endNode); // OLD WAY
-                    //agent.setPath(path);
-                    // ... debug viz ...
-                }
-                calculationsDone++;
-            }
-        }
-        */
-        // ------------------------------------------------------
-
-        // --- 2. MAJ logique & visuel agents (inchangé) ---
+        // 1. Mettre à jour l'ÉTAT logique de chaque agent basé sur currentGameTime
         for (let i = 0; i < this.agents.length; i++) {
-            const agent = this.agents[i]; const instanceId = agent.instanceId;
+            const agent = this.agents[i];
+            agent.updateState(deltaTime, currentHour, currentGameTime);
+        }
 
-            // 2a. MAJ logique agent (position, orientation, état)
-            // Note: agent.update va maintenant appeler agent.requestPath qui appellera
-            // agentManager.requestPathFromWorker si un chemin est nécessaire.
-            agent.update(deltaTime, currentHour);
+        // 2. Mettre à jour la partie VISUELLE de chaque agent
+        let needsBodyMatrixUpdate = false;
+        let needsColorUpdate = this.instanceMeshes.torso.instanceColor?.needsUpdate || false;
+        let needsAgentMarkerUpdate = false;
+        let needsHomeMarkerUpdate = false;
+        let needsWorkMarkerUpdate = false;
 
-            // 2b. Calculer la position VISUELLE
-            const visualPosition = this.tempPosition;
-            visualPosition.copy(agent.position);
-            visualPosition.y += agent.yOffset;
+        // Boucle pour mettre à jour les matrices des InstancedMesh
+        for (let i = 0; i < this.agents.length; i++) {
+             const agent = this.agents[i];
+             const instanceId = agent.instanceId;
 
-            // 2c. Préparer la matrice de base de l'agent
-            const actualScale = agent.isVisible ? agent.scale : 0;
-            this.tempScale.set(actualScale, actualScale, actualScale);
-            this.agentMatrix.compose(visualPosition, agent.orientation, this.tempScale);
+             // Demander à l'agent de mettre à jour sa position/orientation VISUELLE
+             // Passe deltaTime (pour la vitesse d'anim/rotation) et currentGameTime (pour l'interpolation de position)
+             agent.updateVisuals(deltaTime, currentGameTime);
 
-            // 2d. MAJ parties corps
-            const updatePart = (pName, mName, idxMult = 1, idxOff = 0) => {
-                const idx = instanceId * idxMult + idxOff; if (idx >= this.instanceMeshes[mName].count) return;
-                if(agent.isVisible) {
-                    const offset = this._getPartLocalOffsetMatrix(pName); const anim = this._getPartAnimationMatrix(pName, elapsedTime + instanceId * 0.1);
-                    this.tempMatrix.multiplyMatrices(offset, anim); this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix);
-                    this.instanceMeshes[mName].setMatrixAt(idx, this.finalPartMatrix);
-                } else {
-                    this.instanceMeshes[mName].setMatrixAt(idx, this.agentMatrix); // Use agentMatrix (scale 0) to hide
-                }
-            };
-            updatePart('head', 'head'); updatePart('torso', 'torso'); updatePart('leftHand', 'hand', 2, 0); updatePart('rightHand', 'hand', 2, 1); updatePart('leftFoot', 'shoe', 2, 0); updatePart('rightFoot', 'shoe', 2, 1);
-            needsBodyMatrixUpdate = true;
+             // Appliquer la matrice globale de l'agent (position/rotation/scale visuels)
+             const actualScale = agent.isVisible ? agent.scale : 0;
+             this.tempScale.set(actualScale, actualScale, actualScale);
+             // Utilise agent.position et agent.orientation mis à jour par updateVisuals
+             this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
 
-            // 2e. MAJ couleur torse
-            if (this.instanceMeshes.torso.instanceColor && instanceId < this.instanceMeshes.torso.count) {
-                this.tempColor.setHex(agent.torsoColor.getHex()); this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor); needsColorUpdate = true;
-            }
+             // Appliquer les transformations aux parties du corps
+             const updatePart = (pName, mName, idxMult = 1, idxOff = 0) => {
+                 const idx = instanceId * idxMult + idxOff;
+                 if (idx >= this.instanceMeshes[mName].count) return;
 
-             // 2f. MAJ Debug Markers
-             this.tempQuaternion.identity(); this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
+                 if (agent.isVisible) {
+                     // Récupérer la matrice d'offset local (peut être précalculée ou via fonction)
+                     const offsetMatrix = this._getPartLocalOffsetMatrix(pName); // Ou une version optimisée
+                     // Récupérer la matrice d'animation calculée par updateVisuals
+                     const animationMatrix = agent.currentAnimationMatrix[pName] || new THREE.Matrix4(); // Fallback matrice identité
+
+                     // Combiner : AgentGlobal * OffsetLocal * AnimationLocale
+                     this.tempMatrix.multiplyMatrices(offsetMatrix, animationMatrix);
+                     this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix);
+
+                     this.instanceMeshes[mName].setMatrixAt(idx, this.finalPartMatrix);
+                 } else {
+                     // Agent invisible, utiliser une matrice nulle pour le cacher efficacement
+                     this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
+                     this.instanceMeshes[mName].setMatrixAt(idx, this.tempMatrix);
+                 }
+             };
+
+             // Mettre à jour toutes les parties visibles
+             updatePart('head', 'head');
+             updatePart('torso', 'torso');
+             updatePart('leftHand', 'hand', 2, 0);
+             updatePart('rightHand', 'hand', 2, 1);
+             updatePart('leftFoot', 'shoe', 2, 0);
+             updatePart('rightFoot', 'shoe', 2, 1);
+             needsBodyMatrixUpdate = true; // Marquer pour MAJ GPU
+
+             // Mise à jour couleur torse (inchangé)
+             if (this.instanceMeshes.torso.instanceColor && instanceId < this.instanceMeshes.torso.count) {
+                this.tempColor.setHex(agent.torsoColor.getHex());
+                this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
+                needsColorUpdate = true;
+             }
+
+             // Mise à jour Debug Markers (basé sur la position VISUELLE)
+             this.tempQuaternion.identity(); // Pas de rotation pour les markers
+             this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
              const markerBasePos = this.tempPosition.copy(agent.position).add(new THREE.Vector3(0, fixedMarkerYOffset, 0));
+
              this.debugMarkerMatrix.compose(markerBasePos, this.tempQuaternion, this.tempScale);
-             if (instanceId < this.instanceMeshes.agentMarker.count) { this.instanceMeshes.agentMarker.setMatrixAt(instanceId, this.debugMarkerMatrix); needsAgentMarkerUpdate = true; }
-             const homeMarkerPos = agent.homePosition ? this.tempPosition.copy(agent.homePosition).add(new THREE.Vector3(0, fixedMarkerYOffset, 0)) : null;
-             if (homeMarkerPos) { this.debugMarkerMatrix.compose(homeMarkerPos, this.tempQuaternion, this.tempScale); }
-             else { this.debugMarkerMatrix.identity().scale(new THREE.Vector3(0,0,0)); }
-             if (instanceId < this.instanceMeshes.homeMarker.count) { this.instanceMeshes.homeMarker.setMatrixAt(instanceId, this.debugMarkerMatrix); needsHomeMarkerUpdate = true; }
-             const workMarkerPos = agent.workPosition ? this.tempPosition.copy(agent.workPosition).add(new THREE.Vector3(0, fixedMarkerYOffset, 0)) : null;
-             if (workMarkerPos) { this.debugMarkerMatrix.compose(workMarkerPos, this.tempQuaternion, this.tempScale); }
-             else { this.debugMarkerMatrix.identity().scale(new THREE.Vector3(0,0,0)); }
-             if (instanceId < this.instanceMeshes.workMarker.count) { this.instanceMeshes.workMarker.setMatrixAt(instanceId, this.debugMarkerMatrix); needsWorkMarkerUpdate = true; }
+             if (instanceId < this.instanceMeshes.agentMarker.count) {
+                 this.instanceMeshes.agentMarker.setMatrixAt(instanceId, this.debugMarkerMatrix);
+                 needsAgentMarkerUpdate = true;
+             }
+             // Utiliser homePosition/workPosition de l'agent qui sont statiques
+             const homePos = agent.homePosition;
+             if(homePos) {
+                markerBasePos.copy(homePos).add(new THREE.Vector3(0, fixedMarkerYOffset, 0));
+                this.debugMarkerMatrix.compose(markerBasePos, this.tempQuaternion, this.tempScale);
+             } else { this.debugMarkerMatrix.identity().scale(new THREE.Vector3(0,0,0)); }
+             if (instanceId < this.instanceMeshes.homeMarker.count) {
+                this.instanceMeshes.homeMarker.setMatrixAt(instanceId, this.debugMarkerMatrix);
+                needsHomeMarkerUpdate = true;
+             }
+             const workPos = agent.workPosition;
+             if(workPos) {
+                markerBasePos.copy(workPos).add(new THREE.Vector3(0, fixedMarkerYOffset, 0));
+                this.debugMarkerMatrix.compose(markerBasePos, this.tempQuaternion, this.tempScale);
+             } else { this.debugMarkerMatrix.identity().scale(new THREE.Vector3(0,0,0)); }
+             if (instanceId < this.instanceMeshes.workMarker.count) {
+                this.instanceMeshes.workMarker.setMatrixAt(instanceId, this.debugMarkerMatrix);
+                needsWorkMarkerUpdate = true;
+             }
 
-        } // Fin boucle agents
+        } // Fin boucle MAJ visuelle agents
 
-        // --- 3. Appliquer MAJ GPU (inchangé) ---
-        if (needsBodyMatrixUpdate) { ['head', 'torso', 'hand', 'shoe'].forEach(k => { if(this.instanceMeshes[k]?.instanceMatrix) this.instanceMeshes[k].instanceMatrix.needsUpdate = true; }); }
-        if (needsColorUpdate && this.instanceMeshes.torso.instanceColor) { this.instanceMeshes.torso.instanceColor.needsUpdate = true; }
-        if (needsAgentMarkerUpdate && this.instanceMeshes.agentMarker?.instanceMatrix) { this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true; }
-        if (needsHomeMarkerUpdate && this.instanceMeshes.homeMarker?.instanceMatrix) { this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true; }
-        if (needsWorkMarkerUpdate && this.instanceMeshes.workMarker?.instanceMatrix) { this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true; }
+        // 3. Appliquer les mises à jour GPU pour les InstancedMesh (inchangé)
+        if (needsBodyMatrixUpdate) {
+            ['head', 'torso', 'hand', 'shoe'].forEach(k => {
+                if(this.instanceMeshes[k]?.instanceMatrix) this.instanceMeshes[k].instanceMatrix.needsUpdate = true;
+            });
+        }
+        if (needsColorUpdate && this.instanceMeshes.torso.instanceColor) {
+            this.instanceMeshes.torso.instanceColor.needsUpdate = true;
+        }
+        if (needsAgentMarkerUpdate && this.instanceMeshes.agentMarker?.instanceMatrix) {
+            this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
+        }
+        if (needsHomeMarkerUpdate && this.instanceMeshes.homeMarker?.instanceMatrix) {
+            this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
+        }
+        if (needsWorkMarkerUpdate && this.instanceMeshes.workMarker?.instanceMatrix) {
+            this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
+        }
     }
 
     destroy() {
-        console.log("AgentManager: Destruction...");
+		console.log("AgentManager: Destruction...");
+		// Arrêter le worker s'il existe
+		if (this.pathfindingWorker) {
+			this.pathfindingWorker.terminate();
+			this.pathfindingWorker = null;
+			this.isWorkerInitialized = false;
+			console.log("AgentManager: Pathfinding Worker terminé.");
+		}
+	   // ... (reste de la logique de destroy existante) ...
+		const cityManager = this.experience?.world?.cityManager;
+		this.agents.forEach(agent => {
+			// ... (nettoyage citizenManager) ...
+			agent.destroy();
+		});
+		this.agents = [];
+		console.log("AgentManager: Agents logiques détruits.");
 
-        // --- NOUVEAU : Arrêter le worker ---
-        if (this.pathfindingWorker) {
-            this.pathfindingWorker.terminate();
-            this.pathfindingWorker = null;
-            this.isWorkerInitialized = false;
-            console.log("AgentManager: Pathfinding Worker terminé.");
-        }
-        // -----------------------------------
+		Object.values(this.instanceMeshes).forEach(mesh => {
+			if (mesh.parent) mesh.parent.remove(mesh);
+			// Dispose material CLONE (celui de InstancedMesh)
+			if (mesh.material && mesh.material !== this.baseMaterials[mesh.name.replace('Instances','').toLowerCase()]) {
+			   mesh.material.dispose?.();
+			}
+		});
+		this.instanceMeshes = {};
+		console.log("AgentManager: InstancedMeshes retirés & matériaux clonés disposés.");
 
-        // --- Nettoyage existant (inchangé) ---
-        const cityManager = this.experience?.world?.cityManager;
-        this.agents.forEach(agent => {
-            if (cityManager?.citizens?.has(agent.id)) {
-                 const citizenInfo = cityManager.getCitizenInfo(agent.id);
-                 if(citizenInfo) {
-                     const homeBuilding = cityManager.getBuildingInfo(citizenInfo.homeBuildingId);
-                     if(homeBuilding?.occupants?.includes(agent.id)) homeBuilding.occupants.splice(homeBuilding.occupants.indexOf(agent.id), 1);
-                     const workBuilding = cityManager.getBuildingInfo(citizenInfo.workBuildingId);
-                      if(workBuilding?.occupants?.includes(agent.id)) workBuilding.occupants.splice(workBuilding.occupants.indexOf(agent.id), 1);
-                 }
-                 cityManager.citizens.delete(agent.id);
-            }
-            agent.destroy();
-        });
-        this.agents = [];
-        // this.pathQueue = []; // Déjà retiré
-        console.log("AgentManager: Agents logiques détruits.");
+		Object.values(this.baseGeometries).forEach(geom => { geom?.dispose(); });
+		this.baseGeometries = {};
+		console.log("AgentManager: Géométries base disposées.");
 
-        Object.values(this.instanceMeshes).forEach(mesh => {
-            if (mesh.parent) mesh.parent.remove(mesh);
-            if (mesh.material?.dispose) mesh.material.dispose();
-            // La géométrie des InstancedMesh n'est pas disposée ici car elle vient de baseGeometries
-        });
-        this.instanceMeshes = {};
-        console.log("AgentManager: InstancedMeshes retirés & matériaux clonés disposés.");
+		Object.values(this.baseMaterials).forEach(mat => { mat?.dispose(); });
+		this.baseMaterials = {};
+		console.log("AgentManager: Matériaux base disposés.");
 
-        Object.values(this.baseGeometries).forEach(geom => { if (geom?.dispose) geom.dispose(); });
-        this.baseGeometries = {};
-        console.log("AgentManager: Géométries base disposées.");
-
-        Object.values(this.baseMaterials).forEach(mat => { if (mat?.dispose) mat.dispose(); });
-        this.baseMaterials = {};
-        console.log("AgentManager: Matériaux base disposés.");
-
-        this.scene = null; this.experience = null; this.config = null;
-        console.log("AgentManager: Détruit.");
-    }
+		this.scene = null; this.experience = null; this.config = null;
+		console.log("AgentManager: Détruit.");
+	}
 }
