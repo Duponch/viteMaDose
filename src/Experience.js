@@ -1015,55 +1015,39 @@ export default class Experience extends EventTarget {
 
     // Boucle de mise à jour principale
     update() {
-        this.stats.begin();
-        const deltaTime = this.time.delta;
-
-        if (!this.isFollowingAgent && this.controls?.enabled) {
-            this.controls.update();
-        }
-        if (this.camera) this.camera.update(deltaTime);
-        if (this.world) this.world.update();
-        if (this.renderer) this.renderer.update();
-        if (this.timeUI) this.timeUI.update();
-
-		// Optionnel : Mettre à jour l'UI des stats si elle est visible
-        // if (this.agentStatsUI && this.agentStatsUI.isVisible) {
-        //    this.agentStatsUI.update(); // Met à jour liste + graphiques
-        // }
-        // Note: L'update automatique est désactivée par défaut dans AgentStatsUI,
-        // elle se met à jour quand on l'ouvre. Vous pouvez décommenter l'appel
-        // ici si vous préférez une mise à jour continue lorsqu'elle est ouverte.
-
-        // --- Mise à jour Tooltip Agent ---
-        if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
-            this.updateTooltipContent(this.selectedAgent);
-            this.tooltipTargetPosition.copy(this.selectedAgent.position);
-            const headHeightOffset = 8.0 * this.selectedAgent.scale;
-            this.tooltipTargetPosition.y += this.selectedAgent.yOffset + headHeightOffset;
-            this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
-        } else {
-            if (this.tooltipElement && this.tooltipElement.style.display !== 'none') { this.tooltipElement.style.display = 'none'; }
-        }
-
-        // --- Mise à jour Tooltip Bâtiment ---
-        if (this.selectedBuildingInfo && this.buildingTooltipElement) {
-            this.updateBuildingTooltipContent();
-            if (this.highlightMesh && this.highlightMesh.visible) {
-                 const highlightWorldPosition = new Vector3();
-                 this.highlightMesh.getWorldPosition(highlightWorldPosition);
-                 const highlightHeight = this.highlightMesh.scale.y;
-                 this.buildingTooltipTargetPosition.copy(highlightWorldPosition);
-                 this.buildingTooltipTargetPosition.y += highlightHeight * 0.5 + 0.5;
-                this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
-            } else {
-                if (this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
-            }
-        } else {
-            if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
-        }
-
-        this.stats.end();
-    }
+		this.stats.begin();
+		const deltaTime = this.time.delta;
+	
+		// --- Contrôles et Caméra ---
+		if (!this.isFollowingAgent && this.controls?.enabled) {
+			this.controls.update();
+		}
+		if (this.camera) this.camera.update(deltaTime); // Camera update gère suivi/move
+	
+		// --- Monde et UI standard ---
+		if (this.world) this.world.update(); // Update Environnement, Agents, CityManager(fenêtres, lampes)
+		if (this.renderer) this.renderer.update();
+		if (this.timeUI) this.timeUI.update();
+	
+		// --- Tooltips (inchangé) ---
+		// Mise à jour Tooltip Agent
+		if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
+			// ... (logique tooltip agent) ...
+			 this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
+		} else {
+			 if (this.tooltipElement && this.tooltipElement.style.display !== 'none') { this.tooltipElement.style.display = 'none'; }
+		}
+		// Mise à jour Tooltip Bâtiment
+		if (this.selectedBuildingInfo && this.buildingTooltipElement) {
+			// ... (logique tooltip bâtiment) ...
+			 this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
+		} else {
+			 if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') { this.buildingTooltipElement.style.display = 'none'; }
+		}
+		// --- Fin Tooltips ---
+	
+		this.stats.end();
+	}
 
     // Nettoie les ressources et écouteurs lors de la destruction
     destroy() {

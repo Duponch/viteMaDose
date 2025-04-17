@@ -130,79 +130,74 @@ export default class AgentManager {
     // --- NOUVELLE MÉTHODE : Gère les messages du Worker ---
     _handleWorkerMessage(event) {
         const { type, data, error } = event.data;
+        // console.log("AgentManager: Message reçu du worker:", type, data); // Décommenter pour debug
 
         if (type === 'initComplete') {
-             this.isWorkerInitialized = true;
-             console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
+            this.isWorkerInitialized = true;
+            console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
 
         } else if (type === 'pathResult') {
+            // Vérifie si les données nécessaires sont présentes
             if (data && data.agentId && data.path !== undefined) {
+                // Extrait les données reçues
                 const { agentId, path: worldPathData } = data;
+                // Trouve l'agent correspondant
                 const agent = this.getAgentById(agentId);
 
                 if (agent) {
                     let finalWorldPath = null;
+                    // Vérifie si le chemin reçu est valide et non vide
                     if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) {
-                         try {
+                        try {
+                            // Reconstruit les objets THREE.Vector3 sur le thread principal
                             finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
-                         } catch(vecError) {
-                             console.error(`Agent ${agentId}: Erreur reconstruction Vector3 depuis données chemin:`, vecError);
-                             finalWorldPath = null;
-                         }
+                            // console.log(`Agent ${agentId}: Chemin monde reçu et Vector3 reconstruits (${finalWorldPath.length} points).`); // Debug
+                        } catch (vecError) {
+                            console.error(`Agent ${agentId}: Erreur reconstruction Vector3 depuis données chemin:`, vecError);
+                            finalWorldPath = null; // Assure null en cas d'erreur
+                        }
                     } else {
+                        // console.log(`Agent ${agentId}: Chemin vide ou null reçu du worker.`); // Debug
                         finalWorldPath = null;
                     }
 
-                    // --- NOUVEAU: Enregistrement des statistiques AVANT de définir le chemin ---
-                    // On doit déterminer la destination pour savoir si c'est pour aller au travail ou à la maison
-                    // Cette logique est un peu simplifiée ici, on se base sur l'état actuel de l'agent
-                    // AVANT qu'il reçoive le chemin. Si l'agent est AT_HOME ou WAITING_FOR_PATH depuis AT_HOME,
-                    // on suppose que le chemin est pour aller au travail. Inversement depuis AT_WORK.
-                    // C'est une approximation, la logique dans Agent.setPath est plus précise sur la destination.
-                    // Alternative: On pourrait passer la destination prévue à setPath et la récupérer.
-                    // Pour l'instant, on utilise l'état actuel :
-                    let pathPurpose = 'unknown';
-                    if (finalWorldPath) { // Seulement si un chemin valide est trouvé
-                        if (agent.currentState === 'AT_HOME' || (agent.currentState === 'WAITING_FOR_PATH' && agent.workPosition)) {
-                             pathPurpose = 'to_work';
-                        } else if (agent.currentState === 'AT_WORK' || (agent.currentState === 'WAITING_FOR_PATH' && agent.homePosition)) {
-                            pathPurpose = 'to_home';
+                    // **** LOGIQUE STATS RETIRÉE D'ICI ****
+                    // La détermination du but et le comptage sont maintenant dans Agent.setPath()
+
+                    // Envoyer le chemin Vector3 final (ou null) à l'agent.
+                    // C'est Agent.setPath qui mettra à jour l'état ET enregistrera la statistique.
+                    agent.setPath(finalWorldPath);
+
+                    // Mettre à jour la visualisation debug du chemin si nécessaire (inchangé)
+                    if (finalWorldPath && this.experience.isDebugMode) {
+                        const world = this.experience.world;
+                        if (world?.setAgentPathForAgent) {
+                            world.setAgentPathForAgent(agent, agent.path, agent.debugPathColor);
                         }
                     }
-
-                    // Envoyer le chemin Vector3 final (ou null) à l'agent
-                    agent.setPath(finalWorldPath); // L'agent mettra à jour son état ici
-
-                    // Enregistrer la stat APRÈS que l'agent ait potentiellement changé d'état (pour être sûr)
-                    // Surtout si on utilise l'état post-setPath pour déterminer le but.
-                    // Ici, on se base sur l'état *avant* setPath pour simplifier.
-                    if (pathPurpose !== 'unknown' && this.experience?.world?.environment?.isInitialized) {
-                         const currentHour = this.experience.world.environment.getCurrentHour();
-                         if (pathPurpose === 'to_work') {
-                             this.stats.pathsToWorkByHour[currentHour]++;
-                         } else if (pathPurpose === 'to_home') {
-                              this.stats.pathsToHomeByHour[currentHour]++;
-                         }
-                         // Optionnel: émettre un événement pour que l'UI se mette à jour immédiatement
-                         // this.experience.dispatchEvent(new CustomEvent('agentstatsupdated'));
-                    }
-                     // --- FIN NOUVEAU ---
-
-
-                    // Mettre à jour la visualisation debug (inchangé)
-                    if (finalWorldPath && this.experience.isDebugMode) {
-                        // ... (code debug viz) ...
-                    }
                 } else {
-                     console.warn(`AgentManager: Agent ${agentId} non trouvé pour le résultat du chemin.`);
+                    // Agent non trouvé (peut arriver s'il a été détruit entre la requête et la réponse)
+                    console.warn(`AgentManager: Agent ${agentId} non trouvé pour le résultat du chemin.`);
                 }
             } else {
-                 console.warn("AgentManager: Message 'pathResult' incomplet reçu du worker:", event.data);
+                // Message reçu incomplet ou mal formé
+                console.warn("AgentManager: Message 'pathResult' incomplet reçu du worker:", event.data);
             }
         } else if (type === 'workerError') {
-             console.error("AgentManager: Erreur rapportée par le worker:", error, "Data associée:", data);
+            // Gère les erreurs explicitement envoyées par le worker
+            console.error("AgentManager: Erreur rapportée par le worker:", error, "Data associée:", data);
+            // Optionnel : Tenter de retrouver l'agent concerné si l'erreur contient agentId
+             if (data?.agentId) {
+                 const agentWithError = this.getAgentById(data.agentId);
+                 if(agentWithError && agentWithError.currentState === 'WAITING_FOR_PATH') {
+                     // Remettre l'agent dans un état stable
+                     agentWithError.setPath(null); // setPath gère le retour à AT_HOME ou IDLE
+                 }
+             }
+
         } else {
-             console.warn("AgentManager: Type de message inconnu reçu du worker:", type);
+            // Gère les types de messages inconnus
+            console.warn("AgentManager: Type de message inconnu reçu du worker:", type);
         }
     }
     // --- FIN NOUVELLE MÉTHODE ---

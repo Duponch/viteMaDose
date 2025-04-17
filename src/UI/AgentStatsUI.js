@@ -11,6 +11,9 @@ export default class AgentStatsUI {
         this.elements = {};
         this.charts = { workChart: null, homeChart: null };
 
+		this.updateInterval = 1000; // Mettre à jour toutes les secondes (ajustable)
+        this.intervalId = null;
+
         this._createElements();
         this._setupEventListeners();
 
@@ -116,28 +119,44 @@ export default class AgentStatsUI {
     toggleVisibility() {
         this.isVisible = !this.isVisible;
         this.elements.statsPanel.style.display = this.isVisible ? 'block' : 'none';
+
         if (this.isVisible) {
-            this.update(); // Mettre à jour quand on ouvre
+            this.update(); // Mise à jour immédiate à l'ouverture
+            // --- NOUVEAU : Démarrer l'intervalle ---
+            if (this.intervalId) clearInterval(this.intervalId); // Sécurité: nettoyer ancien intervalle
+            this.intervalId = setInterval(() => this.update(), this.updateInterval);
+            // --- FIN NOUVEAU ---
+        } else {
+            // --- NOUVEAU : Arrêter l'intervalle ---
+            if (this.intervalId) {
+                clearInterval(this.intervalId);
+                this.intervalId = null;
+            }
+            // --- FIN NOUVEAU ---
         }
     }
 
 	update() {
-        // --- MODIFIÉ : Utiliser le getter ---
-        const agentManager = this.agentManager; // Appel du getter ici
-        if (!this.isVisible || !agentManager) { // Vérifie si le getter retourne quelque chose
+        // --- MODIFIÉ : Ne plus vérifier isVisible ici, car l'intervalle le gère ---
+        const agentManager = this.agentManager;
+        if (!agentManager) {
+            // Si agentManager disparaît pendant que le panneau est ouvert (peu probable mais possible)
+             if (this.intervalId) { // Arrêter l'intervalle si les données ne sont plus accessibles
+                 clearInterval(this.intervalId);
+                 this.intervalId = null;
+             }
             return;
         }
         // --- FIN MODIFICATION ---
 
-        const stats = agentManager.getAgentStats(); // Utilise la variable locale
+
+        const stats = agentManager.getAgentStats();
 
         this._updateAgentList(stats.agentsByState);
         this._updateChart(this.charts.workChart, this.elements.workChartCanvas, stats.pathsToWorkByHour, 'Agents allant au travail');
         this._updateChart(this.charts.homeChart, this.elements.homeChartCanvas, stats.pathsToHomeByHour, 'Agents rentrant à la maison');
 
-        // Planifier la prochaine mise à jour si le panneau est toujours visible
-        // (alternative à l'appel dans Experience.update)
-        // setTimeout(() => this.update(), 1000); // Ex: Mise à jour chaque seconde
+         // La ligne setTimeout est supprimée, géré par setInterval maintenant
     }
 
     _updateAgentList(agentsByState) {
@@ -154,70 +173,72 @@ export default class AgentStatsUI {
     }
 
     _updateChart(chartInstance, canvasElement, dataByHour, label) {
-        if (!canvasElement) return;
-
+        // ... (préparation ctx, labels, data - inchangé) ...
         const ctx = canvasElement.getContext('2d');
         if (!ctx) return;
-
-        // Préparer les données pour Chart.js
-        const labels = Array.from({ length: 24 }, (_, i) => `${i}h`); // Labels de 0h à 23h
-        const data = labels.map((_, hour) => dataByHour[hour] || 0); // Récupérer les comptes pour chaque heure
+        const labels = Array.from({ length: 24 }, (_, i) => `${i}h`);
+        const data = labels.map((_, hour) => dataByHour[hour] || 0);
 
         const chartData = {
             labels: labels,
             datasets: [{
                 label: label,
                 data: data,
-                backgroundColor: 'rgba(75, 192, 192, 0.6)', // Couleur des barres
+                backgroundColor: 'rgba(75, 192, 192, 0.6)',
                 borderColor: 'rgba(75, 192, 192, 1)',
                 borderWidth: 1
             }]
         };
 
+        // --- OPTIONNEL : Désactiver les animations pour plus de fluidité ---
         const chartOptions = {
+            animation: false, // <-- Désactiver toutes les animations
+            // Vous pouvez aussi cibler des animations spécifiques si besoin
+            // animation: {
+            //     duration: 0 // Durée d'animation à 0
+            // },
             scales: {
                 y: {
                     beginAtZero: true,
-                    ticks: { // Assurer que les ticks sont des entiers
-                         stepSize: 1
-                    }
+                    ticks: { stepSize: 1 }
                 }
             },
             responsive: true,
-            maintainAspectRatio: false // Important pour contrôler la hauteur via CSS
+            maintainAspectRatio: false
         };
+        // --- FIN OPTIONNEL ---
 
-        // Créer le graphique s'il n'existe pas, sinon le mettre à jour
         const chartKey = (canvasElement.id === 'agent-work-chart') ? 'workChart' : 'homeChart';
         if (!this.charts[chartKey]) {
             this.charts[chartKey] = new Chart(ctx, {
-                type: 'bar', // Type de graphique
+                type: 'bar',
                 data: chartData,
-                options: chartOptions
+                options: chartOptions // Utiliser les options (avec ou sans animation: false)
             });
         } else {
             this.charts[chartKey].data = chartData;
-            this.charts[chartKey].update(); // Mettre à jour le graphique existant
+            // --- MODIFIÉ : Option pour mettre à jour sans animation ---
+            // this.charts[chartKey].update(); // Mise à jour standard (avec animations par défaut si non désactivées dans options)
+            this.charts[chartKey].update('none'); // <-- Tente de mettre à jour sans animation de transition
+            // Alternative: this.charts[chartKey].update({duration: 0});
+            // --- FIN MODIFICATION ---
         }
     }
 
     destroy() {
         console.log("Destroying AgentStatsUI...");
-        // Détruire les graphiques Chart.js
-        if (this.charts.workChart) {
-            this.charts.workChart.destroy();
-            this.charts.workChart = null;
+        // --- NOUVEAU : Nettoyer l'intervalle ---
+        if (this.intervalId) {
+            clearInterval(this.intervalId);
+            this.intervalId = null;
         }
-        if (this.charts.homeChart) {
-            this.charts.homeChart.destroy();
-            this.charts.homeChart = null;
-        }
+         // --- FIN NOUVEAU ---
 
-        // Retirer les éléments du DOM
+        // ... (reste du code destroy : charts, éléments DOM, références) ...
+        if (this.charts.workChart) this.charts.workChart.destroy();
+        if (this.charts.homeChart) this.charts.homeChart.destroy();
         this.elements.toggleButton?.remove();
         this.elements.statsPanel?.remove();
-
-        // Nettoyer les références
         this.experience = null;
         this.agentManager = null;
         this.container = null;
