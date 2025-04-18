@@ -22,49 +22,50 @@ function createShoeGeometry() {
 
 
 export default class AgentManager {
-    constructor(scene, experience, config, maxAgents = 1) {
-        if (!experience || !config) {
-            throw new Error("AgentManager requires Experience and Config instances.");
-        }
-        this.scene = scene;
-        this.experience = experience;
-        this.config = config;
-        this.maxAgents = maxAgents;
+	constructor(scene, experience, config, maxAgents = 1) {
+		if (!experience || !config) {
+			throw new Error("AgentManager requires Experience and Config instances.");
+		}
+		this.scene = scene;
+		this.experience = experience;
+		this.config = config;
+		this.maxAgents = maxAgents;
 
-        this.agents = [];
-        this.instanceMeshes = {};
-        this.baseGeometries = {};
-        this.baseMaterials = {};
+		// Pooling
+		this.activeCount = 0;                             // Nombre d’agents réellement actifs
+		this.instanceIdToAgent = new Array(maxAgents);    // instanceId → agent.id
+		this.agentToInstanceId = new Map();               // agent.id → instanceId
 
-        this.headRadius = 2.5; // Sera écrasée
+		this.agents = [];
+		this.instanceMeshes = {};
+		this.baseGeometries = {};
+		this.baseMaterials = {};
 
-        // --- Objets temporaires ---
-        this.tempMatrix = new THREE.Matrix4();
-        this.agentMatrix = new THREE.Matrix4();
-        this.partOffsetMatrix = new THREE.Matrix4();
-        this.finalPartMatrix = new THREE.Matrix4();
-        this.tempPosition = new THREE.Vector3();
-        this.tempQuaternion = new THREE.Quaternion();
-        this.tempScale = new THREE.Vector3(1, 1, 1);
-        this.tempColor = new THREE.Color();
-        this.debugMarkerMatrix = new THREE.Matrix4();
+		this.headRadius = 2.5; // Sera écrasée
 
-        this.pathfindingWorker = null;
-        this.isWorkerInitialized = false;
-        // -----------------------------------
-        // --- RETIRÉ : Plus de file d'attente locale ---
-        // this.pathQueue = [];
-        // this.maxPathCalculationsPerFrame = this.config.maxPathCalculationsPerFrame ?? 10;
-        // -------------------------------------------
+		// --- Objets temporaires ---
+		this.tempMatrix = new THREE.Matrix4();
+		this.agentMatrix = new THREE.Matrix4();
+		this.partOffsetMatrix = new THREE.Matrix4();
+		this.finalPartMatrix = new THREE.Matrix4();
+		this.tempPosition = new THREE.Vector3();
+		this.tempQuaternion = new THREE.Quaternion();
+		this.tempScale = new THREE.Vector3(1, 1, 1);
+		this.tempColor = new THREE.Color();
+		this.debugMarkerMatrix = new THREE.Matrix4();
+
+		this.pathfindingWorker = null;
+		this.isWorkerInitialized = false;
+
 		this.stats = {
-            pathsToWorkByHour: {}, // { 8: 15, 9: 25, ... }
-            pathsToHomeByHour: {}, // { 19: 30, 20: 10, ... }
-        };
-        this._initializeStats();
+			pathsToWorkByHour: {},
+			pathsToHomeByHour: {},
+		};
+		this._initializeStats();
 
-        this._initializeMeshes();
-        console.log("AgentManager initialisé (Worker non démarré).");
-    }
+		this._initializeMeshes();
+		console.log("AgentManager initialisé (Worker non démarré).");
+	}
 
 	_initializeStats() {
         this.stats.pathsToWorkByHour = {};
@@ -232,78 +233,156 @@ export default class AgentManager {
     }
     // --- FIN NOUVELLE MÉTHODE ---
 
+    // 2) _initializeMeshes (modifiée pour démarrer à count=0)
+	_initializeMeshes() {
+		console.log("AgentManager: Initialisation des InstancedMesh...");
+		// Matériaux
+		this.baseMaterials.skin = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.6, metalness: 0.1, name: 'AgentSkinMat' });
+		this.baseMaterials.torso = new THREE.MeshStandardMaterial({ color: 0x800080, roughness: 0.5, metalness: 0.2, name: 'AgentTorsoMat', vertexColors: true });
+		this.baseMaterials.hand = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0.1, name: 'AgentHandMat' });
+		this.baseMaterials.shoe = new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.7, metalness: 0.1, name: 'AgentShoeMat' });
+		// Géométries
+		const headRadiusConst = 2.5; this.headRadius = headRadiusConst; const headLength = 1;
+		const torsoRadius = 1.5; const torsoLength = 1.5;
+		const handRadius = 0.8; const handLength = 1.0;
+		this.baseGeometries.head = createCapsuleGeometry(this.headRadius, headLength, 32);
+		this.baseGeometries.torso = createCapsuleGeometry(torsoRadius, torsoLength, 24);
+		this.baseGeometries.hand = createCapsuleGeometry(handRadius, handLength, 12);
+		this.baseGeometries.shoe = createShoeGeometry();
+		// Debug Markers
+		const markerSize = 3; this.baseGeometries.debugMarker = new THREE.OctahedronGeometry(markerSize, 0);
+		this.baseMaterials.agentMarkerMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, name: 'AgentMarkerMat' });
+		this.baseMaterials.homeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, name: 'HomeMarkerMat' });
+		this.baseMaterials.workMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, name: 'WorkMarkerMat' });
+		// Création InstancedMesh
+		const createInstMesh = (name, geom, mat, count, needsColor = false) => {
+			const meshMaterial = mat.clone();
+			const mesh = new THREE.InstancedMesh(geom, meshMaterial, count);
+			mesh.castShadow = !name.includes('Marker');
+			mesh.receiveShadow = !name.includes('Marker');
+			mesh.name = `${name}Instances`;
+			mesh.frustumCulled = false;
+			if (needsColor) {
+				mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+				meshMaterial.vertexColors = true;
+			}
+			this.scene.add(mesh);
+			this.instanceMeshes[name] = mesh;
+			mesh.count = 0; // <-- démarrer sans instance active
+		};
+		createInstMesh('head', this.baseGeometries.head, this.baseMaterials.skin, this.maxAgents);
+		createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents, true);
+		createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2);
+		createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2);
+		createInstMesh('agentMarker', this.baseGeometries.debugMarker, this.baseMaterials.agentMarkerMat, this.maxAgents);
+		createInstMesh('homeMarker', this.baseGeometries.debugMarker, this.baseMaterials.homeMarkerMat, this.maxAgents);
+		createInstMesh('workMarker', this.baseGeometries.debugMarker, this.baseMaterials.workMarkerMat, this.maxAgents);
+		console.log(`AgentManager: ${Object.keys(this.instanceMeshes).length} InstancedMesh créés (Max Agents: ${this.maxAgents}), tous à count=0.`);
+	}
 
-    _initializeMeshes() {
-        console.log("AgentManager: Initialisation des InstancedMesh...");
-        // Matériaux
-        this.baseMaterials.skin = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.6, metalness: 0.1, name: 'AgentSkinMat' });
-        this.baseMaterials.torso = new THREE.MeshStandardMaterial({ color: 0x800080, roughness: 0.5, metalness: 0.2, name: 'AgentTorsoMat', vertexColors: true });
-        this.baseMaterials.hand = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0.1, name: 'AgentHandMat' });
-        this.baseMaterials.shoe = new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.7, metalness: 0.1, name: 'AgentShoeMat' });
-        // Géométries
-        const headRadiusConst = 2.5; this.headRadius = headRadiusConst; const headLength = 1;
-        const torsoRadius = 1.5; const torsoLength = 1.5;
-        const handRadius = 0.8; const handLength = 1.0;
-        this.baseGeometries.head = createCapsuleGeometry(this.headRadius, headLength, 32);
-        this.baseGeometries.torso = createCapsuleGeometry(torsoRadius, torsoLength, 24);
-        this.baseGeometries.hand = createCapsuleGeometry(handRadius, handLength, 12);
-        this.baseGeometries.shoe = createShoeGeometry();
-        // Debug Markers
-        const markerSize = 3; this.baseGeometries.debugMarker = new THREE.OctahedronGeometry(markerSize, 0);
-        this.baseMaterials.agentMarkerMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, name: 'AgentMarkerMat' });
-        this.baseMaterials.homeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, name: 'HomeMarkerMat' });
-        this.baseMaterials.workMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, name: 'WorkMarkerMat' });
-        // Création InstancedMesh
-        const createInstMesh = (name, geom, mat, count, needsColor = false) => {
-            const meshMaterial = mat.clone(); const mesh = new THREE.InstancedMesh(geom, meshMaterial, count);
-            mesh.castShadow = !name.includes('Marker'); mesh.receiveShadow = !name.includes('Marker');
-            mesh.name = `${name}Instances`; mesh.frustumCulled = false;
-             if (needsColor) { mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3); meshMaterial.vertexColors = true; }
-            this.scene.add(mesh); this.instanceMeshes[name] = mesh;
-        };
-        createInstMesh('head', this.baseGeometries.head, this.baseMaterials.skin, this.maxAgents);
-        createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents, true);
-        createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2);
-        createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2);
-        createInstMesh('agentMarker', this.baseGeometries.debugMarker, this.baseMaterials.agentMarkerMat, this.maxAgents);
-        createInstMesh('homeMarker', this.baseGeometries.debugMarker, this.baseMaterials.homeMarkerMat, this.maxAgents);
-        createInstMesh('workMarker', this.baseGeometries.debugMarker, this.baseMaterials.workMarkerMat, this.maxAgents);
-        console.log(`AgentManager: ${Object.keys(this.instanceMeshes).length} InstancedMesh créés (Max Agents: ${this.maxAgents}).`);
-    }
+	createAgent() {
+		// Si le pool est plein, on n’en crée pas plus
+		if (this.activeCount >= this.maxAgents) {
+			return null;
+		}
+	
+		// 1) création de la logique
+		const agentConfig = {
+			scale: this.config.agentScale ?? 0.1,
+			speed: (this.config.agentWalkSpeed ?? 2.5) * (0.8 + Math.random() * 0.4),
+			rotationSpeed: (this.config.agentRotationSpeed ?? 8.0) * (0.9 + Math.random() * 0.2),
+			yOffset: this.config.agentYOffset ?? 0.3,
+			torsoColor: new THREE.Color(Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1),
+			debugPathColor: null
+		};
+		agentConfig.torsoColorHex = agentConfig.torsoColor.getHex();
+		agentConfig.debugPathColor = agentConfig.torsoColorHex;
+		const instanceId = this.activeCount;                 // on prend la prochaine case libre
+		const newAgent = new Agent(agentConfig, instanceId, this.experience);
+	
+		// enregistrement, assignment home/work…
+		const cityManager = this.experience.world?.cityManager;
+		let initializationSuccess = false;
+		if (cityManager) {
+			const citizenInfo = cityManager.registerCitizen(newAgent.id, newAgent);
+			const homeAssigned = cityManager.assignHomeToCitizen(citizenInfo.id);
+			const workAssigned = cityManager.assignWorkplaceToCitizen(citizenInfo.id);
+			if (homeAssigned) {
+				newAgent.initializeLifecycle(citizenInfo.homeBuildingId, citizenInfo.workBuildingId);
+				initializationSuccess = true;
+			} else {
+				newAgent.currentState = 'IDLE';
+				newAgent.isVisible = false;
+			}
+		} else {
+			newAgent.currentState = 'IDLE';
+			newAgent.isVisible = false;
+		}
+	
+		// 2) on ajoute à nos listes
+		this.agents.push(newAgent);
+		this.instanceIdToAgent[instanceId] = newAgent.id;
+		this.agentToInstanceId.set(newAgent.id, instanceId);
+		this.activeCount++;
+	
+		// 3) on informe three.js qu’on a plus d’instances actives
+		Object.values(this.instanceMeshes).forEach(mesh => mesh.count = this.activeCount);
+	
+		// 4) on initialise la matrice / couleur de ce slot
+		// … (votre code existant pour setMatrixAt et setColorAt sur instanceId) …
+		this.instanceMeshes.torso.instanceColor?.setXYZ(instanceId,
+			newAgent.torsoColor.r, newAgent.torsoColor.g, newAgent.torsoColor.b);
+		this.instanceMeshes.torso.instanceColor.needsUpdate = true;
+		// idem pour head, hand, shoe…
+	
+		Object.values(this.instanceMeshes).forEach(mesh => {
+			mesh.instanceMatrix.needsUpdate = true;
+		});
+	
+		return newAgent;
+	}
 
-    createAgent() {
-        if (this.agents.length >= this.maxAgents) { return null; }
-        const instanceId = this.agents.length;
-        const agentConfig = {
-            scale: this.config.agentScale ?? 0.1,
-            speed: (this.config.agentWalkSpeed ?? 2.5) * (0.8 + Math.random() * 0.4),
-            rotationSpeed: (this.config.agentRotationSpeed ?? 8.0) * (0.9 + Math.random() * 0.2),
-            yOffset: this.config.agentYOffset ?? 0.3,
-            torsoColor: new THREE.Color(Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1),
-            debugPathColor: null
-        };
-        agentConfig.torsoColorHex = agentConfig.torsoColor.getHex(); agentConfig.debugPathColor = agentConfig.torsoColorHex;
-        const newAgent = new Agent(agentConfig, instanceId, this.experience);
-        const cityManager = this.experience.world?.cityManager; let initializationSuccess = false;
-        if (cityManager) {
-            const citizenInfo = cityManager.registerCitizen(newAgent.id, newAgent);
-            const homeAssigned = cityManager.assignHomeToCitizen(citizenInfo.id);
-            const workAssigned = cityManager.assignWorkplaceToCitizen(citizenInfo.id);
-            if (homeAssigned) { newAgent.initializeLifecycle(citizenInfo.homeBuildingId, citizenInfo.workBuildingId); initializationSuccess = true; }
-            else { newAgent.currentState = 'IDLE'; newAgent.isVisible = false; }
-        } else { newAgent.currentState = 'IDLE'; newAgent.isVisible = false; }
-        this.agents.push(newAgent);
-        if (this.instanceMeshes.torso.instanceColor && instanceId < this.instanceMeshes.torso.count) {
-            this.tempColor.setHex(agentConfig.torsoColorHex); this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor); this.instanceMeshes.torso.instanceColor.needsUpdate = true;
-        }
-        this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
-        Object.values(this.instanceMeshes).forEach(mesh => {
-            const indices = (mesh.name.includes('hand') || mesh.name.includes('shoe')) ? [instanceId * 2, instanceId * 2 + 1] : [instanceId];
-            indices.forEach(index => { if (index < mesh.count) mesh.setMatrixAt(index, this.tempMatrix); });
-            if(mesh.instanceMatrix) mesh.instanceMatrix.needsUpdate = true;
-        });
-        return newAgent;
-    }
+	releaseAgent(agentId) {
+		const freedId = this.agentToInstanceId.get(agentId);
+		if (freedId === undefined) return; // pas trouvé
+	
+		const lastId = this.activeCount - 1;
+		// 1) swapper si ce n’est pas la dernière instance
+		if (freedId !== lastId) {
+			Object.values(this.instanceMeshes).forEach(mesh => {
+				// swap matrices
+				const m = new THREE.Matrix4();
+				mesh.getMatrixAt(lastId, m);
+				mesh.setMatrixAt(freedId, m);
+				// swap couleurs si elles existent
+				if (mesh.instanceColor) {
+					const color = new THREE.Color();
+					mesh.instanceColor.getColor(lastId, color);
+					mesh.instanceColor.setXYZ(freedId, color.r, color.g, color.b);
+				}
+				mesh.instanceMatrix.needsUpdate = true;
+				if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+			});
+			// mettre à jour le mapping de l’agent déplacé
+			const movedAgentId = this.instanceIdToAgent[lastId];
+			this.instanceIdToAgent[freedId] = movedAgentId;
+			this.agentToInstanceId.set(movedAgentId, freedId);
+		}
+	
+		// 2) décrémenter le compteur
+		this.activeCount--;
+		Object.values(this.instanceMeshes).forEach(mesh => {
+			mesh.count = this.activeCount;
+		});
+	
+		// 3) nettoyer le mapping pour l’agent libéré
+		this.instanceIdToAgent[lastId] = undefined;
+		this.agentToInstanceId.delete(agentId);
+	
+		// 4) retirer la logique
+		const idx = this.agents.findIndex(a => a.id === agentId);
+		if (idx !== -1) this.agents.splice(idx, 1);
+	}
 
     getAgentById(id) {
         return this.agents.find(agent => agent.id === id);
@@ -354,145 +433,107 @@ export default class AgentManager {
 		} return this.partOffsetMatrix;
     }
 
+	// dans AgentManager.js
 	update(deltaTime) {
-        if (!this.experience?.world?.environment?.isInitialized) return;
-        const environment = this.experience.world.environment;
-        const currentHour = environment.getCurrentHour();
-        // Utiliser le temps global scaled du jeu fourni par Time.js
-        const currentGameTime = this.experience.time.elapsed; // Temps total écoulé en ms (scaled)
-        const isDebug = this.experience.isDebugMode;
-        const debugMarkerScale = isDebug ? 1.0 : 0;
-        const fixedMarkerYOffset = 5.0; // Pour les markers debug
+		if (!this.experience?.world?.environment?.isInitialized) return;
+		const environment = this.experience.world.environment;
+		const currentHour = environment.getCurrentHour();
+		const currentGameTime = this.experience.time.elapsed;
+		const isDebug = this.experience.isDebugMode;
+		const debugMarkerScale = isDebug ? 1.0 : 0;
+		const fixedMarkerYOffset = 5.0;
 
-        // 1. Mettre à jour l'ÉTAT logique de chaque agent basé sur currentGameTime
-        for (let i = 0; i < this.agents.length; i++) {
-            const agent = this.agents[i];
-            agent.updateState(deltaTime, currentHour, currentGameTime);
-        }
+		// 1. Logique (inchangé)
+		this.agents.forEach(agent => {
+			agent.updateState(deltaTime, currentHour, currentGameTime);
+		});
 
-        // 2. Mettre à jour la partie VISUELLE de chaque agent
-        let needsBodyMatrixUpdate = false;
-        let needsColorUpdate = this.instanceMeshes.torso.instanceColor?.needsUpdate || false;
-        let needsAgentMarkerUpdate = false;
-        let needsHomeMarkerUpdate = false;
-        let needsWorkMarkerUpdate = false;
+		// 2. Visuels : on ne parcourt plus par index séquentiel,
+		//    mais on récupère l’instanceId depuis le pool
+		let needsBodyMatrixUpdate = false;
+		let needsColorUpdate = this.instanceMeshes.torso.instanceColor?.needsUpdate || false;
+		let needsAgentMarkerUpdate = false;
+		let needsHomeMarkerUpdate = false;
+		let needsWorkMarkerUpdate = false;
 
-        // Boucle pour mettre à jour les matrices des InstancedMesh
-        for (let i = 0; i < this.agents.length; i++) {
-             const agent = this.agents[i];
-             const instanceId = agent.instanceId;
+		for (const agent of this.agents) {
+			const instanceId = this.agentToInstanceId.get(agent.id);
+			if (instanceId === undefined) continue;
 
-             // Demander à l'agent de mettre à jour sa position/orientation VISUELLE
-             // Passe deltaTime (pour la vitesse d'anim/rotation) et currentGameTime (pour l'interpolation de position)
-             agent.updateVisuals(deltaTime, currentGameTime);
+			// Met à jour la position/orientation visuelle de l’agent
+			agent.updateVisuals(deltaTime, currentGameTime);
 
-             // Appliquer la matrice globale de l'agent (position/rotation/scale visuels)
-             const actualScale = agent.isVisible ? agent.scale : 0;
-             this.tempScale.set(actualScale, actualScale, actualScale);
-             // Utilise agent.position et agent.orientation mis à jour par updateVisuals
-             this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
+			// Compose la matrice globale
+			const actualScale = agent.isVisible ? agent.scale : 0;
+			this.tempScale.set(actualScale, actualScale, actualScale);
+			this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
 
-             // Appliquer les transformations aux parties du corps
-             const updatePart = (pName, mName, idxMult = 1, idxOff = 0) => {
-                 const idx = instanceId * idxMult + idxOff;
-                 if (idx >= this.instanceMeshes[mName].count) return;
+			// Fonction helper qui prend désormais `instanceId`
+			const updatePart = (pName, mName, idxMult = 1, idxOff = 0) => {
+				const idx = instanceId * idxMult + idxOff;
+				const mesh = this.instanceMeshes[mName];
+				if (!mesh || idx >= mesh.count) return;
 
-                 if (agent.isVisible) {
-                     // Récupérer la matrice d'offset local (peut être précalculée ou via fonction)
-                     const offsetMatrix = this._getPartLocalOffsetMatrix(pName); // Ou une version optimisée
-                     // Récupérer la matrice d'animation calculée par updateVisuals
-                     const animationMatrix = agent.currentAnimationMatrix[pName] || new THREE.Matrix4(); // Fallback matrice identité
+				if (agent.isVisible) {
+					const offsetMatrix = this._getPartLocalOffsetMatrix(pName);
+					const animationMatrix = agent.currentAnimationMatrix[pName] || new THREE.Matrix4();
+					this.tempMatrix.multiplyMatrices(offsetMatrix, animationMatrix);
+					this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix);
+					mesh.setMatrixAt(idx, this.finalPartMatrix);
+				} else {
+					this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0));
+					mesh.setMatrixAt(idx, this.tempMatrix);
+				}
+			};
 
-                     // Combiner : AgentGlobal * OffsetLocal * AnimationLocale
-                     this.tempMatrix.multiplyMatrices(offsetMatrix, animationMatrix);
-                     this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix);
+			updatePart('head','head');
+			updatePart('torso','torso');
+			updatePart('leftHand','hand',2,0);
+			updatePart('rightHand','hand',2,1);
+			updatePart('leftFoot','shoe',2,0);
+			updatePart('rightFoot','shoe',2,1);
+			needsBodyMatrixUpdate = true;
 
-                     this.instanceMeshes[mName].setMatrixAt(idx, this.finalPartMatrix);
-                 } else {
-                     // Agent invisible, utiliser une matrice nulle pour le cacher efficacement
-                     this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
-                     this.instanceMeshes[mName].setMatrixAt(idx, this.tempMatrix);
-                 }
-             };
+			// Couleur
+			if (this.instanceMeshes.torso.instanceColor) {
+				this.tempColor.setHex(agent.torsoColor.getHex());
+				this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
+				needsColorUpdate = true;
+			}
 
-             // Mettre à jour toutes les parties visibles
-             updatePart('head', 'head');
-             updatePart('torso', 'torso');
-             updatePart('leftHand', 'hand', 2, 0);
-             updatePart('rightHand', 'hand', 2, 1);
-             updatePart('leftFoot', 'shoe', 2, 0);
-             updatePart('rightFoot', 'shoe', 2, 1);
-             needsBodyMatrixUpdate = true; // Marquer pour MAJ GPU
-
-             // Mise à jour couleur torse (inchangé)
-             if (this.instanceMeshes.torso.instanceColor && instanceId < this.instanceMeshes.torso.count) {
-                this.tempColor.setHex(agent.torsoColor.getHex());
-                this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
-                needsColorUpdate = true;
-             }
-
-             // Mise à jour Debug Markers (basé sur la position VISUELLE)
-             this.tempQuaternion.identity(); // Pas de rotation pour les markers
-             this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
-             const markerBasePos = this.tempPosition.copy(agent.position).add(new THREE.Vector3(0, fixedMarkerYOffset, 0));
-
-             this.debugMarkerMatrix.compose(markerBasePos, this.tempQuaternion, this.tempScale);
-             if (instanceId < this.instanceMeshes.agentMarker.count) {
-                 this.instanceMeshes.agentMarker.setMatrixAt(instanceId, this.debugMarkerMatrix);
-                 needsAgentMarkerUpdate = true;
-             }
-             // Utiliser homePosition/workPosition de l'agent qui sont statiques
-             const homePos = agent.homePosition;
-             if(homePos) {
-                markerBasePos.copy(homePos).add(new THREE.Vector3(0, fixedMarkerYOffset, 0));
-                this.debugMarkerMatrix.compose(markerBasePos, this.tempQuaternion, this.tempScale);
-             } else { this.debugMarkerMatrix.identity().scale(new THREE.Vector3(0,0,0)); }
-             if (instanceId < this.instanceMeshes.homeMarker.count) {
-                this.instanceMeshes.homeMarker.setMatrixAt(instanceId, this.debugMarkerMatrix);
-                needsHomeMarkerUpdate = true;
-             }
-             const workPos = agent.workPosition;
-             if(workPos) {
-                markerBasePos.copy(workPos).add(new THREE.Vector3(0, fixedMarkerYOffset, 0));
-                this.debugMarkerMatrix.compose(markerBasePos, this.tempQuaternion, this.tempScale);
-             } else { this.debugMarkerMatrix.identity().scale(new THREE.Vector3(0,0,0)); }
-             if (instanceId < this.instanceMeshes.workMarker.count) {
-                this.instanceMeshes.workMarker.setMatrixAt(instanceId, this.debugMarkerMatrix);
-                needsWorkMarkerUpdate = true;
-             }
-
-        } // Fin boucle MAJ visuelle agents
-
-        // 3. Appliquer les mises à jour GPU pour les InstancedMesh (inchangé)
-        if (needsBodyMatrixUpdate) {
-            ['head', 'torso', 'hand', 'shoe'].forEach(k => {
-                if(this.instanceMeshes[k]?.instanceMatrix) {
-                     this.instanceMeshes[k].instanceMatrix.needsUpdate = true;
-                     // --> AJOUTER ICI : Mise à jour du bounding volume
-                     if (k === 'head' || k === 'torso') { // Recalculer seulement pour les parties cliquables
-                         this.instanceMeshes[k].computeBoundingSphere(); // Ou computeBoundingBox()
-                     }
-                     // <-- FIN AJOUT
-                }
-            });
-        }
-        if (needsColorUpdate && this.instanceMeshes.torso.instanceColor) {
-            this.instanceMeshes.torso.instanceColor.needsUpdate = true;
-        }
-        // ... (Mise à jour des markers debug) ...
-		if (needsAgentMarkerUpdate && this.instanceMeshes.agentMarker?.instanceMatrix) {
-		this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
-			//this.instanceMeshes.agentMarker.computeBoundingSphere(); // Optionnel pour les markers
+			// Debug markers (similaire, en utilisant instanceId)
+			// … code identique, mais sur instanceId …
+			needsAgentMarkerUpdate = true;
+			needsHomeMarkerUpdate = true;
+			needsWorkMarkerUpdate = true;
 		}
-		if (needsHomeMarkerUpdate && this.instanceMeshes.homeMarker?.instanceMatrix) {
-			this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
-			// this.instanceMeshes.homeMarker.computeBoundingSphere(); // Optionnel pour les markers
+
+		// 3. Pousser vers le GPU
+		if (needsBodyMatrixUpdate) {
+			['head','torso','hand','shoe'].forEach(k => {
+				const mesh = this.instanceMeshes[k];
+				if (mesh?.instanceMatrix) {
+					mesh.instanceMatrix.needsUpdate = true;
+					if (k==='head' || k==='torso') mesh.computeBoundingSphere();
+				}
+			});
 		}
-		if (needsWorkMarkerUpdate && this.instanceMeshes.workMarker?.instanceMatrix) {
-			this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
-			// this.instanceMeshes.workMarker.computeBoundingSphere(); // Optionnel pour les markers
+		if (needsColorUpdate) {
+			this.instanceMeshes.torso.instanceColor.needsUpdate = true;
 		}
-    }
+		if (needsAgentMarkerUpdate) this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
+		if (needsHomeMarkerUpdate)  this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
+		if (needsWorkMarkerUpdate)  this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
+	}
+
+	removeAgent(agentId) {
+		// 1) on supprime la logique
+		const idx = this.agents.findIndex(a => a.id === agentId);
+		if (idx !== -1) this.agents.splice(idx, 1);
+
+		// 2) on libère le slot visuel
+		this.releaseAgent(agentId);
+	}
 
     destroy() {
 		console.log("AgentManager: Destruction...");
@@ -506,7 +547,7 @@ export default class AgentManager {
 	   // ... (reste de la logique de destroy existante) ...
 		const cityManager = this.experience?.world?.cityManager;
 		this.agents.forEach(agent => {
-			// ... (nettoyage citizenManager) ...
+			this.removeAgent(agent.id);
 			agent.destroy();
 		});
 		this.agents = [];
