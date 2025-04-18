@@ -1,275 +1,270 @@
-// --- src/World/PathfindingWorker.js ---
+// src/World/PathfindingWorker.js
+import * as PF from 'pathfinding';
+// Importer AbstractGraph pour la désérialisation
+import AbstractGraph from './HPA/AbstractGraph.js'; // Assurez-vous que le chemin relatif est correct
 
-// (Imports et setup global du worker restent inchangés)
-import * as PF from 'pathfinding'; // Assurez-vous que l'import est correct
+let pfGrid = null; // La grille fine originale (PF.Grid)
+let abstractGraph = null; // Le graphe HPA précalculé (instance de AbstractGraph)
+let detailFinder = null; // JPS Finder pour les chemins sur pfGrid
 
-let pfGrid = null;
+// Variables pour la conversion de coordonnées
 let gridScale = 1.0;
 let offsetX = 0;
 let offsetZ = 0;
 let sidewalkHeight = 0.2;
 
-// Le finder JPS global, initialisé dans 'init'
-let finderJPS = null;
+// --- Fonctions Helper (inchangées) ---
 
-// Pour HPA
-let clusters = [];
-let clusterSize = 0;
-let clusterCols = 0;
-let clusterRows = 0;
-// Map<fromCid, Map<toCid, Array<{x,y,cluster}>>> pour accès rapide aux portes
-let clusterDoorsMap = new Map();
+/**
+ * Calcule la distance euclidienne 2D entre deux points dans le monde.
+ * @param {{x: number, z: number}} p1
+ * @param {{x: number, z: number}} p2
+ * @returns {number}
+ */
+function calculateWorldDistance(p1, p2) {
+    const dx = p2.x - p1.x;
+    const dz = p2.z - p1.z;
+    return Math.sqrt(dx * dx + dz * dz);
+}
 
-// --- Fonction gridToWorld (inchangée) ---
+/**
+ * Convertit les coordonnées grille (x, y) en coordonnées monde (x, y, z).
+ * @param {number} gridX
+ * @param {number} gridY
+ * @returns {{x: number, y: number, z: number}}
+ */
 function gridToWorld(gridX, gridY) {
+    // S'assurer que les paramètres de conversion sont définis
+    if (gridScale === undefined || offsetX === undefined || offsetZ === undefined || sidewalkHeight === undefined) {
+        console.error("[Worker] Variables de conversion non définies dans gridToWorld!");
+        // Assignation de valeurs par défaut robustes en cas d'erreur
+        gridScale = gridScale ?? 1.0;
+        offsetX = offsetX ?? 0;
+        offsetZ = offsetZ ?? 0;
+        sidewalkHeight = sidewalkHeight ?? 0.2;
+    }
+    // Le +0.5 centre le point dans la cellule de la grille
     const worldX = (gridX + 0.5 - offsetX) / gridScale;
     const worldZ = (gridY + 0.5 - offsetZ) / gridScale;
+    // Position Y légèrement au-dessus du trottoir pour éviter z-fighting
     return { x: worldX, y: sidewalkHeight + 0.05, z: worldZ };
 }
 
+// --- Gestionnaire de Messages Principal ---
 self.onmessage = function(event) {
     const { type, data } = event.data;
 
     try {
-        // ------------------------------------------------
-        // 1) INITIALISATION (appel unique)
-        // ------------------------------------------------
-        if (type === 'init') {
-            const { width, height, nodesWalkable } = data.gridData;
-            const params = data.conversionParams;
+        switch (type) {
+            // --- Initialisation de la Grille Fine ---
+            case 'initGrid':
+                console.log('[Worker] Message Reçu: initGrid');
+                if (data && data.gridData && data.conversionParams) {
+                    const { width, height, nodesWalkable } = data.gridData;
+                    const params = data.conversionParams;
 
-            // Stocker params de conversion
-            gridScale      = params.gridScale;
-            offsetX        = params.offsetX;
-            offsetZ        = params.offsetZ;
-            sidewalkHeight = params.sidewalkHeight;
+                    // Stocker les paramètres de conversion
+                    gridScale = params.gridScale ?? 1.0;
+                    offsetX = params.offsetX ?? 0;
+                    offsetZ = params.offsetZ ?? 0;
+                    sidewalkHeight = params.sidewalkHeight ?? 0.2;
 
-            // Construire la grille PF.Grid
-            const matrix = nodesWalkable.map(row => row.map(w => w ? 0 : 1));
-            pfGrid = new PF.Grid(width, height, matrix);
+                    // Valider et créer la grille PF.Grid
+                    if (width > 0 && height > 0 && nodesWalkable && nodesWalkable.length === height && nodesWalkable[0]?.length === width) {
+                        const matrix = nodesWalkable.map(row => row.map(walkable => walkable ? 0 : 1)); // 0=walkable, 1=obstacle
+                        pfGrid = new PF.Grid(width, height, matrix);
 
-            // Initialiser JPS global
-            finderJPS = new PF.JumpPointFinder({
-                allowDiagonal: true,
-                dontCrossCorners: true,
-                heuristic: PF.Heuristic.manhattan
-            });
+                        // Initialiser le JPS Finder pour les chemins détaillés
+                        detailFinder = new PF.JumpPointFinder({
+                            allowDiagonal: true,
+                            dontCrossCorners: true,
+                            heuristic: PF.Heuristic.manhattan
+                            // diagonalMovement: PF.DiagonalMovement.IfAtMostOneObstacle // Option à tester
+                        });
 
-            // Pré-calcul HPA : découpage en clusters
-            clusterSize  = 16;
-            clusterCols  = Math.ceil(width  / clusterSize);
-            clusterRows  = Math.ceil(height / clusterSize);
-            clusters     = [];
-            for (let cy = 0; cy < clusterRows; cy++) {
-                for (let cx = 0; cx < clusterCols; cx++) {
-                    clusters.push({ id: cy*clusterCols + cx, x: cx, y: cy, doors: [] });
+                        console.log(`[Worker] Grille Fine ${width}x${height} et JPS Finder (détail) initialisés.`);
+                        self.postMessage({ type: 'gridInitComplete' }); // Confirmer l'initialisation de la grille
+
+                    } else {
+                        console.error("[Worker] Données de grille invalides reçues pour initGrid.", { width, height, nodesWalkable_height: nodesWalkable?.length });
+                        throw new Error("Données de grille invalides pour initGrid.");
+                    }
+                } else {
+                    throw new Error("Données manquantes pour initGrid (gridData ou conversionParams).");
                 }
-            }
-            // Identifier les portes
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    if (!pfGrid.isWalkableAt(x,y)) continue;
-                    const cid = Math.floor(y/clusterSize)*clusterCols + Math.floor(x/clusterSize);
-                    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => {
-                        const nx = x+dx, ny = y+dy;
-                        if (nx<0||nx>=width||ny<0||ny>=height) return;
-                        if (!pfGrid.isWalkableAt(nx,ny)) return;
-                        const ncid = Math.floor(ny/clusterSize)*clusterCols + Math.floor(nx/clusterSize);
-                        if (ncid !== cid) clusters[cid].doors.push({ x, y, cluster: ncid });
-                    });
+                break;
+
+            // --- Initialisation du Graphe HPA ---
+            case 'initHPA':
+                console.log('[Worker] Message Reçu: initHPA');
+                if (data && data.abstractGraphData) {
+                    try {
+                        // Désérialiser les données JSON pour recréer l'instance AbstractGraph
+                        abstractGraph = AbstractGraph.deserialize(data.abstractGraphData);
+                        console.log('[Worker] Graphe HPA désérialisé et prêt.');
+                        self.postMessage({ type: 'hpaInitComplete' }); // Confirmer l'initialisation HPA
+                    } catch (e) {
+                        console.error('[Worker] Erreur désérialisation Graphe HPA:', e);
+                        throw new Error("Échec désérialisation HPA.");
+                    }
+                } else {
+                    throw new Error("Données manquantes pour initHPA (abstractGraphData).");
                 }
-            }
-            // Nettoyer doublons portes
-            clusters.forEach(c => {
-                const seen = new Set();
-                c.doors = c.doors.filter(d => {
-                    const k = `${d.x},${d.y},${d.cluster}`;
-                    return seen.has(k) ? false : seen.add(k);
-                });
-            });
+                break;
 
-            // Construire clusterDoorsMap pour accès rapide
-            clusterDoorsMap.clear();
-            clusters.forEach(c => {
-                const m = new Map();
-                c.doors.forEach(d => {
-                    if (!m.has(d.cluster)) m.set(d.cluster, []);
-                    m.get(d.cluster).push(d);
-                });
-                clusterDoorsMap.set(c.id, m);
-            });
-
-            self.postMessage({ type: 'initComplete' });
-            return;
-        }
-
-        // ------------------------------------------------
-        // 2) REQUÊTE DE CHEMIN
-        // ------------------------------------------------
-        if (type === 'findPath') {
-            // Si pas encore init
-            if (!pfGrid || !finderJPS) {
-                if (data?.agentId) {
-                    self.postMessage({
-                        type: 'pathResult',
-                        data: { agentId: data.agentId, path: null, pathLengthWorld: 0 }
-                    });
+            // --- Recherche de Chemin Détaillé (sur grille fine avec JPS) ---
+            case 'findDetailPath':
+                // console.log('[Worker] Message Reçu: findDetailPath', data); // Debug
+                if (!pfGrid || !detailFinder) {
+                    console.error(`[Worker] findDetailPath Agent ${data?.agentId}: Grille/Finder(JPS) non initialisé.`);
+                    if (data?.agentId) { self.postMessage({ type: 'pathResult', data: { agentId: data.agentId, path: null, pathLengthWorld: 0, requestType: 'detail' } }); }
+                    return;
                 }
-                return;
-            }
+                if (!data || !data.agentId || !data.startNode || !data.endNode) {
+                    console.error("[Worker] Données manquantes pour findDetailPath:", data);
+                    if (data?.agentId) { self.postMessage({ type: 'pathResult', data: { agentId: data.agentId, path: null, pathLengthWorld: 0, requestType: 'detail' } }); }
+                    return;
+                }
 
-            const { agentId, startNode, endNode } = data;
+                const { agentId: detailAgentId, startNode: detailStartNode, endNode: detailEndNode } = data;
 
-            // Cas trivial départ=arrivée
-            if (startNode.x === endNode.x && startNode.y === endNode.y) {
-                const wp = [ gridToWorld(startNode.x, startNode.y) ];
+                // Vérifier coordonnées valides
+                const isValidCoordDetail = (node) => node && node.x >= 0 && node.x < pfGrid.width && node.y >= 0 && node.y < pfGrid.height;
+                if (!isValidCoordDetail(detailStartNode) || !isValidCoordDetail(detailEndNode)) {
+                     console.error(`[Worker] Coordonnées invalides pour findDetailPath Agent ${detailAgentId} - Start: (${detailStartNode?.x}, ${detailStartNode?.y}), End: (${detailEndNode?.x}, ${detailEndNode?.y}). Limites: ${pfGrid.width}x${pfGrid.height}`);
+                     self.postMessage({ type: 'pathResult', data: { agentId: detailAgentId, path: null, pathLengthWorld: 0, requestType: 'detail' } });
+                     return;
+                 }
+
+                // Gérer cas départ = arrivée
+                if (detailStartNode.x === detailEndNode.x && detailStartNode.y === detailEndNode.y) {
+                    const worldPathDataStart = [gridToWorld(detailStartNode.x, detailStartNode.y)];
+                    self.postMessage({ type: 'pathResult', data: { agentId: detailAgentId, path: worldPathDataStart, pathLengthWorld: 0, requestType: 'detail' } });
+                    return;
+                }
+
+                const gridCloneDetail = pfGrid.clone();
+                gridCloneDetail.setWalkableAt(detailStartNode.x, detailStartNode.y, true); // Assurer marchable
+                gridCloneDetail.setWalkableAt(detailEndNode.x, detailEndNode.y, true);
+                let gridPathDetail = null;
+                let worldPathDataDetail = null;
+                let pathLengthWorldDetail = 0;
+
+                try {
+                    // Exécuter JPS
+                    gridPathDetail = detailFinder.findPath(detailStartNode.x, detailStartNode.y, detailEndNode.x, detailEndNode.y, gridCloneDetail);
+
+                    // Traiter résultat
+                    if (gridPathDetail && gridPathDetail.length > 0) {
+                        worldPathDataDetail = gridPathDetail.map(node => gridToWorld(node[0], node[1]));
+                        // Calculer la longueur dans le monde réel
+                        if (worldPathDataDetail.length > 1) {
+                            for (let i = 0; i < worldPathDataDetail.length - 1; i++) {
+                                pathLengthWorldDetail += calculateWorldDistance(worldPathDataDetail[i], worldPathDataDetail[i + 1]);
+                            }
+                        }
+                    } else {
+                        worldPathDataDetail = null;
+                        pathLengthWorldDetail = 0;
+                        console.warn(`[Worker] JPS n'a pas trouvé de chemin détaillé pour Agent ${detailAgentId} de (${detailStartNode.x},${detailStartNode.y}) à (${detailEndNode.x},${detailEndNode.y})`);
+                    }
+
+                } catch (e) {
+                    console.error(`[Worker] Erreur DANS JPS pour Agent ${detailAgentId} (${detailStartNode.x},${detailStartNode.y})->(${detailEndNode.x},${detailEndNode.y}):`, e);
+                    worldPathDataDetail = null;
+                    pathLengthWorldDetail = 0;
+                }
+
+                // Renvoyer le résultat du chemin détaillé
                 self.postMessage({
                     type: 'pathResult',
-                    data: { agentId, path: wp, pathLengthWorld: 0 }
+                    data: { agentId: detailAgentId, path: worldPathDataDetail, pathLengthWorld: pathLengthWorldDetail, requestType: 'detail' }
                 });
-                return;
-            }
+                break;
 
-            // --- Helper : Jump Point Search local ---
-            function localJPS(s, e) {
-                const g = pfGrid.clone();
-                g.setWalkableAt(s.x, s.y, true);
-                g.setWalkableAt(e.x, e.y, true);
-                return finderJPS.findPath(s.x, s.y, e.x, e.y, g);
-            }
+            // --- Recherche de Chemin Abstrait (sur graphe HPA) ---
+            case 'findAbstractPath':
+                // console.log('[Worker] Message Reçu: findAbstractPath', data); // Debug
+                if (!abstractGraph) {
+                    console.error(`[Worker] findAbstractPath Agent ${data?.agentId}: Graphe HPA non initialisé.`);
+                    if (data?.agentId) { self.postMessage({ type: 'abstractPathResult', data: { agentId: data.agentId, path: null } }); }
+                    return;
+                }
+                if (!data || !data.agentId || data.startGateNodeId === undefined || data.endGateNodeId === undefined) {
+                    console.error("[Worker] Données manquantes pour findAbstractPath:", data);
+                    if (data?.agentId) { self.postMessage({ type: 'abstractPathResult', data: { agentId: data.agentId, path: null } }); }
+                    return;
+                }
 
-           /**
-			 * Trouve un chemin hiérarchique (HPA) entre deux nœuds de grille.
-			 * Pour les trajets courts (manhattan < 2*clusterSize), on utilise directement JPS.
-			 *
-			 * @param {{x:number,y:number}} s  Le nœud de départ en coordonnées de grille.
-			 * @param {{x:number,y:number}} e  Le nœud d’arrivée en coordonnées de grille.
-			 * @returns {{gridPath:Array<[number,number]>, pathLength:number}|null}
-			 */
-			function findHierarchicalPath(s, e) {
-				// Seuil pour bypasser HPA sur les trajets courts
-				const dx = Math.abs(s.x - e.x), dy = Math.abs(s.y - e.y);
-				if (dx + dy < clusterSize * 2) {
-					// trajet court → un seul appel JPS
-					const raw = localJPS(s, e);
-					let len = 0;
-					for (let i = 1; i < raw.length; i++) {
-						const [ax, ay] = raw[i - 1], [bx, by] = raw[i];
-						len += Math.hypot((bx - ax) / gridScale, (by - ay) / gridScale);
-					}
-					return { gridPath: raw, pathLength: len };
-				}
+                const { agentId: abstractAgentId, startGateNodeId, endGateNodeId } = data;
 
-				// Identification des clusters de départ et d’arrivée
-				const cs       = clusterSize;
-				const startCid = Math.floor(s.y / cs) * clusterCols + Math.floor(s.x / cs);
-				const endCid   = Math.floor(e.y / cs) * clusterCols + Math.floor(e.x / cs);
+                 // Gérer cas départ = arrivée (au niveau abstrait)
+                 if (startGateNodeId === endGateNodeId) {
+                     console.warn(`[Worker] findAbstractPath Agent ${abstractAgentId}: Start gate ID (${startGateNodeId}) est identique à End gate ID.`);
+                     // Renvoyer un chemin contenant juste ce nœud ? Ou null ? Renvoyons null pour forcer l'agent à gérer.
+                     self.postMessage({ type: 'abstractPathResult', data: { agentId: abstractAgentId, path: null } });
+                     // Alternative: renvoyer la porte unique
+                     // const singleNode = abstractGraph.getNode(startGateNodeId);
+                     // const singleGate = singleNode ? [{ id: singleNode.id, zoneId: singleNode.zoneId, x: singleNode.x, y: singleNode.y }] : null;
+                     // self.postMessage({ type: 'abstractPathResult', data: { agentId: abstractAgentId, path: singleGate } });
+                     return;
+                 }
 
-				// Même cluster → A* local unique
-				if (startCid === endCid) {
-					const raw = localJPS(s, e);
-					let len = 0;
-					for (let i = 1; i < raw.length; i++) {
-						const [ax, ay] = raw[i - 1], [bx, by] = raw[i];
-						len += Math.hypot((bx - ax) / gridScale, (by - ay) / gridScale);
-					}
-					return { gridPath: raw, pathLength: len };
-				}
 
-				// Construction du graphe abstrait des clusters
-				const adj = new Map();
-				clusters.forEach(c => {
-					// clusterDoorsMap: Map<fromCid, Map<toCid, Array<doors>>>
-					const m = clusterDoorsMap.get(c.id) || new Map();
-					adj.set(c.id, Array.from(m.keys()));
-				});
+                let abstractPathResult = null;
+                try {
+                    // Utiliser la méthode de recherche A* implémentée dans AbstractGraph
+                    abstractPathResult = abstractGraph.findAbstractPath(startGateNodeId, endGateNodeId);
+                } catch (e) {
+                    console.error(`[Worker] Erreur findAbstractPath pour Agent ${abstractAgentId} (${startGateNodeId}->${endGateNodeId}):`, e);
+                    abstractPathResult = null;
+                }
 
-				// BFS pour trouver la séquence de clusters
-				const queue   = [[startCid]];
-				const visited = new Set([startCid]);
-				let cPath     = null;
-				while (queue.length) {
-					const path = queue.shift();
-					const cid  = path[path.length - 1];
-					if (cid === endCid) {
-						cPath = path;
-						break;
-					}
-					for (const nc of adj.get(cid) || []) {
-						if (!visited.has(nc)) {
-							visited.add(nc);
-							queue.push(path.concat(nc));
-						}
-					}
-				}
-				if (!cPath) return null;  // pas de chemin abstrait trouvé
+                // Formater le résultat : renvoyer une liste d'objets {id, zoneId, x, y}
+                const gateSequence = abstractPathResult
+                    ? abstractPathResult.map(node => ({ id: node.id, zoneId: node.zoneId, x: node.x, y: node.y }))
+                    : null;
 
-				// Concaténation des segments locaux entre portes
-				const full = [];
-				let prev   = s;
-				for (let i = 1; i < cPath.length; i++) {
-					const fromC = cPath[i - 1], toC = cPath[i];
-					// Choisir la porte la plus proche de 'prev'
-					const doors = (clusterDoorsMap.get(fromC).get(toC) || [])
-						.sort((a, b) => ((a.x - prev.x) ** 2 + (a.y - prev.y) ** 2)
-									- ((b.x - prev.x) ** 2 + (b.y - prev.y) ** 2));
-					if (doors.length === 0) return null;
-					const door = doors[0];
-					const seg  = localJPS(prev, { x: door.x, y: door.y });
-					if (!seg) return null;
-					// On retire le dernier point pour éviter répétition
-					full.push(...seg.slice(0, -1));
-					prev = { x: door.x, y: door.y };
-				}
-				// Segment final jusqu’à e
-				const lastSeg = localJPS(prev, e);
-				if (!lastSeg) return null;
-				full.push(...lastSeg);
+                if (!gateSequence) {
+                     console.warn(`[Worker] A* abstrait n'a pas trouvé de chemin pour Agent ${abstractAgentId} de ${startGateNodeId} à ${endGateNodeId}`);
+                }
 
-				// Calcul de la longueur monde
-				let total = 0;
-				for (let i = 1; i < full.length; i++) {
-					const [ax, ay] = full[i - 1], [bx, by] = full[i];
-					total += Math.hypot((bx - ax) / gridScale, (by - ay) / gridScale);
-				}
+                // Renvoyer la séquence de portes (ou null si échec)
+                self.postMessage({
+                    type: 'abstractPathResult',
+                    data: { agentId: abstractAgentId, path: gateSequence }
+                });
+                break;
 
-				return { gridPath: full, pathLength: total };
-			}
-
-            // Exécution HPA
-            const result = findHierarchicalPath(startNode, endNode);
-            let worldPath = null, worldLen = 0;
-            if (result && result.gridPath) {
-                worldPath = result.gridPath.map(n => gridToWorld(n[0], n[1]));
-                worldLen  = result.pathLength;
-            }
-
-            self.postMessage({
-                type: 'pathResult',
-                data: { agentId, path: worldPath, pathLengthWorld: worldLen }
-            });
-            return;
+            default:
+                console.warn('[Worker] Type de message inconnu reçu:', type);
         }
+    } catch (error) {
+        // Gestion Erreur Générale dans onmessage
+        console.error('[Worker] Erreur générale dans onmessage:', error);
+        // Tenter de renvoyer un échec pour l'agent si possible
+        const agentIdOnError = data?.agentId;
+        // Déterminer le type de réponse attendu basé sur le type de message entrant
+        const expectedResponseType = (type === 'findAbstractPath') ? 'abstractPathResult' : 'pathResult';
+        const requestTypeOnError = (type === 'findAbstractPath') ? 'abstract' : (type === 'findDetailPath' ? 'detail' : 'unknown');
 
-        // Si message inconnu
-        console.warn('[Worker] Type de message inconnu reçu:', type);
-
-    } catch (err) {
-        console.error('[Worker] Erreur dans onmessage:', err);
-        const agentId = data?.agentId;
-        if (agentId) {
-            self.postMessage({
-                type: 'pathResult',
-                data: { agentId, path: null, pathLengthWorld: 0 }
-            });
+        if (agentIdOnError) {
+            if (expectedResponseType === 'abstractPathResult') {
+                self.postMessage({ type: 'abstractPathResult', data: { agentId: agentIdOnError, path: null } });
+            } else { // 'pathResult'
+                self.postMessage({ type: 'pathResult', data: { agentId: agentIdOnError, path: null, pathLengthWorld: 0, requestType: requestTypeOnError } });
+            }
         } else {
-            self.postMessage({ type: 'workerError', error: err.message, data: event.data });
+            // Erreur non liée à un agent spécifique ou agentId manquant
+            self.postMessage({ type: 'workerError', error: error.message, dataReceived: event.data });
         }
     }
-};
+}; // Fin onmessage
 
-// --- Gestionnaire onerror global (inchangé) ---
-self.onerror = function(error) {
-    console.error('[Worker] Erreur non capturée:', error);
-    self.postMessage({ type: 'workerError', error: 'Erreur worker non capturée: ' + error.message });
+// --- Gestionnaire onerror global ---
+self.onerror = function(errorEvent) {
+    // errorEvent est un ErrorEvent qui contient message, filename, lineno, colno, error
+    console.error('[Worker] Erreur non capturée:', errorEvent.message, 'dans', errorEvent.filename, 'ligne', errorEvent.lineno, 'col', errorEvent.colno);
+    // Tenter de renvoyer une erreur générique au thread principal
+    self.postMessage({ type: 'workerError', error: 'Erreur worker non capturée: ' + errorEvent.message });
 };

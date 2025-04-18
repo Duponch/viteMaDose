@@ -23,53 +23,54 @@ function createShoeGeometry() {
 
 export default class AgentManager {
 	constructor(scene, experience, config, maxAgents = 1) {
-		if (!experience || !config) {
-			throw new Error("AgentManager requires Experience and Config instances.");
-		}
-		this.scene = scene;
-		this.experience = experience;
-		this.config = config;
-		this.maxAgents = maxAgents;
+        if (!experience || !config) {
+            throw new Error("AgentManager requires Experience and Config instances.");
+        }
+        this.scene = scene;
+        this.experience = experience;
+        this.config = config;
+        this.maxAgents = maxAgents;
 
-		// Pooling
-		this.activeCount = 0;                             // Nombre d’agents réellement actifs
-		this.instanceIdToAgent = new Array(maxAgents);    // instanceId → agent.id
-		this.agentToInstanceId = new Map();               // agent.id → instanceId
+        // Pooling
+        this.activeCount = 0;
+        this.instanceIdToAgent = new Array(maxAgents);
+        this.agentToInstanceId = new Map();
 
-		this.workers = [];
-		this._nextWorker = 0;
-		this.numWorkers = 10;  // ajustez selon vos CPU
+        this.agents = [];
+        this.instanceMeshes = {};
+        this.baseGeometries = {};
+        this.baseMaterials = {};
 
-		this.agents = [];
-		this.instanceMeshes = {};
-		this.baseGeometries = {};
-		this.baseMaterials = {};
+        this.headRadius = 2.5; // Sera écrasée par _initializeMeshes
 
-		this.headRadius = 2.5; // Sera écrasée
+        // --- Objets temporaires ---
+        this.tempMatrix = new THREE.Matrix4();
+        this.agentMatrix = new THREE.Matrix4();
+        this.partOffsetMatrix = new THREE.Matrix4();
+        this.finalPartMatrix = new THREE.Matrix4();
+        this.tempPosition = new THREE.Vector3();
+        this.tempQuaternion = new THREE.Quaternion();
+        this.tempScale = new THREE.Vector3(1, 1, 1);
+        this.tempColor = new THREE.Color();
+        this.debugMarkerMatrix = new THREE.Matrix4();
 
-		// --- Objets temporaires ---
-		this.tempMatrix = new THREE.Matrix4();
-		this.agentMatrix = new THREE.Matrix4();
-		this.partOffsetMatrix = new THREE.Matrix4();
-		this.finalPartMatrix = new THREE.Matrix4();
-		this.tempPosition = new THREE.Vector3();
-		this.tempQuaternion = new THREE.Quaternion();
-		this.tempScale = new THREE.Vector3(1, 1, 1);
-		this.tempColor = new THREE.Color();
-		this.debugMarkerMatrix = new THREE.Matrix4();
+        // --- Pathfinding Worker & HPA State ---
+        this.pathfindingWorker = null;
+        this.isGridWorkerInitialized = false; // État pour la grille fine
+        this.isHPAWorkerInitialized = false;  // État pour le graphe HPA
+        this.pendingHPAData = null; // Données HPA en attente d'envoi
 
-		this.pathfindingWorker = null;
-		this.isWorkerInitialized = false;
+        // Statistiques
+        this.stats = {
+            pathsToWorkByHour: {},
+            pathsToHomeByHour: {},
+        };
+        this._initializeStats();
 
-		this.stats = {
-			pathsToWorkByHour: {},
-			pathsToHomeByHour: {},
-		};
-		this._initializeStats();
-
-		this._initializeMeshes();
-		console.log("AgentManager initialisé (Worker non démarré).");
-	}
+        // Création des meshes instanciés
+        this._initializeMeshes();
+        console.log("AgentManager initialisé (Worker non démarré).");
+    }
 
 	_initializeStats() {
         this.stats.pathsToWorkByHour = {};
@@ -80,86 +81,200 @@ export default class AgentManager {
         }
     }
 
-    // --- NOUVELLE MÉTHODE : Initialise le Worker ---
+    /**
+     * Initialise le Pathfinding Worker en lui envoyant d'abord les données de la grille fine.
+     * Stocke les données HPA préparées pour les envoyer ultérieurement.
+     * @param {import('./NavigationGraph.js').default} navigationGraph - Le graphe de navigation bas niveau contenant la grille et les paramètres.
+     */
     initializePathfindingWorker(navigationGraph) {
-		if (!navigationGraph?.grid) return;
-		const gridData = {
-		  width: navigationGraph.gridWidth,
-		  height: navigationGraph.gridHeight,
-		  nodesWalkable: navigationGraph.grid.nodes.map(row=>row.map(n=>n.walkable))
-		};
-		const conversionParams = {
-		  gridScale: navigationGraph.gridScale,
-		  offsetX: navigationGraph.offsetX,
-		  offsetZ: navigationGraph.offsetZ,
-		  sidewalkHeight: navigationGraph.sidewalkHeight
-		};
-		// Créer N workers
-		for (let i = 0; i < this.numWorkers; i++) {
-		  const w = new Worker(new URL('./PathfindingWorker.js', import.meta.url), { type:'module' });
-		  w.onmessage = e => this._handleWorkerMessage(e);
-		  w.postMessage({ type:'init', data:{ gridData, conversionParams }});
-		  this.workers.push(w);
-		}
-		this.isWorkerInitialized = true;
-	}
-    // --- FIN NOUVELLE MÉTHODE ---
+        if (this.pathfindingWorker) {
+            console.warn("AgentManager: Tentative de réinitialiser le worker déjà existant.");
+            return;
+        }
+        if (!navigationGraph || !navigationGraph.grid) {
+            console.error("AgentManager: Impossible d'initialiser le worker - NavigationGraph invalide.");
+            return;
+        }
 
-    _handleWorkerMessage(event) {
-        const { type, data, error } = event.data;
-        // console.log("AgentManager: Message reçu du worker:", type, data); // Debug
+        try {
+            console.log("AgentManager: Initialisation du Pathfinding Worker...");
+            // Création du worker
+            this.pathfindingWorker = new Worker(new URL('./PathfindingWorker.js', import.meta.url), { type: 'module' });
+            this.pathfindingWorker.onmessage = (event) => this._handleWorkerMessage(event);
+            this.pathfindingWorker.onerror = (error) => {
+                console.error("AgentManager: Erreur dans Pathfinding Worker:", error);
+                this.isGridWorkerInitialized = false; // Marquer comme non initialisé en cas d'erreur
+                this.isHPAWorkerInitialized = false;
+                this.pathfindingWorker = null; // Permettre une nouvelle tentative peut-être
+            };
 
-        if (type === 'initComplete') {
-            this.isWorkerInitialized = true;
-            console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
+            // Préparer les données de la grille fine
+            // Accès sécurisé aux nœuds
+            const nodesWalkable = navigationGraph.grid.nodes?.map(row =>
+                row?.map(node => node.walkable ?? false) ?? [] // Gérer ligne ou nœud potentiellement undefined
+            ) ?? []; // Gérer grille ou nœuds potentiellement undefined
 
-        } else if (type === 'pathResult') {
-            // Vérifier si les données nécessaires sont présentes (y compris pathLengthWorld)
-            if (data && data.agentId && data.path !== undefined && data.pathLengthWorld !== undefined) {
-                const { agentId, path: worldPathData, pathLengthWorld } = data; // Extraire la longueur
-                const agent = this.getAgentById(agentId);
+            // Vérification supplémentaire après la préparation
+             if (nodesWalkable.length !== navigationGraph.gridHeight || (navigationGraph.gridHeight > 0 && nodesWalkable[0].length !== navigationGraph.gridWidth)) {
+                 console.error("AgentManager: Incohérence détectée dans les dimensions de nodesWalkable après création.");
+                 throw new Error("Incohérence des dimensions de la grille pour l'initialisation du worker.");
+             }
 
-                if (agent) {
-                    let finalWorldPath = null;
-                    // Reconstruire les Vector3 (inchangé)
-                    if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) {
-                        try {
-                            finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
-                        } catch (vecError) {
-                            console.error(`Agent ${agentId}: Erreur reconstruction Vector3:`, vecError);
-                            finalWorldPath = null;
-                        }
-                    } else {
-                        finalWorldPath = null;
-                    }
+            const gridData = {
+                width: navigationGraph.gridWidth,
+                height: navigationGraph.gridHeight,
+                nodesWalkable: nodesWalkable
+            };
 
-                    // Passer le chemin ET la longueur à l'agent
-                    agent.setPath(finalWorldPath, pathLengthWorld);
+            // Préparer les paramètres de conversion
+            const conversionParams = {
+                gridScale: navigationGraph.gridScale,
+                offsetX: navigationGraph.offsetX,
+                offsetZ: navigationGraph.offsetZ,
+                sidewalkHeight: navigationGraph.sidewalkHeight
+            };
 
-                    // Mise à jour debug (optionnel, peut utiliser agent.currentPathPoints)
-                    if (finalWorldPath && this.experience.isDebugMode && this.experience.world?.setAgentPathForAgent) {
-                        this.experience.world.setAgentPathForAgent(agent, finalWorldPath, agent.debugPathColor);
-                    }
-                } else {
-                    console.warn(`AgentManager: Agent ${agentId} non trouvé pour le résultat du chemin.`);
+            // Stocker les données HPA préparées par CityManager en attente
+            const cityManager = this.experience.world?.cityManager;
+            // Utiliser directement le graphe abstrait sérialisé, s'il est prêt
+            const abstractGraphInstance = cityManager?.getAbstractGraph();
+            if (abstractGraphInstance && abstractGraphInstance.nodes.size > 0) {
+                try {
+                    this.pendingHPAData = abstractGraphInstance.serialize(); // Sérialiser ici
+                     console.log("AgentManager: Données HPA sérialisées et prêtes à être envoyées au worker.");
+                } catch (serializeError) {
+                     console.error("AgentManager: Erreur lors de la sérialisation du graphe HPA:", serializeError);
+                     this.pendingHPAData = null;
                 }
             } else {
-                console.warn("AgentManager: Message 'pathResult' incomplet reçu du worker:", event.data);
+                console.warn("AgentManager: Graphe abstrait non disponible ou vide via CityManager lors de l'init worker. HPA ne sera pas initialisé.");
+                this.pendingHPAData = null;
             }
-        } else if (type === 'workerError') {
-            console.error("AgentManager: Erreur rapportée par le worker:", error, "Data associée:", data);
-             if (data?.agentId) {
-                 const agentWithError = this.getAgentById(data.agentId);
-                 // Si l'agent attendait spécifiquement un chemin
-                 if(agentWithError && (agentWithError.currentState === 'REQUESTING_PATH_FOR_WORK' || agentWithError.currentState === 'REQUESTING_PATH_FOR_HOME')) {
-                     agentWithError.setPath(null, 0); // Force l'échec et le retour à un état stable
-                 }
-             }
-        } else {
-            console.warn("AgentManager: Type de message inconnu reçu du worker:", type);
+
+
+            // Envoyer SEULEMENT l'init de la grille fine pour l'instant
+            this.pathfindingWorker.postMessage({
+                type: 'initGrid', // Utiliser le type spécifique
+                data: { gridData, conversionParams }
+            });
+            console.log("AgentManager: Message 'initGrid' envoyé au worker.");
+
+        } catch (error) {
+            console.error("AgentManager: Échec de la création ou de l'initialisation du Pathfinding Worker:", error);
+            if (this.pathfindingWorker) {
+                this.pathfindingWorker.terminate(); // Assurer la terminaison en cas d'erreur
+            }
+            this.pathfindingWorker = null;
+            this.isGridWorkerInitialized = false;
+            this.isHPAWorkerInitialized = false;
         }
     }
-    // --- FIN NOUVELLE MÉTHODE ---
+
+    /**
+     * Gère les messages reçus du Pathfinding Worker.
+     * @param {MessageEvent} event - L'événement de message du worker.
+     */
+    _handleWorkerMessage(event) {
+        const { type, data, error } = event.data;
+        // console.log("[AgentManager] Message reçu du worker:", type, data); // Utile pour le debug
+
+        try {
+            switch (type) {
+                case 'gridInitComplete':
+                    this.isGridWorkerInitialized = true;
+                    console.log("AgentManager: Worker a confirmé l'initialisation de la grille fine.");
+
+                    // Envoyer les données HPA si elles sont en attente
+                    if (this.pendingHPAData) {
+                        console.log("AgentManager: Envoi des données HPA (sérialisées) au worker...");
+                        this.pathfindingWorker.postMessage({
+                            type: 'initHPA',
+                            // Les données ont déjà été sérialisées dans initializePathfindingWorker
+                            data: { abstractGraphData: this.pendingHPAData }
+                        });
+                        this.pendingHPAData = null; // Nettoyer après envoi
+                    } else {
+                        console.warn("AgentManager: Pas de données HPA en attente à envoyer au worker après gridInitComplete.");
+                        this.isHPAWorkerInitialized = false; // Assurer que HPA n'est pas marqué comme prêt
+                    }
+                    break;
+
+                case 'hpaInitComplete':
+                    this.isHPAWorkerInitialized = true;
+                    console.log("AgentManager: Worker a confirmé l'initialisation HPA.");
+                    // Peut-être déclencher des actions qui dépendaient de HPA prêt ici
+                    break;
+
+                case 'pathResult': // Résultat d'un chemin détaillé (JPS)
+                    if (data && data.agentId && data.path !== undefined && data.pathLengthWorld !== undefined) {
+                        const { agentId, path: worldPathData, pathLengthWorld } = data;
+                        const agent = this.getAgentById(agentId);
+                        if (agent) {
+                            let finalWorldPath = null;
+                            // Reconstruire les Vector3
+                            if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) {
+                                try {
+                                    finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
+                                } catch (vecError) {
+                                    console.error(`Agent ${agentId}: Erreur reconstruction Vector3 pour pathResult:`, vecError);
+                                    finalWorldPath = null;
+                                }
+                            }
+                            // Appeler la méthode spécifique sur l'agent pour chemin détaillé
+                            // Assurez-vous que cette méthode existe dans Agent.js
+                            agent.setDetailPath(finalWorldPath, pathLengthWorld);
+                        } else {
+                            console.warn(`AgentManager: Agent ${agentId} non trouvé pour pathResult.`);
+                        }
+                    } else {
+                        console.warn("AgentManager: Message 'pathResult' incomplet reçu:", event.data);
+                    }
+                    break;
+
+                case 'abstractPathResult': // Résultat d'un chemin abstrait (séquence de portes)
+                     if (data && data.agentId && data.path !== undefined) { // path peut être null ici
+                        const { agentId: abstractAgentId, path: gateSequence } = data;
+                        const agent = this.getAgentById(abstractAgentId);
+                        if (agent) {
+                            // Appeler la méthode spécifique sur l'agent pour chemin abstrait
+                            // Assurez-vous que cette méthode existe dans Agent.js
+                            agent.setAbstractPath(gateSequence);
+                        } else {
+                            console.warn(`AgentManager: Agent ${abstractAgentId} non trouvé pour abstractPathResult.`);
+                        }
+                    } else {
+                         console.warn("AgentManager: Message 'abstractPathResult' incomplet reçu:", event.data);
+                    }
+                    break;
+
+                case 'workerError':
+                    console.error("AgentManager: Erreur rapportée par le worker:", error, "Data associée:", data);
+                    // Informer l'agent concerné si possible
+                    if (data?.agentId) {
+                        const agentWithError = this.getAgentById(data.agentId);
+                        if (agentWithError) {
+                            // Déterminer quelle requête a échoué si possible (peut nécessiter plus d'infos dans l'erreur)
+                            // Pour l'instant, on suppose que l'agent gère l'échec dans setDetailPath/setAbstractPath
+                            console.warn(`AgentManager: Notifying agent ${data.agentId} about worker error.`);
+                            // Exemple : Forcer un reset de chemin sur l'agent
+                            // agentWithError.setDetailPath(null, 0); // Ou une méthode plus générique d'échec
+                            // agentWithError.setAbstractPath(null);
+                        }
+                    }
+                    break;
+
+                default:
+                    console.warn("AgentManager: Type de message inconnu reçu du worker:", type);
+            }
+        } catch (handlerError) {
+             console.error(`AgentManager: Erreur dans _handleWorkerMessage pour le type ${type}:`, handlerError);
+             // Tenter d'informer l'agent si possible
+             if (data?.agentId) {
+                 const agentOnError = this.getAgentById(data.agentId);
+                 // Informer l'agent de l'échec...
+             }
+        }
+    }
 
 	getAgentStats() {
         // Regrouper les agents par état actuel
@@ -187,18 +302,67 @@ export default class AgentManager {
         };
     }
 
-    // --- NOUVELLE MÉTHODE : Demande un chemin au Worker ---
-    requestPathFromWorker(agentId, startNode, endNode) {
-		if (!this.isWorkerInitialized) {
-		  const agent = this.getAgentById(agentId);
-		  if (agent) agent.setPath(null,0);
-		  return;
-		}
-		const worker = this.workers[this._nextWorker];
-		this._nextWorker = (this._nextWorker + 1) % this.numWorkers;
-		worker.postMessage({ type:'findPath', data:{ agentId, startNode, endNode } });
-	}
-    // --- FIN NOUVELLE MÉTHODE ---
+    /**
+     * Envoie une requête de pathfinding (détaillé ou abstrait) au worker.
+     * @param {string} agentId - ID de l'agent demandeur.
+     * @param {'findDetailPath' | 'findAbstractPath'} requestType - Le type de chemin demandé.
+     * @param {object} pathData - Données spécifiques à la requête:
+     * - pour 'findDetailPath': { startNode: {x, y}, endNode: {x, y} }
+     * - pour 'findAbstractPath': { startGateNodeId: number, endGateNodeId: number }
+     */
+    requestPathFromWorker(agentId, requestType, pathData) {
+        const agent = this.getAgentById(agentId); // Récupérer l'agent pour notifier en cas d'échec précoce
+
+        // Vérifier si le worker est prêt pour le type de requête demandé
+        if (!this.pathfindingWorker || !this.isGridWorkerInitialized) {
+            console.error(`AgentManager: Worker (grille) non prêt pour requête ${requestType} Agent ${agentId}.`);
+            if (agent) {
+                if (requestType === 'findAbstractPath') agent.setAbstractPath(null);
+                else agent.setDetailPath(null, 0);
+            }
+            return;
+        }
+        if (requestType === 'findAbstractPath' && !this.isHPAWorkerInitialized) {
+            console.error(`AgentManager: Worker (HPA) non prêt pour requête ${requestType} Agent ${agentId}.`);
+            if (agent) agent.setAbstractPath(null);
+            return;
+        }
+
+        // Valider les données et construire le message
+        let message;
+        if (requestType === 'findDetailPath') {
+             if (!pathData || !pathData.startNode || !pathData.endNode ||
+                 typeof pathData.startNode.x !== 'number' || typeof pathData.startNode.y !== 'number' ||
+                 typeof pathData.endNode.x !== 'number' || typeof pathData.endNode.y !== 'number') {
+                 console.error(`AgentManager: Données invalides pour findDetailPath Agent ${agentId}:`, pathData);
+                 if(agent) agent.setDetailPath(null, 0);
+                 return;
+             }
+             message = {
+                 type: 'findDetailPath',
+                 data: { agentId, startNode: pathData.startNode, endNode: pathData.endNode }
+             };
+        } else if (requestType === 'findAbstractPath') {
+            if (!pathData || pathData.startGateNodeId === undefined || pathData.endGateNodeId === undefined) {
+                 console.error(`AgentManager: Données invalides pour findAbstractPath Agent ${agentId}:`, pathData);
+                 if(agent) agent.setAbstractPath(null);
+                 return;
+            }
+             message = {
+                 type: 'findAbstractPath',
+                 data: { agentId, startGateNodeId: pathData.startGateNodeId, endGateNodeId: pathData.endGateNodeId }
+             };
+        } else {
+            console.error(`AgentManager: Type de requête inconnu '${requestType}' pour Agent ${agentId}.`);
+             // Informer l'agent ? Comment déterminer quel type d'échec notifier ?
+             if (agent) { /* Peut-être une méthode agent.notifyPathRequestFailure() ? */ }
+            return;
+        }
+
+        // Envoyer le message au worker
+        // console.log(`AgentManager: Envoi requête ${requestType} au worker pour Agent ${agentId}:`, message.data); // Debug
+        this.pathfindingWorker.postMessage(message);
+    }
 
     // 2) _initializeMeshes (modifiée pour démarrer à count=0)
 	_initializeMeshes() {
@@ -511,43 +675,67 @@ export default class AgentManager {
 		this.releaseAgent(agentId);
 	}
 
+    /**
+     * Nettoie les ressources utilisées par AgentManager, y compris le worker.
+     */
     destroy() {
-		console.log("AgentManager: Destruction...");
-		// Arrêter le worker s'il existe
-		if (this.pathfindingWorker) {
-			this.pathfindingWorker.terminate();
-			this.pathfindingWorker = null;
-			this.isWorkerInitialized = false;
-			console.log("AgentManager: Pathfinding Worker terminé.");
-		}
-	   // ... (reste de la logique de destroy existante) ...
-		const cityManager = this.experience?.world?.cityManager;
-		this.agents.forEach(agent => {
-			this.removeAgent(agent.id);
-			agent.destroy();
-		});
-		this.agents = [];
-		console.log("AgentManager: Agents logiques détruits.");
+        console.log("AgentManager: Destruction...");
 
-		Object.values(this.instanceMeshes).forEach(mesh => {
-			if (mesh.parent) mesh.parent.remove(mesh);
-			// Dispose material CLONE (celui de InstancedMesh)
-			if (mesh.material && mesh.material !== this.baseMaterials[mesh.name.replace('Instances','').toLowerCase()]) {
-			   mesh.material.dispose?.();
-			}
-		});
-		this.instanceMeshes = {};
-		console.log("AgentManager: InstancedMeshes retirés & matériaux clonés disposés.");
+        // Arrêter et nettoyer le worker
+        if (this.pathfindingWorker) {
+            this.pathfindingWorker.terminate();
+            this.pathfindingWorker = null;
+            this.isGridWorkerInitialized = false;
+            this.isHPAWorkerInitialized = false;
+            this.pendingHPAData = null;
+            console.log("AgentManager: Pathfinding Worker terminé.");
+        }
 
-		Object.values(this.baseGeometries).forEach(geom => { geom?.dispose(); });
-		this.baseGeometries = {};
-		console.log("AgentManager: Géométries base disposées.");
+        // Supprimer les agents (logique et visuel via releaseAgent)
+        // Copier les IDs car this.agents sera modifié par removeAgent
+        const agentIdsToRemove = this.agents.map(a => a.id);
+        agentIdsToRemove.forEach(agentId => {
+            this.removeAgent(agentId); // removeAgent appelle releaseAgent
+             // Assurer que l'agent logique est détruit aussi
+             // Note: removeAgent retire de this.agents, donc pas besoin de trouver l'index ici
+        });
+        this.agents = []; // Vider explicitement après la boucle
+        console.log("AgentManager: Agents logiques et visuels détruits/libérés.");
 
-		Object.values(this.baseMaterials).forEach(mat => { mat?.dispose(); });
-		this.baseMaterials = {};
-		console.log("AgentManager: Matériaux base disposés.");
 
-		this.scene = null; this.experience = null; this.config = null;
-		console.log("AgentManager: Détruit.");
-	}
+        // Nettoyer les InstancedMeshes restants (au cas où releaseAgent aurait manqué quelque chose)
+        Object.values(this.instanceMeshes).forEach(mesh => {
+            if (mesh.parent) mesh.parent.remove(mesh);
+            // Dispose material CLONE (celui de InstancedMesh)
+             // Vérifier si le matériau existe et est différent du matériau de base avant de disposer
+             if (mesh.material) {
+                 const baseMatKey = mesh.name.replace('Instances','').toLowerCase();
+                 if (mesh.material !== this.baseMaterials[baseMatKey]) {
+                     mesh.material.dispose?.();
+                 }
+             }
+        });
+        this.instanceMeshes = {};
+        console.log("AgentManager: InstancedMeshes retirés & matériaux clonés disposés.");
+
+        // Disposer les géométries de base partagées
+        Object.values(this.baseGeometries).forEach(geom => { geom?.dispose(); });
+        this.baseGeometries = {};
+        console.log("AgentManager: Géométries base disposées.");
+
+        // Disposer les matériaux de base partagés
+        Object.values(this.baseMaterials).forEach(mat => { mat?.dispose(); });
+        this.baseMaterials = {};
+        console.log("AgentManager: Matériaux base disposés.");
+
+        // Nullifier les références
+        this.scene = null;
+        this.experience = null;
+        this.config = null;
+        this.agentToInstanceId.clear();
+        this.instanceIdToAgent = [];
+        this.stats = {};
+
+        console.log("AgentManager: Détruit.");
+    }
 }
