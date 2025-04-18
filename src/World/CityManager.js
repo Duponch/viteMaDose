@@ -2,12 +2,13 @@
 import * as THREE from 'three';
 import CityLayoutGenerator from './CityLayoutGenerator.js';
 import RoadNetworkGenerator from './RoadNetworkGenerator.js';
-// Import du PlotContentGenerator refactoré
 import PlotContentGenerator from './PlotContentGenerator.js';
 import CityAssetLoader from './CityAssetLoader.js';
 import DistrictManager from './DistrictManager.js';
 import LampPostManager from './LampPostManager.js';
-import NavigationManager from './NavigationManager.js'; // Utilisation de NavigationManager
+import NavigationManager from './NavigationManager.js';
+import AbstractGraph from './HPA/AbstractGraph.js';
+import HPAPrecalculator from './HPA/HPAPrecalculator.js';
 import CitizenManager from './CitizenManager.js';
 import DebugVisualManager from './DebugVisualManager.js';
 // Renderer spécialisés sont nécessaires pour PlotContentGenerator via Experience/World
@@ -219,11 +220,13 @@ export default class CityManager {
             skyscraperRenderer: this.skyscraperRenderer
         };
 
-        // --- Navigation via NavigationManager ---
-        this.navigationManager = new NavigationManager(this.config);
-        this.navigationGraph = null; // Sera initialisé via NavigationManager
-        this.pathfinder = null;       // Sera initialisé via NavigationManager
-
+		// --- Gestion de la Navigation (incluant HPA) ---
+        this.navigationManager = new NavigationManager(this.config); // Créé ici
+        this.navigationGraph = null; // Sera défini après buildGraph
+        this.pathfinder = null; // Pour l'ancien système ou pathfinding détaillé
+        this.abstractGraph = new AbstractGraph(); // Initialiser le graphe HPA
+        this.hpaPrecalculator = null; // Sera créé lors de la génération
+		
         this.districts = [];
         this.leafPlots = [];
 
@@ -309,83 +312,111 @@ export default class CityManager {
             if (!this.leafPlots || this.leafPlots.length === 0)
                 throw new Error("Layout produced no plots.");
 
-            // --- District Logic via DistrictManager ---
-            console.time("DistrictFormationAndValidation");
-            try {
-                // Crée et utilise DistrictManager pour former et valider les quartiers
-                const districtManager = new DistrictManager(this.config, this.leafPlots, this.debugVisualManager.parentGroup);
-                districtManager.generateAndValidateDistricts(); // Génère, valide et ajuste les types de parcelles
-                this.districts = districtManager.getDistricts(); // Récupère les districts formés
-            } catch (error) {
-                console.error("Error during district formation:", error);
-                throw error; // Arrête la génération si les districts sont invalides
-            }
-            console.timeEnd("DistrictFormationAndValidation");
-
-            // assignDefaultTypeToUnassigned est maintenant appelé DANS generateAndValidateDistricts
-            // this.assignDefaultTypeToUnassigned(); // S'assure que toutes les parcelles ont un type
-            // this.logAdjustedZoneTypes(); // Déjà loggué par DistrictManager
-
-            console.time("RoadAndCrosswalkInfoGeneration");
-            // Génère le réseau routier et les infos pour les passages piétons
+            // === Étape 1: Routes & Graphe de Navigation BAS NIVEAU ===
+            console.time("RoadAndNavGraphGeneration");
             const { roadGroup, crosswalkInfos } = this.roadGenerator.generateRoads(this.leafPlots);
-            this.roadGroup = roadGroup; // Stocke le groupe contenant les routes
-            this.cityContainer.add(this.roadGroup); // Ajoute les routes à la scène
-            console.timeEnd("RoadAndCrosswalkInfoGeneration");
-            console.log(`Road network generated and ${crosswalkInfos.length} crosswalk locations identified.`);
+            this.roadGroup = roadGroup;
+            this.cityContainer.add(this.roadGroup);
 
-            // --- NavigationManager ---
+            // Assurer que navigationManager existe
             if (!this.navigationManager) {
                 this.navigationManager = new NavigationManager(this.config);
             }
-            console.time("NavigationGraphBuilding");
-            this.navigationManager.buildGraph(this.leafPlots, crosswalkInfos); // Construit le graphe de navigation
-            console.timeEnd("NavigationGraphBuilding");
+            this.navigationManager.buildGraph(this.leafPlots, crosswalkInfos); // Construit le graphe bas niveau
+            this.navigationGraph = this.navigationManager.getNavigationGraph(); // Stocker la référence
+            console.timeEnd("RoadAndNavGraphGeneration");
 
+            if (!this.navigationGraph || !this.navigationGraph.grid) {
+                throw new Error("NavigationGraph failed to build after road generation.");
+            }
+            console.log(`Road network & NavigationGraph generated (${crosswalkInfos.length} crosswalks).`);
+
+
+            // === Étape 2: Districts & Identification des Portes HPA ===
+            console.time("DistrictFormationAndHPAGates");
+            try {
+                // DistrictManager a maintenant besoin du NavigationManager pour accéder au graphe construit
+                const districtManager = new DistrictManager(
+                    this.config,
+                    this.leafPlots,
+                    this.debugVisualManager.parentGroup,
+                    this.navigationManager // Passer le manager
+                );
+                // Cette méthode interne appelle maintenant identifyAndAddHPAGates après validation
+                districtManager.generateAndValidateDistricts();
+                this.districts = districtManager.getDistricts(); // Récupère les districts formés (avec les portes HPA identifiées)
+            } catch (error) {
+                console.error("Error during district formation and HPA gate identification:", error);
+                throw error; // Arrête si les districts sont invalides ou l'identification échoue
+            }
+            console.timeEnd("DistrictFormationAndHPAGates");
+
+
+            // === Étape 3: Précalcul HPA ===
+            console.time("HPAPrecomputation");
+            // Vérifier que tout est prêt pour le précalcul
+            if (this.districts.length > 0 && this.navigationGraph && this.abstractGraph) {
+                 this.hpaPrecalculator = new HPAPrecalculator(
+                     this.districts,
+                     this.navigationGraph,
+                     this.abstractGraph
+                 );
+                 this.hpaPrecalculator.precomputePaths(); // Lance le calcul des chemins abstraits
+            } else {
+                 console.error(`CityManager: Cannot start HPA precomputation - Missing dependencies. Districts: ${this.districts.length}, NavGraph: ${!!this.navigationGraph}, AbstractGraph: ${!!this.abstractGraph}.`);
+                 // Peut-être lancer une exception ici ? Ou continuer sans HPA ?
+                 // throw new Error("Failed HPA precomputation due to missing dependencies.");
+            }
+            console.timeEnd("HPAPrecomputation");
+
+
+            // === Étape 4: Initialisation du Pathfinder (pour l'ancien système ou détails) ===
             console.time("PathfinderInitialization");
-            this.navigationManager.initializePathfinder(); // Initialise le service de pathfinding
+            this.navigationManager.initializePathfinder(); // Initialise le service pathfinding bas niveau
+            this.pathfinder = this.navigationManager.getPathfinder();
             console.timeEnd("PathfinderInitialization");
 
-            this.navigationGraph = this.navigationManager.getNavigationGraph(); // Récupère le graphe
-            this.pathfinder = this.navigationManager.getPathfinder(); // Récupère le pathfinder
 
+            // === Étape 5: Génération du Contenu des Parcelles ===
             console.time("ContentGeneration");
-            // Appel à PlotContentGenerator refactoré
             const { sidewalkGroup, buildingGroup, groundGroup } = this.contentGenerator.generateContent(
                 this.leafPlots,
                 this.assetLoader,
-                crosswalkInfos,
-                this, // Passe CityManager (pour enregistrement bâtiments)
+                crosswalkInfos, // Toujours utiles pour les passages piétons réels
+                this, // Passe CityManager pour enregistrement bâtiments
                 this.renderers // Passe les renderers spécialisés
             );
-            // Les groupes sont déjà gérés par PlotContentGenerator ou ajoutés ici
+            // Note: Les groupes retournés sont déjà gérés par this.contentGenerator
             console.timeEnd("ContentGeneration");
-
             console.log(`Total Building Instances Registered: ${this.citizenManager.buildingInstances.size}`);
 
-            // --- Lamp Post Generation via LampPostManager ---
+
+            // === Étape 6: Génération des Lampadaires ===
             console.time("LampPostGeneration");
-            this.lampPostManager.addLampPosts(this.leafPlots); // Ajoute les lampadaires
+            this.lampPostManager.addLampPosts(this.leafPlots);
             console.timeEnd("LampPostGeneration");
 
-            // --- Debug Visuals via DebugVisualManager ---
+
+            // === Étape 7: Mise à jour des Visuels Debug ===
             if (this.experience.isDebugMode) {
                 console.time("DebugVisualsUpdate");
-                if (!this.debugVisualManager.parentGroup.parent) {
+                if (this.debugVisualManager && !this.debugVisualManager.parentGroup.parent) {
                     this.cityContainer.add(this.debugVisualManager.parentGroup);
                 }
-                this.debugVisualManager.createParkOutlines(this.leafPlots, 0.3); // Ajuster la hauteur si besoin
-                 if(this.config.showDistrictBoundaries) {
-                    this.debugVisualManager.createDistrictBoundaries(this.districts);
+                this.debugVisualManager?.createParkOutlines(this.leafPlots, 0.3);
+                 if(this.config.debug?.showDistrictBoundaries) { // Utiliser optional chaining
+                    this.debugVisualManager?.createDistrictBoundaries(this.districts);
                 }
                 console.timeEnd("DebugVisualsUpdate");
             } else {
-                this.debugVisualManager.clearDebugVisuals(); // Nettoie tous les visuels de debug
-                if (this.debugVisualManager.parentGroup.parent) {
-                    this.cityContainer.remove(this.debugVisualManager.parentGroup); // Retire le groupe de debug
+                this.debugVisualManager?.clearDebugVisuals();
+                if (this.debugVisualManager?.parentGroup.parent) {
+                    this.cityContainer.remove(this.debugVisualManager.parentGroup);
                 }
             }
+
             console.log("--- City generation finished ---");
+
         } catch (error) {
             console.error("Major error during city generation:", error);
             this.clearCity(); // Tente de nettoyer en cas d'erreur majeure
@@ -414,20 +445,35 @@ export default class CityManager {
         console.log("Clearing the existing city...");
         // Nettoyage Debug
         if (this.debugVisualManager) {
-            this.debugVisualManager.clearDebugVisuals();
+            // Note: clearDebugVisuals est maintenant dans Experience/World,
+            // mais si DVM est spécifique à CityManager, gardez-le ici.
+            // Sinon, assurez-vous que World.setDebugMode(false) est appelé.
+            this.debugVisualManager.clearDebugVisuals(); // Assumons qu'il nettoie ses propres objets
         }
+
+        // Nettoyage HPA
+        if (this.abstractGraph) {
+            // Pas de méthode dispose standard, juste réinitialiser les maps internes
+            this.abstractGraph.nodes.clear();
+            this.abstractGraph.nodesByZone.clear();
+            // On ne réassigne pas this.abstractGraph à null ici, on le vide juste.
+            // Il sera rempli à nouveau lors de la prochaine génération.
+        }
+        this.hpaPrecalculator = null; // Libérer la référence au précalculateur
 
         // Nettoyage Groupes de Scène Directs
         if (this.roadGroup && this.roadGroup.parent) this.cityContainer.remove(this.roadGroup);
-        // Les autres groupes (sidewalk, content, ground) sont gérés par contentGenerator
+        // Les groupes sidewalk, content, ground sont vidés via contentGenerator.resetManagers()
 
         // Nettoyage Lampadaires via leur Manager
         if (this.lampPostManager && this.lampPostManager.lampPostMeshes) {
+            // Retrait des meshes de la scène (géré dans LampPostManager idéalement ou ici)
             if (this.lampPostManager.lampPostMeshes.grey?.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.grey);
             if (this.lampPostManager.lampPostMeshes.light?.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.light);
             if (this.lampPostManager.lampPostMeshes.lightCone?.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.lightCone);
-            // On ne dispose pas les géométries/matériaux ici, LampPostManager s'en chargera si nécessaire
+            // Réinitialiser les références
             this.lampPostManager.lampPostMeshes = { grey: null, light: null, lightCone: null };
+            // Idéalement, ajouter une méthode LampPostManager.reset() ou destroy()
         }
 
         // Nettoyage Sol Global
@@ -437,22 +483,18 @@ export default class CityManager {
 
         // Réinitialisation des Générateurs et Managers
         this.roadGenerator?.reset();
-        // --- MODIFICATION ICI ---
-        // Appel de la méthode correcte pour PlotContentGenerator
-        this.contentGenerator?.resetManagers(); // Utilise resetManagers au lieu de reset
-        // ------------------------
+        this.contentGenerator?.resetManagers(); // Utilise la méthode correcte
         this.layoutGenerator?.reset();
         this.navigationManager?.destroy(); // NavigationManager gère son propre nettoyage
-        this.navigationManager = null;     // Recréé au besoin
+        this.navigationManager = null; // Important de le remettre à null
         this.navigationGraph = null;
         this.pathfinder = null;
-        this.citizenManager?.reset(); // Assumer ou ajouter une méthode reset à CitizenManager
+        this.citizenManager?.reset();
 
         // Réinitialisation des données internes
         this.leafPlots = [];
         this.districts = [];
         this.roadGroup = null;
-        // Les autres groupes sont réinitialisés via contentGenerator.resetManagers()
 
         console.log("City cleared.");
     }
@@ -466,7 +508,6 @@ export default class CityManager {
     //     console.log("CitizenManager reset.");
     // };
 
-
     destroy() {
         console.log("Destroying CityManager...");
         this.clearCity(); // Appelle le nettoyage
@@ -477,19 +518,15 @@ export default class CityManager {
         });
         this.materials = {};
 
-        // Dispose Renderers spécialisés
-        this.houseRenderer?.reset(); // Utiliser reset ou une méthode destroy si ajoutée
+        // Dispose Renderers spécialisés (appeler leur reset/destroy)
+        this.houseRenderer?.reset();
         this.buildingRenderer?.reset();
         this.skyscraperRenderer?.reset();
-        // Idéalement, les renderers devraient avoir une méthode destroy qui dispose leurs géométries/matériaux de base
 
-         // Dispose LampPostManager (qui devrait disposer ses propres géométries)
-        if (this.lampPostManager?.lampPostConeGeometry) {
-             this.lampPostManager.lampPostConeGeometry.dispose();
-        }
-        // Ajouter une méthode destroy à LampPostManager si nécessaire pour plus de propreté
+        // Dispose LampPostManager (nettoyage interne si implémenté)
+        // this.lampPostManager?.destroy();
 
-        // Dispose Asset Loader (qui dispose les assets chargés)
+        // Dispose Asset Loader
         this.assetLoader?.disposeAssets();
 
         // Retire le conteneur principal
@@ -504,18 +541,19 @@ export default class CityManager {
         this.assetLoader = null;
         this.layoutGenerator = null;
         this.roadGenerator = null;
-        this.contentGenerator = null; // Contient les références aux groupes internes
+        this.contentGenerator = null;
         this.navigationManager = null;
         this.navigationGraph = null;
+        this.abstractGraph = null; // Nullifier HPA
+        this.hpaPrecalculator = null; // Nullifier HPA
         this.pathfinder = null;
         this.citizenManager = null;
         this.lampPostManager = null;
-        this.debugVisualManager = null; // Supposant qu'il n'a pas de ressources lourdes à libérer autres que ses enfants nettoyés dans clearCity
+        this.debugVisualManager = null;
         this.houseRenderer = null;
         this.buildingRenderer = null;
         this.skyscraperRenderer = null;
         this.renderers = null;
-
 
         console.log("CityManager destroyed.");
     }
@@ -524,6 +562,7 @@ export default class CityManager {
     getPlots() { return this.leafPlots || []; }
     getDistricts() { return this.districts || []; }
     getNavigationGraph() { return this.navigationManager?.getNavigationGraph(); } // Via NavManager
+	getAbstractGraph() {return this.abstractGraph;}
     getPathfinder() { return this.navigationManager?.getPathfinder(); }         // Via NavManager
     getBuildingInstances() { return this.citizenManager.buildingInstances; }
     getCitizens() { return this.citizenManager.citizens; }

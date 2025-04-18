@@ -275,6 +275,137 @@ export default class NavigationGraph {
         } else { console.log("NavigationGraph: Aucune cellule marchable à visualiser."); }
     }
 
+	/**
+	 * Découpe la grille en clusters de taille donnée et identifie les portes entre clusters.
+	 * @param {number} clusterSize Taille d'un cluster en nombre de cellules.
+	 */
+	buildClusters(clusterSize) {
+		this.clusterSize = clusterSize;
+		this.clusterCols = Math.ceil(this.gridWidth / clusterSize);
+		this.clusterRows = Math.ceil(this.gridHeight / clusterSize);
+		this.clusters = Array(this.clusterCols * this.clusterRows).fill(null).map((_, cid) => {
+			return {
+				id: cid,
+				x: cid % this.clusterCols, 
+				y: Math.floor(cid / this.clusterCols),
+				doors: []  // { x, y, cluster }
+			};
+		});
+
+		// Pour chaque cellule marchable, si un de ses voisins est dans un autre cluster, c'est une porte
+		for (let y = 0; y < this.gridHeight; y++) {
+			for (let x = 0; x < this.gridWidth; x++) {
+				if (!this.grid.isWalkableAt(x, y)) continue;
+				const cx = Math.floor(x / clusterSize), cy = Math.floor(y / clusterSize);
+				const cid = cy * this.clusterCols + cx;
+				[[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => {
+					const nx = x + dx, ny = y + dy;
+					if (nx < 0 || nx >= this.gridWidth || ny < 0 || ny >= this.gridHeight) return;
+					const ncx = Math.floor(nx / clusterSize), ncy = Math.floor(ny / clusterSize);
+					const ncid = ncy * this.clusterCols + ncx;
+					if (ncid !== cid && this.grid.isWalkableAt(nx, ny)) {
+						this.clusters[cid].doors.push({ x, y, cluster: ncid });
+					}
+				});
+			}
+		}
+
+		// Éliminer les doublons portes par cluster
+		this.clusters.forEach(cluster => {
+			const seen = new Set();
+			cluster.doors = cluster.doors.filter(d => {
+				const k = `${d.x},${d.y},${d.cluster}`;
+				if (seen.has(k)) return false;
+				seen.add(k);
+				return true;
+			});
+		});
+	}
+
+	/**
+	 * Trouve un chemin hiérarchique entre deux nœuds de grille.
+	 * @param {{x:number,y:number}} startNode
+	 * @param {{x:number,y:number}} endNode
+	 * @returns {{gridPath:Array<[number,number]>, pathLength:number}|null}
+	 */
+	findHierarchicalPath(startNode, endNode) {
+		const cs = this.clusterSize;
+		const startCid = Math.floor(startNode.y/cs)*this.clusterCols + Math.floor(startNode.x/cs);
+		const endCid   = Math.floor(endNode.y/cs)*this.clusterCols + Math.floor(endNode.x/cs);
+
+		// Si même cluster, A* local direct
+		if (startCid === endCid) {
+			return this._astarLocal(startNode, endNode);
+		}
+
+		// Construire graphe abstrait (clusters connectés si partagent une porte)
+		const absAdj = new Map();
+		this.clusters.forEach(c => {
+			absAdj.set(c.id, Array.from(new Set(c.doors.map(d => d.cluster))));
+		});
+
+		// BFS pour séquence de clusters
+		const queue = [[startCid]], visited = new Set([startCid]);
+		let clusterPath = null;
+		while (queue.length) {
+			const path = queue.shift(), cid = path[path.length-1];
+			if (cid === endCid) { clusterPath = path; break; }
+			for (const ncid of absAdj.get(cid)) {
+				if (!visited.has(ncid)) {
+					visited.add(ncid);
+					queue.push(path.concat(ncid));
+				}
+			}
+		}
+		if (!clusterPath) return null;
+
+		// Pour chaque saut de cluster, relier par A* local entre portes
+		const full = [];
+		let prev = startNode;
+		for (let i = 1; i < clusterPath.length; i++) {
+			const fromC = clusterPath[i-1], toC = clusterPath[i];
+			// choisir porte la + proche de prev
+			const doors = this.clusters[fromC].doors.filter(d=>d.cluster===toC)
+				.sort((a,b)=>((a.x-prev.x)**2+(a.y-prev.y)**2)-((b.x-prev.x)**2+(b.y-prev.y)**2));
+			const door = doors[0];
+			const seg = this._astarLocal(prev, { x:door.x, y:door.y });
+			if (!seg) return null;
+			full.push(...seg.gridPath.slice(0,-1));
+			prev = { x:door.x, y:door.y };
+		}
+		// dernier segment
+		const last = this._astarLocal(prev, endNode);
+		if (!last) return null;
+		full.push(...last.gridPath);
+
+		// calcul longueur monde
+		let length = 0;
+		for (let i = 1; i < full.length; i++) {
+			const [x1,y1] = full[i-1], [x2,y2] = full[i];
+			length += Math.hypot((x2-x1)/this.gridScale,(y2-y1)/this.gridScale);
+		}
+		return { gridPath: full, pathLength: length };
+	}
+
+	_astarLocal(startNode, endNode) {
+		const clone = this.grid.clone();
+		clone.setWalkableAt(startNode.x, startNode.y, true);
+		clone.setWalkableAt(endNode.x,   endNode.y,   true);
+		const finder = new PF.AStarFinder({
+			allowDiagonal: true,
+			dontCrossCorners: true,
+			heuristic: PF.Heuristic.manhattan
+		});
+		const raw = finder.findPath(startNode.x, startNode.y, endNode.x, endNode.y, clone);
+		if (!raw || raw.length === 0) return null;
+		let length = 0;
+		for (let i = 1; i < raw.length; i++) {
+			const [ax,ay] = raw[i-1], [bx,by] = raw[i];
+			length += Math.hypot((bx-ax)/this.gridScale,(by-ay)/this.gridScale);
+		}
+		return { gridPath: raw, pathLength: length };
+	}
+
     destroy() {
         this.grid = null; // Libère la grille pathfinding-js
         if (this.debugMaterialWalkable) this.debugMaterialWalkable.dispose();

@@ -36,6 +36,10 @@ export default class AgentManager {
 		this.instanceIdToAgent = new Array(maxAgents);    // instanceId → agent.id
 		this.agentToInstanceId = new Map();               // agent.id → instanceId
 
+		this.workers = [];
+		this._nextWorker = 0;
+		this.numWorkers = 10;  // ajustez selon vos CPU
+
 		this.agents = [];
 		this.instanceMeshes = {};
 		this.baseGeometries = {};
@@ -78,53 +82,27 @@ export default class AgentManager {
 
     // --- NOUVELLE MÉTHODE : Initialise le Worker ---
     initializePathfindingWorker(navigationGraph) {
-        if (this.pathfindingWorker) {
-            console.warn("AgentManager: Tentative de réinitialiser le worker déjà existant.");
-            return;
-        }
-        if (!navigationGraph || !navigationGraph.grid) {
-            console.error("AgentManager: Impossible d'initialiser le worker - NavigationGraph invalide.");
-            return;
-        }
-
-        try {
-            console.log("AgentManager: Initialisation du Pathfinding Worker...");
-            this.pathfindingWorker = new Worker(new URL('./PathfindingWorker.js', import.meta.url), { type: 'module' });
-            this.pathfindingWorker.onmessage = (event) => this._handleWorkerMessage(event);
-            this.pathfindingWorker.onerror = (error) => { /* ... gestion erreur worker ... */ };
-
-            // Préparer les données de la grille (inchangé)
-            const nodesWalkable = navigationGraph.grid.nodes.map(row =>
-                row.map(node => node.walkable)
-            );
-            const gridData = {
-                width: navigationGraph.gridWidth,
-                height: navigationGraph.gridHeight,
-                nodesWalkable: nodesWalkable
-            };
-
-            // --- NOUVEAU : Préparer les paramètres de conversion ---
-            const conversionParams = {
-                gridScale: navigationGraph.gridScale,
-                offsetX: navigationGraph.offsetX,
-                offsetZ: navigationGraph.offsetZ,
-                sidewalkHeight: navigationGraph.sidewalkHeight
-            };
-            // ----------------------------------------------------
-
-            // Envoyer le message d'initialisation COMPLET
-            this.pathfindingWorker.postMessage({
-                type: 'init',
-                data: { gridData, conversionParams } // <-- Envoyer les deux objets
-            });
-            console.log("AgentManager: Message d'initialisation (grille + params) envoyé au worker.");
-
-        } catch (error) {
-            console.error("AgentManager: Échec de la création du Pathfinding Worker:", error);
-            this.pathfindingWorker = null;
-            this.isWorkerInitialized = false;
-        }
-    }
+		if (!navigationGraph?.grid) return;
+		const gridData = {
+		  width: navigationGraph.gridWidth,
+		  height: navigationGraph.gridHeight,
+		  nodesWalkable: navigationGraph.grid.nodes.map(row=>row.map(n=>n.walkable))
+		};
+		const conversionParams = {
+		  gridScale: navigationGraph.gridScale,
+		  offsetX: navigationGraph.offsetX,
+		  offsetZ: navigationGraph.offsetZ,
+		  sidewalkHeight: navigationGraph.sidewalkHeight
+		};
+		// Créer N workers
+		for (let i = 0; i < this.numWorkers; i++) {
+		  const w = new Worker(new URL('./PathfindingWorker.js', import.meta.url), { type:'module' });
+		  w.onmessage = e => this._handleWorkerMessage(e);
+		  w.postMessage({ type:'init', data:{ gridData, conversionParams }});
+		  this.workers.push(w);
+		}
+		this.isWorkerInitialized = true;
+	}
     // --- FIN NOUVELLE MÉTHODE ---
 
     _handleWorkerMessage(event) {
@@ -211,26 +189,15 @@ export default class AgentManager {
 
     // --- NOUVELLE MÉTHODE : Demande un chemin au Worker ---
     requestPathFromWorker(agentId, startNode, endNode) {
-        if (!this.pathfindingWorker || !this.isWorkerInitialized) {
-            console.error(`AgentManager: Worker non prêt pour requête path Agent ${agentId}.`);
-            // Informer l'agent de l'échec ?
-             const agent = this.getAgentById(agentId);
-             if(agent) agent.setPath(null); // Indiquer échec à l'agent
-            return;
-        }
-        if(!startNode || !endNode) {
-             console.error(`AgentManager: StartNode ou EndNode invalide pour requête path Agent ${agentId}.`);
-             const agent = this.getAgentById(agentId);
-             if(agent) agent.setPath(null);
-             return;
-        }
-
-        // console.log(`AgentManager: Envoi requête path au worker pour Agent ${agentId}: (${startNode.x},${startNode.y}) -> (${endNode.x},${endNode.y})`);
-        this.pathfindingWorker.postMessage({
-            type: 'findPath',
-            data: { agentId, startNode, endNode }
-        });
-    }
+		if (!this.isWorkerInitialized) {
+		  const agent = this.getAgentById(agentId);
+		  if (agent) agent.setPath(null,0);
+		  return;
+		}
+		const worker = this.workers[this._nextWorker];
+		this._nextWorker = (this._nextWorker + 1) % this.numWorkers;
+		worker.postMessage({ type:'findPath', data:{ agentId, startNode, endNode } });
+	}
     // --- FIN NOUVELLE MÉTHODE ---
 
     // 2) _initializeMeshes (modifiée pour démarrer à count=0)

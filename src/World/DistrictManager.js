@@ -5,28 +5,31 @@ import District from './District.js';
 export default class DistrictManager {
     /**
      * Constructeur de DistrictManager.
-     * @param {object} config - La configuration globale (mapSize, paramètres de district, etc.)
-     * @param {Array} leafPlots - Tableau des parcelles générées (plots).
-     * @param {THREE.Group} [debugGroup=null] - Groupe destiné aux visualisations de debug (optionnel).
+     * @param {object} config - La configuration globale.
+     * @param {Array} leafPlots - Tableau des parcelles.
+     * @param {THREE.Group} [debugGroup=null] - Groupe de debug.
+     * @param {NavigationManager} navigationManager - Référence au gestionnaire de navigation. // <-- MODIFIÉ
      */
-    constructor(config, leafPlots, debugGroup = null) {
+    constructor(config, leafPlots, debugGroup = null, navigationManager = null) { // <-- MODIFIÉ
         this.config = config;
         this.leafPlots = leafPlots || [];
         this.districts = [];
         this.debugGroup = debugGroup;
+        this.navigationManager = navigationManager; // <-- Stocker le Manager entier
+        this._gateIdCounter = 0;
     }
 
     /**
      * Procède à la génération et à la validation de la formation des districts.
      * Lève une exception en cas d'échec critique.
+     * Appelle l'identification des portes HPA après validation. // <-- MODIFICATION
      */
     generateAndValidateDistricts() {
         let districtLayoutValid = false;
         let attempts = 0;
         console.time("DistrictFormationAndValidation");
         while (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
-            attempts++;
-            console.log(`\nTentative de formation/validation des districts #${attempts}...`);
+            // ... (logique existante de _createDistricts et validateDistrictLayout) ...
             // Réinitialise la référence de district dans toutes les parcelles.
             this.leafPlots.forEach(plot => {
                 plot.districtId = null;
@@ -34,7 +37,10 @@ export default class DistrictManager {
                     plot.buildingInstances = [];
                 }
             });
-            // Crée les districts (Phase 1 et Phase 2)
+            // Vider les districts précédents pour la nouvelle tentative
+            this.districts = [];
+            this._gateIdCounter = 0; // Réinitialiser aussi le compteur de portes
+
             this._createDistricts();
             this.logDistrictStats();
             districtLayoutValid = this.validateDistrictLayout();
@@ -48,12 +54,201 @@ export default class DistrictManager {
         if (!districtLayoutValid) {
             throw new Error(`Echec critique : disposition de districts invalide après ${attempts} tentatives.`);
         }
+
         console.log("Disposition des districts validée.");
+
+        // --- AJOUT : Identification des portes HPA ---
+        console.time("HPAGateIdentification");
+        this.identifyAndAddHPAGates();
+        console.timeEnd("HPAGateIdentification");
+        // --- FIN AJOUT ---
+
         console.time("PlotTypeAdjustment");
         this.adjustPlotTypesWithinDistricts();
         console.timeEnd("PlotTypeAdjustment");
         this.assignDefaultTypeToUnassigned();
         this.logAdjustedZoneTypes();
+    }
+
+	// --- NOUVELLE MÉTHODE : Identifier les portes HPA ---
+    /**
+     * Identifie les points de passage ("portes") entre districts adjacents
+     * en se basant sur les routes et les nœuds marchables du NavigationGraph.
+     */
+    identifyAndAddHPAGates() {
+        // --- MODIFICATION : Récupérer le graphe ici ---
+        const navigationGraph = this.navigationManager?.getNavigationGraph(); // Utiliser ?. pour sécurité
+        // ---------------------------------------------
+
+        if (!navigationGraph || !navigationGraph.grid) { // Vérifier le graphe récupéré
+            console.error("DistrictManager: Impossible d'identifier les portes HPA, NavigationGraph non disponible via NavigationManager.");
+            return;
+        }
+        if (!this.districts || this.districts.length < 2) {
+            console.log("DistrictManager: Pas assez de districts pour identifier des portes inter-districts.");
+            return;
+        }
+
+        console.log("Identification des portes HPA entre districts adjacents...");
+        let gatesFound = 0;
+        const navGrid = navigationGraph.grid; // Utiliser le graphe récupéré
+        const checkedPairs = new Set();
+
+        for (let i = 0; i < this.districts.length; i++) {
+            const distA = this.districts[i];
+
+            for (let j = i + 1; j < this.districts.length; j++) {
+                const distB = this.districts[j];
+
+                // ... (logique pour trouver borderPlotsA et borderPlotsB reste inchangée) ...
+                const borderPlotsA = new Set();
+                const borderPlotsB = new Set();
+
+                distA.plots.forEach(plotA => {
+                    const neighbors = this.findNeighbors(plotA, this.leafPlots);
+                    neighbors.forEach(neighbor => {
+                        if (neighbor.districtId === distB.id) {
+                            borderPlotsA.add(plotA);
+                            borderPlotsB.add(neighbor);
+                        }
+                    });
+                });
+
+                if (borderPlotsA.size === 0 || borderPlotsB.size === 0) {
+                    continue;
+                }
+
+
+                borderPlotsA.forEach(plotA => {
+                    borderPlotsB.forEach(plotB => {
+                        const roadInfo = this._findRoadBetweenPlots(plotA, plotB);
+                        if (roadInfo) {
+                            // --- MODIFICATION : Passer navigationGraph à la méthode helper ---
+                            const gateNodes = this._findGateNodesOnRoad(plotA, plotB, roadInfo, navigationGraph);
+                            // -----------------------------------------------------------------
+
+                            gateNodes.forEach(nodePos => {
+                                const gateId = `gate_${this._gateIdCounter++}`;
+                                const gateInfo = {
+                                    id: gateId,
+                                     // --- MODIFICATION : Utiliser la largeur du graphe récupéré ---
+                                    nodeId: nodePos.y * navigationGraph.gridWidth + nodePos.x,
+                                    // ----------------------------------------------------------
+                                    position: { x: nodePos.x, y: nodePos.y },
+                                };
+                                distA.addGate(gateInfo);
+                                distB.addGate(gateInfo);
+                                gatesFound++;
+                            });
+                        }
+                    });
+                });
+            }
+        }
+
+        console.log(`Identification terminée : ${gatesFound} points de portes HPA identifiés et ajoutés aux districts.`);
+        // ... (Debug log optionnel) ...
+    }
+
+	/**
+     * Trouve les nœuds de grille marchables le long du segment de route identifié.
+     * @param {Plot} plotA
+     * @param {Plot} plotB
+     * @param {object} roadInfo
+     * @param {NavigationGraph} navigationGraph - Le graphe de navigation bas niveau. // <-- AJOUTÉ
+     * @returns {Array<{x: number, y: number}>}
+     */
+    _findGateNodesOnRoad(plotA, plotB, roadInfo, navigationGraph) { // <-- AJOUTÉ navigationGraph
+        const gateNodes = [];
+        // --- MODIFICATION : Utiliser le graphe passé en argument ---
+        if (!navigationGraph || !navigationGraph.grid) return gateNodes;
+        // ---------------------------------------------------------
+
+        const roadW = this.config.roadWidth;
+        const halfRoadW = roadW / 2;
+        const grid = navigationGraph.grid; // Utiliser la grille du graphe passé
+        const step = 1.0 / navigationGraph.gridScale;
+
+        if (roadInfo.type === 'V') {
+            // ... (logique interne inchangée, mais utilise navigationGraph pour les conversions/vérifications) ...
+            const roadCenterX = roadInfo.x;
+            const startZ = roadInfo.z;
+            const endZ = roadInfo.z + roadInfo.length;
+            for (let z = startZ + step / 2; z < endZ; z += step) {
+                for (let dx = -halfRoadW; dx <= halfRoadW; dx += step) {
+                    const worldX = roadCenterX + dx;
+                    const gridPos = navigationGraph.worldToGrid(worldX, z); // Utiliser navGraph
+                    if (navigationGraph.isValidGridCoord(gridPos.x, gridPos.y) && grid.isWalkableAt(gridPos.x, gridPos.y)) {
+                        if (!gateNodes.some(n => n.x === gridPos.x && n.y === gridPos.y)) {
+                            gateNodes.push(gridPos);
+                        }
+                    }
+                }
+            }
+
+        } else { // Route horizontale
+             // ... (logique interne inchangée, mais utilise navigationGraph pour les conversions/vérifications) ...
+             const roadCenterZ = roadInfo.z;
+             const startX = roadInfo.x;
+             const endX = roadInfo.x + roadInfo.length;
+             for (let x = startX + step / 2; x < endX; x += step) {
+                for (let dz = -halfRoadW; dz <= halfRoadW; dz += step) {
+                     const worldZ = roadCenterZ + dz;
+                     const gridPos = navigationGraph.worldToGrid(x, worldZ); // Utiliser navGraph
+                    if (navigationGraph.isValidGridCoord(gridPos.x, gridPos.y) && grid.isWalkableAt(gridPos.x, gridPos.y)) {
+                         if (!gateNodes.some(n => n.x === gridPos.x && n.y === gridPos.y)) {
+                             gateNodes.push(gridPos);
+                         }
+                    }
+                }
+            }
+        }
+
+        // ... (Simplification / sélection du point milieu reste inchangée) ...
+         if (gateNodes.length > 2) {
+             const midIndex = Math.floor(gateNodes.length / 2);
+             return [gateNodes[midIndex]];
+         }
+        return gateNodes;
+    }
+
+	/**
+     * Trouve les informations de la route (si elle existe) entre deux parcelles adjacentes.
+     * @param {Plot} p1
+     * @param {Plot} p2
+     * @returns {object|null} { type: 'V'|'H', x?, z?, length? } ou null si pas de route directe.
+     */
+    _findRoadBetweenPlots(p1, p2) {
+        const roadW = this.config.roadWidth;
+        const tolerance = 0.1;
+
+        // Vérification Route Verticale
+        const gapH = p2.x - (p1.x + p1.width);
+        const gapHReverse = p1.x - (p2.x + p2.width);
+        const zOverlapStart = Math.max(p1.z, p2.z);
+        const zOverlapEnd = Math.min(p1.z + p1.depth, p2.z + p2.depth);
+        const zOverlapLength = Math.max(0, zOverlapEnd - zOverlapStart);
+
+        if (Math.abs(gapH - roadW) < tolerance && zOverlapLength > tolerance) {
+            return { type: "V", x: p1.x + p1.width + roadW / 2, z: zOverlapStart, length: zOverlapLength };
+        } else if (Math.abs(gapHReverse - roadW) < tolerance && zOverlapLength > tolerance) {
+            return { type: "V", x: p2.x + p2.width + roadW / 2, z: zOverlapStart, length: zOverlapLength };
+        }
+
+        // Vérification Route Horizontale
+        const gapV = p2.z - (p1.z + p1.depth);
+        const gapVReverse = p1.z - (p2.z + p2.depth);
+        const xOverlapStart = Math.max(p1.x, p2.x);
+        const xOverlapEnd = Math.min(p1.x + p1.width, p2.x + p2.width);
+        const xOverlapLength = Math.max(0, xOverlapEnd - xOverlapStart);
+
+        if (Math.abs(gapV - roadW) < tolerance && xOverlapLength > tolerance) {
+            return { type: "H", x: xOverlapStart, z: p1.z + p1.depth + roadW / 2, length: xOverlapLength };
+        } else if (Math.abs(gapVReverse - roadW) < tolerance && xOverlapLength > tolerance) {
+            return { type: "H", x: xOverlapStart, z: p2.z + p2.depth + roadW / 2, length: xOverlapLength };
+        }
+
+        return null; // Pas de route directe trouvée
     }
 
     /**

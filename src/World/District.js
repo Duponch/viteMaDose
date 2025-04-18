@@ -1,8 +1,3 @@
-/*
- * Fichier: src/World/District.js
- * Modifications:
- * - Ajout de la méthode `hasPark()` pour vérifier la présence d'un parc.
- */
 // src/World/District.js
 import * as THREE from 'three';
 
@@ -19,6 +14,12 @@ export default class District {
         this.plots = []; // Array of Plot objects in this district
         this._center = null; // Cached center
         this._bounds = null; // Cached bounding box
+
+        // --- AJOUTS HPA ---
+        /** @type {Array<{id: string, nodeId: number, position: {x: number, y: number}, connectedTo: Array<{neighborGateId: string, cost: number, path: Array<{x: number, y: number}>}>}>} */
+        this.gates = []; // Portes appartenant à ce district { id, nodeId (unique sur toute la map), position grille, connections }
+        this.hpaZoneId = this.id; // Utiliser l'ID du district comme ID de zone HPA pour l'instant
+        // --- FIN AJOUTS HPA ---
     }
 
     /**
@@ -39,6 +40,7 @@ export default class District {
      * @returns {THREE.Vector3} The center point.
      */
     get center() {
+        // ... (code existant inchangé) ...
         if (this._center) {
             return this._center;
         }
@@ -60,6 +62,7 @@ export default class District {
      * @returns {THREE.Box3} The bounding box.
      */
     get bounds() {
+        // ... (code existant inchangé) ...
         if (this._bounds) {
             return this._bounds;
         }
@@ -83,24 +86,22 @@ export default class District {
         return this._bounds;
     }
 
-    // ==============================================================
-    // NOUVELLE FONCTION: hasPark
-    // ==============================================================
     /**
      * Checks if this district already contains a plot designated as a park.
      * @returns {boolean} True if a park exists, false otherwise.
      */
     hasPark() {
-        return this.plots.some(plot => plot.zoneType === 'park');
+        // ... (code existant inchangé) ...
+         return this.plots.some(plot => plot.zoneType === 'park');
     }
-    // ==============================================================
 
-     /**
+    /**
       * Returns the count of plots with specific zone types allowed for this district.
       * @returns {number}
       */
      getPlotCountMatchingType() {
-         return this.plots.filter(plot => this.isAllowedPlotType(plot.zoneType)).length;
+         // ... (code existant inchangé) ...
+          return this.plots.filter(plot => this.isAllowedPlotType(plot.zoneType)).length;
      }
 
      /**
@@ -109,7 +110,8 @@ export default class District {
       * @returns {boolean}
       */
      isAllowedPlotType(zoneType) {
-         switch (this.type) {
+         // ... (code existant inchangé) ...
+          switch (this.type) {
              case 'residential':
                  // Un parc est autorisé (mais un seul sera gardé)
                  return ['house', 'building', 'park'].includes(zoneType);
@@ -123,4 +125,27 @@ export default class District {
                  return false;
          }
      }
+
+     // --- NOUVELLES MÉTHODES HPA ---
+     addGate(gateInfo) {
+         // gateInfo: {id: string, nodeId: number, position: {x: number, y: number}}
+         if (!this.gates.find(g => g.id === gateInfo.id)) {
+             this.gates.push({ ...gateInfo, connectedTo: [] }); // Ajoute connectedTo vide
+         }
+     }
+
+     getGateById(gateId) {
+         return this.gates.find(g => g.id === gateId);
+     }
+
+     addConnection(fromGateId, toGateId, cost, path) {
+         const fromGate = this.getGateById(fromGateId);
+         if (fromGate) {
+             // Vérifier si la connexion existe déjà pour éviter les doublons
+             if (!fromGate.connectedTo.find(c => c.neighborGateId === toGateId)) {
+                 fromGate.connectedTo.push({ neighborGateId: toGateId, cost: cost, path: path });
+             }
+         }
+     }
+     // --- FIN NOUVELLES MÉTHODES HPA ---
 }
