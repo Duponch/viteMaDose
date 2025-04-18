@@ -433,49 +433,44 @@ export default class AgentManager {
 		} return this.partOffsetMatrix;
     }
 
-	// dans AgentManager.js
 	update(deltaTime) {
 		if (!this.experience?.world?.environment?.isInitialized) return;
-		const environment = this.experience.world.environment;
-		const currentHour = environment.getCurrentHour();
-		const currentGameTime = this.experience.time.elapsed;
-		const isDebug = this.experience.isDebugMode;
-		const debugMarkerScale = isDebug ? 1.0 : 0;
+		const environment        = this.experience.world.environment;
+		const currentGameTime    = this.experience.time.elapsed;
+		const isDebug            = this.experience.isDebugMode;
+		const debugMarkerScale   = isDebug ? 1.0 : 0;
 		const fixedMarkerYOffset = 5.0;
 
-		// 1. Logique (inchangé)
+		// 1. Logique
 		this.agents.forEach(agent => {
-			agent.updateState(deltaTime, currentHour, currentGameTime);
+			agent.updateState(deltaTime, environment.getCurrentHour(), currentGameTime);
 		});
 
-		// 2. Visuels : on ne parcourt plus par index séquentiel,
-		//    mais on récupère l’instanceId depuis le pool
-		let needsBodyMatrixUpdate = false;
-		let needsColorUpdate = this.instanceMeshes.torso.instanceColor?.needsUpdate || false;
-		let needsAgentMarkerUpdate = false;
-		let needsHomeMarkerUpdate = false;
-		let needsWorkMarkerUpdate = false;
+		// 2. Visuels
+		let needsBodyMatrixUpdate   = false;
+		let needsColorUpdate        = this.instanceMeshes.torso.instanceColor?.needsUpdate || false;
+		let needsAgentMarkerUpdate  = false;
+		let needsHomeMarkerUpdate   = false;
+		let needsWorkMarkerUpdate   = false;
 
 		for (const agent of this.agents) {
 			const instanceId = this.agentToInstanceId.get(agent.id);
 			if (instanceId === undefined) continue;
 
-			// Met à jour la position/orientation visuelle de l’agent
+			// Met à jour la position/orientation de base
 			agent.updateVisuals(deltaTime, currentGameTime);
-
-			// Compose la matrice globale
 			const actualScale = agent.isVisible ? agent.scale : 0;
 			this.tempScale.set(actualScale, actualScale, actualScale);
 			this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
 
-			// Fonction helper qui prend désormais `instanceId`
+			// Mise à jour des parties du corps…
 			const updatePart = (pName, mName, idxMult = 1, idxOff = 0) => {
 				const idx = instanceId * idxMult + idxOff;
 				const mesh = this.instanceMeshes[mName];
 				if (!mesh || idx >= mesh.count) return;
 
 				if (agent.isVisible) {
-					const offsetMatrix = this._getPartLocalOffsetMatrix(pName);
+					const offsetMatrix    = this._getPartLocalOffsetMatrix(pName);
 					const animationMatrix = agent.currentAnimationMatrix[pName] || new THREE.Matrix4();
 					this.tempMatrix.multiplyMatrices(offsetMatrix, animationMatrix);
 					this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix);
@@ -485,27 +480,43 @@ export default class AgentManager {
 					mesh.setMatrixAt(idx, this.tempMatrix);
 				}
 			};
-
-			updatePart('head','head');
-			updatePart('torso','torso');
-			updatePart('leftHand','hand',2,0);
-			updatePart('rightHand','hand',2,1);
-			updatePart('leftFoot','shoe',2,0);
-			updatePart('rightFoot','shoe',2,1);
+			updatePart('head',     'head');
+			updatePart('torso',    'torso');
+			updatePart('leftHand', 'hand', 2, 0);
+			updatePart('rightHand','hand', 2, 1);
+			updatePart('leftFoot', 'shoe', 2, 0);
+			updatePart('rightFoot','shoe', 2, 1);
 			needsBodyMatrixUpdate = true;
 
-			// Couleur
+			// Couleur du torse
 			if (this.instanceMeshes.torso.instanceColor) {
 				this.tempColor.setHex(agent.torsoColor.getHex());
 				this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
 				needsColorUpdate = true;
 			}
 
-			// Debug markers (similaire, en utilisant instanceId)
-			// … code identique, mais sur instanceId …
-			needsAgentMarkerUpdate = true;
-			needsHomeMarkerUpdate = true;
-			needsWorkMarkerUpdate = true;
+			// Debug marker (agentMarker)
+			const markerMesh = this.instanceMeshes.agentMarker;
+			if (markerMesh) {
+				if (isDebug) {
+					// Composer la matrice du losange au-dessus de l’agent
+					this.tempMatrix.identity();
+					this.tempMatrix.makeTranslation(
+						agent.position.x,
+						agent.position.y + fixedMarkerYOffset,
+						agent.position.z
+					);
+					this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
+					this.tempMatrix.scale(this.tempScale);
+				} else {
+					// Masquer le losange (échelle 0)
+					this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
+				}
+				markerMesh.setMatrixAt(instanceId, this.tempMatrix);
+				needsAgentMarkerUpdate = true;
+			}
+
+			// … Vous pouvez appliquer la même logique pour homeMarker & workMarker si nécessaire …
 		}
 
 		// 3. Pousser vers le GPU
@@ -518,12 +529,10 @@ export default class AgentManager {
 				}
 			});
 		}
-		if (needsColorUpdate) {
-			this.instanceMeshes.torso.instanceColor.needsUpdate = true;
-		}
-		if (needsAgentMarkerUpdate) this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
-		if (needsHomeMarkerUpdate)  this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
-		if (needsWorkMarkerUpdate)  this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
+		if (needsColorUpdate)        this.instanceMeshes.torso.instanceColor.needsUpdate = true;
+		if (needsAgentMarkerUpdate)  this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
+		if (needsHomeMarkerUpdate)   this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
+		if (needsWorkMarkerUpdate)   this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
 	}
 
 	removeAgent(agentId) {
