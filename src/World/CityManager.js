@@ -2,28 +2,33 @@
 import * as THREE from 'three';
 import CityLayoutGenerator from './CityLayoutGenerator.js';
 import RoadNetworkGenerator from './RoadNetworkGenerator.js';
-// Import du PlotContentGenerator refactoré
 import PlotContentGenerator from './PlotContentGenerator.js';
 import CityAssetLoader from './CityAssetLoader.js';
 import DistrictManager from './DistrictManager.js';
 import LampPostManager from './LampPostManager.js';
-import NavigationManager from './NavigationManager.js'; // Utilisation de NavigationManager
+import NavMeshManager from './NavMeshManager.js';
+// --- AJOUTER CET IMPORT ---
+import AgentManager from './AgentManager.js'; // <--- LIGNE MANQUANTE
+// --------------------------
 import CitizenManager from './CitizenManager.js';
 import DebugVisualManager from './DebugVisualManager.js';
-// Renderer spécialisés sont nécessaires pour PlotContentGenerator via Experience/World
+// Renderers spécialisés
 import HouseRenderer from './HouseRenderer.js';
 import BuildingRenderer from './BuildingRenderer.js';
 import SkyscraperRenderer from './SkyscraperRenderer.js';
-
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 export default class CityManager {
     constructor(experience, config = {}) {
         this.experience = experience;
         this.scene = this.experience.scene;
 
-        // --- Configuration initiale ---
-        this.config = {
-            // Map & Layout
+        // --- Configuration initiale (INCHANGÉ) ---
+        // Toute la configuration existante est conservée.
+        // S'assurer que les paramètres nécessaires à la génération du NavMesh
+        // (ex: agent radius, height, max climb, etc.) sont présents ici ou passés autrement.
+        this.config = { /* ...la longue liste de config ... */
+             // Map & Layout
             mapSize: 800,
             roadWidth: 10,
             minPlotSize: 30,
@@ -64,7 +69,7 @@ export default class CityManager {
             sidewalkHeight: 0.2,
             centerlineWidth: 0.15,
             centerlineHeight: 0.02,
-            plotGroundY: 0.005, // Ajout pour uniformiser
+            plotGroundY: 0.005,
             // Espacements Minimum
             minHouseSpacing: 5.0,
             minBuildingSpacing: 3.0,
@@ -76,51 +81,37 @@ export default class CityManager {
             gridBuildingBaseScale: 1,
             gridIndustrialBaseScale: 1.2,
             gridSkyscraperBaseScale: 1.7,
-            gridParkBaseScale: 1.0, // Ajout pour parcs
-            // Assets (Simplifié - les détails restent dans la config passée)
+            gridParkBaseScale: 1.0,
+            // Assets (Simplifié)
             houseModelDir: "Public/Assets/Models/Houses/",
             houseModelFiles: [ { file: "House1.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 } ],
-            houseBaseWidth: 5,
-            houseBaseHeight: 6,
-            houseBaseDepth: 5,
+            houseBaseWidth: 5, houseBaseHeight: 6, houseBaseDepth: 5,
             buildingModelDir: "Public/Assets/Models/Buildings/",
             buildingModelFiles: [ { file: "Building1.fbx", scale: 0.8 }, { file: "Building10.glb", scale: 0.8 } ],
-            buildingBaseWidth: 10,
-            buildingBaseHeight: 20,
-            buildingBaseDepth: 10,
+            buildingBaseWidth: 10, buildingBaseHeight: 20, buildingBaseDepth: 10,
             industrialModelDir: "Public/Assets/Models/Industrials/",
             industrialModelFiles: [ { file: "Factory1_glb.glb", scale: 1 }, { file: "Factory2_glb.glb", scale: 1 }, { file: "Factory3_glb.glb", scale: 1 } ],
-            industrialBaseWidth: 18,
-            industrialBaseHeight: 12,
-            industrialBaseDepth: 25,
+            industrialBaseWidth: 18, industrialBaseHeight: 12, industrialBaseDepth: 25,
             parkModelDir: "Public/Assets/Models/Parks/",
             parkModelFiles: [ { file: "Bench.glb", scale: 0.5 }, { file: "Fountain.glb", scale: 1.0 }, { file: "Gazebo.glb", scale: 2 }, { file: "Table.glb", scale: 0.5 } ],
-            parkBaseWidth: 15, // Utilisé pour le calcul de grille
-            parkBaseHeight: 3,
-            parkBaseDepth: 15, // Utilisé pour le calcul de grille
-            minParkElements: 1, // Ajout config parc
-            maxParkElements: 5, // Ajout config parc
+            parkBaseWidth: 15, parkBaseHeight: 3, parkBaseDepth: 15,
+            minParkElements: 1, maxParkElements: 5,
             treeModelDir: "Public/Assets/Models/Trees/",
             treeModelFiles: [{ file: "Tree2.glb", scale: 0.9 }, { file: "Tree3.glb", scale: 0.9 }, { file: "Tree4.glb", scale: 0.9 }, { file: "Tree5.glb", scale: 0.9 }, { file: "Tree6.glb", scale: 0.9 } ],
-            treeBaseWidth: 4,
-            treeBaseHeight: 8,
-            treeBaseDepth: 4,
+            treeBaseWidth: 4, treeBaseHeight: 8, treeBaseDepth: 4,
             skyscraperModelDir: "Public/Assets/Models/Skyscrapers/",
             skyscraperModelFiles: [ { file: "Skyscraper1.glb", scale: 0.8 }, { file: "Skyscraper2.glb", scale: 1 }, { file: "Skyscraper3.glb", scale: 1 } ],
-            skyscraperBaseWidth: 15,
-            skyscraperBaseHeight: 80,
-            skyscraperBaseDepth: 15,
+            skyscraperBaseWidth: 15, skyscraperBaseHeight: 80, skyscraperBaseDepth: 15,
             // Placement d'arbres
             treePlacementProbabilitySidewalk: 0.3,
             treePlacementProbabilityPark: 0.04,
             // Debug
             debug: {
-                showDistrictBoundaries: false, // Gardé de l'ancienne config
-                // Facteurs de réduction pour la taille des cubes de debug des bâtiments
-                houseScaleReduction: 0.4,       // Maison debug = 80% de la taille calculée
-                buildingScaleReduction: 0.8,    // Immeuble debug = 70%
-                industrialScaleReduction: 0.4,  // Industriel debug = 60%
-                skyscraperScaleReduction: 1.01   // Gratte-ciel debug = 50%
+                showDistrictBoundaries: false,
+                houseScaleReduction: 0.4,
+                buildingScaleReduction: 0.8,
+                industrialScaleReduction: 0.4,
+                skyscraperScaleReduction: 1.01
             },
             // Time
             dayNightCycleEnabled: true,
@@ -149,14 +140,25 @@ export default class CityManager {
             maxWorkersPerSkyscraper: 100,
             maxWorkersPerIndustrial: 50,
             // Lampadaires
-            lampPostSpacing: 20, // Ajout config lampadaire
+            lampPostSpacing: 20,
             lampPostLightConeRadiusBottom: 5.0,
             lampPostLightConeOpacity: 0.0023,
-            lampPostLightConeColor: 0xFFFF99
-        };
+            lampPostLightConeColor: 0xFFFF99,
+             // --- AJOUT POTENTIEL : Paramètres NavMesh ---
+             navMesh: {
+                 agentRadius: 0.5,        // Rayon de l'agent pour le calcul du NavMesh
+                 agentHeight: 1.8,        // Hauteur de l'agent
+                 agentMaxClimb: 0.4,      // Hauteur maximale franchissable
+                 agentMaxSlope: 45.0,     // Pente maximale (en degrés)
+                 cellSize: 0.3,           // Taille des cellules pour la voxelisation initiale
+                 cellHeight: 0.2,         // Hauteur des cellules
+                 // ... autres paramètres spécifiques à Recast/Detour si utilisés
+             }
+             // ------------------------------------------
+         };
 
-        // Fusion de configuration externe
-        const deepMerge = (target, source) => {
+        // Fusion de configuration externe (INCHANGÉ)
+        const deepMerge = (target, source) => { /* ... */
             for (const key in source) {
                 if (source.hasOwnProperty(key)) {
                     if (source[key] instanceof Object && !(source[key] instanceof THREE.Color) && !(source[key] instanceof THREE.Vector3) &&
@@ -168,11 +170,11 @@ export default class CityManager {
                 }
             }
             return target;
-        };
+         };
         deepMerge(this.config, config);
 
-        // --- Matériaux ---
-        this.materials = {
+        // --- Matériaux (INCHANGÉ) ---
+        this.materials = { /* ... matériaux existants ... */
             groundMaterial: new THREE.MeshStandardMaterial({ color: 0x272442, metalness: 0.1, roughness: 0.8 }),
             sidewalkMaterial: new THREE.MeshStandardMaterial({ color: 0x999999 }),
             centerlineMaterial: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.1, roughness: 0.8 }),
@@ -186,30 +188,23 @@ export default class CityManager {
             debugIndustrialMat: new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugBusinessMat: new THREE.MeshBasicMaterial({ color: 0xcc0000, transparent: true, opacity: 0.4, side: THREE.DoubleSide }),
             debugDefaultMat: new THREE.MeshBasicMaterial({ color: 0xcccccc, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
-            // debugPlotGridMaterial: new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true, side: THREE.DoubleSide }), // Déplacé potentiellement
-            debugParkOutlineMaterial: new THREE.LineBasicMaterial({
-                color: 0x00ff00,
-                linewidth: 2, // Note: linewidth > 1 non garanti sur toutes les plateformes
-                depthTest: false
-            }),
+            debugParkOutlineMaterial: new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2, depthTest: false }),
             lampLightConeMaterial: new THREE.MeshBasicMaterial({
                 color: this.config.lampPostLightConeColor,
                 transparent: true,
                 opacity: this.config.lampPostLightConeOpacity,
                 side: THREE.DoubleSide,
-                depthWrite: false // Important pour le rendu correct des cônes transparents
+                depthWrite: false
             })
-        };
+         };
 
-        // --- Composants ---
+        // --- Composants (INCHANGÉ, sauf Navigation) ---
         this.assetLoader = new CityAssetLoader(this.config);
         this.layoutGenerator = new CityLayoutGenerator(this.config);
         this.roadGenerator = new RoadNetworkGenerator(this.config, this.materials);
-        // Instanciation du PlotContentGenerator refactoré
         this.contentGenerator = new PlotContentGenerator(this.config, this.materials, this.experience);
 
-        // --- Renderers Spécialisés ---
-        // Créés ici pour être passés à PlotContentGenerator lors de la génération
+        // --- Renderers Spécialisés (INCHANGÉ) ---
         this.houseRenderer = new HouseRenderer(this.config, this.materials);
         this.buildingRenderer = new BuildingRenderer(this.config, this.materials);
         this.skyscraperRenderer = new SkyscraperRenderer(this.config, this.materials);
@@ -219,71 +214,60 @@ export default class CityManager {
             skyscraperRenderer: this.skyscraperRenderer
         };
 
-        // --- Navigation via NavigationManager ---
-        this.navigationManager = new NavigationManager(this.config);
-        this.navigationGraph = null; // Sera initialisé via NavigationManager
-        this.pathfinder = null;       // Sera initialisé via NavigationManager
+        // --- MODIFICATION : Navigation via NavMeshManager ---
+        // this.navigationManager = new NavigationManager(this.config); // Ancien
+        this.navMeshManager = new NavMeshManager(this.config, this.experience); // <-- NOUVEAU
+        // Plus besoin de stocker navigationGraph ou pathfinder ici
+        // -------------------------------------------------
 
         this.districts = [];
         this.leafPlots = [];
 
-        // --- Groupes de scène ---
+        // --- Groupes de scène (INCHANGÉ) ---
         this.cityContainer = new THREE.Group();
         this.cityContainer.name = "CityContainer";
-        // Les groupes spécifiques (road, sidewalk, content, ground) seront ajoutés par les managers/générateurs
-        this.roadGroup = null;      // Géré par RoadNetworkGenerator
-        this.sidewalkGroup = this.contentGenerator.sidewalkGroup; // Accès au groupe de PlotContentGenerator
-        this.contentGroup = this.contentGenerator.buildingGroup; // Accès au groupe de PlotContentGenerator
-        this.groundGroup = this.contentGenerator.groundGroup;   // Accès au groupe de PlotContentGenerator
+        this.roadGroup = null;
+        this.sidewalkGroup = this.contentGenerator.sidewalkGroup;
+        this.contentGroup = this.contentGenerator.buildingGroup;
+        this.groundGroup = this.contentGenerator.groundGroup;
         this.cityContainer.add(this.sidewalkGroup, this.contentGroup, this.groundGroup);
 
-        // --- Instance de DebugVisualManager ---
-        // Créé ici pour pouvoir être utilisé par DistrictManager
+        // --- DebugVisualManager (INCHANGÉ) ---
 		this.debugVisualManager = new DebugVisualManager(
-            null,
-            this.materials,
-            this.experience.sizes,
-            this.config
+            null, this.materials, this.experience.sizes, this.config
         );
-        if (this.experience.isDebugMode || this.config.showDistrictBoundaries) {
+        if (this.experience.isDebugMode || this.config.debug?.showDistrictBoundaries) { // Utiliser config.debug
             this.cityContainer.add(this.debugVisualManager.parentGroup);
         }
 
-        // --- CitizenManager ---
-        // Passe la config pour les capacités des bâtiments
+        // --- CitizenManager (INCHANGÉ) ---
         this.citizenManager = new CitizenManager(this.config);
 
-        // --- LampPostManager ---
-        // Passe le cityContainer où ajouter les lampadaires
+        // --- LampPostManager (INCHANGÉ) ---
         this.lampPostManager = new LampPostManager(this.config, this.materials, this.cityContainer);
 
-        // Ajout du conteneur principal à la scène
+        // Ajout du conteneur principal à la scène (INCHANGÉ)
         this.scene.add(this.cityContainer);
 
-        console.log("CityManager initialized.");
+        console.log("CityManager initialized (NavMesh ready).");
     }
 
-    // --- Délégation vers CitizenManager ---
+    // --- Délégation vers CitizenManager (INCHANGÉ) ---
     registerBuildingInstance(plotId, assetType, position, capacityOverride = null) {
         return this.citizenManager.registerBuildingInstance(plotId, assetType, position, capacityOverride);
     }
-
     registerCitizen(citizenId, agentLogic) {
         return this.citizenManager.registerCitizen(citizenId, agentLogic);
     }
-
     assignHomeToCitizen(citizenId) {
         return this.citizenManager.assignHomeToCitizen(citizenId);
     }
-
     assignWorkplaceToCitizen(citizenId) {
         return this.citizenManager.assignWorkplaceToCitizen(citizenId);
     }
-
     getBuildingInfo(buildingInstanceId) {
         return this.citizenManager.getBuildingInfo(buildingInstanceId);
     }
-
     getCitizenInfo(citizenId) {
         return this.citizenManager.getCitizenInfo(citizenId);
     }
@@ -293,270 +277,268 @@ export default class CityManager {
         console.time("CityGeneration");
         this.clearCity(); // Efface la ville précédente
         try {
-            console.log("--- Starting city generation ---");
-            this.createGlobalGround(); // Crée le sol global
+            console.log("--- Starting city generation (NavMesh version) ---");
+            this.createGlobalGround();
 
             console.time("AssetLoading");
-            await this.assetLoader.loadAssets(); // Charge tous les modèles 3D
+            await this.assetLoader.loadAssets();
             console.timeEnd("AssetLoading");
             this.logLoadedAssets();
 
             console.time("LayoutGeneration");
-            this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize); // Génère les parcelles
+            this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
             console.timeEnd("LayoutGeneration");
             console.log(`Layout generated with ${this.leafPlots.length} plots.`);
-            this.logInitialZoneTypes(); // Log les types initiaux des parcelles
-            if (!this.leafPlots || this.leafPlots.length === 0)
-                throw new Error("Layout produced no plots.");
+            this.logInitialZoneTypes();
+            if (!this.leafPlots || this.leafPlots.length === 0) throw new Error("Layout produced no plots.");
 
-            // --- District Logic via DistrictManager ---
+            // --- Districts ---
             console.time("DistrictFormationAndValidation");
             try {
-                // Crée et utilise DistrictManager pour former et valider les quartiers
                 const districtManager = new DistrictManager(this.config, this.leafPlots, this.debugVisualManager.parentGroup);
-                districtManager.generateAndValidateDistricts(); // Génère, valide et ajuste les types de parcelles
-                this.districts = districtManager.getDistricts(); // Récupère les districts formés
+                districtManager.generateAndValidateDistricts();
+                this.districts = districtManager.getDistricts();
             } catch (error) {
                 console.error("Error during district formation:", error);
-                throw error; // Arrête la génération si les districts sont invalides
+                throw error;
             }
             console.timeEnd("DistrictFormationAndValidation");
 
-            // assignDefaultTypeToUnassigned est maintenant appelé DANS generateAndValidateDistricts
-            // this.assignDefaultTypeToUnassigned(); // S'assure que toutes les parcelles ont un type
-            // this.logAdjustedZoneTypes(); // Déjà loggué par DistrictManager
-
+            // --- Routes ---
             console.time("RoadAndCrosswalkInfoGeneration");
-            // Génère le réseau routier et les infos pour les passages piétons
             const { roadGroup, crosswalkInfos } = this.roadGenerator.generateRoads(this.leafPlots);
-            this.roadGroup = roadGroup; // Stocke le groupe contenant les routes
-            this.cityContainer.add(this.roadGroup); // Ajoute les routes à la scène
+            this.roadGroup = roadGroup;
+            this.cityContainer.add(this.roadGroup);
             console.timeEnd("RoadAndCrosswalkInfoGeneration");
             console.log(`Road network generated and ${crosswalkInfos.length} crosswalk locations identified.`);
 
-            // --- NavigationManager ---
-            if (!this.navigationManager) {
-                this.navigationManager = new NavigationManager(this.config);
-            }
-            console.time("NavigationGraphBuilding");
-            this.navigationManager.buildGraph(this.leafPlots, crosswalkInfos); // Construit le graphe de navigation
-            console.timeEnd("NavigationGraphBuilding");
-
-            console.time("PathfinderInitialization");
-            this.navigationManager.initializePathfinder(); // Initialise le service de pathfinding
-            console.timeEnd("PathfinderInitialization");
-
-            this.navigationGraph = this.navigationManager.getNavigationGraph(); // Récupère le graphe
-            this.pathfinder = this.navigationManager.getPathfinder(); // Récupère le pathfinder
-
-            console.time("ContentGeneration");
-            // Appel à PlotContentGenerator refactoré
+            // --- Contenu Parcelles (génère trottoirs, sol, bâtiments, arbres...) ---
+            console.time("PlotContentGeneration");
             const { sidewalkGroup, buildingGroup, groundGroup } = this.contentGenerator.generateContent(
                 this.leafPlots,
                 this.assetLoader,
                 crosswalkInfos,
-                this, // Passe CityManager (pour enregistrement bâtiments)
-                this.renderers // Passe les renderers spécialisés
+                this,
+                this.renderers
             );
-            // Les groupes sont déjà gérés par PlotContentGenerator ou ajoutés ici
-            console.timeEnd("ContentGeneration");
-
+            console.timeEnd("PlotContentGeneration");
             console.log(`Total Building Instances Registered: ${this.citizenManager.buildingInstances.size}`);
 
-            // --- Lamp Post Generation via LampPostManager ---
+            // --- NOUVEAU : Génération du NavMesh (SECTION CORRIGÉE) ---
+            console.time("NavMeshGeneration");
+            if (!this.navMeshManager) {
+                this.navMeshManager = new NavMeshManager(this.config, this.experience);
+            }
+
+            // 1. Collecter les meshes marchables sources (trottoirs, etc.)
+            const walkableMeshSources = [];
+            if (this.sidewalkGroup && this.sidewalkGroup.children.length > 0) {
+                 walkableMeshSources.push(...this.sidewalkGroup.children);
+            }
+            // Ajoutez ici d'autres sources si besoin (ex: sols des parcs)
+            // if (this.groundGroup) {
+            //    walkableMeshSources.push(...this.groundGroup.children.filter(m => m.name.includes('Ground_Plot') && m.name.includes('_park')));
+            // }
+
+            let finalWalkableMesh = null; // Le mesh unique à passer à buildNavMesh
+            let mergedGeometry = null; // Pour stocker la géométrie fusionnée
+            const geometriesToMerge = []; // Pour stocker les géométries transformées
+
+            if (walkableMeshSources.length > 0) {
+                console.log(`NavMesh Generation: Preparing to merge ${walkableMeshSources.length} walkable source meshes...`);
+
+                // 2. Extraire et transformer les géométries en coordonnées monde
+                walkableMeshSources.forEach(mesh => {
+                    if (mesh.geometry && mesh.isMesh) { // Vérifier que c'est un Mesh avec une géométrie
+                        const clonedGeometry = mesh.geometry.clone();
+                        mesh.updateMatrixWorld(true); // Assurer que la matrice monde est à jour
+                        clonedGeometry.applyMatrix4(mesh.matrixWorld); // Appliquer la transformation monde
+                        geometriesToMerge.push(clonedGeometry);
+                    } else {
+                        console.warn("NavMesh Generation: Found a walkable source without valid geometry:", mesh.name);
+                    }
+                });
+
+                // 3. Fusionner les géométries transformées
+                if (geometriesToMerge.length > 0) {
+                    mergedGeometry = mergeGeometries(geometriesToMerge, false);
+                    // Nettoyer les géométries clonées individuelles
+                    geometriesToMerge.forEach(geom => geom.dispose());
+
+                    if (mergedGeometry) {
+                        // 4. Créer un mesh temporaire avec la géométrie fusionnée
+                        // Le matériau importe peu ici, juste besoin d'un Mesh valide
+                        finalWalkableMesh = new THREE.Mesh(mergedGeometry, new THREE.MeshBasicMaterial());
+                        finalWalkableMesh.name = "MergedWalkableSurface_ForNavMeshGen";
+                        console.log("NavMesh Generation: Walkable geometries merged successfully.");
+                    } else {
+                        console.error("NavMesh Generation: Failed to merge walkable geometries.");
+                    }
+                } else {
+                     console.warn("NavMesh Generation: No valid geometries found to merge for NavMesh.");
+                }
+
+            } else {
+                 console.warn("NavMesh Generation: No walkable mesh sources found (e.g., no sidewalks generated).");
+            }
+
+            // 5. Construire le NavMesh en utilisant le mesh fusionné (s'il existe)
+            let navMeshInstanceData = null; // Contiendra les données pour le worker
+            if (finalWalkableMesh) {
+                navMeshInstanceData = await this.navMeshManager.buildNavMesh(finalWalkableMesh);
+            } else {
+                 console.error("NavMesh Generation: Cannot build NavMesh, no final walkable mesh was created.");
+            }
+
+            // 6. Nettoyer le mesh temporaire et sa géométrie fusionnée
+            if (finalWalkableMesh) {
+                finalWalkableMesh.geometry.dispose(); // Dispose mergedGeometry
+                finalWalkableMesh = null;
+                // mergedGeometry est déjà hors de portée ou null
+            }
+
+            // Vérifier si la génération a réussi et lever une erreur si nécessaire
+            if (!navMeshInstanceData) {
+                 throw new Error("Failed to build NavMesh or get its instance data.");
+            }
+            console.timeEnd("NavMeshGeneration");
+            console.log("NavMesh generated and processed successfully.");
+            // --- FIN SECTION CORRIGÉE ---
+
+            // --- Initialisation AgentManager (Maintenant AVEC NavMesh) ---
+            console.time("AgentManagerInitialization");
+            const maxAgents = this.config.maxAgents ?? 300;
+            this.experience.world?.agentManager?.destroy(); // Nettoyer l'ancien si existant
+            this.experience.world.agentManager = new AgentManager(
+                this.scene, this.experience, this.config, maxAgents
+            );
+            this.agentManager = this.experience.world.agentManager;
+            if (this.agentManager && navMeshInstanceData) {
+                 // Passer les données SÉRIALISÉES retournées par buildNavMesh
+                this.agentManager.initializePathfindingWorker(navMeshInstanceData);
+                console.log("AgentManager initialized and Pathfinding Worker initialization requested with NavMesh data.");
+            } else {
+                 console.error("World: Failed to initialize AgentManager or its worker - NavMesh data invalid?");
+            }
+            console.timeEnd("AgentManagerInitialization");
+
+            // --- Création Agents (maintenant APRÈS init worker) ---
+            this.experience.world.createAgents(maxAgents);
+
+            // --- Lampadaires ---
             console.time("LampPostGeneration");
-            this.lampPostManager.addLampPosts(this.leafPlots); // Ajoute les lampadaires
+            this.lampPostManager.addLampPosts(this.leafPlots);
             console.timeEnd("LampPostGeneration");
 
-            // --- Debug Visuals via DebugVisualManager ---
+            // --- Debug Visuels ---
             if (this.experience.isDebugMode) {
                 console.time("DebugVisualsUpdate");
                 if (!this.debugVisualManager.parentGroup.parent) {
                     this.cityContainer.add(this.debugVisualManager.parentGroup);
                 }
-                this.debugVisualManager.createParkOutlines(this.leafPlots, 0.3); // Ajuster la hauteur si besoin
-                 if(this.config.showDistrictBoundaries) {
-                    this.debugVisualManager.createDistrictBoundaries(this.districts);
-                }
+                // World.setDebugMode s'occupera d'appeler les fonctions de DVM et du NavMeshManager
                 console.timeEnd("DebugVisualsUpdate");
             } else {
-                this.debugVisualManager.clearDebugVisuals(); // Nettoie tous les visuels de debug
-                if (this.debugVisualManager.parentGroup.parent) {
-                    this.cityContainer.remove(this.debugVisualManager.parentGroup); // Retire le groupe de debug
+                 if (this.debugVisualManager.parentGroup.parent) {
+                    this.cityContainer.remove(this.debugVisualManager.parentGroup);
                 }
             }
-            console.log("--- City generation finished ---");
+
+            console.log("--- City generation finished (NavMesh version) ---");
         } catch (error) {
             console.error("Major error during city generation:", error);
-            this.clearCity(); // Tente de nettoyer en cas d'erreur majeure
+            this.clearCity(); // Tenter de nettoyer même en cas d'erreur
         } finally {
-            console.timeEnd("CityGeneration"); // Fin du chronomètre global
+            console.timeEnd("CityGeneration");
         }
-    }
+    } // Fin generateCity
 
-    createGlobalGround() {
+    // --- createGlobalGround (INCHANGÉ) ---
+    createGlobalGround() { /* ... code inchangé ... */
         if (this.groundMesh && this.groundMesh.parent) return;
-        if (this.groundMesh && !this.groundMesh.parent) {
-            this.scene.add(this.groundMesh);
-            return;
-        }
+        if (this.groundMesh && !this.groundMesh.parent) { this.scene.add(this.groundMesh); return; }
         const groundGeometry = new THREE.PlaneGeometry(this.config.mapSize, this.config.mapSize);
         this.groundMesh = new THREE.Mesh(groundGeometry, this.materials.groundMaterial);
-        this.groundMesh.rotation.x = -Math.PI / 2;
-        this.groundMesh.position.y = -0.01;
-        this.groundMesh.receiveShadow = true;
-        this.groundMesh.name = "CityGround";
+        this.groundMesh.rotation.x = -Math.PI / 2; this.groundMesh.position.y = -0.01;
+        this.groundMesh.receiveShadow = true; this.groundMesh.name = "CityGround";
         this.scene.add(this.groundMesh);
-        // console.log(`CityGround created: ${this.config.mapSize}x${this.config.mapSize}`);
-    }
+     }
 
+    // --- clearCity (Adapté pour NavMeshManager) ---
     clearCity() {
-        console.log("Clearing the existing city...");
-        // Nettoyage Debug
-        if (this.debugVisualManager) {
-            this.debugVisualManager.clearDebugVisuals();
-        }
-
-        // Nettoyage Groupes de Scène Directs
+        console.log("Clearing the existing city (NavMesh version)...");
+        this.debugVisualManager?.clearAllAndDisposeMaterials(); // Nettoie cache et géométries partagées DVM
         if (this.roadGroup && this.roadGroup.parent) this.cityContainer.remove(this.roadGroup);
-        // Les autres groupes (sidewalk, content, ground) sont gérés par contentGenerator
-
-        // Nettoyage Lampadaires via leur Manager
-        if (this.lampPostManager && this.lampPostManager.lampPostMeshes) {
-            if (this.lampPostManager.lampPostMeshes.grey?.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.grey);
-            if (this.lampPostManager.lampPostMeshes.light?.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.light);
-            if (this.lampPostManager.lampPostMeshes.lightCone?.parent) this.cityContainer.remove(this.lampPostManager.lampPostMeshes.lightCone);
-            // On ne dispose pas les géométries/matériaux ici, LampPostManager s'en chargera si nécessaire
-            this.lampPostManager.lampPostMeshes = { grey: null, light: null, lightCone: null };
-        }
-
-        // Nettoyage Sol Global
+        // this.lampPostManager?.reset(); // Si une méthode reset existe
+        this.contentGenerator?.resetManagers();
         if (this.groundMesh && this.groundMesh.parent) this.scene.remove(this.groundMesh);
-        this.groundMesh?.geometry?.dispose(); // Dispose seulement si elle existe
+        this.groundMesh?.geometry?.dispose();
         this.groundMesh = null;
-
-        // Réinitialisation des Générateurs et Managers
         this.roadGenerator?.reset();
-        // --- MODIFICATION ICI ---
-        // Appel de la méthode correcte pour PlotContentGenerator
-        this.contentGenerator?.resetManagers(); // Utilise resetManagers au lieu de reset
-        // ------------------------
         this.layoutGenerator?.reset();
-        this.navigationManager?.destroy(); // NavigationManager gère son propre nettoyage
-        this.navigationManager = null;     // Recréé au besoin
-        this.navigationGraph = null;
-        this.pathfinder = null;
-        this.citizenManager?.reset(); // Assumer ou ajouter une méthode reset à CitizenManager
-
-        // Réinitialisation des données internes
+        this.navMeshManager?.destroy(); // Appel correct
+        this.navMeshManager = null;
+        this.citizenManager?.reset();
+        this.districtManager = null;
         this.leafPlots = [];
         this.districts = [];
         this.roadGroup = null;
-        // Les autres groupes sont réinitialisés via contentGenerator.resetManagers()
-
-        console.log("City cleared.");
+        console.log("City cleared (NavMesh version).");
     }
 
-    // Reset ajouté à CitizenManager pour nettoyer les données
-    // (doit être implémenté dans CitizenManager.js)
-    // CitizenManager.prototype.reset = function() {
-    //     this.buildingInstances.clear();
-    //     this.citizens.clear();
-    //     this.nextBuildingInstanceId = 0;
-    //     console.log("CitizenManager reset.");
-    // };
-
-
+    // --- destroy (Adapté pour NavMeshManager) ---
     destroy() {
-        console.log("Destroying CityManager...");
-        this.clearCity(); // Appelle le nettoyage
-
-        // Dispose Materials (ceux créés DANS CityManager)
-        Object.values(this.materials).forEach(material => {
-            material?.dispose?.();
-        });
+        console.log("Destroying CityManager (NavMesh version)...");
+        this.clearCity();
+        Object.values(this.materials).forEach(material => material?.dispose?.());
         this.materials = {};
-
-        // Dispose Renderers spécialisés
-        this.houseRenderer?.reset(); // Utiliser reset ou une méthode destroy si ajoutée
-        this.buildingRenderer?.reset();
-        this.skyscraperRenderer?.reset();
-        // Idéalement, les renderers devraient avoir une méthode destroy qui dispose leurs géométries/matériaux de base
-
-         // Dispose LampPostManager (qui devrait disposer ses propres géométries)
-        if (this.lampPostManager?.lampPostConeGeometry) {
-             this.lampPostManager.lampPostConeGeometry.dispose();
-        }
-        // Ajouter une méthode destroy à LampPostManager si nécessaire pour plus de propreté
-
-        // Dispose Asset Loader (qui dispose les assets chargés)
+        this.houseRenderer?.reset(); this.buildingRenderer?.reset(); this.skyscraperRenderer?.reset();
+        // this.lampPostManager?.destroy(); // Si une méthode destroy existe
         this.assetLoader?.disposeAssets();
-
-        // Retire le conteneur principal
-        if (this.cityContainer?.parent) {
-            this.cityContainer.parent.remove(this.cityContainer);
-        }
-
-        // Nullifie les références
-        this.cityContainer = null;
-        this.experience = null;
-        this.scene = null;
-        this.assetLoader = null;
-        this.layoutGenerator = null;
-        this.roadGenerator = null;
-        this.contentGenerator = null; // Contient les références aux groupes internes
-        this.navigationManager = null;
-        this.navigationGraph = null;
-        this.pathfinder = null;
-        this.citizenManager = null;
-        this.lampPostManager = null;
-        this.debugVisualManager = null; // Supposant qu'il n'a pas de ressources lourdes à libérer autres que ses enfants nettoyés dans clearCity
-        this.houseRenderer = null;
-        this.buildingRenderer = null;
-        this.skyscraperRenderer = null;
+        // this.debugVisualManager?.destroy(); // Est détruit par clearCity via clearAllAndDisposeMaterials
+        if (this.cityContainer?.parent) this.cityContainer.parent.remove(this.cityContainer);
+        this.cityContainer = null; this.experience = null; this.scene = null;
+        this.assetLoader = null; this.layoutGenerator = null; this.roadGenerator = null;
+        this.contentGenerator = null;
+        this.navMeshManager = null; // Déjà null via clearCity
+        this.citizenManager = null; this.lampPostManager = null; this.debugVisualManager = null;
+        this.houseRenderer = null; this.buildingRenderer = null; this.skyscraperRenderer = null;
         this.renderers = null;
-
-
-        console.log("CityManager destroyed.");
+        console.log("CityManager destroyed (NavMesh version).");
     }
 
-    // Getters (inchangés ou ajustés pour pointer vers les bons managers)
+    // --- Getters (Adaptés) ---
     getPlots() { return this.leafPlots || []; }
     getDistricts() { return this.districts || []; }
-    getNavigationGraph() { return this.navigationManager?.getNavigationGraph(); } // Via NavManager
-    getPathfinder() { return this.navigationManager?.getPathfinder(); }         // Via NavManager
+    // --- MODIFICATION ---
+    // Retourne le manager NavMesh ou une interface spécifique si nécessaire
+    getNavigationSystem() { return this.navMeshManager; }
+    // getNavigationGraph() et getPathfinder() sont obsolètes
+    // -------------------
     getBuildingInstances() { return this.citizenManager.buildingInstances; }
     getCitizens() { return this.citizenManager.citizens; }
 
-    // Logging (inchangé)
-    logLoadedAssets() {
-        if (!this.assetLoader || !this.assetLoader.assets) return;
+    // Logging (INCHANGÉ)
+    logLoadedAssets() { /* ... */
+         if (!this.assetLoader || !this.assetLoader.assets) return;
         const counts = Object.entries(this.assetLoader.assets)
             .map(([type, list]) => `${type}: ${list.length}`)
             .join(', ');
         console.log(`Assets loaded - ${counts}`);
-    }
-
-    logInitialZoneTypes() {
+     }
+    logInitialZoneTypes() { /* ... */
         if (!this.leafPlots) return;
         const counts = {};
         this.leafPlots.forEach(p => {
             counts[p.zoneType] = (counts[p.zoneType] || 0) + 1;
         });
         console.log("Initial zone types (from LayoutGenerator):", counts);
-    }
+     }
+    // logAdjustedZoneTypes() { /* Géré par DistrictManager */ }
+    // assignDefaultTypeToUnassigned() { /* Géré par DistrictManager */ }
 
-    logAdjustedZoneTypes() {
-        // Cette info est maintenant logguée par DistrictManager
-        // console.log("Final zone types (after adjustment & fallback):", counts);
-    }
-
-    assignDefaultTypeToUnassigned() {
-        // Cette logique est maintenant gérée dans DistrictManager
-    }
-
+    // update() est appelé par World.js et délègue aux composants si nécessaire (INCHANGÉ)
     update() {
-        // L'appel à contentGenerator.update est maintenant dans World.js
-        // L'appel à lampPostManager.update est aussi dans World.js
+        // La mise à jour des fenêtres, lampadaires, agents est gérée par World.js
     }
 }

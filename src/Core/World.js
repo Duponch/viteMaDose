@@ -3,8 +3,10 @@ import * as THREE from 'three';
 import Environment from '../World/Environment.js';
 import CityManager from '../World/CityManager.js';
 import AgentManager from '../World/AgentManager.js';
-// ... autres imports ...
 import DebugVisualManager from '../World/DebugVisualManager.js'; // Assurez-vous qu'il est importé
+// Import nécessaire pour Agent Path Debugging
+import { CatmullRomCurve3, TubeGeometry, MeshBasicMaterial, Mesh } from 'three';
+
 
 export default class World {
     constructor(experience) {
@@ -12,59 +14,60 @@ export default class World {
         this.scene = this.experience.scene;
 
         // --- Managers ---
+        // CityManager gère maintenant NavMeshManager en interne
         this.cityManager = new CityManager(this.experience);
         this.environment = new Environment(this.experience, this);
+        // AgentManager sera créé dans initializeWorld après la génération de la ville/navmesh
         this.agentManager = null;
 
-        // --- NOUVEAU : Groupes de Debug par Catégorie ---
-        // Ces groupes contiendront les InstancedMesh *par sous-type*.
+        // --- Groupes de Debug par Catégorie ---
         this.debugGroups = {
             district: new THREE.Group(),
             plot: new THREE.Group(),
             buildingOutline: new THREE.Group(),
-            navGrid: new THREE.Group(),
+            // --- MODIFICATION : Renommé navGrid en navMesh ---
+            navMesh: new THREE.Group(), // <-- Renommé
+            // --------------------------------------------
             agentPath: new THREE.Group()
         };
         this.debugGroups.district.name = "DebugDistrictGrounds";
         this.debugGroups.plot.name = "DebugPlotGrounds";
         this.debugGroups.buildingOutline.name = "DebugBuildingOutlines";
-        this.debugGroups.navGrid.name = "DebugNavGrid";
+        // --- MODIFICATION : Nom du groupe ---
+        this.debugGroups.navMesh.name = "DebugNavMesh"; // <-- Renommé
+        // -----------------------------------
         this.debugGroups.agentPath.name = "DebugAgentPaths";
 
-        // Ajouter tous les groupes à la scène
+        // Ajouter tous les groupes à la scène (INCHANGÉ)
         Object.values(this.debugGroups).forEach(group => this.scene.add(group));
-        // --------------------------------------------------
 
-        // --- Debug Visual Manager (référence) ---
-        // DVM est maintenant principalement utilisé pour créer les géométries/matériaux,
-        // mais moins pour gérer directement les objets dans la scène.
+        // --- Debug Visual Manager (référence) (INCHANGÉ) ---
         this.debugVisualManager = this.cityManager.debugVisualManager;
         if (!this.debugVisualManager) {
             console.warn("World: DebugVisualManager non trouvé dans CityManager.");
         }
 
-        // Hauteurs (peuvent être gérées ici ou dans DVM)
-        this.debugHeights = { /* ... hauteurs existantes ... */
+        // Hauteurs (INCHANGÉ - mais la clé navGrid devient navMesh)
+        this.debugHeights = {
             districtGround: 0.005,
             plotGround: 0.015,
             buildingOutline: 0.05,
-            navGrid: 0.06,
+            navMesh: 0.06, // <-- Renommé
             agentPath: 0.07
         };
-        // Render Orders sont gérés dans DVM maintenant.
 
-        // Visibilité initiale des groupes
+        // Visibilité initiale des groupes (INCHANGÉ)
         this.setAllDebugGroupsVisibility(false);
 
+        // Lancement de l'initialisation asynchrone
         this.initializeWorld();
     }
 
     /**
-     * Définit la visibilité de tous les groupes de debug principaux.
+     * Définit la visibilité de tous les groupes de debug principaux. (INCHANGÉ)
      * @param {boolean} visible
      */
     setAllDebugGroupsVisibility(visible) {
-        // Appliquer la visibilité à chaque groupe stocké dans this.debugGroups
         for (const categoryName in this.debugGroups) {
              if (this.debugGroups.hasOwnProperty(categoryName)) {
                  this.debugGroups[categoryName].visible = visible;
@@ -73,31 +76,36 @@ export default class World {
     }
 
 	/**
-     * Vide tous les enfants d'un groupe donné et dispose leurs géométries/matériaux si nécessaire.
+     * Vide tous les enfants d'un groupe donné et dispose leurs géométries/matériaux si nécessaire. (INCHANGÉ)
      * @param {THREE.Group} group
      * @param {boolean} disposeSharedGeom - Si true, dispose même les géométries partagées.
      */
     clearGroupChildren(group, disposeSharedGeom = false) {
-        if (!group) return;
+         if (!group) return;
         while (group.children.length > 0) {
             const child = group.children[0];
             group.remove(child);
-            // Nettoyage Géométrie (ne pas toucher aux partagées sauf demandé)
+            // Nettoyage Géométrie
             if (child.geometry) {
                  const isSharedGround = child.geometry === this.debugVisualManager?.sharedGroundBoxGeometry;
                  const isSharedBuilding = child.geometry === this.debugVisualManager?.sharedBuildingBoxGeometry;
-                 if (disposeSharedGeom || (!isSharedGround && !isSharedBuilding)) {
+                 // --- AJOUT POTENTIEL : Vérifier si c'est la géométrie partagée du NavMesh debug ---
+                 const isSharedNavMeshDebug = child.geometry === this.cityManager?.navMeshManager?.debugMeshGeometry; // Supposant que NavMeshManager expose sa géométrie debug
+                 // --------------------------------------------------------------------------------
+                 if (disposeSharedGeom || (!isSharedGround && !isSharedBuilding && !isSharedNavMeshDebug)) {
                     child.geometry.dispose();
                  }
             }
-            // Nettoyage Matériau (seulement si non partagé ou spécifique comme AgentPath)
+            // Nettoyage Matériau
             if (child.material) {
                 const matKey = Object.keys(this.debugVisualManager?.cachedMaterials || {}).find(
                     key => this.debugVisualManager.cachedMaterials[key] === child.material
                 );
                 const isCached = !!matKey;
-                 // Ne dispose pas les matériaux mis en cache par DVM, sauf cas spécifiques
-                 if (!isCached && child.name?.startsWith('AgentPath_')) {
+                 // --- AJOUT POTENTIEL : Vérifier si c'est le matériau partagé du NavMesh debug ---
+                const isSharedNavMeshMat = child.material === this.cityManager?.navMeshManager?.debugMeshMaterial;
+                // ----------------------------------------------------------------------------
+                 if (!isCached && !isSharedNavMeshMat && child.name?.startsWith('AgentPath_')) { // Dispose seulement AgentPath ou matériaux non cachés/partagés
                       if (Array.isArray(child.material)) {
                            child.material.forEach(m => m.dispose());
                       } else {
@@ -109,7 +117,7 @@ export default class World {
     }
 
     /**
-     * MODIFIÉ : Active ou désactive le mode debug global. Crée ou nettoie les visuels.
+     * Active ou désactive le mode debug global. Crée ou nettoie les visuels.
      * Applique la visibilité des groupes principaux basée sur l'état de Experience.
      * @param {boolean} enabled - True pour activer, false pour désactiver.
      */
@@ -117,33 +125,31 @@ export default class World {
         if (enabled) {
             console.log("  [World Debug] Enabling Debug Mode - Creating visuals...");
 
-            if (!this.debugVisualManager) { /* ... erreur DVM manquant ... */ return; }
+            if (!this.debugVisualManager) { console.error("World: DVM manquant!"); return; }
 
-            // --- Nettoyage des groupes AVANT recréation ---
+            // Nettoyage préalable des groupes (INCHANGÉ)
             this.clearGroupChildren(this.debugGroups.district);
             this.clearGroupChildren(this.debugGroups.plot);
             this.clearGroupChildren(this.debugGroups.buildingOutline);
-            this.clearGroupChildren(this.debugGroups.navGrid);
+            // --- MODIFICATION ---
+            this.clearGroupChildren(this.debugGroups.navMesh); // Nettoie ancien contenu NavMesh
+            // -------------------
             this.clearGroupChildren(this.debugGroups.agentPath);
-            // ---------------------------------------------
 
             if (this.cityManager) {
                 const plots = this.cityManager.getPlots();
                 const districts = this.cityManager.getDistricts();
                 const buildingInstances = this.cityManager.getBuildingInstances();
 
-                // --- Création et Ajout aux Groupes (MAJ) ---
-
-                // 1. Sols Districts (par type)
-                const districtMeshesByType = this.debugVisualManager.createDistrictGroundVisuals(districts, 0); // Y pos géré par groupe
+                // 1. Sols Districts (par type) (INCHANGÉ)
+                const districtMeshesByType = this.debugVisualManager.createDistrictGroundVisuals(districts, 0);
                 for (const type in districtMeshesByType) {
                     this.debugGroups.district.add(districtMeshesByType[type]);
-                    // Appliquer la visibilité initiale du sous-type
                      districtMeshesByType[type].visible = this.experience.debugLayerVisibility.district[type] ?? true;
                 }
                 this.debugGroups.district.position.y = this.debugHeights.districtGround;
 
-                // 2. Sols Parcelles (par type)
+                // 2. Sols Parcelles (par type) (INCHANGÉ)
                 const plotMeshesByType = this.debugVisualManager.createPlotGroundVisuals(plots, 0);
                 for (const type in plotMeshesByType) {
                      this.debugGroups.plot.add(plotMeshesByType[type]);
@@ -151,7 +157,7 @@ export default class World {
                 }
                 this.debugGroups.plot.position.y = this.debugHeights.plotGround;
 
-                // 3. Outlines Bâtiments (par type)
+                // 3. Outlines Bâtiments (par type) (INCHANGÉ)
                 const outlineMeshesByType = this.debugVisualManager.createBuildingOutlines(buildingInstances, this.cityManager.config, 0);
                 for (const type in outlineMeshesByType) {
                     this.debugGroups.buildingOutline.add(outlineMeshesByType[type]);
@@ -159,59 +165,62 @@ export default class World {
                 }
                 this.debugGroups.buildingOutline.position.y = this.debugHeights.buildingOutline;
 
-                // 4. NavGrid (reste simple, pas de sous-types)
-                if (this.cityManager.navigationGraph) {
-                    this.cityManager.navigationGraph.createDebugVisualization(this.debugGroups.navGrid);
+                // --- MODIFICATION : Visualisation NavMesh ---
+                // 4. NavMesh
+                if (this.cityManager.navMeshManager) {
+                    // Demander au NavMeshManager de créer sa visualisation et de l'ajouter au groupe fourni
+                    this.cityManager.navMeshManager.createDebugVisualization(this.debugGroups.navMesh);
+                    // Le NavMeshManager gère lui-même la visibilité de ses composants internes si besoin.
                 }
-                this.debugGroups.navGrid.position.y = this.debugHeights.navGrid;
+                this.debugGroups.navMesh.position.y = this.debugHeights.navMesh; // Appliquer hauteur globale
+                // -------------------------------------------
 
-                // 5. Chemins Agents (reste dynamique)
+                // 5. Chemins Agents (groupe prêt, contenu ajouté dynamiquement) (INCHANGÉ)
                 this.debugGroups.agentPath.position.y = this.debugHeights.agentPath;
 
             } // fin if (this.cityManager)
 
-            // --- Appliquer la Visibilité Initiale des Catégories (Groupes) ---
+            // --- Appliquer la Visibilité Initiale des Catégories ---
             this.setGroupVisibility('district', this.experience.debugLayerVisibility.district._visible);
             this.setGroupVisibility('plot', this.experience.debugLayerVisibility.plot._visible);
             this.setGroupVisibility('buildingOutline', this.experience.debugLayerVisibility.buildingOutline._visible);
-            this.setGroupVisibility('navGrid', this.experience.debugLayerVisibility.navGrid._visible);
+            // --- MODIFICATION ---
+            this.setGroupVisibility('navMesh', this.experience.debugLayerVisibility.navMesh._visible); // Utilise la nouvelle clé
+            // -------------------
             this.setGroupVisibility('agentPath', this.experience.debugLayerVisibility.agentPath._visible);
-            // La visibilité des sous-types a été appliquée lors de l'ajout des meshes.
 
         } else {
             console.log("  [World Debug] Disabling Debug Mode - Clearing visuals...");
-            // Nettoyer les groupes (dispose la géométrie/matériaux spécifiques comme AgentPath)
+            // Nettoyer les groupes (INCHANGÉ - clearGroupChildren gère les géométries spécifiques)
             this.clearGroupChildren(this.debugGroups.district);
             this.clearGroupChildren(this.debugGroups.plot);
             this.clearGroupChildren(this.debugGroups.buildingOutline);
-            this.clearGroupChildren(this.debugGroups.navGrid);
+            // --- MODIFICATION ---
+            this.clearGroupChildren(this.debugGroups.navMesh); // Nettoie NavMesh debug
+            // -------------------
             this.clearGroupChildren(this.debugGroups.agentPath, true); // Dispose AgentPath specifics
 
-            // Cacher tous les groupes principaux
+            // Cacher tous les groupes principaux (INCHANGÉ)
             this.setAllDebugGroupsVisibility(false);
-
-             // Optionnel: Nettoyer aussi les matériaux cachés dans DVM
-             // this.debugVisualManager?.clearAllAndDisposeMaterials(); // Attention si DVM est partagé
         }
     }
 
 	/**
-     * NOUVEAU : Définit la visibilité d'un groupe de catégorie principal.
-     * @param {string} categoryName - Nom de la catégorie ('district', 'plot', etc.).
+     * Définit la visibilité d'un groupe de catégorie principal. (Adapté pour navMesh)
+     * @param {string} categoryName - Nom de la catégorie ('district', 'plot', 'navMesh', etc.).
      * @param {boolean} isVisible - True pour afficher, false pour masquer.
      */
     setGroupVisibility(categoryName, isVisible) {
 		const targetGroup = this.debugGroups[categoryName];
 		if (targetGroup) {
 			targetGroup.visible = isVisible;
-			// console.log(`  [World Debug] Group '${categoryName}' visibility set to ${isVisible}`);
 		} else {
 			console.warn(`World.setGroupVisibility: Unknown category group '${categoryName}'`);
 		}
     }
-   
+
 	/**
-     * NOUVEAU : Définit la visibilité d'un mesh de sous-type spécifique dans un groupe.
+     * Définit la visibilité d'un mesh de sous-type spécifique dans un groupe. (INCHANGÉ)
      * @param {string} categoryName - Nom de la catégorie (ex: 'plot').
      * @param {string} subTypeName - Nom du sous-type (ex: 'house').
      * @param {boolean} isVisible - True pour afficher, false pour masquer.
@@ -222,110 +231,111 @@ export default class World {
 			console.warn(`World.setSubLayerMeshVisibility: Group for category '${categoryName}' not found.`);
 			return;
 		}
-
-		// Trouver le mesh correspondant dans le groupe (basé sur userData.subType ou le nom)
 		const targetMesh = targetGroup.children.find(child => child.userData?.subType === subTypeName || child.name.endsWith(`_${subTypeName}`));
-
 		if (targetMesh) {
 			targetMesh.visible = isVisible;
-			// console.log(`  [World Debug] SubLayer Mesh '${categoryName}.${subTypeName}' visibility set to ${isVisible}`);
 		} else {
-			console.warn(`World.setSubLayerMeshVisibility: Mesh for subType '${subTypeName}' not found in category '${categoryName}'.`);
+			// C'est normal de ne pas trouver si aucun objet de ce sous-type n'a été généré
+            // console.warn(`World.setSubLayerMeshVisibility: Mesh for subType '${subTypeName}' not found in category '${categoryName}'.`);
 		}
     }
 
-	/**
-     * Définit la visibilité d'un calque de debug spécifique.
-     * @param {string} layerName - Nom du calque ('districtGround', 'plotGround', 'buildingOutline', 'navGrid', 'agentPath').
-     * @param {boolean} isVisible - True pour afficher, false pour masquer.
-     */
-    setLayerVisibility(layerName, isVisible) {
-        let targetGroup = null;
-        switch (layerName) {
-            case 'districtGround':  targetGroup = this.debugDistrictGroundGroup; break;
-            case 'plotGround':      targetGroup = this.debugPlotGroundGroup; break;
-            case 'buildingOutline': targetGroup = this.debugBuildingOutlineGroup; break;
-            case 'navGrid':         targetGroup = this.debugNavGridGroup; break;
-            case 'agentPath':       targetGroup = this.debugAgentPathGroup; break;
-            default:
-                console.warn(`World.setLayerVisibility: Unknown layer name '${layerName}'`);
-                return;
-        }
-        if (targetGroup) {
-            targetGroup.visible = isVisible;
-            // console.log(`  [World Debug] Layer '${layerName}' visibility set to ${isVisible}`);
-        }
-    }
+    // --- setLayerVisibility (OBSOLETE) ---
+    // Cette méthode n'est plus utilisée car la visibilité est gérée par setGroupVisibility et setSubLayerMeshVisibility
+    // setLayerVisibility(layerName, isVisible) { ... }
 
+    // --- clearDebugAgentPaths (INCHANGÉ) ---
     clearDebugAgentPaths() {
-        this.clearGroupChildren(this.debugGroups.agentPath);
+        this.clearGroupChildren(this.debugGroups.agentPath, true); // Dispose les tubes
     }
 
-    clearDebugNavGrid() {
-        this.clearGroupChildren(this.debugGroups.navGrid);
+    // --- clearDebugNavGrid -> clearDebugNavMesh ---
+    /**
+     * Vide le contenu du groupe de visualisation du NavMesh.
+     */
+    clearDebugNavMesh() {
+        // Le NavMeshManager pourrait avoir sa propre méthode de nettoyage si la géométrie est complexe
+        this.cityManager?.navMeshManager?.clearDebugVisualization(this.debugGroups.navMesh);
+        // Ou nettoyage générique si le DVM a tout créé :
+        // this.clearGroupChildren(this.debugGroups.navMesh);
     }
+    // -----------------------------------------
 
+    // --- setAgentPathForAgent (INCHANGÉ - fonctionne avec Vector3) ---
 	setAgentPathForAgent(agentLogic, pathPoints, pathColor = 0xff00ff) {
         const agentPathGroup = this.debugGroups.agentPath;
-        if (!agentLogic || !agentPathGroup || !agentPathGroup.visible) {
-             const agentId = agentLogic?.id || 'unknown'; // Gérer cas où agentLogic est null
-             const agentPathName = `AgentPath_${agentId}`;
-             const existingPath = agentPathGroup?.getObjectByName(agentPathName);
-             if (existingPath) {
-                 agentPathGroup.remove(existingPath);
-                 if (existingPath.geometry) existingPath.geometry.dispose();
-                 if (existingPath.material) existingPath.material.dispose();
-             }
-             return;
-        }
-        // Le reste de la logique pour créer/mettre à jour le tube reste identique...
-        const agentId = agentLogic.id;
+        const agentId = agentLogic?.id || 'unknown';
         const agentPathName = `AgentPath_${agentId}`;
-        const existingPath = agentPathGroup.getObjectByName(agentPathName);
+
+        // Retirer l'ancien chemin s'il existe
+        const existingPath = agentPathGroup?.getObjectByName(agentPathName);
         if (existingPath) {
              agentPathGroup.remove(existingPath);
              if (existingPath.geometry) existingPath.geometry.dispose();
-             if (existingPath.material) existingPath.material.dispose();
-        }
-        if (pathPoints && pathPoints.length > 1) {
-             try {
-                 const curve = new THREE.CatmullRomCurve3(pathPoints);
-                 const tubeSegments = Math.min(64, pathPoints.length * 4);
-                 const tubeRadius = 0.1;
-                 const radialSegments = 4;
-                 const closed = false;
-                 const tubeGeometry = new THREE.TubeGeometry(curve, tubeSegments, tubeRadius, radialSegments, closed);
-                 const tubeMaterial = new THREE.MeshBasicMaterial({ color: pathColor });
-                 const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
-                 tubeMesh.name = agentPathName;
-                 // La position Y est gérée par le groupe parent this.debugGroups.agentPath
-                 tubeMesh.renderOrder = this.debugVisualManager.renderOrders.debugLine + 1; // Au-dessus des autres lignes debug
-                 agentPathGroup.add(tubeMesh);
-             } catch (error) {
-                 console.error(`World: Erreur création tube debug pour Agent ${agentId}:`, error);
+             if (existingPath.material) { // Matériau est spécifique, on le dispose
+                 if (Array.isArray(existingPath.material)) {
+                      existingPath.material.forEach(m => m.dispose());
+                 } else {
+                      existingPath.material.dispose();
+                 }
              }
         }
+
+        // Ne rien ajouter si le groupe est caché ou si pas de chemin
+        if (!agentPathGroup || !agentPathGroup.visible || !pathPoints || pathPoints.length < 2) {
+             return;
+        }
+
+        // Créer le nouveau chemin (tube)
+         try {
+             const curve = new THREE.CatmullRomCurve3(pathPoints);
+             const tubeSegments = Math.min(64, pathPoints.length * 4);
+             const tubeRadius = 0.1;
+             const radialSegments = 4;
+             const closed = false;
+             const tubeGeometry = new THREE.TubeGeometry(curve, tubeSegments, tubeRadius, radialSegments, closed);
+             // Utiliser le matériau spécifique du DVM pour les lignes si possible, sinon MeshBasic
+             const tubeMaterial = this.debugVisualManager?._getOrCreateMaterial(`agent_path_${pathColor.toString(16)}`, new THREE.Color(pathColor), 'line', 1.0, 1.0)
+                               || new THREE.MeshBasicMaterial({ color: pathColor });
+             tubeMaterial.depthTest = false; // Assurer qu'il est visible
+
+             // Utiliser Line2 si le matériau est LineMaterial, sinon Mesh
+             let tubeMesh;
+             if (tubeMaterial instanceof THREE.LineMaterial) { // Attention: Importer LineMaterial si utilisé
+                 // La géométrie pour Line2 doit être LineGeometry
+                 console.warn("TubeGeometry n'est pas compatible avec LineMaterial/Line2 pour AgentPath. Utilisation de MeshBasicMaterial.");
+                 tubeMaterial.dispose(); // Dispose le LineMaterial créé
+                 const fallbackMaterial = new THREE.MeshBasicMaterial({ color: pathColor, depthTest: false });
+                 tubeMesh = new THREE.Mesh(tubeGeometry, fallbackMaterial);
+             } else {
+                  tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+             }
+
+             tubeMesh.name = agentPathName;
+             tubeMesh.renderOrder = this.debugVisualManager?.renderOrders?.debugLine + 1 || 1000; // Au-dessus
+             agentPathGroup.add(tubeMesh);
+         } catch (error) {
+             console.error(`World: Erreur création tube debug pour Agent ${agentId}:`, error);
+         }
    }
 
-   destroy() {
+    // --- destroy (Adapté pour NavMeshManager) ---
+    destroy() {
         console.log("Destroying World...");
-        this.agentManager?.destroy();
+        this.agentManager?.destroy(); // AgentManager gère son worker
         this.agentManager = null;
 
-        // Nettoyer tous les groupes de debug et leurs enfants
+        // Nettoyer les groupes de debug (INCHANGÉ)
         Object.values(this.debugGroups).forEach(group => {
-            this.clearGroupChildren(group, true); // Dispose all geometries including specific ones like paths
+            this.clearGroupChildren(group, true);
             if(group.parent) group.parent.remove(group);
         });
         this.debugGroups = {};
 
-        // Le groupe parent de DVM (s'il existe et est différent)
-        // est retiré dans CityManager.destroy ou ici s'il est géré séparément
-        // this.debugVisualManager?.parentGroup?.removeFromParent(); // Si DVM a son propre groupe parent
-
-        this.cityManager?.destroy(); // CityManager nettoie son propre contenu
+        // CityManager gère son propre NavMeshManager dans son destroy
+        this.cityManager?.destroy();
         this.cityManager = null;
-        this.debugVisualManager = null; // Référence nulle
+        this.debugVisualManager = null; // DVM est détruit par CityManager
 
         this.environment?.destroy();
         this.environment = null;
@@ -333,39 +343,31 @@ export default class World {
         console.log("World destroyed.");
     }
 
+    // --- initializeWorld (Adapté pour AgentManager init) ---
     async initializeWorld() {
         console.log("World: Initialisation asynchrone...");
         try {
             await this.environment.initialize();
             console.log("World: Environnement initialisé.");
 
+            // CityManager gère maintenant la génération NavMesh dans son generateCity
             await this.cityManager.generateCity();
-            console.log("World: Ville générée.");
+            console.log("World: Ville & NavMesh générés par CityManager.");
 
-            const maxAgents = this.cityManager.config.maxAgents ?? 300;
-            this.agentManager = new AgentManager(
-                this.scene,
-                this.experience,
-                this.cityManager.config,
-                maxAgents
-            );
-            console.log("World: AgentManager instancié.");
-
-            const navGraph = this.cityManager.getNavigationGraph();
-            if (this.agentManager && navGraph) {
-                this.agentManager.initializePathfindingWorker(navGraph);
-                console.log("World: Initialisation du Pathfinding Worker demandée.");
-            } else {
-                 console.error("World: Echec initialisation Worker - AgentManager ou NavGraph manquant.");
+            // AgentManager est maintenant créé et initialisé DANS generateCity
+            // après la création du NavMesh. Récupérer la référence.
+            this.agentManager = this.experience.world.agentManager;
+            if (!this.agentManager) {
+                 console.error("World: AgentManager n'a pas été initialisé par CityManager.generateCity() !");
             }
 
-            this.createAgents(maxAgents);
+            // La création des agents est également gérée dans generateCity maintenant
 
-            // Si le mode debug est actif AU DEMARRAGE, générer les visuels
+            // Initialisation des visuels debug (INCHANGÉ)
             if (this.experience.isDebugMode) {
-                this.setDebugMode(true); // Applique les visibilités initiales des catégories/sous-types
+                this.setDebugMode(true);
             } else {
-                this.setAllDebugGroupsVisibility(false); // Assurer qu'ils sont cachés
+                this.setAllDebugGroupsVisibility(false);
             }
 
             console.log("World: Initialisation complète.");
@@ -375,35 +377,30 @@ export default class World {
         }
     }
 
+    // --- createAgents (Maintenant appelé par CityManager.generateCity) ---
     createAgents(numberOfAgents) {
-		if (!this.agentManager) { /* ... erreur ... */ return; }
-		if (!this.cityManager?.citizenManager?.buildingInstances || this.cityManager.citizenManager.buildingInstances.size === 0) {
-			console.warn("World: Aucun bâtiment enregistré via CitizenManager. Impossible de créer agents avec domicile/travail.");
-			// return; // Peut-être créer des agents sans domicile/travail ?
-		}
-	   console.log(`World: Demande de création de ${numberOfAgents} agents...`);
-	   for (let i = 0; i < numberOfAgents; i++) {
-			const agent = this.agentManager.createAgent(); // createAgent gère l'enregistrement via CityManager
+		if (!this.agentManager) { console.error("World: AgentManager non initialisé, impossible de créer des agents."); return; }
+		console.log(`World: Demande de création de ${numberOfAgents} agents...`);
+	    for (let i = 0; i < numberOfAgents; i++) {
+			const agent = this.agentManager.createAgent();
 			if (!agent) {
 				console.warn(`World: Echec création agent (max ${this.agentManager.maxAgents} atteint?).`);
 				break;
 			}
-	   }
-	   console.log(`World: ${this.agentManager.agents.length} agents logiques créés (demandé: ${numberOfAgents}).`);
-   }
+	    }
+	    console.log(`World: ${this.agentManager.agents.length} agents logiques créés (demandé: ${numberOfAgents}).`);
+    }
 
-   update() {
-	   const deltaTime = this.experience.time.delta;
-	   this.environment?.update(deltaTime);
-	   const currentHour = this.environment?.getCurrentHour() ?? 12;
+    // --- update (INCHANGÉ) ---
+    update() {
+	    const deltaTime = this.experience.time.delta;
+	    this.environment?.update(deltaTime); // Anime ciel, nuages...
+	    const currentHour = this.environment?.getCurrentHour() ?? 12;
 
-	   // PlotContentGenerator.update (fenêtres) est géré par CityManager ou ici si besoin
-	   if (this.cityManager?.contentGenerator) {
-			this.cityManager.contentGenerator.update(currentHour); // Appel via CityManager
-	   }
-	   if(this.cityManager?.lampPostManager) {
-		   this.cityManager.lampPostManager.updateLampPostLights(currentHour); // Appel via CityManager
-	   }
-	   this.agentManager?.update(deltaTime);
-   }
+	    // CityManager gère la mise à jour de ses composants (fenêtres, lampes)
+	    this.cityManager?.update(); // Peut être vide si rien à faire
+
+        // AgentManager gère la mise à jour de la logique et des visuels des agents
+	    this.agentManager?.update(deltaTime);
+    }
 }

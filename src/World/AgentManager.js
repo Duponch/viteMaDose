@@ -4,7 +4,7 @@ import Agent from './Agent.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 // --- Fonctions createCapsuleGeometry, createShoeGeometry (INCHANGÉES) ---
-// ... (coller les fonctions ici) ...
+// Ces fonctions restent les mêmes car elles définissent l'apparence des agents.
 function createCapsuleGeometry(radius, length, radialSegments = 16, heightSegments = 1) {
     const cylinderHeight = length; const sphereRadius = radius; const geometries = [];
     const cylinderGeometry = new THREE.CylinderGeometry(radius, radius, cylinderHeight, radialSegments, heightSegments); geometries.push(cylinderGeometry);
@@ -32,9 +32,9 @@ export default class AgentManager {
 		this.maxAgents = maxAgents;
 
 		// Pooling
-		this.activeCount = 0;                             // Nombre d’agents réellement actifs
-		this.instanceIdToAgent = new Array(maxAgents);    // instanceId → agent.id
-		this.agentToInstanceId = new Map();               // agent.id → instanceId
+		this.activeCount = 0;
+		this.instanceIdToAgent = new Array(maxAgents);
+		this.agentToInstanceId = new Map();
 
 		this.agents = [];
 		this.instanceMeshes = {};
@@ -54,8 +54,10 @@ export default class AgentManager {
 		this.tempColor = new THREE.Color();
 		this.debugMarkerMatrix = new THREE.Matrix4();
 
+        // --- Pathfinding Worker (NavMesh) ---
 		this.pathfindingWorker = null;
 		this.isWorkerInitialized = false;
+        this.pendingPathRequests = new Map(); // Stocke les callbacks ou promesses en attente
 
 		this.stats = {
 			pathsToWorkByHour: {},
@@ -64,7 +66,7 @@ export default class AgentManager {
 		this._initializeStats();
 
 		this._initializeMeshes();
-		console.log("AgentManager initialisé (Worker non démarré).");
+		console.log("AgentManager initialisé (NavMesh Worker non démarré).");
 	}
 
 	_initializeStats() {
@@ -76,127 +78,204 @@ export default class AgentManager {
         }
     }
 
-    // --- NOUVELLE MÉTHODE : Initialise le Worker ---
-    initializePathfindingWorker(navigationGraph) {
+    /**
+     * Initialise le worker de pathfinding NavMesh. (CORRIGÉ)
+     * Doit être appelé APRÈS la génération du NavMesh.
+     * @param {object} navMeshInstanceData - Données SÉRIALISÉES du NavMesh ({ groups, vertices: Float32Array }).
+     */
+    initializePathfindingWorker(navMeshInstanceData) { // Renommé pour clarté
         if (this.pathfindingWorker) {
             console.warn("AgentManager: Tentative de réinitialiser le worker déjà existant.");
             return;
         }
-        if (!navigationGraph || !navigationGraph.grid) {
-            console.error("AgentManager: Impossible d'initialiser le worker - NavigationGraph invalide.");
+        // VÉRIFICATION AJOUTÉE : S'assurer que les données reçues sont valides
+        if (!navMeshInstanceData || !navMeshInstanceData.groups || !navMeshInstanceData.vertices) {
+            console.error("AgentManager: Invalid navMeshInstanceData received for worker initialization. Missing 'groups' or 'vertices'.", navMeshInstanceData);
+            this.isWorkerInitialized = false;
             return;
+        }
+         // VÉRIFICATION AJOUTÉE : S'assurer que la config navMesh existe
+        if (!this.config.navMesh) {
+             console.error("AgentManager: Missing navMesh configuration (this.config.navMesh). Cannot initialize worker.");
+             this.isWorkerInitialized = false;
+             return;
         }
 
         try {
-            console.log("AgentManager: Initialisation du Pathfinding Worker...");
-            this.pathfindingWorker = new Worker(new URL('./PathfindingWorker.js', import.meta.url), { type: 'module' });
+            console.log("AgentManager: Initialisation du NavMesh Pathfinding Worker...");
+            this.pathfindingWorker = new Worker(new URL('./NavMeshPathfindingWorker.js', import.meta.url), { type: 'module' });
             this.pathfindingWorker.onmessage = (event) => this._handleWorkerMessage(event);
-            this.pathfindingWorker.onerror = (error) => { /* ... gestion erreur worker ... */ };
-
-            // Préparer les données de la grille (inchangé)
-            const nodesWalkable = navigationGraph.grid.nodes.map(row =>
-                row.map(node => node.walkable)
-            );
-            const gridData = {
-                width: navigationGraph.gridWidth,
-                height: navigationGraph.gridHeight,
-                nodesWalkable: nodesWalkable
+            this.pathfindingWorker.onerror = (error) => {
+                 console.error("AgentManager: Erreur dans le NavMesh Worker:", error);
+                 this.isWorkerInitialized = false;
+                 this.pendingPathRequests.forEach((callbacks) => {
+                     if (callbacks.reject) callbacks.reject(new Error("NavMesh Worker failed"));
+                 });
+                 this.pendingPathRequests.clear();
             };
 
-            // --- NOUVEAU : Préparer les paramètres de conversion ---
-            const conversionParams = {
-                gridScale: navigationGraph.gridScale,
-                offsetX: navigationGraph.offsetX,
-                offsetZ: navigationGraph.offsetZ,
-                sidewalkHeight: navigationGraph.sidewalkHeight
-            };
-            // ----------------------------------------------------
+            // --- CORRECTION : Envoyer les données NavMesh au worker avec la bonne structure ---
+            // navMeshInstanceData contient { groups, vertices: Float32Array }
+            const verticesBuffer = navMeshInstanceData.vertices;
+            // Préparer les données transférables (le ArrayBuffer sous-jacent du Float32Array)
+            const transferables = (verticesBuffer instanceof Float32Array || verticesBuffer instanceof ArrayBuffer) ? [verticesBuffer.buffer] : [];
 
-            // Envoyer le message d'initialisation COMPLET
             this.pathfindingWorker.postMessage({
                 type: 'init',
-                data: { gridData, conversionParams } // <-- Envoyer les deux objets
-            });
-            console.log("AgentManager: Message d'initialisation (grille + params) envoyé au worker.");
+                data: {
+                    // Utiliser la structure attendue par le worker :
+                    zoneData: {
+                        groups: navMeshInstanceData.groups,     // Passer les groupes reçus
+                        vertices: navMeshInstanceData.vertices // Passer le Float32Array des vertices
+                    },
+                    navMeshConfig: this.config.navMesh // Passer la configuration NavMesh
+                }
+            }, transferables); // Transférer le buffer des vertices si possible
+
+            console.log("AgentManager: Message d'initialisation (zoneData & navMeshConfig) envoyé au worker.");
 
         } catch (error) {
-            console.error("AgentManager: Échec de la création du Pathfinding Worker:", error);
+            console.error("AgentManager: Échec de la création du NavMesh Pathfinding Worker:", error);
             this.pathfindingWorker = null;
             this.isWorkerInitialized = false;
         }
     }
-    // --- FIN NOUVELLE MÉTHODE ---
 
+    /**
+     * Gère les messages reçus du worker NavMesh.
+     * @param {MessageEvent} event
+     */
     _handleWorkerMessage(event) {
-        const { type, data, error } = event.data;
-        // console.log("AgentManager: Message reçu du worker:", type, data); // Debug
+        const { type, data, requestId, error } = event.data;
+        // console.log("AgentManager: Message reçu du NavMesh worker:", type, requestId); // Debug
 
         if (type === 'initComplete') {
             this.isWorkerInitialized = true;
-            console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
+            console.log("AgentManager: NavMesh Pathfinding Worker initialisé et prêt.");
+            // Traiter les requêtes qui étaient en attente si nécessaire (non implémenté ici)
 
         } else if (type === 'pathResult') {
-            // Vérifier si les données nécessaires sont présentes (y compris pathLengthWorld)
-            if (data && data.agentId && data.path !== undefined && data.pathLengthWorld !== undefined) {
-                const { agentId, path: worldPathData, pathLengthWorld } = data; // Extraire la longueur
-                const agent = this.getAgentById(agentId);
-
-                if (agent) {
-                    let finalWorldPath = null;
-                    // Reconstruire les Vector3 (inchangé)
-                    if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) {
-                        try {
-                            finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
-                        } catch (vecError) {
-                            console.error(`Agent ${agentId}: Erreur reconstruction Vector3:`, vecError);
-                            finalWorldPath = null;
-                        }
-                    } else {
-                        finalWorldPath = null;
-                    }
-
-                    // Passer le chemin ET la longueur à l'agent
-                    agent.setPath(finalWorldPath, pathLengthWorld);
-
-                    // Mise à jour debug (optionnel, peut utiliser agent.currentPathPoints)
-                    if (finalWorldPath && this.experience.isDebugMode && this.experience.world?.setAgentPathForAgent) {
-                        this.experience.world.setAgentPathForAgent(agent, finalWorldPath, agent.debugPathColor);
-                    }
-                } else {
-                    console.warn(`AgentManager: Agent ${agentId} non trouvé pour le résultat du chemin.`);
-                }
-            } else {
-                console.warn("AgentManager: Message 'pathResult' incomplet reçu du worker:", event.data);
+            if (requestId === undefined || !this.pendingPathRequests.has(requestId)) {
+                console.warn("AgentManager: Reçu pathResult pour une requête inconnue ou déjà traitée:", requestId);
+                return;
             }
-        } else if (type === 'workerError') {
-            console.error("AgentManager: Erreur rapportée par le worker:", error, "Data associée:", data);
-             if (data?.agentId) {
-                 const agentWithError = this.getAgentById(data.agentId);
-                 // Si l'agent attendait spécifiquement un chemin
-                 if(agentWithError && (agentWithError.currentState === 'REQUESTING_PATH_FOR_WORK' || agentWithError.currentState === 'REQUESTING_PATH_FOR_HOME')) {
-                     agentWithError.setPath(null, 0); // Force l'échec et le retour à un état stable
+
+            const { resolve } = this.pendingPathRequests.get(requestId);
+            this.pendingPathRequests.delete(requestId); // Supprimer la requête traitée
+
+            // Les données ('data') devraient contenir { path: Array<{x,y,z}> | null, pathLength: number }
+            if (data && data.path !== undefined && data.pathLength !== undefined) {
+                 let finalWorldPath = null;
+                 // Reconstruire les Vector3 (inchangé par rapport à A*)
+                 if (data.path && Array.isArray(data.path) && data.path.length > 0) {
+                     try {
+                         finalWorldPath = data.path.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
+                     } catch (vecError) {
+                         console.error(`Request ${requestId}: Erreur reconstruction Vector3:`, vecError);
+                         finalWorldPath = null; // Considérer comme échec si reconstruction échoue
+                     }
                  }
+
+                 // Résoudre la promesse avec le chemin et la longueur
+                 resolve({ path: finalWorldPath, pathLength: data.pathLength });
+
+            } else {
+                 console.warn(`AgentManager: Message 'pathResult' (ID: ${requestId}) invalide ou incomplet reçu du worker NavMesh:`, event.data);
+                 resolve({ path: null, pathLength: 0 }); // Résoudre avec échec
+            }
+
+        } else if (type === 'pathError') {
+             if (requestId === undefined || !this.pendingPathRequests.has(requestId)) {
+                 console.warn("AgentManager: Reçu pathError pour une requête inconnue ou déjà traitée:", requestId);
+                 return;
              }
+             const { reject } = this.pendingPathRequests.get(requestId);
+             this.pendingPathRequests.delete(requestId);
+
+             console.error(`AgentManager: Erreur pathfinding NavMesh rapportée par le worker pour requête ${requestId}:`, error);
+             reject(new Error(error || "NavMesh pathfinding failed")); // Rejeter la promesse
+
+        } else if (type === 'workerError') { // Erreur générale du worker
+            console.error("AgentManager: Erreur générale rapportée par le worker NavMesh:", error, "Data associée:", data);
+            // Rejeter toutes les promesses en attente
+            this.pendingPathRequests.forEach(({ reject }) => {
+                 reject(new Error("NavMesh Worker encountered a general error"));
+            });
+            this.pendingPathRequests.clear();
+            this.isWorkerInitialized = false; // Marquer comme non initialisé
         } else {
-            console.warn("AgentManager: Type de message inconnu reçu du worker:", type);
+            console.warn("AgentManager: Type de message inconnu reçu du worker NavMesh:", type);
         }
     }
-    // --- FIN NOUVELLE MÉTHODE ---
+
+    /**
+     * Demande un chemin au worker NavMesh entre deux positions monde.
+     * Retourne une promesse qui sera résolue avec { path: Array<Vector3>|null, pathLength: number }.
+     * @param {string} agentId - ID de l'agent demandeur (pour contexte/debug).
+     * @param {THREE.Vector3} startPosWorld - Position de départ dans le monde.
+     * @param {THREE.Vector3} endPosWorld - Position d'arrivée dans le monde.
+     * @returns {Promise<{path: Array<THREE.Vector3>|null, pathLength: number}>}
+     */
+	async requestPath(agentId, startPosWorld, endPosWorld) {
+        if (!this.pathfindingWorker || !this.isWorkerInitialized) {
+            console.error(`AgentManager: Worker NavMesh non prêt pour requête path Agent ${agentId}.`);
+            return { path: null, pathLength: 0 }; // Retourne échec immédiat
+        }
+        if (!startPosWorld || !endPosWorld) {
+            console.error(`AgentManager: StartPos ou EndPos invalide pour requête path Agent ${agentId}.`);
+            return { path: null, pathLength: 0 };
+        }
+
+        // Générer un ID unique pour cette requête
+        const requestId = `${agentId}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+        // Créer une promesse et stocker ses fonctions resolve/reject
+        const promise = new Promise((resolve, reject) => {
+            this.pendingPathRequests.set(requestId, { resolve, reject });
+        });
+
+        // Envoyer la requête au worker
+        // console.log(`AgentManager: Envoi requête NavMesh path (ID: ${requestId}) pour Agent ${agentId}: Start(${startPosWorld.x.toFixed(1)}, ${startPosWorld.z.toFixed(1)}) -> End(${endPosWorld.x.toFixed(1)}, ${endPosWorld.z.toFixed(1)})`);
+        this.pathfindingWorker.postMessage({
+            type: 'findPath',
+            data: {
+                startPos: { x: startPosWorld.x, y: startPosWorld.y, z: startPosWorld.z }, // Envoyer sous forme simple
+                endPos: { x: endPosWorld.x, y: endPosWorld.y, z: endPosWorld.z },
+                // Ajouter d'autres paramètres si nécessaires (ex: agent size)
+                // agentRadius: this.config.agentRadius ?? 0.5,
+            },
+            requestId: requestId // Inclure l'ID de la requête
+        });
+
+        // Nettoyage automatique si la promesse n'est pas résolue après un certain temps (timeout)
+         const timeoutMs = 10000; // 10 secondes timeout
+         const timeoutId = setTimeout(() => {
+             if (this.pendingPathRequests.has(requestId)) {
+                 console.warn(`AgentManager: Timeout pour requête path NavMesh ${requestId}`);
+                 const { reject } = this.pendingPathRequests.get(requestId);
+                 this.pendingPathRequests.delete(requestId);
+                 reject(new Error(`NavMesh path request ${requestId} timed out after ${timeoutMs}ms`));
+             }
+         }, timeoutMs);
+
+         // S'assurer que le timeout est annulé quand la promesse est résolue/rejetée
+          promise.finally(() => {
+             clearTimeout(timeoutId);
+         });
+
+
+        return promise; // Retourner la promesse
+    }
 
 	getAgentStats() {
-        // Regrouper les agents par état actuel
         const agentsByState = {};
-         // Initialiser tous les états possibles pour éviter les clés manquantes
-        Object.values(Agent.prototype.constructor.AgentState || { // Accès à l'enum AgentState via Agent.js
-            AT_HOME: 'AT_HOME', GOING_TO_WORK: 'GOING_TO_WORK', AT_WORK: 'AT_WORK',
-            GOING_HOME: 'GOING_HOME', IDLE: 'IDLE', WAITING_FOR_PATH: 'WAITING_FOR_PATH'
-        }).forEach(state => agentsByState[state] = []);
+        Object.values(AgentState || {}).forEach(state => agentsByState[state] = []); // Initialise avec les états connus
 
         if (this.agents) {
             this.agents.forEach(agent => {
-                const state = agent.currentState || 'IDLE'; // Utiliser IDLE si currentState est null/undefined
+                const state = agent.currentState || AgentState.IDLE;
                 if (!agentsByState[state]) {
-                    agentsByState[state] = []; // Sécurité si un état inattendu apparaît
+                    agentsByState[state] = [];
                 }
                 agentsByState[state].push(agent.id);
             });
@@ -204,36 +283,15 @@ export default class AgentManager {
 
         return {
             agentsByState,
-            pathsToWorkByHour: { ...this.stats.pathsToWorkByHour }, // Retourner une copie
-            pathsToHomeByHour: { ...this.stats.pathsToHomeByHour }, // Retourner une copie
+            pathsToWorkByHour: { ...this.stats.pathsToWorkByHour },
+            pathsToHomeByHour: { ...this.stats.pathsToHomeByHour },
         };
     }
 
-    // --- NOUVELLE MÉTHODE : Demande un chemin au Worker ---
-    requestPathFromWorker(agentId, startNode, endNode) {
-        if (!this.pathfindingWorker || !this.isWorkerInitialized) {
-            console.error(`AgentManager: Worker non prêt pour requête path Agent ${agentId}.`);
-            // Informer l'agent de l'échec ?
-             const agent = this.getAgentById(agentId);
-             if(agent) agent.setPath(null); // Indiquer échec à l'agent
-            return;
-        }
-        if(!startNode || !endNode) {
-             console.error(`AgentManager: StartNode ou EndNode invalide pour requête path Agent ${agentId}.`);
-             const agent = this.getAgentById(agentId);
-             if(agent) agent.setPath(null);
-             return;
-        }
+	// --- Méthodes de gestion des agents (Pooling, _initializeMeshes, createAgent, releaseAgent, getAgentById) ---
+    // --- Ces méthodes restent globalement INCHANGÉES car elles concernent la logique et le visuel des agents, ---
+    // --- pas directement la requête de pathfinding qui est maintenant externalisée via requestPath().       ---
 
-        // console.log(`AgentManager: Envoi requête path au worker pour Agent ${agentId}: (${startNode.x},${startNode.y}) -> (${endNode.x},${endNode.y})`);
-        this.pathfindingWorker.postMessage({
-            type: 'findPath',
-            data: { agentId, startNode, endNode }
-        });
-    }
-    // --- FIN NOUVELLE MÉTHODE ---
-
-    // 2) _initializeMeshes (modifiée pour démarrer à count=0)
 	_initializeMeshes() {
 		console.log("AgentManager: Initialisation des InstancedMesh...");
 		// Matériaux
@@ -281,119 +339,108 @@ export default class AgentManager {
 	}
 
 	createAgent() {
-		// Si le pool est plein, on n’en crée pas plus
-		if (this.activeCount >= this.maxAgents) {
-			return null;
-		}
-	
-		// 1) création de la logique
+		if (this.activeCount >= this.maxAgents) return null;
+
 		const agentConfig = {
 			scale: this.config.agentScale ?? 0.1,
 			speed: (this.config.agentWalkSpeed ?? 2.5) * (0.8 + Math.random() * 0.4),
 			rotationSpeed: (this.config.agentRotationSpeed ?? 8.0) * (0.9 + Math.random() * 0.2),
 			yOffset: this.config.agentYOffset ?? 0.3,
 			torsoColor: new THREE.Color(Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1),
+            // Passer agentManager ici pour que Agent puisse appeler requestPath
+            agentManager: this,
 			debugPathColor: null
 		};
 		agentConfig.torsoColorHex = agentConfig.torsoColor.getHex();
 		agentConfig.debugPathColor = agentConfig.torsoColorHex;
-		const instanceId = this.activeCount;                 // on prend la prochaine case libre
+		const instanceId = this.activeCount;
+        // Passer l'agentManager à Agent
 		const newAgent = new Agent(agentConfig, instanceId, this.experience);
-	
-		// enregistrement, assignment home/work…
+
 		const cityManager = this.experience.world?.cityManager;
-		let initializationSuccess = false;
 		if (cityManager) {
 			const citizenInfo = cityManager.registerCitizen(newAgent.id, newAgent);
 			const homeAssigned = cityManager.assignHomeToCitizen(citizenInfo.id);
 			const workAssigned = cityManager.assignWorkplaceToCitizen(citizenInfo.id);
 			if (homeAssigned) {
+                 // initializeLifecycle essaiera de demander un chemin si l'heure est venue
 				newAgent.initializeLifecycle(citizenInfo.homeBuildingId, citizenInfo.workBuildingId);
-				initializationSuccess = true;
 			} else {
-				newAgent.currentState = 'IDLE';
+				newAgent.currentState = AgentState.IDLE; // Utiliser la constante si importée ou définie ici
 				newAgent.isVisible = false;
+                console.warn(`Agent ${newAgent.id} could not be assigned a home.`);
 			}
 		} else {
-			newAgent.currentState = 'IDLE';
+             console.error("CityManager not available for agent initialization.");
+			newAgent.currentState = AgentState.IDLE;
 			newAgent.isVisible = false;
 		}
-	
-		// 2) on ajoute à nos listes
+
 		this.agents.push(newAgent);
 		this.instanceIdToAgent[instanceId] = newAgent.id;
 		this.agentToInstanceId.set(newAgent.id, instanceId);
 		this.activeCount++;
-	
-		// 3) on informe three.js qu’on a plus d’instances actives
+
 		Object.values(this.instanceMeshes).forEach(mesh => mesh.count = this.activeCount);
-	
-		// 4) on initialise la matrice / couleur de ce slot
-		// … (votre code existant pour setMatrixAt et setColorAt sur instanceId) …
-		this.instanceMeshes.torso.instanceColor?.setXYZ(instanceId,
-			newAgent.torsoColor.r, newAgent.torsoColor.g, newAgent.torsoColor.b);
-		this.instanceMeshes.torso.instanceColor.needsUpdate = true;
-		// idem pour head, hand, shoe…
-	
+
+		this.instanceMeshes.torso.instanceColor?.setXYZ(instanceId, newAgent.torsoColor.r, newAgent.torsoColor.g, newAgent.torsoColor.b);
+        if(this.instanceMeshes.torso.instanceColor) this.instanceMeshes.torso.instanceColor.needsUpdate = true;
+
 		Object.values(this.instanceMeshes).forEach(mesh => {
 			mesh.instanceMatrix.needsUpdate = true;
 		});
-	
+
 		return newAgent;
 	}
 
 	releaseAgent(agentId) {
 		const freedId = this.agentToInstanceId.get(agentId);
-		if (freedId === undefined) return; // pas trouvé
-	
+		if (freedId === undefined) return;
+
 		const lastId = this.activeCount - 1;
-		// 1) swapper si ce n’est pas la dernière instance
 		if (freedId !== lastId) {
 			Object.values(this.instanceMeshes).forEach(mesh => {
-				// swap matrices
 				const m = new THREE.Matrix4();
 				mesh.getMatrixAt(lastId, m);
 				mesh.setMatrixAt(freedId, m);
-				// swap couleurs si elles existent
 				if (mesh.instanceColor) {
 					const color = new THREE.Color();
-					mesh.instanceColor.getColor(lastId, color);
-					mesh.instanceColor.setXYZ(freedId, color.r, color.g, color.b);
+					mesh.getColorAt(lastId, color); // Correction: utiliser getColorAt
+					mesh.setColorAt(freedId, color); // Correction: utiliser setColorAt
 				}
 				mesh.instanceMatrix.needsUpdate = true;
 				if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 			});
-			// mettre à jour le mapping de l’agent déplacé
 			const movedAgentId = this.instanceIdToAgent[lastId];
 			this.instanceIdToAgent[freedId] = movedAgentId;
 			this.agentToInstanceId.set(movedAgentId, freedId);
 		}
-	
-		// 2) décrémenter le compteur
+
 		this.activeCount--;
 		Object.values(this.instanceMeshes).forEach(mesh => {
 			mesh.count = this.activeCount;
 		});
-	
-		// 3) nettoyer le mapping pour l’agent libéré
+
 		this.instanceIdToAgent[lastId] = undefined;
 		this.agentToInstanceId.delete(agentId);
-	
-		// 4) retirer la logique
+
 		const idx = this.agents.findIndex(a => a.id === agentId);
-		if (idx !== -1) this.agents.splice(idx, 1);
+		if (idx !== -1) {
+            // Avant de supprimer, s'assurer que les références sont nettoyées
+            this.agents[idx].destroy();
+            this.agents.splice(idx, 1);
+        }
 	}
 
     getAgentById(id) {
         return this.agents.find(agent => agent.id === id);
     }
 
-    // --- RETIRÉ : queuePathRequest n'est plus utilisé ---
-    // queuePathRequest(agentId, startNode, endNode) { ... }
-    // ---------------------------------------------------
-
+    // --- Méthodes d'animation visuelle (_getPartAnimationMatrix, _getPartLocalOffsetMatrix) ---
+    // --- Ces méthodes restent INCHANGÉES car elles définissent l'animation de marche ---
     _getPartAnimationMatrix(partType, time) {
-        this.animationMatrix.identity();
+        // ... (code inchangé) ...
+        this.tempMatrix.identity(); // Renommé tempMatrix pour cohérence
         const agentBaseWalkSpeed = this.config.agentWalkSpeed ?? 2.5;
         const animationSpeedFactor = this.config.agentAnimationSpeedFactor ?? 1.0;
         const agentBobAmplitude = this.config.agentBobAmplitude ?? 0.15;
@@ -417,8 +464,8 @@ export default class AgentManager {
         }
         this.tempPosition.set(pos.x, pos.y, pos.z);
         if (applyRotation) { this.tempQuaternion.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')); } else { this.tempQuaternion.identity(); }
-        this.tempScale.set(1, 1, 1); this.animationMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
-        return this.animationMatrix;
+        this.tempScale.set(1, 1, 1); this.tempMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
+        return this.tempMatrix;
      }
 
 	 _getPartLocalOffsetMatrix(partType) {
@@ -433,154 +480,187 @@ export default class AgentManager {
 		} return this.partOffsetMatrix;
     }
 
+    /**
+     * Met à jour la logique d'état et les visuels de tous les agents actifs.
+     * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms.
+     */
 	update(deltaTime) {
 		if (!this.experience?.world?.environment?.isInitialized) return;
-		const environment        = this.experience.world.environment;
-		const currentGameTime    = this.experience.time.elapsed;
-		const isDebug            = this.experience.isDebugMode;
-		const debugMarkerScale   = isDebug ? 1.0 : 0;
+		const environment = this.experience.world.environment;
+		const currentGameTime = this.experience.time.elapsed;
+		const currentHour = environment.getCurrentHour();
+		const isDebug = this.experience.isDebugMode;
+		const debugMarkerScale = isDebug ? 1.0 : 0; // Markers visibles seulement en debug
 		const fixedMarkerYOffset = 5.0;
 
-		// 1. Logique
-		this.agents.forEach(agent => {
-			agent.updateState(deltaTime, environment.getCurrentHour(), currentGameTime);
-		});
+		let needsBodyMatrixUpdate = false;
+		let needsColorUpdate = this.instanceMeshes.torso.instanceColor?.needsUpdate || false;
+		let needsAgentMarkerUpdate = false;
+		let needsHomeMarkerUpdate = false;
+		let needsWorkMarkerUpdate = false;
 
-		// 2. Visuels
-		let needsBodyMatrixUpdate   = false;
-		let needsColorUpdate        = this.instanceMeshes.torso.instanceColor?.needsUpdate || false;
-		let needsAgentMarkerUpdate  = false;
-		let needsHomeMarkerUpdate   = false;
-		let needsWorkMarkerUpdate   = false;
+		// --- 1. Mettre à jour la logique de tous les agents actifs ---
+        // Itérer seulement sur les agents actifs (index 0 à activeCount-1)
+        for(let i = 0; i < this.activeCount; i++) {
+             const agentId = this.instanceIdToAgent[i];
+             const agent = this.getAgentById(agentId);
+             if(agent) {
+                 agent.updateState(deltaTime, currentHour, currentGameTime);
+             }
+        }
 
-		for (const agent of this.agents) {
-			const instanceId = this.agentToInstanceId.get(agent.id);
-			if (instanceId === undefined) continue;
+		// --- 2. Mettre à jour les visuels (InstancedMesh) ---
+        for (let instanceId = 0; instanceId < this.activeCount; instanceId++) {
+			const agentId = this.instanceIdToAgent[instanceId];
+			const agent = this.getAgentById(agentId);
 
-			// Met à jour la position/orientation de base
-			agent.updateVisuals(deltaTime, currentGameTime);
-			const actualScale = agent.isVisible ? agent.scale : 0;
+            // Si l'agent n'existe plus (ce qui ne devrait pas arriver avec la boucle sur activeCount), skipper
+			if (!agent) continue;
+
+            // Mise à jour visuelle de l'agent (position, orientation, animation)
+            agent.updateVisuals(deltaTime, currentGameTime); // Cette fonction calcule la position/orientation finale
+
+            const actualScale = agent.isVisible ? agent.scale : 0;
 			this.tempScale.set(actualScale, actualScale, actualScale);
 			this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
 
-			// Mise à jour des parties du corps…
-			const updatePart = (pName, mName, idxMult = 1, idxOff = 0) => {
-				const idx = instanceId * idxMult + idxOff;
-				const mesh = this.instanceMeshes[mName];
-				if (!mesh || idx >= mesh.count) return;
+            // Mettre à jour les matrices pour chaque partie du corps
+            const updatePart = (partName, meshName, instanceIndexMultiplier = 1, instanceIndexOffset = 0) => {
+				const finalInstanceIndex = instanceId * instanceIndexMultiplier + instanceIndexOffset;
+                const mesh = this.instanceMeshes[meshName];
+				if (!mesh || finalInstanceIndex >= mesh.count) return; // Sécurité
 
-				if (agent.isVisible) {
-					const offsetMatrix    = this._getPartLocalOffsetMatrix(pName);
-					const animationMatrix = agent.currentAnimationMatrix[pName] || new THREE.Matrix4();
-					this.tempMatrix.multiplyMatrices(offsetMatrix, animationMatrix);
-					this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix);
-					mesh.setMatrixAt(idx, this.finalPartMatrix);
-				} else {
-					this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0));
-					mesh.setMatrixAt(idx, this.tempMatrix);
-				}
+				// Utiliser la matrice d'animation pré-calculée par agent.updateVisuals
+                const animationMatrix = agent.currentAnimationMatrix[partName] || this.tempMatrix.identity();
+                const offsetMatrix = this._getPartLocalOffsetMatrix(partName);
+
+                this.tempMatrix.multiplyMatrices(offsetMatrix, animationMatrix); // Apply animation to offset
+                this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix); // Apply global transform
+
+                mesh.setMatrixAt(finalInstanceIndex, this.finalPartMatrix);
 			};
-			updatePart('head',     'head');
-			updatePart('torso',    'torso');
+
+			updatePart('head', 'head');
+			updatePart('torso', 'torso');
 			updatePart('leftHand', 'hand', 2, 0);
-			updatePart('rightHand','hand', 2, 1);
+			updatePart('rightHand', 'hand', 2, 1);
 			updatePart('leftFoot', 'shoe', 2, 0);
-			updatePart('rightFoot','shoe', 2, 1);
+			updatePart('rightFoot', 'shoe', 2, 1);
 			needsBodyMatrixUpdate = true;
 
-			// Couleur du torse
+			// Mise à jour de la couleur du torse (si elle a changé, mais on le fait à chaque frame pour le moment)
 			if (this.instanceMeshes.torso.instanceColor) {
 				this.tempColor.setHex(agent.torsoColor.getHex());
-				this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
-				needsColorUpdate = true;
+				this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor); // Correction: utiliser setColorAt
+				needsColorUpdate = true; // Marquer pour update GPU
 			}
 
-			// Debug marker (agentMarker)
-			const markerMesh = this.instanceMeshes.agentMarker;
-			if (markerMesh) {
-				if (isDebug) {
-					// Composer la matrice du losange au-dessus de l’agent
-					this.tempMatrix.identity();
-					this.tempMatrix.makeTranslation(
-						agent.position.x,
-						agent.position.y + fixedMarkerYOffset,
-						agent.position.z
-					);
-					this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
-					this.tempMatrix.scale(this.tempScale);
-				} else {
-					// Masquer le losange (échelle 0)
-					this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
-				}
-				markerMesh.setMatrixAt(instanceId, this.tempMatrix);
-				needsAgentMarkerUpdate = true;
-			}
+			// Mise à jour des marqueurs debug (position agent, domicile, travail)
+            const updateMarker = (markerName, targetPosition) => {
+                 const markerMesh = this.instanceMeshes[markerName];
+                 if (markerMesh) {
+                     if (isDebug && targetPosition) {
+                         this.tempPosition.copy(targetPosition).setY(fixedMarkerYOffset); // Position au sol + offset Y
+                         this.tempQuaternion.identity();
+                         this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
+                         this.debugMarkerMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
+                         markerMesh.setMatrixAt(instanceId, this.debugMarkerMatrix);
+                     } else {
+                         // Cacher si pas en mode debug ou pas de cible
+                         this.debugMarkerMatrix.identity().scale(this.tempScale.set(0, 0, 0));
+                         markerMesh.setMatrixAt(instanceId, this.debugMarkerMatrix);
+                     }
+                     return true; // Marquer qu'une mise à jour est nécessaire
+                 }
+                 return false; // Pas de mise à jour
+            };
 
-			// … Vous pouvez appliquer la même logique pour homeMarker & workMarker si nécessaire …
-		}
+             needsAgentMarkerUpdate = updateMarker('agentMarker', agent.position) || needsAgentMarkerUpdate;
+             needsHomeMarkerUpdate = updateMarker('homeMarker', agent.homePosition) || needsHomeMarkerUpdate;
+             needsWorkMarkerUpdate = updateMarker('workMarker', agent.workPosition) || needsWorkMarkerUpdate;
 
-		// 3. Pousser vers le GPU
+		} // Fin boucle sur les agents actifs
+
+		// --- 3. Envoyer les mises à jour au GPU (si nécessaire) ---
 		if (needsBodyMatrixUpdate) {
-			['head','torso','hand','shoe'].forEach(k => {
-				const mesh = this.instanceMeshes[k];
-				if (mesh?.instanceMatrix) {
-					mesh.instanceMatrix.needsUpdate = true;
-					if (k==='head' || k==='torso') mesh.computeBoundingSphere();
-				}
+			['head', 'torso', 'hand', 'shoe'].forEach(key => {
+                const mesh = this.instanceMeshes[key];
+				if (mesh?.instanceMatrix) mesh.instanceMatrix.needsUpdate = true;
+                // Recalculer bounding sphere pour frustum culling (optionnel mais recommandé)
+                // if (mesh && (key === 'head' || key === 'torso')) mesh.computeBoundingSphere();
 			});
 		}
-		if (needsColorUpdate)        this.instanceMeshes.torso.instanceColor.needsUpdate = true;
-		if (needsAgentMarkerUpdate)  this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
-		if (needsHomeMarkerUpdate)   this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
-		if (needsWorkMarkerUpdate)   this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
-	}
+		if (needsColorUpdate && this.instanceMeshes.torso.instanceColor) {
+            this.instanceMeshes.torso.instanceColor.needsUpdate = true;
+        }
+		if (needsAgentMarkerUpdate && this.instanceMeshes.agentMarker) {
+            this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
+        }
+		if (needsHomeMarkerUpdate && this.instanceMeshes.homeMarker) {
+            this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
+        }
+		if (needsWorkMarkerUpdate && this.instanceMeshes.workMarker) {
+            this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
+        }
+	} // Fin update()
 
-	removeAgent(agentId) {
-		// 1) on supprime la logique
+    removeAgent(agentId) {
+        // La logique de releaseAgent gère déjà le retrait visuel et le nettoyage du mapping.
+        // Il faut juste retirer l'instance logique de this.agents.
 		const idx = this.agents.findIndex(a => a.id === agentId);
-		if (idx !== -1) this.agents.splice(idx, 1);
-
-		// 2) on libère le slot visuel
-		this.releaseAgent(agentId);
+		if (idx !== -1) {
+            this.agents[idx].destroy(); // Nettoyer l'agent logique
+            this.agents.splice(idx, 1);
+            this.releaseAgent(agentId); // Gère le swap/décrémentation visuel
+        }
 	}
 
     destroy() {
 		console.log("AgentManager: Destruction...");
-		// Arrêter le worker s'il existe
+		// Arrêter le worker NavMesh
 		if (this.pathfindingWorker) {
 			this.pathfindingWorker.terminate();
 			this.pathfindingWorker = null;
 			this.isWorkerInitialized = false;
-			console.log("AgentManager: Pathfinding Worker terminé.");
+			console.log("AgentManager: NavMesh Pathfinding Worker terminé.");
+            // Rejeter les promesses en attente
+            this.pendingPathRequests.forEach(({ reject }) => reject(new Error("AgentManager destroyed")));
+            this.pendingPathRequests.clear();
 		}
-	   // ... (reste de la logique de destroy existante) ...
-		const cityManager = this.experience?.world?.cityManager;
-		this.agents.forEach(agent => {
-			this.removeAgent(agent.id);
-			agent.destroy();
-		});
+
+        // Nettoyer tous les agents logiques restants
+		this.agents.forEach(agent => agent.destroy());
 		this.agents = [];
 		console.log("AgentManager: Agents logiques détruits.");
 
+        // Nettoyer les InstancedMesh
 		Object.values(this.instanceMeshes).forEach(mesh => {
 			if (mesh.parent) mesh.parent.remove(mesh);
-			// Dispose material CLONE (celui de InstancedMesh)
-			if (mesh.material && mesh.material !== this.baseMaterials[mesh.name.replace('Instances','').toLowerCase()]) {
-			   mesh.material.dispose?.();
-			}
+			// Disposer le material CLONE (créé dans _initializeMeshes)
+			mesh.material?.dispose();
+            // La géométrie est gérée par baseGeometries
 		});
 		this.instanceMeshes = {};
 		console.log("AgentManager: InstancedMeshes retirés & matériaux clonés disposés.");
 
-		Object.values(this.baseGeometries).forEach(geom => { geom?.dispose(); });
+        // Nettoyer les géométries de base
+		Object.values(this.baseGeometries).forEach(geom => geom?.dispose());
 		this.baseGeometries = {};
 		console.log("AgentManager: Géométries base disposées.");
 
-		Object.values(this.baseMaterials).forEach(mat => { mat?.dispose(); });
+        // Nettoyer les matériaux de base
+		Object.values(this.baseMaterials).forEach(mat => mat?.dispose());
 		this.baseMaterials = {};
 		console.log("AgentManager: Matériaux base disposés.");
 
-		this.scene = null; this.experience = null; this.config = null;
+        // Réinitialiser le pooling et les maps
+        this.activeCount = 0;
+        this.instanceIdToAgent = new Array(this.maxAgents);
+        this.agentToInstanceId.clear();
+
+		this.scene = null;
+        this.experience = null;
+        this.config = null;
 		console.log("AgentManager: Détruit.");
 	}
 }
