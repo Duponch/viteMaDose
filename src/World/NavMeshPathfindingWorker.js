@@ -27,6 +27,56 @@ function serializePath(vectorPath) {
     return vectorPath.map(v => ({ x: v.x, y: v.y, z: v.z }));
 }
 
+// --- Fonction Helper pour recherche élargie des points valides ---
+function findClosestValidNode(position, zoneId, groupId, maxSearchDistance = 10) {
+    if (!pathfinding || !isInitialized) return null;
+    
+    // Essayer d'abord la position exacte
+    let result = pathfinding.getClosestNode(position, zoneId, groupId, true);
+    if (result && result.node !== null && result.pos) {
+        return result;
+    }
+    
+    // Si échoué, essayer avec des distances croissantes
+    const searchSteps = 5; // Nombre d'étapes de recherche
+    const stepSize = maxSearchDistance / searchSteps;
+    
+    // Directions de recherche (8 directions)
+    const directions = [
+        new THREE.Vector3(1, 0, 0),   // droite
+        new THREE.Vector3(-1, 0, 0),  // gauche
+        new THREE.Vector3(0, 0, 1),   // avant
+        new THREE.Vector3(0, 0, -1),  // arrière
+        new THREE.Vector3(1, 0, 1),   // diagonale avant-droite
+        new THREE.Vector3(-1, 0, 1),  // diagonale avant-gauche
+        new THREE.Vector3(1, 0, -1),  // diagonale arrière-droite
+        new THREE.Vector3(-1, 0, -1)  // diagonale arrière-gauche
+    ];
+    
+    // Normaliser les diagonales
+    for (let i = 4; i < directions.length; i++) {
+        directions[i].normalize();
+    }
+    
+    // Pour chaque étape de distance
+    for (let step = 1; step <= searchSteps; step++) {
+        const currentDistance = step * stepSize;
+        
+        // Essayer dans chaque direction
+        for (const dir of directions) {
+            const searchPos = position.clone().addScaledVector(dir, currentDistance);
+            result = pathfinding.getClosestNode(searchPos, zoneId, groupId, true);
+            
+            if (result && result.node !== null && result.pos) {
+                // console.log(`Found valid node at distance ${currentDistance} in direction (${dir.x}, ${dir.z})`);
+                return result;
+            }
+        }
+    }
+    
+    return null; // Aucun point valide trouvé même après recherche élargie
+}
+
 // --- Gestionnaire de Messages ---
 self.onmessage = async function(event) {
     const { type, data, requestId } = event.data;
@@ -102,9 +152,9 @@ self.onmessage = async function(event) {
             self.postMessage({ type: 'workerError', error: `Erreur initialisation: ${initError.message || initError}` });
         }
 
-    // --- Recherche de Chemin (inchangé) ---
+    // --- Recherche de Chemin ---
 	} else if (type === 'findPath') {
-		// Vérifications initiales (inchangées)
+		// Vérifications initiales
 		if (!isInitialized || !pathfinding || groupID === null) {
 			console.warn(`[NavMeshWorker] Path request received but worker not ready (init=${isInitialized}, pf=${!!pathfinding}, group=${groupID}). Req ID: ${requestId}`);
 			self.postMessage({ type: 'pathError', requestId: requestId, error: 'Worker not initialized' });
@@ -116,70 +166,139 @@ self.onmessage = async function(event) {
 			return;
 		}
 
-		const startVec = new THREE.Vector3(data.startPos.x, data.startPos.y, data.startPos.z);
-		const endVec = new THREE.Vector3(data.endPos.x, data.endPos.y, data.endPos.z);
-		let path = null; // Initialiser le chemin à null
-
+		// Utiliser le NavMesh pour générer un chemin suivant les trottoirs et passages piétons
 		try {
-			// --- AJOUT : Snap points to NavMesh ---
-			const checkPolygon = true; // Assure que le noeud trouvé est sur un polygone marchable
-
-			// Trouver le point le plus proche sur le NavMesh pour le départ
-			const closestStartNodeResult = pathfinding.getClosestNode(startVec, ZONE_ID, groupID, checkPolygon);
-			// Trouver le point le plus proche sur le NavMesh pour l'arrivée
-			const closestEndNodeResult = pathfinding.getClosestNode(endVec, ZONE_ID, groupID, checkPolygon);
-
-			let snappedStartVec = null;
-			let snappedEndVec = null;
-
-			// Vérifier si le snapping a réussi pour le départ
-			if (closestStartNodeResult && closestStartNodeResult.node !== null && closestStartNodeResult.pos) {
-				snappedStartVec = closestStartNodeResult.pos; // Utiliser la position retournée par getClosestNode
-			} else {
-				console.warn(`[NavMeshWorker Req ${requestId}] Could not snap start point (${startVec.x.toFixed(1)}, ${startVec.y.toFixed(1)}, ${startVec.z.toFixed(1)}) to NavMesh.`);
-			}
-
-			// Vérifier si le snapping a réussi pour l'arrivée
-			if (closestEndNodeResult && closestEndNodeResult.node !== null && closestEndNodeResult.pos) {
-				snappedEndVec = closestEndNodeResult.pos; // Utiliser la position retournée par getClosestNode
-			} else {
-				console.warn(`[NavMeshWorker Req ${requestId}] Could not snap end point (${endVec.x.toFixed(1)}, ${endVec.y.toFixed(1)}, ${endVec.z.toFixed(1)}) to NavMesh.`);
-			}
-			// --- FIN AJOUT SNAPPING ---
-
-			// --- MODIFIÉ : Chercher le chemin seulement si les deux points ont été snappés ---
-			if (snappedStartVec && snappedEndVec) {
-				// Vérifier si les points snappés sont trop proches (évite erreur findPath)
-				if (snappedStartVec.distanceToSquared(snappedEndVec) < 0.01) { // Tolérance très faible
-					console.log(`[NavMeshWorker Req ${requestId}] Snapped start and end points are virtually identical. Returning direct path.`);
-					path = [snappedStartVec.clone(), snappedEndVec.clone()]; // Retourner un chemin simple entre les deux points
-				} else {
-					// Appeler findPath avec les points SNAPPÉS
-					// console.log(`[NavMeshWorker Req ${requestId}] Finding path between snapped points: Start(${snappedStartVec.x.toFixed(1)}, ${snappedStartVec.z.toFixed(1)}) -> End(${snappedEndVec.x.toFixed(1)}, ${snappedEndVec.z.toFixed(1)})`); // Optionnel: Debug
-					path = pathfinding.findPath(snappedStartVec, snappedEndVec, ZONE_ID, groupID);
-					// if (!path) { console.warn(`[NavMeshWorker Req ${requestId}] pathfinding.findPath returned null between snapped points.`); } // Optionnel: Debug
-				}
-			} else {
-				// Si le snapping a échoué pour l'un ou l'autre point, le chemin reste null
-				console.warn(`[NavMeshWorker Req ${requestId}] Pathfinding aborted because start or end point could not be snapped to NavMesh.`);
-				path = null;
-			}
-			// --- FIN MODIFICATION ---
-
-			// Traitement du résultat (inchangé, mais 'path' peut être null ou un chemin court)
-			if (path && path.length > 0) {
-				const pathLength = calculatePathLength(path);
-				self.postMessage({
-					type: 'pathResult', requestId: requestId,
-					data: { path: serializePath(path), pathLength: pathLength }
-				});
-			} else {
-				// Si path est null ou vide (après snapping échoué ou findPath échoué)
-				self.postMessage({ type: 'pathResult', requestId: requestId, data: { path: null, pathLength: 0 } });
-			}
+			// Version améliorée pour assurer un pathfinding robuste
+            const startVec = new THREE.Vector3(data.startPos.x, data.startPos.y, data.startPos.z);
+            const endVec = new THREE.Vector3(data.endPos.x, data.endPos.y, data.endPos.z);
+            
+            // Forcer la hauteur à celle du trottoir
+            const sidewalkHeight = 0.2;
+            startVec.y = sidewalkHeight;
+            endVec.y = sidewalkHeight;
+            
+            // Recherche de points valides sur le NavMesh avec plusieurs tentatives
+            let startPosOnMesh = null;
+            let endPosOnMesh = null;
+            
+            // Recherche de point de départ valide
+            const startSearchDistances = [0, 1, 2, 3, 5, 8]; // Distances de recherche croissantes
+            for (const distance of startSearchDistances) {
+                // Tentative avec la position exacte d'abord
+                if (distance === 0) {
+                    const result = pathfinding.getClosestNode(startVec, ZONE_ID, groupID, true);
+                    if (result && result.node && result.pos) {
+                        startPosOnMesh = result.pos;
+                        break;
+                    }
+                } else {
+                    // Essayer en 8 directions autour du point avec distance croissante
+                    for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                        const offsetX = Math.cos(angle) * distance;
+                        const offsetZ = Math.sin(angle) * distance;
+                        const testPos = new THREE.Vector3(
+                            startVec.x + offsetX,
+                            sidewalkHeight,
+                            startVec.z + offsetZ
+                        );
+                        const result = pathfinding.getClosestNode(testPos, ZONE_ID, groupID, true);
+                        if (result && result.node && result.pos) {
+                            startPosOnMesh = result.pos;
+                            console.log(`[NavMeshWorker] Found valid start point at distance ${distance}`);
+                            break;
+                        }
+                    }
+                    if (startPosOnMesh) break;
+                }
+            }
+            
+            // Recherche de point d'arrivée valide
+            for (const distance of startSearchDistances) {
+                // Tentative avec la position exacte d'abord
+                if (distance === 0) {
+                    const result = pathfinding.getClosestNode(endVec, ZONE_ID, groupID, true);
+                    if (result && result.node && result.pos) {
+                        endPosOnMesh = result.pos;
+                        break;
+                    }
+                } else {
+                    // Essayer en 8 directions autour du point avec distance croissante
+                    for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                        const offsetX = Math.cos(angle) * distance;
+                        const offsetZ = Math.sin(angle) * distance;
+                        const testPos = new THREE.Vector3(
+                            endVec.x + offsetX,
+                            sidewalkHeight,
+                            endVec.z + offsetZ
+                        );
+                        const result = pathfinding.getClosestNode(testPos, ZONE_ID, groupID, true);
+                        if (result && result.node && result.pos) {
+                            endPosOnMesh = result.pos;
+                            console.log(`[NavMeshWorker] Found valid end point at distance ${distance}`);
+                            break;
+                        }
+                    }
+                    if (endPosOnMesh) break;
+                }
+            }
+            
+            // Si on ne trouve pas de points valides, utiliser un chemin direct en fallback
+            if (!startPosOnMesh || !endPosOnMesh) {
+                console.warn(`[NavMeshWorker] Could not find valid NavMesh points. Using direct path as fallback.`);
+                const directPath = [startVec.clone(), endVec.clone()];
+                const directPathLength = calculatePathLength(directPath);
+                
+                self.postMessage({
+                    type: 'pathResult',
+                    requestId: requestId,
+                    data: {
+                        path: serializePath(directPath),
+                        pathLength: directPathLength
+                    }
+                });
+                return;
+            }
+            
+            // Calculer le chemin entre les points trouvés
+            const path = pathfinding.findPath(startPosOnMesh, endPosOnMesh, ZONE_ID, groupID);
+            
+            // Si un chemin est trouvé, l'envoyer
+            if (path && path.length > 0) {
+                // Ajouter points de départ/arrivée exacts si nécessaire
+                const completePath = [startVec.clone()];
+                path.forEach(point => completePath.push(point.clone()));
+                completePath.push(endVec.clone());
+                
+                // Calculer la longueur du chemin final
+                const pathLength = calculatePathLength(completePath);
+                
+                // Envoyer le résultat
+                self.postMessage({
+                    type: 'pathResult',
+                    requestId: requestId,
+                    data: { 
+                        path: serializePath(completePath),
+                        pathLength: pathLength
+                    }
+                });
+            } else {
+                // Si aucun chemin n'est trouvé, utiliser un chemin direct
+                console.warn(`[NavMeshWorker] Could not find path on NavMesh. Using direct path as fallback.`);
+                const directPath = [startVec.clone(), endVec.clone()];
+                const directPathLength = calculatePathLength(directPath);
+                
+                self.postMessage({
+                    type: 'pathResult',
+                    requestId: requestId,
+                    data: {
+                        path: serializePath(directPath),
+                        pathLength: directPathLength
+                    }
+                });
+            }
 		} catch (pathError) {
-			console.error(`[NavMeshWorker Req ${requestId}] Error during findPath/getClosestNode:`, pathError);
-			self.postMessage({ type: 'pathError', requestId: requestId, error: `Pathfinding internal error: ${pathError.message || pathError}` });
+			console.error(`[NavMeshWorker Req ${requestId}] Error during pathfinding:`, pathError);
+			self.postMessage({ type: 'pathError', requestId: requestId, error: `Pathfinding error: ${pathError.message || pathError}` });
 		}
 	// Fin du bloc 'findPath'
 	} else { /* ... message inconnu ... */ }

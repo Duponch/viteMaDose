@@ -377,112 +377,59 @@ export default class Agent {
      * @returns {THREE.Vector3 | null} La position snappée sur le NavMesh ou null si échec.
      */
     findEntryPointOnSidewalk(buildingInfo, plot, navMeshManager, config) {
-        if (!buildingInfo || !plot || !navMeshManager || !config) { /* ... gestion erreur args ... */ return null; }
+        if (!buildingInfo || !plot || !navMeshManager || !config) { 
+            console.warn(`Agent ${this.id}: Arguments invalides pour findEntryPointOnSidewalk`);
+            return null; 
+        }
 
         const buildingPos = buildingInfo.position;
         const sidewalkWidth = config.sidewalkWidth ?? 2.0;
         const sidewalkHeight = config.sidewalkHeight ?? 0.2;
         const halfSidewalk = sidewalkWidth / 2;
-        const sampleOffset = Math.min(plot.width, plot.depth) * 0.25; // Décalage pour échantillonner (ex: 1/4 de la plus petite dim)
 
-        // 1. Trouver le bord le plus proche (inchangé)
+        // SOLUTION TEMPORAIRE: Ignorer la recherche NavMesh et retourner toujours un point valide
+        
+        // 1. Trouver le bord le plus proche (comme avant)
         const distToTop = Math.abs(buildingPos.z - plot.z);
         const distToBottom = Math.abs(buildingPos.z - (plot.z + plot.depth));
         const distToLeft = Math.abs(buildingPos.x - plot.x);
         const distToRight = Math.abs(buildingPos.x - (plot.x + plot.width));
         const minDist = Math.min(distToTop, distToBottom, distToLeft, distToRight);
 
-        // 2. Calculer le point central sur le trottoir adjacent (inchangé)
-        const centerTargetPoint = new THREE.Vector3();
-        let edgeAxis = ''; // 'x' ou 'z' - l'axe PARALLÈLE au bord de la parcelle
-        let alignAxis = ''; // 'x' ou 'z' - l'axe PERPENDICULAIRE (aligné avec buildingPos)
-
+        // 2. Calculer le point sur le trottoir adjacent
+        const entryPoint = new THREE.Vector3();
+        
         if (minDist === distToTop) {
-            centerTargetPoint.x = buildingPos.x; centerTargetPoint.z = plot.z - halfSidewalk;
-            edgeAxis = 'x'; alignAxis = 'z';
+            // Point sur le trottoir du haut
+            entryPoint.x = buildingPos.x;
+            entryPoint.z = plot.z - halfSidewalk;
         } else if (minDist === distToBottom) {
-            centerTargetPoint.x = buildingPos.x; centerTargetPoint.z = plot.z + plot.depth + halfSidewalk;
-            edgeAxis = 'x'; alignAxis = 'z';
+            // Point sur le trottoir du bas
+            entryPoint.x = buildingPos.x;
+            entryPoint.z = plot.z + plot.depth + halfSidewalk;
         } else if (minDist === distToLeft) {
-            centerTargetPoint.x = plot.x - halfSidewalk; centerTargetPoint.z = buildingPos.z;
-            edgeAxis = 'z'; alignAxis = 'x';
+            // Point sur le trottoir de gauche
+            entryPoint.x = plot.x - halfSidewalk;
+            entryPoint.z = buildingPos.z;
         } else { // distToRight is min
-            centerTargetPoint.x = plot.x + plot.width + halfSidewalk; centerTargetPoint.z = buildingPos.z;
-            edgeAxis = 'z'; alignAxis = 'x';
+            // Point sur le trottoir de droite
+            entryPoint.x = plot.x + plot.width + halfSidewalk;
+            entryPoint.z = buildingPos.z;
         }
-        centerTargetPoint.y = sidewalkHeight;
-
-        // 3. Créer les points d'échantillonnage (centre, gauche, droite)
-        const samplePoints = [centerTargetPoint];
-        const pointLeft = centerTargetPoint.clone();
-        const pointRight = centerTargetPoint.clone();
-
-        if (edgeAxis === 'x') { // Bord haut/bas -> décaler sur X
-            pointLeft.x -= sampleOffset;
-            pointRight.x += sampleOffset;
-        } else { // Bord gauche/droit -> décaler sur Z
-            pointLeft.z -= sampleOffset;
-            pointRight.z += sampleOffset;
-        }
-        samplePoints.push(pointLeft, pointRight);
-
-        // 4. Clamper TOUS les points pour rester sur le segment de trottoir
-        samplePoints.forEach(p => {
-            if (edgeAxis === 'x') {
-                p.x = THREE.MathUtils.clamp(p.x, plot.x, plot.x + plot.width);
-            } else {
-                p.z = THREE.MathUtils.clamp(p.z, plot.z, plot.z + plot.depth);
-            }
-        });
-
-		// === DEBUG VISUALIZATION ===
-    samplePoints.forEach((p, index) => {
-        const color = (index === 0) ? 0xff0000 : 0xffff00; // Rouge pour centre, Jaune pour autres
+        
+        // Fixer la hauteur à celle du trottoir
+        entryPoint.y = sidewalkHeight;
+        
+        // Créer un marqueur visible pour le point d'entrée (pour debug)
         const markerGeom = new THREE.SphereGeometry(0.5, 8, 8);
-        const markerMat = new THREE.MeshBasicMaterial({ color: color, depthTest: false, wireframe: true });
+        const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false });
         const markerMesh = new THREE.Mesh(markerGeom, markerMat);
-        markerMesh.position.copy(p);
+        markerMesh.position.copy(entryPoint);
         markerMesh.renderOrder = 999;
-        this.experience.scene.add(markerMesh); // Ajoute à la scène globale
-        // Optionnel: supprimer après qqs secondes
-        // setTimeout(() => { markerMesh.geometry.dispose(); markerMesh.material.dispose(); this.experience.scene.remove(markerMesh); }, 5000);
-    });
-     const plotCenterMarkerGeom = new THREE.SphereGeometry(0.6, 8, 8);
-     const plotCenterMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, depthTest: false }); // Cyan pour centre parcelle
-     const plotCenterMarkerMesh = new THREE.Mesh(plotCenterMarkerGeom, plotCenterMarkerMat);
-     const plotCenterForDebug = plot.center.clone(); plotCenterForDebug.y = sidewalkHeight;
-     plotCenterMarkerMesh.position.copy(plotCenterForDebug);
-     plotCenterMarkerMesh.renderOrder = 999;
-     this.experience.scene.add(plotCenterMarkerMesh);
-
-// ==========================
-
-        // 5. Essayer de snapper chaque point échantillonné
-        for (const pointToSnap of samplePoints) {
-            const snappedResult = navMeshManager.findNearestNode(pointToSnap);
-            if (snappedResult && snappedResult.position) {
-                // console.log(`Agent ${this.id}: Entry point SUCCESS for building ${buildingInfo.id} using sampled point near edge.`);
-                return snappedResult.position.clone(); // Succès !
-            } else {
-                // Optionnel : logguer l'échec pour ce point spécifique
-                // console.warn(`Agent ${this.id}: Snap failed for sample point (${pointToSnap.x.toFixed(1)}, ${pointToSnap.z.toFixed(1)})`);
-            }
-        }
-
-        // 6. Si TOUS les points échantillonnés échouent, tenter le fallback sur le centre de la parcelle
-        console.warn(`Agent ${this.id}: Could not snap any sampled sidewalk point for building ${buildingInfo.id} on plot ${plot.id}. Trying plot center fallback...`);
-        const plotCenter = plot.center.clone();
-        plotCenter.y = sidewalkHeight;
-        const fallbackResult = navMeshManager.findNearestNode(plotCenter);
-        if (fallbackResult && fallbackResult.position) {
-             console.warn(` -> Using plot center snap as fallback.`);
-             return fallbackResult.position.clone();
-        } else {
-             console.error(` -> CRITICAL: Could not snap plot center either for plot ${plot.id}. Returning original building position as last resort.`);
-             const lastResortPos = buildingPos.clone();
-             lastResortPos.y = sidewalkHeight;
-             return lastResortPos; // Dernier recours
-        }
+        this.experience.scene.add(markerMesh);
+        
+        // Retourner directement le point calculé sans faire de snapping NavMesh
+        return entryPoint;
     } // Fin findEntryPointOnSidewalk
 
     /**

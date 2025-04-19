@@ -22,6 +22,9 @@ export default class SidewalkGenerator {
             console.warn("SidewalkGenerator: sidewalkMaterial not found in provided materials. Using fallback.");
             this.materials.sidewalkMaterial = new THREE.MeshStandardMaterial({ color: 0x999999 });
         }
+        
+        // Ajouter une marge de connexion pour éviter les trous entre trottoirs
+        this.connectionMargin = 0.2; // Augmenter la marge à 20cm pour mieux connecter les trottoirs
     }
 
     /**
@@ -38,7 +41,7 @@ export default class SidewalkGenerator {
             return null;
         }
 
-        console.log("SidewalkGenerator: Generating sidewalk geometries...");
+        console.log("SidewalkGenerator: Generating sidewalk geometries with extended margins...");
         const allSidewalkGeometries = [];
         const baseSidewalkGeom = new THREE.BoxGeometry(1, 1, 1); // Géométrie de base
 
@@ -55,6 +58,7 @@ export default class SidewalkGenerator {
             return clonedGeom;
         };
 
+        // Générer les segments de trottoirs pour chaque parcelle avec des marges étendues
         plots.forEach(plot => {
             const plotWidth = plot.width;
             const plotDepth = plot.depth;
@@ -66,6 +70,9 @@ export default class SidewalkGenerator {
             const plotCenterZ = plotZ + plotDepth / 2;
             const halfSidewalkW = sidewalkW / 2;
 
+            // Ajouter la marge de connexion aux dimensions pour éviter les trous
+            const margin = this.connectionMargin;
+
             // Positions des centres des segments de trottoir
             const topZ = plotZ - halfSidewalkW;         // Centre du segment haut
             const bottomZ = plotZ + plotDepth + halfSidewalkW; // Centre du segment bas
@@ -73,17 +80,17 @@ export default class SidewalkGenerator {
             const rightX = plotX + plotWidth + halfSidewalkW; // Centre du segment droit
 
             // --- Création des 8 segments (4 côtés, 4 coins) ---
-            // Côtés (longueur = dimension de la parcelle, largeur = sidewalkW)
-            allSidewalkGeometries.push(createTransformedGeom(plotWidth, sidewalkW, sidewalkH, plotCenterX, topZ));    // Haut
-            allSidewalkGeometries.push(createTransformedGeom(plotWidth, sidewalkW, sidewalkH, plotCenterX, bottomZ)); // Bas
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, plotDepth, sidewalkH, leftX, plotCenterZ));    // Gauche
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, plotDepth, sidewalkH, rightX, plotCenterZ));   // Droite
+            // Côtés (longueur = dimension de la parcelle + marge, largeur = sidewalkW)
+            allSidewalkGeometries.push(createTransformedGeom(plotWidth + margin, sidewalkW + margin, sidewalkH, plotCenterX, topZ));    // Haut
+            allSidewalkGeometries.push(createTransformedGeom(plotWidth + margin, sidewalkW + margin, sidewalkH, plotCenterX, bottomZ)); // Bas
+            allSidewalkGeometries.push(createTransformedGeom(sidewalkW + margin, plotDepth + margin, sidewalkH, leftX, plotCenterZ));    // Gauche
+            allSidewalkGeometries.push(createTransformedGeom(sidewalkW + margin, plotDepth + margin, sidewalkH, rightX, plotCenterZ));   // Droite
 
-            // Coins (carrés de côté sidewalkW)
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, topZ));     // Coin Haut Gauche
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, topZ));    // Coin Haut Droit
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, bottomZ));  // Coin Bas Gauche
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, bottomZ)); // Coin Bas Droit
+            // Coins (carrés de côté sidewalkW + marge)
+            allSidewalkGeometries.push(createTransformedGeom(sidewalkW + margin, sidewalkW + margin, sidewalkH, leftX, topZ));     // Coin Haut Gauche
+            allSidewalkGeometries.push(createTransformedGeom(sidewalkW + margin, sidewalkW + margin, sidewalkH, rightX, topZ));    // Coin Haut Droit
+            allSidewalkGeometries.push(createTransformedGeom(sidewalkW + margin, sidewalkW + margin, sidewalkH, leftX, bottomZ));  // Coin Bas Gauche
+            allSidewalkGeometries.push(createTransformedGeom(sidewalkW + margin, sidewalkW + margin, sidewalkH, rightX, bottomZ)); // Coin Bas Droit
         });
 
         baseSidewalkGeom.dispose(); // Nettoyer la géométrie de base
