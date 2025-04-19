@@ -199,11 +199,6 @@ export default class Agent {
         this._calculateScheduledTimes();
     }
 
-    // --- SUPPRESSION : requestPath n'est plus appelé directement ---
-    // requestPath(startPosWorld, endPosWorld, startNodeOverride = null, endNodeOverride = null, nextStateIfSuccess) { ... }
-    // --- SUPPRESSION : setPath est remplacé par la gestion de la Promise dans updateState ---
-    // setPath(pathPoints, pathLengthWorld) { ... }
-
     /**
      * Met à jour la machine d'état de l'agent en fonction de l'heure et demande des chemins si nécessaire.
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame (ms).
@@ -248,29 +243,36 @@ export default class Agent {
                             .then(({ path, pathLength }) => {
                                 if (this.currentState === AgentState.REQUESTING_PATH_FOR_WORK) {
                                     if (path && pathLength > 0.1) {
-                                        this.currentPathPoints = path.map(p => p.clone());
+                                        // Stocker le chemin reçu tel quel, sans modification
+                                        this.currentPathPoints = path;
                                         this.currentPathLengthWorld = pathLength;
+                                        
+                                        // Nettoyer tout visualiseur de debug précédent
+                                        this._clearDebugVisualizer();
+                                        this._debugPathVisualized = false;
+                                        
+                                        // Recalculer la durée totale du trajet basée sur la longueur du chemin
                                         const travelSecondsGame = pathLength / this.agentBaseSpeed;
                                         const travelRatioOfDay = travelSecondsGame / (dayDurationMs / 1000);
                                         this.calculatedTravelDurationGame = travelRatioOfDay * dayDurationMs;
                                         this.currentState = AgentState.READY_TO_LEAVE_FOR_WORK;
-                                        // console.log(`Agent ${this.id}: Path TO WORK received. Length=${pathLength.toFixed(1)}, Duration=${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s. State -> READY_TO_LEAVE`);
+                                        console.log(`Agent ${this.id}: Path TO WORK received with ${path.length} points. Length=${pathLength.toFixed(1)}, Duration=${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
                                     } else {
                                         console.warn(`Agent ${this.id}: Path TO WORK received but invalid (path: ${path ? 'Array['+path.length+']' : 'null'}, length: ${pathLength}). Reverting to AT_HOME.`);
                                         this.currentState = AgentState.AT_HOME;
                                     }
-                                } else { /* ... état a changé ... */ console.warn(`Agent ${this.id}: Path TO WORK received, but state is now ${this.currentState}. Ignoring path.`); }
+                                } else { console.warn(`Agent ${this.id}: Path TO WORK received, but state is now ${this.currentState}. Ignoring path.`); }
                             })
                             .catch(error => {
                                 if (this.currentState === AgentState.REQUESTING_PATH_FOR_WORK) {
                                      console.error(`Agent ${this.id}: Pathfinding TO WORK failed: ${error.message}. Reverting to AT_HOME.`);
                                      this.currentState = AgentState.AT_HOME;
-                                } else { /* ... état a changé ... */ console.warn(`Agent ${this.id}: Pathfinding TO WORK failed, but state is now ${this.currentState}. Ignoring error.`); }
+                                } else { console.warn(`Agent ${this.id}: Pathfinding TO WORK failed, but state is now ${this.currentState}. Ignoring error.`); }
                             });
-                    } else { /* ... positions manquantes ... */
+                    } else { 
                          if (currentGameTime >= this.lastPathRequestTimeGame + this.MIN_RETRY_DELAY_MS) {
                              console.warn(`Agent ${this.id}: Cannot request work path at ${currentGameTime.toFixed(0)} due to missing entry points (home or work).`);
-                             this.lastPathRequestTimeGame = currentGameTime; // Évite spam de logs
+                             this.lastPathRequestTimeGame = currentGameTime; 
                          }
                     }
                 }
@@ -286,35 +288,41 @@ export default class Agent {
                 }
 
                 if (currentGameTime >= nextScheduledRequestHome && currentGameTime >= this.lastPathRequestTimeGame + this.MIN_RETRY_DELAY_MS) {
-                     // --- Utilise maintenant this.homePosition et this.workPosition (points d'entrée) ---
                      if (this.homePosition && this.workPosition) {
                          this.lastPathRequestTimeGame = currentGameTime;
                          this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
 
-                         this.agentManager.requestPath(this.id, this.workPosition, this.homePosition) // Utilise les points d'entrée
+                         this.agentManager.requestPath(this.id, this.workPosition, this.homePosition)
                              .then(({ path, pathLength }) => {
                                  if (this.currentState === AgentState.REQUESTING_PATH_FOR_HOME) {
                                      if (path && pathLength > 0.1) {
-                                         this.currentPathPoints = path.map(p => p.clone());
+                                         // Stocker le chemin reçu tel quel, sans modification
+                                         this.currentPathPoints = path;
                                          this.currentPathLengthWorld = pathLength;
+                                         
+                                         // Nettoyer tout visualiseur de debug précédent
+                                         this._clearDebugVisualizer();
+                                         this._debugPathVisualized = false;
+                                         
+                                         // Recalculer la durée totale du trajet basée sur la longueur du chemin
                                          const travelSecondsGame = pathLength / this.agentBaseSpeed;
                                          const travelRatioOfDay = travelSecondsGame / (dayDurationMs / 1000);
                                          this.calculatedTravelDurationGame = travelRatioOfDay * dayDurationMs;
                                          this.currentState = AgentState.READY_TO_LEAVE_FOR_HOME;
-                                         // console.log(`Agent ${this.id}: Path TO HOME received. Length=${pathLength.toFixed(1)}, Duration=${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s. State -> READY_TO_LEAVE`);
+                                         console.log(`Agent ${this.id}: Path TO HOME received with ${path.length} points. Length=${pathLength.toFixed(1)}, Duration=${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
                                      } else {
                                          console.warn(`Agent ${this.id}: Path TO HOME received but invalid. Reverting to AT_WORK.`);
                                          this.currentState = AgentState.AT_WORK;
                                      }
-                                 } else { /* ... état a changé ... */ console.warn(`Agent ${this.id}: Path TO HOME received, but state is now ${this.currentState}. Ignoring path.`); }
+                                 } else { console.warn(`Agent ${this.id}: Path TO HOME received, but state is now ${this.currentState}. Ignoring path.`); }
                              })
                              .catch(error => {
                                  if (this.currentState === AgentState.REQUESTING_PATH_FOR_HOME) {
                                       console.error(`Agent ${this.id}: Pathfinding TO HOME failed: ${error.message}. Reverting to AT_WORK.`);
                                       this.currentState = AgentState.AT_WORK;
-                                 } else { /* ... état a changé ... */ console.warn(`Agent ${this.id}: Pathfinding TO HOME failed, but state is now ${this.currentState}. Ignoring error.`); }
+                                 } else { console.warn(`Agent ${this.id}: Pathfinding TO HOME failed, but state is now ${this.currentState}. Ignoring error.`); }
                              });
-                     } else { /* ... positions manquantes ... */
+                     } else { 
                            if (currentGameTime >= this.lastPathRequestTimeGame + this.MIN_RETRY_DELAY_MS) {
                              console.warn(`Agent ${this.id}: Cannot request home path at ${currentGameTime.toFixed(0)} due to missing entry points (home or work).`);
                              this.lastPathRequestTimeGame = currentGameTime;
@@ -330,42 +338,105 @@ export default class Agent {
                 break;
             case AgentState.READY_TO_LEAVE_FOR_WORK:
                  this.isVisible = false;
-                 if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) { /* ... gestion erreur ... */ console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_WORK but path invalid. Reverting to AT_HOME.`); this.currentState = AgentState.AT_HOME; this.lastArrivalTimeHome = currentGameTime; this.lastPathRequestTimeGame = -1; break; }
+                 if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) { console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_WORK but path invalid. Reverting to AT_HOME.`); this.currentState = AgentState.AT_HOME; this.lastArrivalTimeHome = currentGameTime; this.lastPathRequestTimeGame = -1; break; }
                  let effectiveDepTimeW = this.exactWorkDepartureTimeGame;
                   while (effectiveDepTimeW + dayDurationMs <= currentGameTime) { effectiveDepTimeW += dayDurationMs; }
-                 if (currentGameTime >= effectiveDepTimeW) { /* ... départ ... */
-                     this.departureTimeGame = effectiveDepTimeW; this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame; this.currentState = AgentState.IN_TRANSIT_TO_WORK; this.isVisible = true; this.currentPathIndexVisual = 0;
-                     const departHourW = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24)); const agentManagerW = this.agentManager; if (agentManagerW?.stats?.pathsToWorkByHour) { agentManagerW.stats.pathsToWorkByHour[departHourW] = (agentManagerW.stats.pathsToWorkByHour[departHourW] || 0) + 1; }
+                 if (currentGameTime >= effectiveDepTimeW) { 
+                     this.departureTimeGame = effectiveDepTimeW; 
+                     this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame; 
+                     this.currentState = AgentState.IN_TRANSIT_TO_WORK; 
+                     this.isVisible = true; 
+                     this.currentPathIndexVisual = 0;
+                     const departHourW = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24)); 
+                     const agentManagerW = this.agentManager; 
+                     if (agentManagerW?.stats?.pathsToWorkByHour) { 
+                         agentManagerW.stats.pathsToWorkByHour[departHourW] = (agentManagerW.stats.pathsToWorkByHour[departHourW] || 0) + 1; 
+                     }
                  }
                  break;
             case AgentState.READY_TO_LEAVE_FOR_HOME:
                  this.isVisible = false;
-                 if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) { /* ... gestion erreur ... */ console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_HOME but path invalid. Reverting to AT_WORK.`); this.currentState = AgentState.AT_WORK; this.lastArrivalTimeWork = currentGameTime; this.lastPathRequestTimeGame = -1; break; }
+                 if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) { console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_HOME but path invalid. Reverting to AT_WORK.`); this.currentState = AgentState.AT_WORK; this.lastArrivalTimeWork = currentGameTime; this.lastPathRequestTimeGame = -1; break; }
                  let effectiveDepTimeH = this.exactHomeDepartureTimeGame;
                   while (effectiveDepTimeH + dayDurationMs <= currentGameTime) { effectiveDepTimeH += dayDurationMs; }
-                 if (currentGameTime >= effectiveDepTimeH) { /* ... départ ... */
-                     this.departureTimeGame = effectiveDepTimeH; this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame; this.currentState = AgentState.IN_TRANSIT_TO_HOME; this.isVisible = true; this.currentPathIndexVisual = 0;
-                     const departHourH = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24)); const agentManagerH = this.agentManager; if (agentManagerH?.stats?.pathsToHomeByHour) { agentManagerH.stats.pathsToHomeByHour[departHourH] = (agentManagerH.stats.pathsToHomeByHour[departHourH] || 0) + 1; }
+                 if (currentGameTime >= effectiveDepTimeH) { 
+                     this.departureTimeGame = effectiveDepTimeH; 
+                     this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame; 
+                     this.currentState = AgentState.IN_TRANSIT_TO_HOME; 
+                     this.isVisible = true; 
+                     this.currentPathIndexVisual = 0;
+                     const departHourH = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24)); 
+                     const agentManagerH = this.agentManager; 
+                     if (agentManagerH?.stats?.pathsToHomeByHour) { 
+                         agentManagerH.stats.pathsToHomeByHour[departHourH] = (agentManagerH.stats.pathsToHomeByHour[departHourH] || 0) + 1; 
+                     }
                  }
                  break;
             case AgentState.IN_TRANSIT_TO_WORK:
             case AgentState.IN_TRANSIT_TO_HOME:
                  this.isVisible = true;
-                 if (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) { /* ... arrivée ... */
+                 if (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) { 
                     const destinationState = (this.currentState === AgentState.IN_TRANSIT_TO_WORK) ? AgentState.AT_WORK : AgentState.AT_HOME;
                     this.currentState = destinationState;
-                    if (destinationState === AgentState.AT_WORK) { this.lastArrivalTimeWork = this.arrivalTmeGame; if (this.workPosition) { this.position.copy(this.workPosition); this.position.y += this.yOffset; } }
-                    else { this.lastArrivalTimeHome = this.arrivalTmeGame; if (this.homePosition) { this.position.copy(this.homePosition); this.position.y += this.yOffset; } }
-                    this.isVisible = false; this.lastPathRequestTimeGame = -1; this.currentPathPoints = null; this.departureTimeGame = -1; this.arrivalTmeGame = -1; this.calculatedTravelDurationGame = 0; this.currentPathLengthWorld = 0;
+                    if (destinationState === AgentState.AT_WORK) { 
+                        this.lastArrivalTimeWork = this.arrivalTmeGame; 
+                        if (this.workPosition) { 
+                            this.position.copy(this.workPosition); 
+                            this.position.y += this.yOffset; 
+                        }
+                    } else { 
+                        this.lastArrivalTimeHome = this.arrivalTmeGame; 
+                        if (this.homePosition) { 
+                            this.position.copy(this.homePosition); 
+                            this.position.y += this.yOffset; 
+                        }
+                    }
+                    
+                    // Nettoyer les visualisations de debug à l'arrivée
+                    this._clearDebugVisualizer();
+                    
+                    this.isVisible = false; 
+                    this.lastPathRequestTimeGame = -1; 
+                    this.currentPathPoints = null; 
+                    this.departureTimeGame = -1; 
+                    this.arrivalTmeGame = -1; 
+                    this.calculatedTravelDurationGame = 0; 
+                    this.currentPathLengthWorld = 0;
                  }
                  break;
             case AgentState.IDLE:
                  this.isVisible = false;
-                 if (!this.homePosition && this.homeBuildingId && this.experience.world?.cityManager) { this.initializeLifecycle(this.homeBuildingId, this.workBuildingId); }
+                 if (!this.homePosition && this.homeBuildingId && this.experience.world?.cityManager) { 
+                     this.initializeLifecycle(this.homeBuildingId, this.workBuildingId); 
+                 }
                  break;
 
         } // Fin switch
     } // Fin updateState
+
+    /**
+     * Nettoie les visualiseurs de debug du chemin
+     * @private
+     */
+    _clearDebugVisualizer() {
+        if (this._debugPathLine) {
+            this._debugPathLine.geometry.dispose();
+            this._debugPathLine.material.dispose();
+            this.experience.scene.remove(this._debugPathLine);
+            this._debugPathLine = null;
+        }
+        
+        if (this._debugPathPoints && this._debugPathPoints.length > 0) {
+            this._debugPathPoints.forEach(sphere => {
+                sphere.geometry.dispose();
+                sphere.material.dispose();
+                this.experience.scene.remove(sphere);
+            });
+            this._debugPathPoints = [];
+        }
+        
+        this._debugPathVisualized = false;
+    }
 
 	/**
      * Trouve le point d'entrée le plus probable sur le NavMesh (trottoir)
@@ -448,9 +519,9 @@ export default class Agent {
             }
             return;
         }
+        
         if (!this.currentPathPoints || this.currentPathPoints.length === 0 || this.calculatedTravelDurationGame <= 0 || this.departureTimeGame < 0 || this.currentPathLengthWorld <= 0) {
             // Sécurité : si on est en transit mais sans chemin valide, on ne bouge pas. L'état devrait se corriger.
-             // console.warn(`Agent ${this.id}: updateVisuals called in transit state without valid path data.`);
             return;
         }
 
@@ -458,65 +529,147 @@ export default class Agent {
         const elapsedTimeSinceDeparture = Math.max(0, currentGameTime - this.departureTimeGame); // Assurer non négatif
         let progress = Math.min(1, elapsedTimeSinceDeparture / this.calculatedTravelDurationGame); // Clamp [0, 1]
 
-        // --- Logique de Déplacement Linéaire le long des Segments ---
-        if (this.currentPathPoints.length === 1) {
+        // Identifier le segment actuel du chemin et la position sur ce segment
+        if (this.currentPathPoints.length <= 1) {
             // Cas spécial : chemin d'un seul point (devrait être rare)
             this.position.copy(this.currentPathPoints[0]);
+            this.currentPathIndexVisual = 0;
         } else {
-            // Calculer la distance cible à parcourir depuis le début du chemin
-            const targetDistance = progress * this.currentPathLengthWorld;
-            let cumulativeLength = 0;
-            let targetPosition = this.currentPathPoints[this.currentPathPoints.length - 1]; // Défaut: fin du chemin
-
-            // Trouver le segment actuel et la position sur ce segment
+            // Calculer la longueur totale du chemin
+            let totalPathLength = 0;
+            const segmentLengths = [];
+            
+            // Pré-calculer les longueurs de segments
             for (let i = 0; i < this.currentPathPoints.length - 1; i++) {
-                const p1 = this.currentPathPoints[i];
-                const p2 = this.currentPathPoints[i+1];
-                const segmentVector = this._tempV3_1.copy(p2).sub(p1);
-                const segmentLength = segmentVector.length();
-
-                if (segmentLength < 0.001) continue; // Ignorer segments de longueur nulle
-
-                // Si la distance cible est sur ou avant la fin de ce segment
-                if (cumulativeLength + segmentLength >= targetDistance || i === this.currentPathPoints.length - 2) {
-                    const lengthOnSegment = Math.max(0, targetDistance - cumulativeLength); // Distance à parcourir sur ce segment
-                    const segmentProgress = Math.min(1, lengthOnSegment / segmentLength); // Progrès [0,1] sur ce segment
-                    targetPosition = this._tempV3_2.copy(p1).addScaledVector(segmentVector, segmentProgress);
-                    this.currentPathIndexVisual = i; // Mémoriser l'index du segment actuel
+                const length = this.currentPathPoints[i].distanceTo(this.currentPathPoints[i+1]);
+                segmentLengths.push(length);
+                totalPathLength += length;
+            }
+            
+            // Déterminer la distance parcourue basée sur le progrès
+            const targetDistance = progress * totalPathLength;
+            
+            // Trouver le segment actuel
+            let distanceTraveled = 0;
+            let segmentIndex = 0;
+            let segmentProgress = 0;
+            
+            for (let i = 0; i < segmentLengths.length; i++) {
+                if (distanceTraveled + segmentLengths[i] >= targetDistance) {
+                    // Ce segment contient le point cible
+                    segmentIndex = i;
+                    segmentProgress = (targetDistance - distanceTraveled) / segmentLengths[i];
                     break;
                 }
-                cumulativeLength += segmentLength;
+                distanceTraveled += segmentLengths[i];
+                // Si on arrive à la fin et qu'on n'a pas encore dépassé targetDistance
+                if (i === segmentLengths.length - 1) {
+                    segmentIndex = i;
+                    segmentProgress = 1.0; // Fin du dernier segment
+                }
             }
-            // Appliquer la position cible calculée
-            this.position.copy(targetPosition);
+            
+            // Interpoler la position entre les points du segment
+            const p1 = this.currentPathPoints[segmentIndex];
+            const p2 = this.currentPathPoints[segmentIndex + 1];
+            
+            // Interpolation linéaire entre p1 et p2 selon segmentProgress
+            this.position.copy(p1).lerp(p2, segmentProgress);
+            
+            // Garder trace du segment actuel pour l'orientation
+            this.currentPathIndexVisual = segmentIndex;
+            
+            // DEBUG: Visualiser le chemin si en mode debug
+            if (this.experience.isDebugMode && !this._debugPathVisualized) {
+                this._visualizePathForDebug();
+                this._debugPathVisualized = true;
+            }
         }
+
         // Appliquer l'offset vertical
         this.position.y += this.yOffset;
 
         // --- Calcul de l'Orientation ---
-        // Regarder vers le point suivant du chemin, ou le dernier point si on est proche de la fin.
+        // Regarder vers le point suivant du chemin
         let lookAtIndex = this.currentPathIndexVisual + 1;
-        // Si on est très proche de la fin (ex: > 98%), regarder le dernier point pour éviter oscillation finale
-        if (progress > 0.98 || lookAtIndex >= this.currentPathPoints.length) {
-             lookAtIndex = this.currentPathPoints.length - 1;
+        // Si on est au dernier segment, regarder le dernier point
+        if (lookAtIndex >= this.currentPathPoints.length) {
+            lookAtIndex = this.currentPathPoints.length - 1;
         }
+        
         const lookTargetPoint = this.currentPathPoints[lookAtIndex];
         this._tempV3_1.copy(lookTargetPoint).setY(this.position.y); // Garder la même hauteur Y pour lookAt
 
-        // Orienter l'agent seulement s'il y a une distance significative à la cible pour éviter NaN/Infinity
+        // Orienter l'agent seulement s'il y a une distance significative à la cible
         if (this.position.distanceToSquared(this._tempV3_1) > 0.01) {
             this._tempMatrix.lookAt(this.position, this._tempV3_1, THREE.Object3D.DEFAULT_UP);
             this._tempQuat.setFromRotationMatrix(this._tempMatrix);
+            
             // Interpolation douce (Slerp) vers l'orientation cible
             const deltaSeconds = deltaTime / 1000.0;
-            // Ajuster le facteur de rotation pour une rotation plus rapide/lente
             const slerpAlpha = 1.0 - Math.exp(-this.rotationSpeed * deltaSeconds); // Indépendant du framerate
             this.orientation.slerp(this._tempQuat, slerpAlpha);
         }
 
-        // --- Mise à jour de l'Animation de Marche (INCHANGÉ) ---
-        // Utiliser currentGameTime pour l'animation pour qu'elle soit continue
-        this._updateWalkAnimation(currentGameTime / 1000); // Passe le temps en secondes
+        // Mise à jour de l'animation de marche
+        this._updateWalkAnimation(currentGameTime / 1000);
+    }
+    
+    /**
+     * Visualise le chemin pour le debug
+     * @private
+     */
+    _visualizePathForDebug() {
+        if (!this.currentPathPoints || this.currentPathPoints.length < 2) return;
+        
+        // Créer une ligne pour visualiser le chemin
+        const pathGeometry = new THREE.BufferGeometry();
+        const points = [];
+        
+        // Extraire tous les points du chemin
+        this.currentPathPoints.forEach(point => {
+            points.push(point.x, point.y + 0.1, point.z); // Légèrement au-dessus du sol
+        });
+        
+        // Définir les attributs de la géométrie
+        pathGeometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+        
+        // Créer un matériau pour la ligne (utiliser la couleur de l'agent)
+        const pathMaterial = new THREE.LineBasicMaterial({ 
+            color: this.torsoColor.getHex(),
+            linewidth: 3,
+            depthTest: false,
+            opacity: 0.7,
+            transparent: true
+        });
+        
+        // Créer l'objet ligne
+        const pathLine = new THREE.Line(pathGeometry, pathMaterial);
+        pathLine.renderOrder = 100; // Pour s'assurer qu'il est visible au-dessus du terrain
+        
+        // Ajouter à la scène
+        this.experience.scene.add(pathLine);
+        
+        // Stocker une référence pour pouvoir nettoyer plus tard
+        this._debugPathLine = pathLine;
+        
+        // Créer des sphères aux points d'inflexion du chemin
+        this._debugPathPoints = [];
+        this.currentPathPoints.forEach((point, index) => {
+            // Ne pas créer de sphere pour tous les points (seulement pour les points clés)
+            if (index === 0 || index === this.currentPathPoints.length - 1 || index % 2 === 0) {
+                const sphereGeom = new THREE.SphereGeometry(0.3, 8, 8);
+                const sphereMat = new THREE.MeshBasicMaterial({ 
+                    color: index === 0 ? 0x00ff00 : (index === this.currentPathPoints.length - 1 ? 0xff0000 : 0xffff00),
+                    depthTest: false
+                });
+                const sphere = new THREE.Mesh(sphereGeom, sphereMat);
+                sphere.position.copy(point);
+                sphere.position.y += 0.1; // Légèrement au-dessus du sol
+                this.experience.scene.add(sphere);
+                this._debugPathPoints.push(sphere);
+            }
+        });
     }
 
     // --- _updateWalkAnimation (INCHANGÉ) ---
@@ -578,6 +731,24 @@ export default class Agent {
 
 	destroy() {
         // Libérer les références pour aider le garbage collector
+        
+        // Nettoyer les visuels de debug du chemin
+        if (this._debugPathLine) {
+            this._debugPathLine.geometry.dispose();
+            this._debugPathLine.material.dispose();
+            this.experience.scene.remove(this._debugPathLine);
+            this._debugPathLine = null;
+        }
+        
+        if (this._debugPathPoints && this._debugPathPoints.length > 0) {
+            this._debugPathPoints.forEach(sphere => {
+                sphere.geometry.dispose();
+                sphere.material.dispose();
+                this.experience.scene.remove(sphere);
+            });
+            this._debugPathPoints = [];
+        }
+        
         this.currentPathPoints = null;
         this.homePosition = null;
         this.workPosition = null;
