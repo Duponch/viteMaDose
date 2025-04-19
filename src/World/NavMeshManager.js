@@ -78,6 +78,43 @@ export default class NavMeshManager {
 
             // 2. Charger ces données dans l'instance pathfinding locale (main thread)
             this.pathfinding.setZoneData(this.ZONE_ID, this.zoneData);
+
+
+
+			
+
+			// Dans NavMeshManager.buildNavMesh, après this.pathfinding.setZoneData(...)
+			console.log("NavMeshManager buildNavMesh: Zone Data Loaded. Checking validity...");
+			console.log("  -> zoneData Structure:", {
+				verticesCount: this.zoneData?.vertices?.length ?? 'N/A',
+				groupsDefined: !!this.zoneData?.groups,
+				groupsCount: this.zoneData?.groups?.length ?? 'N/A',
+				firstGroupPolyCount: this.zoneData?.groups?.[0]?.polygons?.length ??
+									this.zoneData?.groups?.[0]?.polyIndices?.length ??
+									(Array.isArray(this.zoneData?.groups?.[0]) ? this.zoneData.groups[0].length : 'N/A')
+			});
+
+			// Vérifier si on peut obtenir un groupID immédiatement après chargement
+			const checkGroupID = this.getAgentGroupID(); // Appelle la fonction qui contient getGroup
+			console.log(`  -> Immediate getAgentGroupID check result: ${checkGroupID}`);
+
+			if (checkGroupID === null) {
+				console.error("<<<<< CRITICAL NAVMESH FAILURE >>>>> getAgentGroupID returned null. The generated NavMesh data is likely INVALID or EMPTY on the main thread!");
+				// Optionnel: loguer les paramètres utilisés pour le build
+				console.error("     Build Parameters Used:", this.config); // Log config.navMesh
+				// Optionnel: logger des infos sur la géométrie d'entrée
+				// if (geometry) { // geometry est le clone transformé passé à createZone
+				//    console.error(`     Input Geometry Vertices: ${geometry.attributes.position.count}, Indexed: ${!!geometry.index}`);
+				// }
+			} else {
+				console.log("     NavMesh seems potentially valid on main thread (got Group ID).");
+			}
+			// Fin des logs ajoutés
+
+
+
+
+			
             // --- SUPPRESSION DU TEST getZone ---
             // if (!this.pathfinding.getZone(this.ZONE_ID)) { // <<< LIGNE INCORRECTE SUPPRIMÉE
             //      throw new Error(`Failed to load zone data into pathfinding instance for zone '${this.ZONE_ID}'.`);

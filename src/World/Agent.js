@@ -135,57 +135,68 @@ export default class Agent {
 
     /**
      * Initialise la position et l'état de l'agent basé sur son domicile et travail.
-     * Doit être appelé après l'assignation par CitizenManager.
+     * Snappe les positions au NavMesh le plus proche.
      */
-	initializeLifecycle(homeId, workId) {
-		this.homeBuildingId = homeId;
-		this.workBuildingId = workId;
-		const cityManager = this.experience.world?.cityManager;
-        // --- MODIFICATION : Accéder au NavMeshManager ou interface NavMesh ---
-		// const navMesh = this.experience.world?.navMeshManager?.getNavMesh(); // Exemple
-        // Supposons que cityManager fournit l'accès pour simplifier
-        const navMeshInterface = cityManager; // Ou une sous-propriété dédiée
-		// -----------------------------------------------------------------
-		const sidewalkHeight = cityManager?.config?.sidewalkHeight ?? 0.2;
+    initializeLifecycle(homeId, workId) {
+        this.homeBuildingId = homeId;
+        this.workBuildingId = workId;
+        const cityManager = this.experience.world?.cityManager;
+        const navMeshManager = cityManager?.navMeshManager;
+        const plots = cityManager?.getPlots() || [];
+        const config = cityManager?.config; // Récupérer la config
 
-		const homeInfo = cityManager?.getBuildingInfo(this.homeBuildingId);
-		if (homeInfo) {
-			let baseHomePos = homeInfo.position.clone();
-			baseHomePos.y = sidewalkHeight; // Position au niveau du trottoir
+        if (!navMeshManager || !config) {
+             console.error(`Agent ${this.id}: NavMeshManager or Config not found during init.`);
+             this.currentState = AgentState.IDLE; this.isVisible = false; return;
+        }
 
-            // --- MODIFICATION : Pas de conversion en grille, on garde la position monde ---
-            // Remplacer getClosestWalkableNode par une fonction pour trouver le point le plus proche sur le NavMesh si nécessaire.
-            // Pour l'instant, on utilise la position du bâtiment comme point de départ/arrivée direct.
-            // La bibliothèque NavMesh gérera le "snap" à la surface marchable.
-			this.homePosition = baseHomePos;
-            // -------------------------------------------------------------------------
+        const homeInfo = cityManager?.getBuildingInfo(this.homeBuildingId);
+        const homePlot = homeInfo ? plots.find(p => p.id === homeInfo.plotId) : null;
 
-			this.position.copy(this.homePosition); // Position initiale visuelle
-			this.position.y += this.yOffset;       // Appliquer l'offset Y
-			this.currentState = AgentState.AT_HOME;
-			this.isVisible = false; // Commence caché à la maison
-            this.lastArrivalTimeHome = 0; // Réinitialiser l'heure d'arrivée
-		} else {
-			console.error(`Agent ${this.id}: Infos domicile ${this.homeBuildingId} non trouvées.`);
-			this.currentState = AgentState.IDLE;
-			this.isVisible = false;
-			return; // Sortir si pas de domicile
-		}
+        if (homeInfo && homePlot) {
+            // --- Utiliser la NOUVELLE méthode pour trouver le point d'entrée ---
+            const entryPoint = this.findEntryPointOnSidewalk(homeInfo, homePlot, navMeshManager, config);
+            if (entryPoint) {
+                 this.homePosition = entryPoint;
+            } else {
+                 // Si même la nouvelle méthode échoue, on a un gros souci. Utiliser le centre comme dernier recours.
+                 console.error(`Agent ${this.id}: CRITICAL FAILURE obtaining home entry point even after sampling. Setting to plot center.`);
+                 this.homePosition = homePlot.center.clone();
+                 this.homePosition.y = config.sidewalkHeight ?? 0.2;
+            }
+            // -----------------------------------------------------------------
 
-		const workInfo = cityManager?.getBuildingInfo(this.workBuildingId);
-		if (workInfo) {
-			let baseWorkPos = workInfo.position.clone();
-			baseWorkPos.y = sidewalkHeight;
-            // --- MODIFICATION : Idem pour la position travail ---
-			this.workPosition = baseWorkPos;
-            // --------------------------------------------------
-		} else {
-			console.warn(`Agent ${this.id}: Infos travail ${this.workBuildingId} non trouvées.`);
-			this.workPosition = null;
-		}
+            this.position.copy(this.homePosition);
+            this.position.y += this.yOffset;
+            this.currentState = AgentState.AT_HOME;
+            this.isVisible = false;
+            this.lastArrivalTimeHome = 0;
 
-		// (Ré)Calculer les temps planifiés car l'environnement est peut-être prêt maintenant
-		this._calculateScheduledTimes();
+        } else { /* ... gestion erreur domicile ... */
+            console.error(`Agent ${this.id}: Home building info (${this.homeBuildingId}) or its plot not found.`);
+            this.currentState = AgentState.IDLE; this.isVisible = false; return;
+         }
+
+        const workInfo = cityManager?.getBuildingInfo(this.workBuildingId);
+        const workPlot = workInfo ? plots.find(p => p.id === workInfo.plotId) : null;
+
+        if (workInfo && workPlot) {
+             // --- Utiliser la NOUVELLE méthode pour trouver le point d'entrée ---
+             const entryPoint = this.findEntryPointOnSidewalk(workInfo, workPlot, navMeshManager, config);
+             if (entryPoint) {
+                  this.workPosition = entryPoint;
+             } else {
+                  console.error(`Agent ${this.id}: CRITICAL FAILURE obtaining work entry point even after sampling. Setting to plot center.`);
+                  this.workPosition = workPlot.center.clone();
+                  this.workPosition.y = config.sidewalkHeight ?? 0.2;
+             }
+             // -----------------------------------------------------------------
+        } else { /* ... gestion erreur travail ... */
+             console.warn(`Agent ${this.id}: Work building info (${this.workBuildingId}) or its plot not found.`);
+             this.workPosition = null;
+         }
+
+        this._calculateScheduledTimes();
     }
 
     // --- SUPPRESSION : requestPath n'est plus appelé directement ---
@@ -228,15 +239,13 @@ export default class Agent {
 
                 // Vérifier s'il est temps de demander le chemin ET si on n'a pas fait de requête récemment
                 if (currentGameTime >= nextScheduledRequestWork && currentGameTime >= this.lastPathRequestTimeGame + this.MIN_RETRY_DELAY_MS) {
-                    if (this.workPosition && this.homePosition) { // Vérifier seulement les positions monde
-                        this.lastPathRequestTimeGame = currentGameTime; // Marquer l'heure de la requête
-                        this.currentState = AgentState.REQUESTING_PATH_FOR_WORK; // Changer d'état AVANT l'appel async
-                        // console.log(`Agent ${this.id}: Requesting path TO WORK at ${currentGameTime.toFixed(0)} (scheduled: ${nextScheduledRequestWork.toFixed(0)})`);
+                    // --- Utilise maintenant this.homePosition et this.workPosition (points d'entrée) ---
+                    if (this.workPosition && this.homePosition) {
+                        this.lastPathRequestTimeGame = currentGameTime;
+                        this.currentState = AgentState.REQUESTING_PATH_FOR_WORK;
 
-                        // --- MODIFICATION : Appel Asynchrone ---
-                        this.agentManager.requestPath(this.id, this.homePosition, this.workPosition)
+                        this.agentManager.requestPath(this.id, this.homePosition, this.workPosition) // Utilise les points d'entrée
                             .then(({ path, pathLength }) => {
-                                // Succès : Vérifier si on est TOUJOURS en état de requête
                                 if (this.currentState === AgentState.REQUESTING_PATH_FOR_WORK) {
                                     if (path && pathLength > 0.1) {
                                         this.currentPathPoints = path.map(p => p.clone());
@@ -249,37 +258,27 @@ export default class Agent {
                                     } else {
                                         console.warn(`Agent ${this.id}: Path TO WORK received but invalid (path: ${path ? 'Array['+path.length+']' : 'null'}, length: ${pathLength}). Reverting to AT_HOME.`);
                                         this.currentState = AgentState.AT_HOME;
-                                        // Ne pas remettre lastPathRequestTimeGame à -1 ici pour respecter le délai de retry
                                     }
-                                } else {
-                                    // L'état a changé entre temps (ne devrait pas arriver sauf si reset/destroy)
-                                    console.warn(`Agent ${this.id}: Path TO WORK received, but state is now ${this.currentState}. Ignoring path.`);
-                                }
+                                } else { /* ... état a changé ... */ console.warn(`Agent ${this.id}: Path TO WORK received, but state is now ${this.currentState}. Ignoring path.`); }
                             })
                             .catch(error => {
-                                // Échec : Vérifier si on est TOUJOURS en état de requête
                                 if (this.currentState === AgentState.REQUESTING_PATH_FOR_WORK) {
                                      console.error(`Agent ${this.id}: Pathfinding TO WORK failed: ${error.message}. Reverting to AT_HOME.`);
                                      this.currentState = AgentState.AT_HOME;
-                                     // Ne pas remettre lastPathRequestTimeGame à -1 ici pour respecter le délai de retry
-                                } else {
-                                     console.warn(`Agent ${this.id}: Pathfinding TO WORK failed, but state is now ${this.currentState}. Ignoring error.`);
-                                }
+                                } else { /* ... état a changé ... */ console.warn(`Agent ${this.id}: Pathfinding TO WORK failed, but state is now ${this.currentState}. Ignoring error.`); }
                             });
-                        // -------------------------------------
-                    } else {
-                        // Pas de position travail/maison
-                        if (currentGameTime >= this.lastPathRequestTimeGame + this.MIN_RETRY_DELAY_MS) {
-                             console.warn(`Agent ${this.id}: Cannot request work path at ${currentGameTime.toFixed(0)} due to missing positions.`);
+                    } else { /* ... positions manquantes ... */
+                         if (currentGameTime >= this.lastPathRequestTimeGame + this.MIN_RETRY_DELAY_MS) {
+                             console.warn(`Agent ${this.id}: Cannot request work path at ${currentGameTime.toFixed(0)} due to missing entry points (home or work).`);
                              this.lastPathRequestTimeGame = currentGameTime; // Évite spam de logs
-                        }
+                         }
                     }
-                } // Fin if (temps de demander)
+                }
                 break;
 
             case AgentState.AT_WORK:
-                this.isVisible = false;
-                 if (this.lastArrivalTimeWork < 0) this.lastArrivalTimeWork = currentGameTime; // Initialisation si besoin
+                 this.isVisible = false;
+                 if (this.lastArrivalTimeWork < 0) this.lastArrivalTimeWork = currentGameTime;
 
                 let nextScheduledRequestHome = departHomeTime;
                 while (nextScheduledRequestHome <= this.lastArrivalTimeWork) {
@@ -287,13 +286,12 @@ export default class Agent {
                 }
 
                 if (currentGameTime >= nextScheduledRequestHome && currentGameTime >= this.lastPathRequestTimeGame + this.MIN_RETRY_DELAY_MS) {
+                     // --- Utilise maintenant this.homePosition et this.workPosition (points d'entrée) ---
                      if (this.homePosition && this.workPosition) {
                          this.lastPathRequestTimeGame = currentGameTime;
                          this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
-                         // console.log(`Agent ${this.id}: Requesting path TO HOME at ${currentGameTime.toFixed(0)} (scheduled: ${nextScheduledRequestHome.toFixed(0)})`);
 
-                         // --- MODIFICATION : Appel Asynchrone ---
-                         this.agentManager.requestPath(this.id, this.workPosition, this.homePosition)
+                         this.agentManager.requestPath(this.id, this.workPosition, this.homePosition) // Utilise les points d'entrée
                              .then(({ path, pathLength }) => {
                                  if (this.currentState === AgentState.REQUESTING_PATH_FOR_HOME) {
                                      if (path && pathLength > 0.1) {
@@ -308,142 +306,184 @@ export default class Agent {
                                          console.warn(`Agent ${this.id}: Path TO HOME received but invalid. Reverting to AT_WORK.`);
                                          this.currentState = AgentState.AT_WORK;
                                      }
-                                 } else {
-                                      console.warn(`Agent ${this.id}: Path TO HOME received, but state is now ${this.currentState}. Ignoring path.`);
-                                 }
+                                 } else { /* ... état a changé ... */ console.warn(`Agent ${this.id}: Path TO HOME received, but state is now ${this.currentState}. Ignoring path.`); }
                              })
                              .catch(error => {
                                  if (this.currentState === AgentState.REQUESTING_PATH_FOR_HOME) {
                                       console.error(`Agent ${this.id}: Pathfinding TO HOME failed: ${error.message}. Reverting to AT_WORK.`);
                                       this.currentState = AgentState.AT_WORK;
-                                 } else {
-                                       console.warn(`Agent ${this.id}: Pathfinding TO HOME failed, but state is now ${this.currentState}. Ignoring error.`);
-                                 }
+                                 } else { /* ... état a changé ... */ console.warn(`Agent ${this.id}: Pathfinding TO HOME failed, but state is now ${this.currentState}. Ignoring error.`); }
                              });
-                         // -------------------------------------
-                     } else {
-                          if (currentGameTime >= this.lastPathRequestTimeGame + this.MIN_RETRY_DELAY_MS) {
-                             console.warn(`Agent ${this.id}: Cannot request home path at ${currentGameTime.toFixed(0)} due to missing positions.`);
+                     } else { /* ... positions manquantes ... */
+                           if (currentGameTime >= this.lastPathRequestTimeGame + this.MIN_RETRY_DELAY_MS) {
+                             console.warn(`Agent ${this.id}: Cannot request home path at ${currentGameTime.toFixed(0)} due to missing entry points (home or work).`);
                              this.lastPathRequestTimeGame = currentGameTime;
-                          }
+                           }
                      }
                 }
                 break;
 
+            // ... (autres états: REQUESTING, READY_TO_LEAVE, IN_TRANSIT, IDLE inchangés) ...
             case AgentState.REQUESTING_PATH_FOR_WORK:
             case AgentState.REQUESTING_PATH_FOR_HOME:
                 this.isVisible = false; // Reste caché pendant l'attente
-                // Attend passivement le résultat de la promesse (géré dans AT_HOME/AT_WORK)
                 break;
-
             case AgentState.READY_TO_LEAVE_FOR_WORK:
-                this.isVisible = false;
-                // Vérifier si le chemin est toujours valide (sécurité)
-                if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) {
-                    console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_WORK but path invalid. Reverting to AT_HOME.`);
-                    this.currentState = AgentState.AT_HOME;
-                    this.lastArrivalTimeHome = currentGameTime;
-                    this.lastPathRequestTimeGame = -1; // Permettre nouvelle requête
-                    break;
-                }
-                // Trouver l'heure exacte de départ la plus récente <= temps actuel
-                let effectiveDepTimeW = this.exactWorkDepartureTimeGame;
-                 while (effectiveDepTimeW + dayDurationMs <= currentGameTime) {
-                     effectiveDepTimeW += dayDurationMs;
+                 this.isVisible = false;
+                 if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) { /* ... gestion erreur ... */ console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_WORK but path invalid. Reverting to AT_HOME.`); this.currentState = AgentState.AT_HOME; this.lastArrivalTimeHome = currentGameTime; this.lastPathRequestTimeGame = -1; break; }
+                 let effectiveDepTimeW = this.exactWorkDepartureTimeGame;
+                  while (effectiveDepTimeW + dayDurationMs <= currentGameTime) { effectiveDepTimeW += dayDurationMs; }
+                 if (currentGameTime >= effectiveDepTimeW) { /* ... départ ... */
+                     this.departureTimeGame = effectiveDepTimeW; this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame; this.currentState = AgentState.IN_TRANSIT_TO_WORK; this.isVisible = true; this.currentPathIndexVisual = 0;
+                     const departHourW = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24)); const agentManagerW = this.agentManager; if (agentManagerW?.stats?.pathsToWorkByHour) { agentManagerW.stats.pathsToWorkByHour[departHourW] = (agentManagerW.stats.pathsToWorkByHour[departHourW] || 0) + 1; }
                  }
-                // Partir si l'heure est atteinte
-                if (currentGameTime >= effectiveDepTimeW) {
-                    // console.log(`Agent ${this.id}: Departing for work now. Game Time: ${currentGameTime.toFixed(0)} (Departure based on scheduled: ${effectiveDepTimeW.toFixed(0)})`);
-                    this.departureTimeGame = effectiveDepTimeW;
-                    this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
-                    this.currentState = AgentState.IN_TRANSIT_TO_WORK;
-                    this.isVisible = true;
-                    this.currentPathIndexVisual = 0; // Réinitialiser l'index de suivi visuel
-                    // Incrémenter stats (inchangé)
-                    const departHourW = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24));
-                    const agentManagerW = this.agentManager;
-                    if (agentManagerW?.stats?.pathsToWorkByHour) {
-                        agentManagerW.stats.pathsToWorkByHour[departHourW] = (agentManagerW.stats.pathsToWorkByHour[departHourW] || 0) + 1;
-                    }
-                }
-                break;
-
+                 break;
             case AgentState.READY_TO_LEAVE_FOR_HOME:
-                this.isVisible = false;
-                if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) {
-                    console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_HOME but path invalid. Reverting to AT_WORK.`);
-                    this.currentState = AgentState.AT_WORK;
-                    this.lastArrivalTimeWork = currentGameTime;
-                     this.lastPathRequestTimeGame = -1;
-                    break;
-                }
-                let effectiveDepTimeH = this.exactHomeDepartureTimeGame;
-                 while (effectiveDepTimeH + dayDurationMs <= currentGameTime) {
-                     effectiveDepTimeH += dayDurationMs;
+                 this.isVisible = false;
+                 if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) { /* ... gestion erreur ... */ console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_HOME but path invalid. Reverting to AT_WORK.`); this.currentState = AgentState.AT_WORK; this.lastArrivalTimeWork = currentGameTime; this.lastPathRequestTimeGame = -1; break; }
+                 let effectiveDepTimeH = this.exactHomeDepartureTimeGame;
+                  while (effectiveDepTimeH + dayDurationMs <= currentGameTime) { effectiveDepTimeH += dayDurationMs; }
+                 if (currentGameTime >= effectiveDepTimeH) { /* ... départ ... */
+                     this.departureTimeGame = effectiveDepTimeH; this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame; this.currentState = AgentState.IN_TRANSIT_TO_HOME; this.isVisible = true; this.currentPathIndexVisual = 0;
+                     const departHourH = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24)); const agentManagerH = this.agentManager; if (agentManagerH?.stats?.pathsToHomeByHour) { agentManagerH.stats.pathsToHomeByHour[departHourH] = (agentManagerH.stats.pathsToHomeByHour[departHourH] || 0) + 1; }
                  }
-                if (currentGameTime >= effectiveDepTimeH) {
-                    // console.log(`Agent ${this.id}: Departing for home now. Game Time: ${currentGameTime.toFixed(0)} (Departure based on scheduled: ${effectiveDepTimeH.toFixed(0)})`);
-                    this.departureTimeGame = effectiveDepTimeH;
-                    this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
-                    this.currentState = AgentState.IN_TRANSIT_TO_HOME;
-                    this.isVisible = true;
-                    this.currentPathIndexVisual = 0;
-                    // Incrémenter stats (inchangé)
-                     const departHourH = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24));
-                    const agentManagerH = this.agentManager;
-                     if (agentManagerH?.stats?.pathsToHomeByHour) {
-                        agentManagerH.stats.pathsToHomeByHour[departHourH] = (agentManagerH.stats.pathsToHomeByHour[departHourH] || 0) + 1;
-                    }
-                }
-                break;
-
+                 break;
             case AgentState.IN_TRANSIT_TO_WORK:
             case AgentState.IN_TRANSIT_TO_HOME:
-                this.isVisible = true; // Assurer visibilité pendant le transit
-                // Vérifier si l'heure d'arrivée prévue est atteinte
-                if (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
+                 this.isVisible = true;
+                 if (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) { /* ... arrivée ... */
                     const destinationState = (this.currentState === AgentState.IN_TRANSIT_TO_WORK) ? AgentState.AT_WORK : AgentState.AT_HOME;
-                    // console.log(`Agent ${this.id}: Arrived at destination (${destinationState}). Game Time: ${currentGameTime.toFixed(0)} (Scheduled: ${this.arrivalTmeGame.toFixed(0)})`);
-
-                    // Mettre à jour l'état et l'heure d'arrivée
                     this.currentState = destinationState;
-                    if (destinationState === AgentState.AT_WORK) {
-                        this.lastArrivalTimeWork = this.arrivalTmeGame;
-                        if (this.workPosition) { // Se téléporter à la position exacte
-                            this.position.copy(this.workPosition);
-                            this.position.y += this.yOffset;
-                        }
-                    } else { // Arrivé à la maison
-                        this.lastArrivalTimeHome = this.arrivalTmeGame;
-                         if (this.homePosition) {
-                            this.position.copy(this.homePosition);
-                            this.position.y += this.yOffset;
-                        }
-                    }
-                    this.isVisible = false; // Disparaît dans le bâtiment
-                    this.lastPathRequestTimeGame = -1; // Permettre la prochaine requête
-
-                    // Nettoyer les données du chemin terminé
-                    this.currentPathPoints = null;
-                    this.departureTimeGame = -1;
-                    this.arrivalTmeGame = -1;
-                    this.calculatedTravelDurationGame = 0;
-                    this.currentPathLengthWorld = 0;
-                }
-                // Le déplacement visuel est géré dans updateVisuals
-                break;
-
+                    if (destinationState === AgentState.AT_WORK) { this.lastArrivalTimeWork = this.arrivalTmeGame; if (this.workPosition) { this.position.copy(this.workPosition); this.position.y += this.yOffset; } }
+                    else { this.lastArrivalTimeHome = this.arrivalTmeGame; if (this.homePosition) { this.position.copy(this.homePosition); this.position.y += this.yOffset; } }
+                    this.isVisible = false; this.lastPathRequestTimeGame = -1; this.currentPathPoints = null; this.departureTimeGame = -1; this.arrivalTmeGame = -1; this.calculatedTravelDurationGame = 0; this.currentPathLengthWorld = 0;
+                 }
+                 break;
             case AgentState.IDLE:
-                this.isVisible = false;
-                // Pourrait tenter de s'initialiser si home/work sont assignés plus tard
-                if (!this.homePosition && this.homeBuildingId && this.experience.world?.cityManager) {
-                    // Tenter de ré-initialiser (peut arriver si généré avant bâtiments ?)
-                    this.initializeLifecycle(this.homeBuildingId, this.workBuildingId);
-                }
-                break;
+                 this.isVisible = false;
+                 if (!this.homePosition && this.homeBuildingId && this.experience.world?.cityManager) { this.initializeLifecycle(this.homeBuildingId, this.workBuildingId); }
+                 break;
 
-        } // Fin switch(this.currentState)
+        } // Fin switch
     } // Fin updateState
+
+	/**
+     * Trouve le point d'entrée le plus probable sur le NavMesh (trottoir)
+     * pour un bâtiment donné sur une parcelle, en testant plusieurs points.
+     * @param {object} buildingInfo - Informations sur le bâtiment (nécessite au moins position).
+     * @param {object} plot - La parcelle contenant le bâtiment (Plot instance).
+     * @param {object} navMeshManager - L'instance de NavMeshManager.
+     * @param {object} config - La configuration globale (pour sidewalkWidth, sidewalkHeight).
+     * @returns {THREE.Vector3 | null} La position snappée sur le NavMesh ou null si échec.
+     */
+    findEntryPointOnSidewalk(buildingInfo, plot, navMeshManager, config) {
+        if (!buildingInfo || !plot || !navMeshManager || !config) { /* ... gestion erreur args ... */ return null; }
+
+        const buildingPos = buildingInfo.position;
+        const sidewalkWidth = config.sidewalkWidth ?? 2.0;
+        const sidewalkHeight = config.sidewalkHeight ?? 0.2;
+        const halfSidewalk = sidewalkWidth / 2;
+        const sampleOffset = Math.min(plot.width, plot.depth) * 0.25; // Décalage pour échantillonner (ex: 1/4 de la plus petite dim)
+
+        // 1. Trouver le bord le plus proche (inchangé)
+        const distToTop = Math.abs(buildingPos.z - plot.z);
+        const distToBottom = Math.abs(buildingPos.z - (plot.z + plot.depth));
+        const distToLeft = Math.abs(buildingPos.x - plot.x);
+        const distToRight = Math.abs(buildingPos.x - (plot.x + plot.width));
+        const minDist = Math.min(distToTop, distToBottom, distToLeft, distToRight);
+
+        // 2. Calculer le point central sur le trottoir adjacent (inchangé)
+        const centerTargetPoint = new THREE.Vector3();
+        let edgeAxis = ''; // 'x' ou 'z' - l'axe PARALLÈLE au bord de la parcelle
+        let alignAxis = ''; // 'x' ou 'z' - l'axe PERPENDICULAIRE (aligné avec buildingPos)
+
+        if (minDist === distToTop) {
+            centerTargetPoint.x = buildingPos.x; centerTargetPoint.z = plot.z - halfSidewalk;
+            edgeAxis = 'x'; alignAxis = 'z';
+        } else if (minDist === distToBottom) {
+            centerTargetPoint.x = buildingPos.x; centerTargetPoint.z = plot.z + plot.depth + halfSidewalk;
+            edgeAxis = 'x'; alignAxis = 'z';
+        } else if (minDist === distToLeft) {
+            centerTargetPoint.x = plot.x - halfSidewalk; centerTargetPoint.z = buildingPos.z;
+            edgeAxis = 'z'; alignAxis = 'x';
+        } else { // distToRight is min
+            centerTargetPoint.x = plot.x + plot.width + halfSidewalk; centerTargetPoint.z = buildingPos.z;
+            edgeAxis = 'z'; alignAxis = 'x';
+        }
+        centerTargetPoint.y = sidewalkHeight;
+
+        // 3. Créer les points d'échantillonnage (centre, gauche, droite)
+        const samplePoints = [centerTargetPoint];
+        const pointLeft = centerTargetPoint.clone();
+        const pointRight = centerTargetPoint.clone();
+
+        if (edgeAxis === 'x') { // Bord haut/bas -> décaler sur X
+            pointLeft.x -= sampleOffset;
+            pointRight.x += sampleOffset;
+        } else { // Bord gauche/droit -> décaler sur Z
+            pointLeft.z -= sampleOffset;
+            pointRight.z += sampleOffset;
+        }
+        samplePoints.push(pointLeft, pointRight);
+
+        // 4. Clamper TOUS les points pour rester sur le segment de trottoir
+        samplePoints.forEach(p => {
+            if (edgeAxis === 'x') {
+                p.x = THREE.MathUtils.clamp(p.x, plot.x, plot.x + plot.width);
+            } else {
+                p.z = THREE.MathUtils.clamp(p.z, plot.z, plot.z + plot.depth);
+            }
+        });
+
+		// === DEBUG VISUALIZATION ===
+    samplePoints.forEach((p, index) => {
+        const color = (index === 0) ? 0xff0000 : 0xffff00; // Rouge pour centre, Jaune pour autres
+        const markerGeom = new THREE.SphereGeometry(0.5, 8, 8);
+        const markerMat = new THREE.MeshBasicMaterial({ color: color, depthTest: false, wireframe: true });
+        const markerMesh = new THREE.Mesh(markerGeom, markerMat);
+        markerMesh.position.copy(p);
+        markerMesh.renderOrder = 999;
+        this.experience.scene.add(markerMesh); // Ajoute à la scène globale
+        // Optionnel: supprimer après qqs secondes
+        // setTimeout(() => { markerMesh.geometry.dispose(); markerMesh.material.dispose(); this.experience.scene.remove(markerMesh); }, 5000);
+    });
+     const plotCenterMarkerGeom = new THREE.SphereGeometry(0.6, 8, 8);
+     const plotCenterMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, depthTest: false }); // Cyan pour centre parcelle
+     const plotCenterMarkerMesh = new THREE.Mesh(plotCenterMarkerGeom, plotCenterMarkerMat);
+     const plotCenterForDebug = plot.center.clone(); plotCenterForDebug.y = sidewalkHeight;
+     plotCenterMarkerMesh.position.copy(plotCenterForDebug);
+     plotCenterMarkerMesh.renderOrder = 999;
+     this.experience.scene.add(plotCenterMarkerMesh);
+
+// ==========================
+
+        // 5. Essayer de snapper chaque point échantillonné
+        for (const pointToSnap of samplePoints) {
+            const snappedResult = navMeshManager.findNearestNode(pointToSnap);
+            if (snappedResult && snappedResult.position) {
+                // console.log(`Agent ${this.id}: Entry point SUCCESS for building ${buildingInfo.id} using sampled point near edge.`);
+                return snappedResult.position.clone(); // Succès !
+            } else {
+                // Optionnel : logguer l'échec pour ce point spécifique
+                // console.warn(`Agent ${this.id}: Snap failed for sample point (${pointToSnap.x.toFixed(1)}, ${pointToSnap.z.toFixed(1)})`);
+            }
+        }
+
+        // 6. Si TOUS les points échantillonnés échouent, tenter le fallback sur le centre de la parcelle
+        console.warn(`Agent ${this.id}: Could not snap any sampled sidewalk point for building ${buildingInfo.id} on plot ${plot.id}. Trying plot center fallback...`);
+        const plotCenter = plot.center.clone();
+        plotCenter.y = sidewalkHeight;
+        const fallbackResult = navMeshManager.findNearestNode(plotCenter);
+        if (fallbackResult && fallbackResult.position) {
+             console.warn(` -> Using plot center snap as fallback.`);
+             return fallbackResult.position.clone();
+        } else {
+             console.error(` -> CRITICAL: Could not snap plot center either for plot ${plot.id}. Returning original building position as last resort.`);
+             const lastResortPos = buildingPos.clone();
+             lastResortPos.y = sidewalkHeight;
+             return lastResortPos; // Dernier recours
+        }
+    } // Fin findEntryPointOnSidewalk
 
     /**
      * Met à jour la position et l'orientation visuelle de l'agent le long du chemin.

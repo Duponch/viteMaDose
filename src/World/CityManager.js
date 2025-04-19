@@ -38,7 +38,7 @@ export default class CityManager {
         // (ex: agent radius, height, max climb, etc.) sont présents ici ou passés autrement.
         this.config = { /* ...la longue liste de config ... */
              // Map & Layout
-            mapSize: 800,
+            mapSize: 400,
             roadWidth: 10,
             minPlotSize: 30,
             maxPlotSize: 60,
@@ -142,7 +142,7 @@ export default class CityManager {
             agentHeadTiltAmplitude: 0.08,
             agentHeadBobAmplitude: 0.06,
             agentAnimationSpeedFactor: 8,
-            maxAgents: 10,
+            maxAgents: 5,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
@@ -155,14 +155,22 @@ export default class CityManager {
             lampPostLightConeColor: 0xFFFF99,
              // --- AJOUT POTENTIEL : Paramètres NavMesh ---
              navMesh: {
-                 agentRadius: 0.5,        // Rayon de l'agent pour le calcul du NavMesh
-                 agentHeight: 1.8,        // Hauteur de l'agent
-                 agentMaxClimb: 0.4,      // Hauteur maximale franchissable
-                 agentMaxSlope: 45.0,     // Pente maximale (en degrés)
-                 cellSize: 0.3,           // Taille des cellules pour la voxelisation initiale
-                 cellHeight: 0.2,         // Hauteur des cellules
-                 // ... autres paramètres spécifiques à Recast/Detour si utilisés
-             }
+				// Valeurs TRES permissives pour tester
+				agentRadius: 0.6,      // Agent un peu plus "épais"
+				agentHeight: 2.0,      // Agent plus grand
+				agentMaxClimb: 1.0,    // Peut grimper 1 unité ! Très permissif
+				agentMaxSlope: 60.0,   // Pente max élevée
+				cellSize: 0.5,         // Cellules plus GROSSES (moins de détails)
+				cellHeight: 0.3,       // Cellules plus HAUTES
+				// --- Laisser les autres paramètres par défaut ---
+				// edgeMaxLen: 12.0,
+				// edgeMaxError: 1.3,
+				// regionMinSize: 8,
+				// regionMergeSize: 20,
+				// vertsPerPoly: 6,
+				// detailSampleDist: 6.0,
+				// detailSampleMaxError: 1.0,
+			}
              // ------------------------------------------
          };
 
@@ -285,194 +293,202 @@ export default class CityManager {
         console.time("CityGeneration");
         this.clearCity();
         try {
-            console.log("--- Starting city generation (NavMesh version) ---");
-            this.createGlobalGround();
-
-            // 1. Load Assets
-            console.time("AssetLoading");
-            await this.assetLoader.loadAssets();
-            console.timeEnd("AssetLoading");
-            this.logLoadedAssets();
-
-            // 2. Generate Layout
-            console.time("LayoutGeneration");
-            this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize);
-            console.timeEnd("LayoutGeneration");
-            console.log(`Layout generated with ${this.leafPlots.length} plots.`);
-            this.logInitialZoneTypes();
-            if (!this.leafPlots || this.leafPlots.length === 0) throw new Error("Layout produced no plots.");
-
-            // 3. Handle Districts
-            console.time("DistrictFormationAndValidation");
-            try {
-                const districtManager = new DistrictManager(this.config, this.leafPlots, this.debugVisualManager.parentGroup);
-                districtManager.generateAndValidateDistricts();
-                this.districts = districtManager.getDistricts();
-            } catch (error) { /* ... gestion erreur ... */ throw error; }
-            console.timeEnd("DistrictFormationAndValidation");
-
-            // 4. Generate Roads & Crosswalk Info
-            console.time("RoadAndCrosswalkInfoGeneration");
-            const { roadGroup, crosswalkInfos } = this.roadGenerator.generateRoads(this.leafPlots);
-            this.roadGroup = roadGroup;
-            this.cityContainer.add(this.roadGroup);
-            console.timeEnd("RoadAndCrosswalkInfoGeneration");
-            console.log(`Road network generated and ${crosswalkInfos.length} crosswalk locations identified.`);
+            // ... (Étapes 1 à 4: Load Assets, Layout, Districts, Roads - inchangées) ...
+             console.log("--- Starting city generation (NavMesh version) ---");
+             this.createGlobalGround();
+             console.time("AssetLoading"); await this.assetLoader.loadAssets(); console.timeEnd("AssetLoading"); this.logLoadedAssets();
+             console.time("LayoutGeneration"); this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize); console.timeEnd("LayoutGeneration"); console.log(`Layout generated with ${this.leafPlots.length} plots.`); this.logInitialZoneTypes(); if (!this.leafPlots || this.leafPlots.length === 0) throw new Error("Layout produced no plots.");
+             console.time("DistrictFormationAndValidation"); try { const districtManager = new DistrictManager(this.config, this.leafPlots, this.debugVisualManager.parentGroup); districtManager.generateAndValidateDistricts(); this.districts = districtManager.getDistricts(); } catch (error) { console.error("Error during district formation:", error); throw error; } console.timeEnd("DistrictFormationAndValidation");
+             console.time("RoadAndCrosswalkInfoGeneration"); const { roadGroup, crosswalkInfos } = this.roadGenerator.generateRoads(this.leafPlots); this.roadGroup = roadGroup; this.cityContainer.add(this.roadGroup); console.timeEnd("RoadAndCrosswalkInfoGeneration"); console.log(`Road network generated and ${crosswalkInfos.length} crosswalk locations identified.`);
 
             // --- 5. Plot Content Preparation ---
             console.time("PlotContentPrep");
-            // Initialize Strategies
-             if (!this.renderers /*...vérif renderers...*/ ) throw new Error("Renderers not initialized...");
-             this.contentGenerator.zoneStrategies = { /* ... stratégies ... */
+             // Initialize Strategies & InstancedMeshManager
+             // ... (initialisation stratégies et instancedMeshManager inchangée)...
+              if (!this.renderers /*...vérif...*/ ) throw new Error("Renderers not initialized...");
+              this.contentGenerator.zoneStrategies = { /* ... stratégies ... */
                 'house': new HousePlacementStrategy(this.config, this.assetLoader, this.renderers, this.experience),
                 'building': new BuildingPlacementStrategy(this.config, this.assetLoader, this.renderers, this.experience),
                 'industrial': new IndustrialPlacementStrategy(this.config, this.assetLoader, this.renderers, this.experience),
                 'skyscraper': new SkyscraperPlacementStrategy(this.config, this.assetLoader, this.renderers, this.experience),
                 'park': new ParkPlacementStrategy(this.config, this.assetLoader, this.renderers, this.experience)
-             };
-             this.contentGenerator.treePlacementStrategy = new TreePlacementStrategy(this.config, this.assetLoader, this.renderers, this.experience);
-             console.log("Placement strategies initialized.");
+              };
+              this.contentGenerator.treePlacementStrategy = new TreePlacementStrategy(this.config, this.assetLoader, this.renderers, this.experience);
+              if (!this.contentGenerator.instancedMeshManager) { this.contentGenerator.instancedMeshManager = new InstancedMeshManager( this.config, this.materials, this.assetLoader, this.renderers, this.contentGroup, this.experience ); console.log("InstancedMeshManager initialized early for NavMesh prep."); }
+              console.log("Placement strategies initialized.");
 
-             // --- 5b. FORCE INITIALIZATION OF INSTANCED MESH MANAGER HERE ---
-             // Cela crée this.contentGenerator.instancedMeshManager et sa stripeBaseGeometry
-             if (!this.contentGenerator.instancedMeshManager) {
-                this.contentGenerator.instancedMeshManager = new InstancedMeshManager(
-                    this.config, this.materials, this.assetLoader, this.renderers, this.contentGroup, this.experience
-                );
-                console.log("InstancedMeshManager initialized early for NavMesh prep.");
-             }
-             // ---------------------------------------------------------------
+             // Generate Ground & Sidewalk Meshes
+             // ... (inchangé) ...
+             const generatedGroundGroup = this.contentGenerator.plotGroundGenerator.generateGrounds(this.leafPlots);
+             if (generatedGroundGroup) this.groundGroup.add(generatedGroundGroup);
+             const generatedSidewalkMesh = this.contentGenerator.sidewalkGenerator.generateSidewalks(this.leafPlots);
+             if (generatedSidewalkMesh) this.sidewalkGroup.add(generatedSidewalkMesh);
 
-            // Generate Ground & Sidewalk Meshes
-            const generatedGroundGroup = this.contentGenerator.plotGroundGenerator.generateGrounds(this.leafPlots);
-            if (generatedGroundGroup) this.groundGroup.add(generatedGroundGroup);
-            const generatedSidewalkMesh = this.contentGenerator.sidewalkGenerator.generateSidewalks(this.leafPlots);
-            if (generatedSidewalkMesh) this.sidewalkGroup.add(generatedSidewalkMesh);
-
-            // Generate Instance DATA (buildings, trees, crosswalks)
-            const plotGroundY = this.config.plotGroundY ?? 0.005;
-            this.leafPlots.forEach((plot) => { /* ... populatePlot ... */
+             // Generate Instance DATA
+             // ... (inchangé) ...
+              const plotGroundY = this.config.plotGroundY ?? 0.005;
+              this.leafPlots.forEach((plot) => { /* ... populatePlot ... */
                 plot.buildingInstances = [];
                 const strategy = this.contentGenerator.zoneStrategies[plot.zoneType];
-                if (strategy) {
-                    try { strategy.populatePlot(plot, this.contentGenerator.instanceDataManager, this, plotGroundY); }
-                    catch (strategyError) { console.error(`Error executing placement strategy '${plot.zoneType}' for plot ${plot.id}:`, strategyError); }
-                } else if (plot.zoneType !== 'unbuildable') { console.warn(`No placement strategy found for zone type: ${plot.zoneType} on plot ${plot.id}`); }
-             });
-            if (this.contentGenerator.treePlacementStrategy) { /* ... placeTrees ... */
-                this.contentGenerator.treePlacementStrategy.placeTrees(this.leafPlots, this.assetLoader, this.contentGenerator.instanceDataManager);
-            } else { console.error("treePlacementStrategy is null!"); }
-            this.contentGenerator.crosswalkInstancer.generateCrosswalkInstances(crosswalkInfos, this.contentGenerator.instanceDataManager);
+                if (strategy) { try { strategy.populatePlot(plot, this.contentGenerator.instanceDataManager, this, plotGroundY); } catch (strategyError) { console.error(`Error executing placement strategy '${plot.zoneType}' for plot ${plot.id}:`, strategyError); } }
+                else if (plot.zoneType !== 'unbuildable') { console.warn(`No placement strategy found for zone type: ${plot.zoneType} on plot ${plot.id}`); }
+              });
+              if (this.contentGenerator.treePlacementStrategy) { /* ... placeTrees ... */ this.contentGenerator.treePlacementStrategy.placeTrees(this.leafPlots, this.assetLoader, this.contentGenerator.instanceDataManager); } else { console.error("treePlacementStrategy is null!"); }
+              this.contentGenerator.crosswalkInstancer.generateCrosswalkInstances(crosswalkInfos, this.contentGenerator.instanceDataManager);
             console.timeEnd("PlotContentPrep");
 
 
-            // --- 6. Prepare Walkable Mesh for NavMesh ---
+            // --- 6. Prepare Walkable Mesh for NavMesh (CORRECTED SOLID CROSSWALKS) ---
             console.time("WalkableMeshPreparation");
-            let crosswalkGeometryForNavMesh = null;
-            let tempCrosswalkMeshForNavMesh = null;
-            const crosswalkData = this.contentGenerator.instanceDataManager.getDataForType('crosswalk');
-            // Accéder à stripeBaseGeometry (devrait exister maintenant)
-            const crosswalkBaseGeom = this.contentGenerator.instancedMeshManager?.stripeBaseGeometry;
 
-            if (crosswalkData && crosswalkData['default_crosswalk_stripe'] && crosswalkBaseGeom) {
-                // ... (logique création crosswalkGeometryForNavMesh inchangée) ...
-                const crosswalkMatrices = crosswalkData['default_crosswalk_stripe'];
-                if (crosswalkMatrices.length > 0) {
-                    const crosswalkGeomsToMerge = [];
-                    crosswalkMatrices.forEach(matrix => { const clonedGeom = crosswalkBaseGeom.clone(); clonedGeom.applyMatrix4(matrix); crosswalkGeomsToMerge.push(clonedGeom); });
-                    crosswalkGeometryForNavMesh = mergeGeometries(crosswalkGeomsToMerge, false);
-                    crosswalkGeomsToMerge.forEach(g => g.dispose());
-                    if(crosswalkGeometryForNavMesh) { tempCrosswalkMeshForNavMesh = new THREE.Mesh(crosswalkGeometryForNavMesh); console.log("NavMesh Prep: Merged crosswalk geometry created."); }
-                    else { console.error("NavMesh Prep: Failed to merge crosswalk geometries."); }
-                }
-            } else {
-                // Le warning ici est maintenant plus significatif s'il apparaît
-                if(!crosswalkBaseGeom) console.warn("NavMesh Prep: Crosswalk base geometry STILL not found in InstancedMeshManager.");
-                if(!crosswalkData || !crosswalkData['default_crosswalk_stripe']) console.warn("NavMesh Prep: Crosswalk instance data not found.");
-            }
+            // --- 6a. Generate SOLID Crosswalk Geometries ---
+            let mergedSolidCrosswalkGeometry = null;
+            let tempSolidCrosswalkMesh = null;
+            const solidCrosswalkGeomsToMerge = [];
 
-            // Collect sources (sidewalks + crosswalks)
+            if (crosswalkInfos && crosswalkInfos.length > 0) {
+                const stripeCount = this.config.crosswalkStripeCount ?? 5;
+                const stripeWidth = this.config.crosswalkStripeWidth ?? 0.6;
+                const stripeGap = this.config.crosswalkStripeGap ?? 0.5;
+                const totalCrosswalkVisualWidth = (stripeCount * stripeWidth) + Math.max(0, stripeCount - 1) * stripeGap;
+                const crosswalkY = this.config.sidewalkHeight ?? 0.2;
+
+                console.log(`NavMesh Prep: Calculated totalCrosswalkVisualWidth: ${totalCrosswalkVisualWidth.toFixed(2)}`);
+
+                if (totalCrosswalkVisualWidth > 0.01) {
+                    const matrix = new THREE.Matrix4();
+                    const position = new THREE.Vector3();
+                    const quaternion = new THREE.Quaternion();
+                    // NOTE: L'échelle n'est plus nécessaire car on définit les dimensions dans PlaneGeometry
+                    // const scale = new THREE.Vector3(1, 1, 1); // Echelle par défaut
+
+                    crosswalkInfos.forEach(info => {
+                        if (!info || !info.position || info.angle === undefined || info.length === undefined || info.length <= 0) {
+                             console.warn("NavMesh Prep: Invalid crosswalk info skipped:", info);
+                             return;
+                        }
+
+                        // --- CORRECTION DIMENSIONS PlaneGeometry ---
+                        // Largeur = largeur visuelle totale, Hauteur = longueur du passage
+                        const solidPlaneGeom = new THREE.PlaneGeometry(
+                            totalCrosswalkVisualWidth, // Dimension X du plan = largeur totale
+                            info.length                // Dimension Y du plan = longueur
+                        );
+                        // -------------------------------------------
+
+                        // Position: Centre du passage piéton, à la hauteur du trottoir
+                        position.copy(info.position).setY(crosswalkY);
+
+                        // Rotation: D'abord horizontal (-PI/2 sur X), puis rotation Y selon l'angle
+                        // 'YXZ' est un bon ordre pour ce type de rotation (plan puis autour de Y)
+                        quaternion.setFromEuler(new THREE.Euler(-Math.PI / 2, info.angle, 0, 'YXZ'));
+
+                        // Composer la matrice SANS échelle (les dimensions sont dans la géométrie)
+                        matrix.compose(position, quaternion, new THREE.Vector3(1, 1, 1)); // Utilise scale 1
+
+                        // Appliquer la matrice directement à la géométrie créée
+                        solidPlaneGeom.applyMatrix4(matrix);
+                        solidCrosswalkGeomsToMerge.push(solidPlaneGeom); // Ajouter la géométrie transformée
+                    });
+
+                    // Fusionner toutes les géométries solides des passages piétons
+                    if (solidCrosswalkGeomsToMerge.length > 0) {
+                        mergedSolidCrosswalkGeometry = mergeGeometries(solidCrosswalkGeomsToMerge, false);
+                        // Pas besoin de disposer les solidPlaneGeom ici car ils sont directement utilisés puis mis hors de portée
+                        if (mergedSolidCrosswalkGeometry) {
+                            tempSolidCrosswalkMesh = new THREE.Mesh(mergedSolidCrosswalkGeometry); // Mesh temporaire
+                            console.log(`NavMesh Prep: Merged SOLID crosswalk geometry created (${solidCrosswalkGeomsToMerge.length} areas).`);
+                        } else {
+                            console.error("NavMesh Prep: Failed to merge SOLID crosswalk geometries.");
+                            solidCrosswalkGeomsToMerge.forEach(g => g.dispose()); // Nettoyer en cas d'échec
+                        }
+                    }
+                } // fin if totalCrosswalkVisualWidth > 0.01
+            } // fin if crosswalkInfos
+            // --- Fin 6a ---
+
+            // --- 6b. Merge Sidewalks and Solid Crosswalks ---
             const walkableMeshSources = [];
             if (generatedSidewalkMesh) walkableMeshSources.push(generatedSidewalkMesh);
-            if (tempCrosswalkMeshForNavMesh) walkableMeshSources.push(tempCrosswalkMeshForNavMesh);
+            if (tempSolidCrosswalkMesh) walkableMeshSources.push(tempSolidCrosswalkMesh);
 
-            // Merge sources for NavMesh
             let finalWalkableMesh = null;
             let mergedGeometryForNavMesh = null;
             if (walkableMeshSources.length > 0) {
-                // ... (logique fusion inchangée) ...
+                 // ... (logique de fusion inchangée) ...
                  const geometriesToMergeForNavMesh = [];
-                walkableMeshSources.forEach(mesh => { if (mesh.geometry && mesh.isMesh) { const clonedGeometry = mesh.geometry.clone(); mesh.updateMatrixWorld(true); clonedGeometry.applyMatrix4(mesh.matrixWorld); geometriesToMergeForNavMesh.push(clonedGeometry); } });
+                walkableMeshSources.forEach(mesh => {
+                    if (mesh.geometry && mesh.isMesh) {
+                        const clonedGeometry = mesh.geometry.clone();
+                        mesh.updateMatrixWorld(true);
+                        clonedGeometry.applyMatrix4(mesh.matrixWorld);
+                        geometriesToMergeForNavMesh.push(clonedGeometry);
+                    }
+                });
                 if (geometriesToMergeForNavMesh.length > 0) {
                     mergedGeometryForNavMesh = mergeGeometries(geometriesToMergeForNavMesh, false);
                     geometriesToMergeForNavMesh.forEach(geom => geom.dispose());
-                    if (mergedGeometryForNavMesh) { finalWalkableMesh = new THREE.Mesh(mergedGeometryForNavMesh); finalWalkableMesh.name = "MergedWalkableSurface_ForNavMeshGen"; console.log("NavMesh Generation: Walkable geometries merged successfully."); }
-                    else { console.error("NavMesh Generation: Failed to merge final walkable geometries."); }
+                    if (mergedGeometryForNavMesh) {
+                        finalWalkableMesh = new THREE.Mesh(mergedGeometryForNavMesh);
+                        finalWalkableMesh.name = "MergedWalkableSurface_SidewalksAndSOLIDCrosswalks";
+                        console.log("NavMesh Generation: Sidewalks and SOLID crosswalks merged successfully.");
+                    } else { console.error("NavMesh Generation: Failed to merge final walkable geometries."); }
                 } else { console.warn("NavMesh Generation: No valid geometries found to merge for NavMesh."); }
             } else { console.warn("NavMesh Generation: No walkable mesh sources found."); }
             console.timeEnd("WalkableMeshPreparation");
+            // --- Fin 6b ---
+
 
             // --- 7. Generate NavMesh ---
             console.time("NavMeshGeneration");
-            if (!this.navMeshManager) { this.navMeshManager = new NavMeshManager(this.config, this.experience); }
+            // ... (buildNavMesh inchangé) ...
+             if (!this.navMeshManager) { this.navMeshManager = new NavMeshManager(this.config, this.experience); }
             let navMeshInstanceData = null;
             if (finalWalkableMesh) { navMeshInstanceData = await this.navMeshManager.buildNavMesh(finalWalkableMesh); }
             else { console.error("NavMesh Generation: Cannot build NavMesh, no final walkable mesh was created."); }
-            // Cleanup temp meshes/geoms for NavMesh
             finalWalkableMesh?.geometry?.dispose(); finalWalkableMesh = null;
-            tempCrosswalkMeshForNavMesh?.geometry?.dispose(); tempCrosswalkMeshForNavMesh = null;
+            tempSolidCrosswalkMesh?.geometry?.dispose(); tempSolidCrosswalkMesh = null; // Nettoyage
             if (!navMeshInstanceData) throw new Error("Failed to build NavMesh or get its instance data.");
             console.timeEnd("NavMeshGeneration");
             console.log("NavMesh generated and processed successfully.");
 
             // --- 8. Create Final Visual Instanced Meshes ---
             console.time("InstancedMeshCreation");
-             // Utilise l'InstancedMeshManager qui a été créé à l'étape 5b
-             if (!this.contentGenerator.instancedMeshManager) {
-                  throw new Error("InstancedMeshManager should have been initialized earlier!"); // Sécurité
-             }
-             this.contentGenerator.instancedMeshManager.createMeshes(
-                 this.contentGenerator.instanceDataManager.getData()
-             );
+            // ... (createMeshes inchangé - crée les bandes visuelles) ...
+             if (!this.contentGenerator.instancedMeshManager) { /* ... init tardive ... */ this.contentGenerator.instancedMeshManager = new InstancedMeshManager( this.config, this.materials, this.assetLoader, this.renderers, this.contentGroup, this.experience ); console.log("InstancedMeshManager late initialization in generateCity."); }
+             this.contentGenerator.instancedMeshManager.createMeshes( this.contentGenerator.instanceDataManager.getData() );
             console.timeEnd("InstancedMeshCreation");
             console.log(`Total Building Instances Registered: ${this.citizenManager.buildingInstances.size}`);
 
             // --- 9. Initialize Agent Manager ---
             console.time("AgentManagerInitialization");
-            const maxAgents = this.config.maxAgents ?? 300;
+            // ... (init Agent Manager inchangé) ...
+             const maxAgents = this.config.maxAgents ?? 300;
             this.experience.world?.agentManager?.destroy();
             this.experience.world.agentManager = new AgentManager(this.scene, this.experience, this.config, maxAgents);
             this.agentManager = this.experience.world.agentManager;
-            if (this.agentManager && navMeshInstanceData) {
-                this.agentManager.initializePathfindingWorker(navMeshInstanceData);
-                console.log("AgentManager initialized and Pathfinding Worker initialization requested.");
-            } else {
-                console.error("World: Failed to initialize AgentManager or its worker - NavMesh data invalid?");
-                throw new Error("AgentManager could not be initialized.");
-            }
+            if (this.agentManager && navMeshInstanceData) { this.agentManager.initializePathfindingWorker(navMeshInstanceData); console.log("AgentManager initialized and Pathfinding Worker initialization requested."); }
+            else { console.error("World: Failed to initialize AgentManager or its worker - NavMesh data invalid?"); throw new Error("AgentManager could not be initialized."); }
             console.timeEnd("AgentManagerInitialization");
 
             // --- 10. Create Agents ---
             console.time("AgentCreation");
-            this.experience.world.createAgents(maxAgents);
+            // ... (createAgents inchangé) ...
+             this.experience.world.createAgents(maxAgents);
             console.timeEnd("AgentCreation");
 
             // --- 11. Lamp Posts ---
             console.time("LampPostGeneration");
-            this.lampPostManager.addLampPosts(this.leafPlots);
+            // ... (addLampPosts inchangé) ...
+             this.lampPostManager.addLampPosts(this.leafPlots);
             console.timeEnd("LampPostGeneration");
 
             // --- 12. Debug Visuals ---
-            if (this.experience.isDebugMode) { /* ... */
-                console.time("DebugVisualsUpdate");
-                if (!this.debugVisualManager.parentGroup.parent) this.cityContainer.add(this.debugVisualManager.parentGroup);
-                this.experience.world.setDebugMode(true);
-                console.timeEnd("DebugVisualsUpdate");
-            } else { /* ... */
-                 if (this.debugVisualManager.parentGroup.parent) this.cityContainer.remove(this.debugVisualManager.parentGroup);
-             }
+            // ... (debug visuals inchangé) ...
+            if (this.experience.isDebugMode) { /* ... */ console.time("DebugVisualsUpdate"); if (!this.debugVisualManager.parentGroup.parent) this.cityContainer.add(this.debugVisualManager.parentGroup); this.experience.world.setDebugMode(true); console.timeEnd("DebugVisualsUpdate"); }
+            else { /* ... */ if (this.debugVisualManager.parentGroup.parent) this.cityContainer.remove(this.debugVisualManager.parentGroup); }
 
-            console.log("--- City generation finished (NavMesh version) ---");
+            console.log("--- City generation finished (NavMesh version with solid crosswalks - corrected orientation) ---");
         } catch (error) {
             console.error("Major error during city generation:", error);
             this.clearCity();
