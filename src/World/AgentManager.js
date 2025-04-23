@@ -32,7 +32,7 @@ export default class AgentManager {
 		this.maxAgents = maxAgents;
 
 		// Pooling
-		this.activeCount = 0;                             // Nombre d’agents réellement actifs
+		this.activeCount = 0;                             // Nombre d'agents réellement actifs
 		this.instanceIdToAgent = new Array(maxAgents);    // instanceId → agent.id
 		this.agentToInstanceId = new Map();               // agent.id → instanceId
 
@@ -82,42 +82,31 @@ export default class AgentManager {
             console.warn("AgentManager: Tentative de réinitialiser le worker déjà existant.");
             return;
         }
-        if (!navigationGraph || !navigationGraph.grid) {
-            console.error("AgentManager: Impossible d'initialiser le worker - NavigationGraph invalide.");
+        if (!navigationGraph) {
+            console.error("AgentManager: Impossible d'initialiser le worker - NavigationGraph manquant.");
             return;
         }
 
         try {
-            console.log("AgentManager: Initialisation du Pathfinding Worker...");
+            console.log("AgentManager: Initialisation du Pathfinding Worker (mode SharedArrayBuffer)...");
             this.pathfindingWorker = new Worker(new URL('./PathfindingWorker.js', import.meta.url), { type: 'module' });
             this.pathfindingWorker.onmessage = (event) => this._handleWorkerMessage(event);
             this.pathfindingWorker.onerror = (error) => { /* ... gestion erreur worker ... */ };
 
-            // Préparer les données de la grille (inchangé)
-            const nodesWalkable = navigationGraph.grid.nodes.map(row =>
-                row.map(node => node.walkable)
-            );
-            const gridData = {
-                width: navigationGraph.gridWidth,
-                height: navigationGraph.gridHeight,
-                nodesWalkable: nodesWalkable
-            };
+            const workerInitData = navigationGraph.getGridDataForWorker();
 
-            // --- NOUVEAU : Préparer les paramètres de conversion ---
-            const conversionParams = {
-                gridScale: navigationGraph.gridScale,
-                offsetX: navigationGraph.offsetX,
-                offsetZ: navigationGraph.offsetZ,
-                sidewalkHeight: navigationGraph.sidewalkHeight
-            };
-            // ----------------------------------------------------
+            if (!workerInitData || !workerInitData.gridBuffer) {
+                console.error("AgentManager: Échec de la récupération des données de grille (SharedArrayBuffer) depuis NavigationGraph.");
+                 if (this.pathfindingWorker) this.pathfindingWorker.terminate();
+                 this.pathfindingWorker = null;
+                return;
+            }
 
-            // Envoyer le message d'initialisation COMPLET
             this.pathfindingWorker.postMessage({
                 type: 'init',
-                data: { gridData, conversionParams } // <-- Envoyer les deux objets
+                data: workerInitData
             });
-            console.log("AgentManager: Message d'initialisation (grille + params) envoyé au worker.");
+            console.log("AgentManager: Message d'initialisation (SharedArrayBuffer + params) envoyé au worker.");
 
         } catch (error) {
             console.error("AgentManager: Échec de la création du Pathfinding Worker:", error);
@@ -281,7 +270,7 @@ export default class AgentManager {
 	}
 
 	createAgent() {
-		// Si le pool est plein, on n’en crée pas plus
+		// Si le pool est plein, on n'en crée pas plus
 		if (this.activeCount >= this.maxAgents) {
 			return null;
 		}
@@ -325,7 +314,7 @@ export default class AgentManager {
 		this.agentToInstanceId.set(newAgent.id, instanceId);
 		this.activeCount++;
 	
-		// 3) on informe three.js qu’on a plus d’instances actives
+		// 3) on informe three.js qu'on a plus d'instances actives
 		Object.values(this.instanceMeshes).forEach(mesh => mesh.count = this.activeCount);
 	
 		// 4) on initialise la matrice / couleur de ce slot
@@ -347,7 +336,7 @@ export default class AgentManager {
 		if (freedId === undefined) return; // pas trouvé
 	
 		const lastId = this.activeCount - 1;
-		// 1) swapper si ce n’est pas la dernière instance
+		// 1) swapper si ce n'est pas la dernière instance
 		if (freedId !== lastId) {
 			Object.values(this.instanceMeshes).forEach(mesh => {
 				// swap matrices
@@ -363,7 +352,7 @@ export default class AgentManager {
 				mesh.instanceMatrix.needsUpdate = true;
 				if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
 			});
-			// mettre à jour le mapping de l’agent déplacé
+			// mettre à jour le mapping de l'agent déplacé
 			const movedAgentId = this.instanceIdToAgent[lastId];
 			this.instanceIdToAgent[freedId] = movedAgentId;
 			this.agentToInstanceId.set(movedAgentId, freedId);
@@ -375,7 +364,7 @@ export default class AgentManager {
 			mesh.count = this.activeCount;
 		});
 	
-		// 3) nettoyer le mapping pour l’agent libéré
+		// 3) nettoyer le mapping pour l'agent libéré
 		this.instanceIdToAgent[lastId] = undefined;
 		this.agentToInstanceId.delete(agentId);
 	
@@ -499,7 +488,7 @@ export default class AgentManager {
 			const markerMesh = this.instanceMeshes.agentMarker;
 			if (markerMesh) {
 				if (isDebug) {
-					// Composer la matrice du losange au-dessus de l’agent
+					// Composer la matrice du losange au-dessus de l'agent
 					this.tempMatrix.identity();
 					this.tempMatrix.makeTranslation(
 						agent.position.x,

@@ -605,7 +605,7 @@ export default class Agent {
 
 	_updateWalkAnimation(walkTime) {
         // Accéder à la config via cityManager
-        const config = this.experience.world?.cityManager?.config;
+        let config = this.experience.world?.cityManager?.config;
         if (!config) {
              console.warn(`Agent ${this.id}: Impossible d'accéder à la config dans _updateWalkAnimation.`);
              // Utiliser des valeurs par défaut ou arrêter ? Utilisons des défauts pour l'instant.

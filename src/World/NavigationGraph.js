@@ -3,10 +3,14 @@ import * as THREE from 'three';
 import * as PF from 'pathfinding';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
+const WALKABLE = 0;
+const NON_WALKABLE = 1;
+
 export default class NavigationGraph {
 	constructor(config) {
         this.config = config; // Assure-toi que config contient bien sidewalkWidth, crosswalkStripe*, roadWidth etc.
-        this.grid = null;
+        this.gridBuffer = null;         // SharedArrayBuffer
+        this.gridWalkableMap = null;    // Uint8Array view on gridBuffer
         this.gridScale = 1.0;
         this.gridWidth = 0;
         this.gridHeight = 0;
@@ -19,7 +23,7 @@ export default class NavigationGraph {
     }
 
     buildGraph(plots, crosswalkInfos) {
-        console.log("NavigationGraph: Construction de la grille...");
+        console.log("NavigationGraph: Construction de la grille avec SharedArrayBuffer...");
         const mapSize = this.config.mapSize;
         const sidewalkWidth = this.config.sidewalkWidth;
         const worldMinX = -mapSize / 2 - sidewalkWidth;
@@ -32,14 +36,30 @@ export default class NavigationGraph {
         this.offsetX = -worldMinX * this.gridScale;
         this.offsetZ = -worldMinZ * this.gridScale;
 
-        this.grid = new PF.Grid(this.gridWidth, this.gridHeight);
-        console.log(`NavigationGraph: Grille créée (${this.gridWidth}x${this.gridHeight})`);
-        console.log("NavigationGraph: Initialisation de la grille comme non marchable...");
-        for (let y = 0; y < this.gridHeight; y++) {
-            for (let x = 0; x < this.gridWidth; x++) {
-                this.grid.setWalkableAt(x, y, false);
-            }
+        const bufferSize = this.gridWidth * this.gridHeight;
+        if (bufferSize <= 0) {
+             console.error(`NavigationGraph: Dimensions de grille invalides (${this.gridWidth}x${this.gridHeight}). Impossible de créer le buffer.`);
+             return;
         }
+        try {
+            this.gridBuffer = new SharedArrayBuffer(bufferSize);
+            this.gridWalkableMap = new Uint8Array(this.gridBuffer);
+            console.log(`NavigationGraph: SharedArrayBuffer créé (taille: ${bufferSize} octets).`);
+        } catch (e) {
+            console.error("NavigationGraph: Erreur lors de la création du SharedArrayBuffer. Vérifiez que le contexte est sécurisé (crossOriginIsolated).", e);
+            // Tenter de continuer sans SharedArrayBuffer? Ou lever une erreur?
+            // Pour l'instant, on arrête ici.
+            this.gridBuffer = null;
+            this.gridWalkableMap = null;
+             alert("SharedArrayBuffer n'est pas disponible. L'application nécessite un contexte sécurisé (HTTPS avec en-têtes COOP/COEP). Voir la console pour les détails.");
+             throw new Error("SharedArrayBuffer creation failed. Ensure secure context.");
+
+        }
+
+        console.log(`NavigationGraph: Grille logique créée (${this.gridWidth}x${this.gridHeight})`);
+        console.log("NavigationGraph: Initialisation de la grille comme non marchable...");
+        this.gridWalkableMap.fill(NON_WALKABLE); // Initialise tout à non marchable
+
         console.log("NavigationGraph: Initialisation non marchable terminée.");
         this.markSidewalksArea(plots, sidewalkWidth);
         this.markCrosswalksCorrected(crosswalkInfos); // Utiliser la version corrigée
@@ -103,7 +123,7 @@ export default class NavigationGraph {
                      const isOutsideInner = (gx < innerMinGridX || gx > innerMaxGridX || gy < innerMinGridY || gy > innerMaxGridY);
 
                     if (isOutsideInner) {
-                        if (this.markCell(gx, gy)) { markedCells++; }
+                        if (this.markCell(gx, gy)) markedCells++;
                     }
                 }
             }
@@ -165,9 +185,12 @@ export default class NavigationGraph {
 
     markCell(x, y) {
         if (this.isValidGridCoord(x, y)) {
-             // Marquer comme marchable seulement s'il ne l'est pas déjà
-             if (!this.grid.isWalkableAt(x,y)){
-                 this.grid.setWalkableAt(x, y, true);
+            const index = y * this.gridWidth + x;
+            // Marquer comme marchable (0) seulement s'il est non marchable (1)
+             //if (!this.grid.isWalkableAt(x,y)){
+             if (this.gridWalkableMap[index] === NON_WALKABLE) {
+                 //this.grid.setWalkableAt(x, y, true);
+                 this.gridWalkableMap[index] = WALKABLE;
                  return true; // Indique qu'une cellule a été marquée
              }
         }
@@ -176,25 +199,33 @@ export default class NavigationGraph {
 
 	isValidGridCoord(x, y) {
         // Vérifie si les coordonnées sont dans les limites de la grille
-        return this.grid && x >= 0 && x < this.gridWidth && y >= 0 && y < this.gridHeight;
+        // return this.grid && x >= 0 && x < this.gridWidth && y >= 0 && y < this.gridHeight;
+        return this.gridWalkableMap !== null && x >= 0 && x < this.gridWidth && y >= 0 && y < this.gridHeight;
+    }
+
+    isWalkableAt(x, y) {
+        if (!this.isValidGridCoord(x, y)) {
+            return false;
+        }
+        const index = y * this.gridWidth + x;
+        return this.gridWalkableMap[index] === WALKABLE;
     }
 
     // ==============================================================
-    // Fonction getClosestWalkableNode OPTIMISÉE
+    // Fonction getClosestWalkableNode adaptée pour gridWalkableMap
     // ==============================================================
     getClosestWalkableNode(worldPos) {
-		if (!this.grid) return null;
+		if (!this.gridWalkableMap) return null;
 	
 		// 1) Position « brute » en grille
 		const startGrid = this.worldToGrid(worldPos.x, worldPos.z);
 	
 		// Si cette cellule est déjà marchable on la renvoie tout de suite
-		if (this.isValidGridCoord(startGrid.x, startGrid.y)
-		 && this.grid.isWalkableAt(startGrid.x, startGrid.y)) {
+		if (this.isWalkableAt(startGrid.x, startGrid.y)) { // isWalkableAt inclut la validation des coords
 			return startGrid;
 		}
 	
-		// 2) Recherche en spirale — on prend toute la grille comme rayon max
+		// 2) Recherche en spirale
 		const maxSearchRadius = Math.max(this.gridWidth, this.gridHeight);
 	
 		let bestNode = null;
@@ -206,7 +237,7 @@ export default class NavigationGraph {
 					if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
 	
 					const x = startGrid.x + dx, y = startGrid.y + dy;
-					if (!this.isValidGridCoord(x, y) || !this.grid.isWalkableAt(x,y)) continue;
+					if (!this.isWalkableAt(x, y)) continue; // Utiliser la nouvelle méthode
 	
 					const d2 = dx*dx + dy*dy;
 					if (d2 < minGridDistSq) {
@@ -221,7 +252,7 @@ export default class NavigationGraph {
 	
 		if (!bestNode) {
 			// Aucune cellule marchable trouvée sur toute la grille :  
-			// on la remplace par le point d’origine en grille pour éviter le null
+			// on la remplace par le point d'origine en grille pour éviter le null
 			console.warn(
 			  `NavigationGraph: Aucun nœud marchable trouvé près de`, 
 			  worldPos, `(Grille: ${startGrid.x},${startGrid.y})`
@@ -232,13 +263,31 @@ export default class NavigationGraph {
 		return bestNode;
 	}	
     // ==============================================================
-    // FIN Fonction getClosestWalkableNode OPTIMISÉE
+    // FIN Fonction getClosestWalkableNode
     // ==============================================================
 
+    // --- Nouvelle méthode pour fournir les données au Worker ---
+    getGridDataForWorker() {
+        if (!this.gridBuffer) {
+            console.error("NavigationGraph: SharedArrayBuffer non initialisé. Impossible de fournir les données au worker.");
+            return null;
+        }
+        return {
+            gridBuffer: this.gridBuffer, // Le SharedArrayBuffer lui-même
+            gridWidth: this.gridWidth,
+            gridHeight: this.gridHeight,
+            conversionParams: { // Paramètres nécessaires au worker pour gridToWorld etc.
+                gridScale: this.gridScale,
+                offsetX: this.offsetX,
+                offsetZ: this.offsetZ,
+                sidewalkHeight: this.sidewalkHeight
+            }
+        };
+    }
 
-    // --- Fonctions de Debug (inchangées, mais utilisent la logique optimisée) ---
+    // --- Fonctions de Debug adaptées ---
     createDebugVisualization(targetGroup) {
-         if (!this.grid || !targetGroup) return;
+         if (!this.gridWalkableMap || !targetGroup) return;
         console.log("NavigationGraph: Création de la visualisation de la grille...");
         while(targetGroup.children.length > 0) {
              const child = targetGroup.children[0]; targetGroup.remove(child);
@@ -250,36 +299,52 @@ export default class NavigationGraph {
         const geometries = [];
         for (let y = 0; y < this.gridHeight; y++) {
             for (let x = 0; x < this.gridWidth; x++) {
-                if (this.grid.isWalkableAt(x, y)) {
-                    const worldPos = this.gridToWorld(x, y); // Centre de la cellule
-                    const matrix = new THREE.Matrix4();
-                    // Placer le plan horizontalement à la bonne position
-                    matrix.makeRotationX(-Math.PI / 2);
-                    matrix.setPosition(worldPos.x, worldPos.y - 0.03, worldPos.z); // Légèrement décalé en Y pour visibilité
-                    const clonedGeom = planeGeom.clone().applyMatrix4(matrix);
-                    geometries.push(clonedGeom);
+                if (this.isWalkableAt(x, y)) {
+                    const worldPos = this.gridToWorld(x, y);
+                    const cellGeom = planeGeom.clone();
+                    cellGeom.translate(worldPos.x, worldPos.y, worldPos.z);
+                    cellGeom.rotateX(-Math.PI / 2);
+                    geometries.push(cellGeom);
                 }
             }
         }
         planeGeom.dispose(); // Disposer la géométrie de base
 
         if (geometries.length > 0) {
-             const mergedWalkableGeometry = mergeGeometries(geometries, false);
-             if (mergedWalkableGeometry) {
-                 const walkableMesh = new THREE.Mesh(mergedWalkableGeometry, this.debugMaterialWalkable);
-                 walkableMesh.name = "Debug_NavGrid_Walkable";
-                 targetGroup.add(walkableMesh);
+             const mergedGeometry = mergeGeometries(geometries);
+             if (mergedGeometry) {
+                 const mesh = new THREE.Mesh(mergedGeometry, this.debugMaterialWalkable);
+                 mesh.name = "Debug_NavGrid_Walkable";
+                 targetGroup.add(mesh);
                  console.log(`NavigationGraph: Visualisation grille ajoutée (${geometries.length} cellules).`);
              } else { console.warn("NavigationGraph: Échec fusion géométries debug grille."); }
-             geometries.forEach(g => g.dispose()); // Nettoyer les géométries clonées après fusion
         } else { console.log("NavigationGraph: Aucune cellule marchable à visualiser."); }
     }
 
+    // Méthode pour visualiser un chemin (inchangée conceptuellement, utilise gridToWorld)
+    visualizePath(path, targetGroup) {
+        if (!path || path.length < 2 || !targetGroup) return;
+        // Supprimer l'ancienne visualisation de chemin s'il y en a une
+        const existingPathViz = targetGroup.getObjectByName("pathVisualization");
+        if (existingPathViz) {
+            targetGroup.remove(existingPathViz);
+             if (existingPathViz.geometry) existingPathViz.geometry.dispose();
+        }
+
+        const points = path.map(p => new THREE.Vector3(p.x, p.y + 0.02, p.z)); // Légèrement au-dessus
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const line = new THREE.Line(geometry, this.debugMaterialPath);
+        line.name = "pathVisualization";
+        targetGroup.add(line);
+    }
+
     destroy() {
-        this.grid = null; // Libère la grille pathfinding-js
+        console.log("NavigationGraph: Destruction...");
+        // Rien à faire pour le SharedArrayBuffer explicitement ici,
+        // mais assurez-vous qu'aucune référence n'est conservée ailleurs.
+        this.gridBuffer = null;
+        this.gridWalkableMap = null;
         if (this.debugMaterialWalkable) this.debugMaterialWalkable.dispose();
         if (this.debugMaterialPath) this.debugMaterialPath.dispose();
-        // Aucune autre géométrie à disposer ici car elles sont gérées dans createDebugVisualization
-        console.log("NavigationGraph: Détruit.");
-     }
+    }
 }
