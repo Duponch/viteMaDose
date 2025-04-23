@@ -213,6 +213,73 @@ self.onmessage = function(event) {
 
 // --- Nouvelle section pour l'implémentation A* ---
 
+// --- Implémentation Min-Heap (File de Priorité) ---
+class MinHeap {
+    constructor() {
+        this.heap = []; // Tableau pour stocker les éléments du tas [{item, priority}]
+    }
+
+    // Insère un élément avec sa priorité
+    insert(item, priority) {
+        this.heap.push({ item, priority });
+        this._siftUp(this.heap.length - 1);
+    }
+
+    // Extrait l'élément avec la priorité la plus faible (minimum)
+    extractMin() {
+        if (this.isEmpty()) {
+            return null;
+        }
+        this._swap(0, this.heap.length - 1);
+        const minItem = this.heap.pop();
+        if (!this.isEmpty()) {
+            this._siftDown(0);
+        }
+        return minItem; // Retourne {item, priority}
+    }
+
+    // Vérifie si le tas est vide
+    isEmpty() {
+        return this.heap.length === 0;
+    }
+
+    // Fait "remonter" un élément pour maintenir la propriété du tas
+    _siftUp(index) {
+        if (index === 0) return;
+        const parentIndex = this._getParentIndex(index);
+        if (this.heap[parentIndex].priority > this.heap[index].priority) {
+            this._swap(parentIndex, index);
+            this._siftUp(parentIndex);
+        }
+    }
+
+    // Fait "descendre" un élément pour maintenir la propriété du tas
+    _siftDown(index) {
+        const leftChildIndex = this._getLeftChildIndex(index);
+        const rightChildIndex = this._getRightChildIndex(index);
+        let smallestIndex = index;
+
+        if (leftChildIndex < this.heap.length && this.heap[leftChildIndex].priority < this.heap[smallestIndex].priority) {
+            smallestIndex = leftChildIndex;
+        }
+        if (rightChildIndex < this.heap.length && this.heap[rightChildIndex].priority < this.heap[smallestIndex].priority) {
+            smallestIndex = rightChildIndex;
+        }
+
+        if (smallestIndex !== index) {
+            this._swap(index, smallestIndex);
+            this._siftDown(smallestIndex);
+        }
+    }
+
+    // Fonctions utilitaires pour les indices
+    _getParentIndex(index) { return Math.floor((index - 1) / 2); }
+    _getLeftChildIndex(index) { return 2 * index + 1; }
+    _getRightChildIndex(index) { return 2 * index + 2; }
+    _swap(i, j) { [this.heap[i], this.heap[j]] = [this.heap[j], this.heap[i]]; }
+}
+// --- Fin Min-Heap ---
+
 // Fonction Heuristique (Manhattan distance)
 function heuristic(nodeA, nodeB) {
     const dx = Math.abs(nodeA.x - nodeB.x);
@@ -300,10 +367,11 @@ function reconstructPath(cameFrom, current) {
  * @returns {Array<{x: number, y: number}> | null} Le chemin trouvé (liste de points grille) ou null.
  */
 function findPathAStar(start, end) {
-    // Utilisation de Map pour une gestion plus simple des clés objet/string
-    const openSet = new Map(); // { "x,y": { node: {x,y}, fScore: number } }
-    const cameFrom = new Map(); // { "x,y": "px,py" } (stocke la clé du parent)
-    const gScore = new Map();   // { "x,y": number }
+    // Initialisation avec MinHeap
+    const openSet = new MinHeap(); // Utilise MinHeap
+    const closedSet = new Set();   // Garde trace des nœuds déjà traités
+    const cameFrom = new Map();    // { "x,y": "px,py" }
+    const gScore = new Map();      // { "x,y": number }
 
     const startKey = `${start.x},${start.y}`;
     const endKey = `${end.x},${end.y}`;
@@ -311,61 +379,59 @@ function findPathAStar(start, end) {
     // Initialisation pour le nœud de départ
     gScore.set(startKey, 0);
     const startHeuristic = heuristic(start, end);
-    openSet.set(startKey, { node: start, fScore: startHeuristic });
+    // Insérer dans le MinHeap: { item: {key, node}, priority: fScore }
+    openSet.insert({ key: startKey, node: start }, startHeuristic);
 
-    while (openSet.size > 0) {
-        // 1. Trouver le nœud dans openSet avec le plus petit fScore
-        let currentKey = null;
-        let minFScore = Infinity;
-        for (const [key, data] of openSet.entries()) {
-            if (data.fScore < minFScore) {
-                minFScore = data.fScore;
-                currentKey = key;
-            }
+    // while (openSet.size > 0) { // Ancienne condition
+    while (!openSet.isEmpty()) { // Nouvelle condition avec MinHeap
+        
+        // 1. Extraire le nœud avec le plus petit fScore du MinHeap
+        const currentHeapNode = openSet.extractMin();
+        if (!currentHeapNode) break; // Tas vide
+        
+        const { item: currentItem, priority: currentFScore } = currentHeapNode;
+        const { key: currentKey, node: currentNode } = currentItem;
+
+        // Ignorer si déjà traité (utile car on peut insérer des doublons dans le tas)
+        if (closedSet.has(currentKey)) {
+            continue;
         }
-
-        if (currentKey === null) break; // Sécurité
-
-        const currentNodeData = openSet.get(currentKey);
-        const currentNode = currentNodeData.node;
 
         // 2. Vérifier si on a atteint la destination
         if (currentKey === endKey) {
-            return reconstructPath(cameFrom, currentNode);
+            return reconstructPath(cameFrom, currentNode); // Chemin trouvé
         }
 
-        // 3. Retirer le nœud courant de openSet
-        openSet.delete(currentKey);
+        // 3. Marquer le nœud courant comme traité
+        closedSet.add(currentKey);
 
         // 4. Explorer les voisins
         const neighbors = getNeighbors(currentNode);
         for (const neighbor of neighbors) {
             const neighborKey = `${neighbor.x},${neighbor.y}`;
-            // --- Calcul du coût du mouvement --- 
-            // Simple: coût 1 pour tous les mouvements
-            const moveCost = 1; 
-            // Alternative : coût différent pour diagonales
-            // const dx = Math.abs(neighbor.x - currentNode.x);
-            // const dy = Math.abs(neighbor.y - currentNode.y);
-            // const moveCost = (dx === 1 && dy === 1) ? Math.SQRT2 : 1;
-            
+
+            // Ignorer si voisin déjà traité
+            if (closedSet.has(neighborKey)) {
+                continue;
+            }
+
+            const moveCost = 1; // Coût simple
             const tentativeGScore = (gScore.get(currentKey) ?? 0) + moveCost;
 
-            // Vérifier si ce chemin vers le voisin est meilleur que le précédent connu
+            // Vérifier si ce chemin vers le voisin est meilleur
             if (tentativeGScore < (gScore.get(neighborKey) ?? Infinity)) {
-                // Meilleur chemin trouvé !
-                cameFrom.set(neighborKey, currentKey); // Stocker la clé du parent
+                cameFrom.set(neighborKey, currentKey);
                 gScore.set(neighborKey, tentativeGScore);
                 const neighborFScore = tentativeGScore + heuristic(neighbor, end);
                 
-                // Ajouter/Mettre à jour dans openSet (pas besoin de vérifier s'il y est déjà avec Map.set)
-                openSet.set(neighborKey, { node: neighbor, fScore: neighborFScore });
+                // Insérer dans le MinHeap (même s'il y est déjà avec un score plus élevé)
+                openSet.insert({ key: neighborKey, node: neighbor }, neighborFScore);
             }
         }
     }
 
-    // Open set est vide mais destination non atteinte
-    console.log(`[Worker A*] Open set vide, pas de chemin trouvé de ${startKey} vers ${endKey}`);
+    // Tas vide mais destination non atteinte
+    console.log(`[Worker A*] Open set (MinHeap) vide, pas de chemin trouvé de ${startKey} vers ${endKey}`);
     return null;
 }
 

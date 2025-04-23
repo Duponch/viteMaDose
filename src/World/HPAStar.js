@@ -369,27 +369,34 @@ export default class HPAStar {
 
         // 2. Boucle A*
         while (openSet.size > 0) {
-             let currentId = -1; let minF = Infinity;
-             for (const [id, data] of openSet.entries()) { if (data.f < minF) { minF = data.f; currentId = id; } }
-             if (currentId === -1) break;
+             // 1. Trouver le nœud dans openSet avec le plus petit fScore
+             let currentKey = null;
+             let minFScore = Infinity;
+             for (const [key, data] of openSet.entries()) { // <-- Parcours complet O(N)
+                 if (data.f < minFScore) {
+                     minFScore = data.f;
+                     currentKey = key;
+                 }
+             }
+             if (currentKey === null) break;
 
-             const currentData = openSet.get(currentId);
-             const currentEntrance = entrancesById.get(currentId); // Fast lookup by ID
-             if (!currentEntrance) { console.error(`HPAStar A*: Cannot find entrance object for ID ${currentId}`); break; }
+             const currentData = openSet.get(currentKey);
+             const currentEntrance = entrancesById.get(currentKey); // Fast lookup by ID
+             if (!currentEntrance) { console.error(`HPAStar A*: Cannot find entrance object for ID ${currentKey}`); break; }
 
              // Goal check
              if (currentEntrance.clusterId === endClusterId) {
-                 finalEntranceInfo = { entranceId: currentId, data: currentData };
+                 finalEntranceInfo = { entranceId: currentKey, data: currentData };
                  break; // Found path
              }
 
              // Move current from open to closed
-             openSet.delete(currentId);
-             closedSet.add(currentId);
+             openSet.delete(currentKey);
+             closedSet.add(currentKey);
 
              // Explore neighbors in abstract graph
-             if (this.abstractGraph[currentId]) {
-                 for (const edge of this.abstractGraph[currentId]) {
+             if (this.abstractGraph[currentKey]) {
+                 for (const edge of this.abstractGraph[currentKey]) {
                      const neighborId = edge.targetEntranceId;
                      if (closedSet.has(neighborId)) continue;
 
@@ -407,7 +414,7 @@ export default class HPAStar {
                              g: tentativeGCost,
                              h: minHeuristic,
                              f: tentativeGCost + minHeuristic,
-                             parent: currentId, // Store parent ID
+                             parent: currentKey, // Store parent ID
                              startPathGrid: null // Only first nodes have this
                          };
                          openSet.set(neighborId, newData);
