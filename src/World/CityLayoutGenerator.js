@@ -10,7 +10,19 @@ export default class CityLayoutGenerator {
         this.leafPlots = []; // Contiendra les parcelles finales utilisables
         this.rootPlot = null;
         this.nextPlotId = 0;
+        // Ajouter la taille de cellule de la grille
+        this.gridCellSize = 1.0 / config.gridScale;
         console.log("CityLayoutGenerator initialisé.");
+    }
+
+    // Nouvelle méthode utilitaire pour snapper les dimensions
+    snapToGrid(value) {
+        return Math.round(value / this.gridCellSize) * this.gridCellSize;
+    }
+
+    // Nouvelle méthode pour snapper une position
+    snapPositionToGrid(value) {
+        return Math.floor(value / this.gridCellSize) * this.gridCellSize;
     }
 
     // ----- generateLayout (Inchangé) -----
@@ -23,11 +35,18 @@ export default class CityLayoutGenerator {
         this.reset();
         console.log("Génération du layout par subdivision...");
 
+        // Snapper la taille de la carte à la grille
+        const snappedMapSize = this.snapToGrid(mapSize);
+        const snappedStartX = this.snapPositionToGrid(-snappedMapSize / 2);
+        const snappedStartZ = this.snapPositionToGrid(-snappedMapSize / 2);
+
         // Crée la parcelle racine couvrant toute la carte
         this.rootPlot = new Plot(
             this.nextPlotId++,
-            -mapSize / 2, -mapSize / 2, // Position du coin supérieur gauche
-            mapSize, mapSize            // Dimensions
+            snappedStartX,
+            snappedStartZ,
+            snappedMapSize,
+            snappedMapSize
         );
         this.plots.push(this.rootPlot);
 
@@ -66,11 +85,15 @@ export default class CityLayoutGenerator {
         const minSize = this.config.minPlotSize;
         const maxSize = this.config.maxPlotSize; // Taille max pour éviter la subdivision
 
+        // Snapper les dimensions minimales à la grille
+        const snappedMinSize = this.snapToGrid(minSize);
+        const snappedRoad = this.snapToGrid(road);
+
         // --- Conditions d'arrêt de la récursion ---
 
         // 1. La parcelle est trop petite pour être coupée en deux (même sans route)
         // OU trop petite pour créer deux parcelles de taille minSize avec une route entre elles.
-        const cannotSplitFurther = (plot.width < minSize * 2 + road) && (plot.depth < minSize * 2 + road);
+        const cannotSplitFurther = (plot.width < snappedMinSize * 2 + snappedRoad) && (plot.depth < snappedMinSize * 2 + snappedRoad);
 
         // 2. La profondeur de récursion maximale est atteinte
         const reachedMaxDepth = depth >= this.config.maxRecursionDepth;
@@ -96,19 +119,19 @@ export default class CityLayoutGenerator {
         let splitVertical = plot.width > plot.depth;
         // Si les dimensions sont très proches (presque carré), choisir aléatoirement.
         // Utiliser une tolérance pour éviter les effets de bord flottants.
-        if (Math.abs(plot.width - plot.depth) < minSize * 0.1) {
+        if (Math.abs(plot.width - plot.depth) < snappedMinSize * 0.1) {
             splitVertical = Math.random() > 0.5;
         }
         // Si la dimension choisie est trop petite pour être coupée, essayer l'autre.
-        if (splitVertical && plot.width < minSize * 2 + road) {
+        if (splitVertical && plot.width < snappedMinSize * 2 + snappedRoad) {
             splitVertical = false; // Tenter horizontalement
-        } else if (!splitVertical && plot.depth < minSize * 2 + road) {
+        } else if (!splitVertical && plot.depth < snappedMinSize * 2 + snappedRoad) {
             splitVertical = true; // Tenter verticalement
         }
 
         // --- Vérification finale: est-ce qu'on PEUT couper dans la direction (re)choisie ? ---
-        if ((splitVertical && plot.width < minSize * 2 + road) ||
-            (!splitVertical && plot.depth < minSize * 2 + road)) {
+        if ((splitVertical && plot.width < snappedMinSize * 2 + snappedRoad) ||
+            (!splitVertical && plot.depth < snappedMinSize * 2 + snappedRoad)) {
             // Si même l'autre direction n'est pas possible, on doit s'arrêter.
             // console.warn(`Plot ${plot.id} ne peut être coupée dans aucune direction respectant minSize. Marquée comme feuille.`);
             plot.isLeaf = true;
@@ -124,42 +147,55 @@ export default class CityLayoutGenerator {
         if (splitVertical) { // Coupe Verticale => Crée une route verticale au milieu
             // Déterminer la plage valide pour la position de la coupe (centre de la route)
             // La coupe doit laisser au moins minSize de chaque côté + la moitié de la route.
-            const minSplitX = plot.x + minSize + road / 2;
-            const maxSplitX = plot.x + plot.width - minSize - road / 2;
+            const minSplitX = this.snapPositionToGrid(plot.x + snappedMinSize + snappedRoad / 2);
+            const maxSplitX = this.snapPositionToGrid(plot.x + plot.width - snappedMinSize - snappedRoad / 2);
 
             // S'assurer que min < max (sinon, on ne peut pas vraiment couper aléatoirement)
             if (minSplitX >= maxSplitX) {
                  // Si la plage est invalide ou nulle, forcer la coupe au milieu (ne devrait pas arriver grace aux checks précédents)
-                 splitCoord = plot.x + plot.width / 2;
+                 splitCoord = this.snapPositionToGrid(plot.x + plot.width / 2);
                  // console.warn(`Plage de coupe verticale invalide pour plot ${plot.id}. Coupe au milieu.`);
              } else {
-                 // Choisir une coordonnée aléatoire dans la plage valide
-                 splitCoord = THREE.MathUtils.randFloat(minSplitX, maxSplitX);
+                 // Choisir une position de coupe qui est alignée sur la grille
+                 const possibleSplits = [];
+                 for (let x = minSplitX; x <= maxSplitX; x += this.gridCellSize) {
+                     possibleSplits.push(x);
+                 }
+                 splitCoord = possibleSplits[Math.floor(Math.random() * possibleSplits.length)];
              }
 
             // Créer les deux nouvelles parcelles (gauche et droite de la route)
             // Parcelle 1 (gauche)
-            p1 = new Plot(this.nextPlotId++, plot.x, plot.z, splitCoord - plot.x - road / 2, plot.depth);
+            const width1 = this.snapToGrid(splitCoord - plot.x - snappedRoad / 2);
+            const width2 = this.snapToGrid(plot.x + plot.width - (splitCoord + snappedRoad / 2));
+            p1 = new Plot(this.nextPlotId++, plot.x, plot.z, width1, plot.depth);
             // Parcelle 2 (droite)
-            p2 = new Plot(this.nextPlotId++, splitCoord + road / 2, plot.z, plot.x + plot.width - (splitCoord + road / 2), plot.depth);
+            p2 = new Plot(this.nextPlotId++, splitCoord + snappedRoad / 2, plot.z, width2, plot.depth);
 
         } else { // Coupe Horizontale => Crée une route horizontale au milieu
              // Déterminer la plage valide pour la position de la coupe (centre de la route)
-            const minSplitZ = plot.z + minSize + road / 2;
-            const maxSplitZ = plot.z + plot.depth - minSize - road / 2;
+            const minSplitZ = this.snapPositionToGrid(plot.z + snappedMinSize + snappedRoad / 2);
+            const maxSplitZ = this.snapPositionToGrid(plot.z + plot.depth - snappedMinSize - snappedRoad / 2);
 
             if (minSplitZ >= maxSplitZ) {
-                 splitCoord = plot.z + plot.depth / 2;
+                 splitCoord = this.snapPositionToGrid(plot.z + plot.depth / 2);
                  // console.warn(`Plage de coupe horizontale invalide pour plot ${plot.id}. Coupe au milieu.`);
              } else {
-                 splitCoord = THREE.MathUtils.randFloat(minSplitZ, maxSplitZ);
+                 // Choisir une position de coupe qui est alignée sur la grille
+                 const possibleSplits = [];
+                 for (let z = minSplitZ; z <= maxSplitZ; z += this.gridCellSize) {
+                     possibleSplits.push(z);
+                 }
+                 splitCoord = possibleSplits[Math.floor(Math.random() * possibleSplits.length)];
              }
 
             // Créer les deux nouvelles parcelles (haut et bas de la route)
             // Parcelle 1 (haut)
-            p1 = new Plot(this.nextPlotId++, plot.x, plot.z, plot.width, splitCoord - plot.z - road / 2);
+            const depth1 = this.snapToGrid(splitCoord - plot.z - snappedRoad / 2);
+            const depth2 = this.snapToGrid(plot.z + plot.depth - (splitCoord + snappedRoad / 2));
+            p1 = new Plot(this.nextPlotId++, plot.x, plot.z, plot.width, depth1);
             // Parcelle 2 (bas)
-            p2 = new Plot(this.nextPlotId++, plot.x, splitCoord + road / 2, plot.width, plot.z + plot.depth - (splitCoord + road / 2));
+            p2 = new Plot(this.nextPlotId++, plot.x, splitCoord + snappedRoad / 2, plot.width, depth2);
         }
 
         // --- Validation et Récursion ---

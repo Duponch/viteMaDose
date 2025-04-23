@@ -11,7 +11,7 @@ export default class NavigationGraph {
         this.config = config; // Assure-toi que config contient bien sidewalkWidth, crosswalkStripe*, roadWidth etc.
         this.gridBuffer = null;         // SharedArrayBuffer
         this.gridWalkableMap = null;    // Uint8Array view on gridBuffer
-        this.gridScale = 1.0;
+        this.gridScale = config.gridScale ?? 1.0; // Utiliser la valeur de config ou 1.0 par défaut
         this.gridWidth = 0;
         this.gridHeight = 0;
         this.offsetX = 0;
@@ -67,48 +67,108 @@ export default class NavigationGraph {
     }
 
 	markCrosswalksCorrected(crosswalkInfos) {
-        console.log("NavigationGraph: Marquage des passages piétons (largeur corrigée)...");
+        console.log("NavigationGraph: Marquage des passages piétons (centre snappé, dimensions snappées)...");
         let markedCells = 0;
-        const stripeCount = this.config.crosswalkStripeCount || 5;
-        const stripeWidth = this.config.crosswalkStripeWidth || 0.6;
-        const stripeGap = this.config.crosswalkStripeGap || 0.5;
-        const crosswalkVisualWidth = (stripeCount * stripeWidth) + Math.max(0, stripeCount - 1) * stripeGap;
-        // Utiliser Math.floor pour la cohérence avec worldToGrid
-        const crosswalkGridThickness = Math.max(1, Math.floor(crosswalkVisualWidth * this.gridScale));
-        // console.log(` -> Largeur passage piéton calculée: ${crosswalkVisualWidth.toFixed(1)} unités monde -> ${crosswalkGridThickness} cellules grille.`);
+        const cellSizeWorld = 1.0 / this.gridScale;
+
         crosswalkInfos.forEach(info => {
-           const pos = info.position; const angle = info.angle; const length = info.length;
-           const halfLength = length / 2; let dx = 0, dz = 0;
-           // Déterminer direction du passage piéton basé sur son angle (0 ou PI/2)
-           if (Math.abs(Math.sin(angle)) < 0.1) { // Angle proche de 0 ou PI -> passage Horizontal (direction Z)
-               dz = halfLength; // Extension le long de Z
-           } else { // Angle proche de PI/2 ou -PI/2 -> passage Vertical (direction X)
-               dx = halfLength; // Extension le long de X
-           }
-           const startWorld = new THREE.Vector3(pos.x - dx, this.sidewalkHeight, pos.z - dz);
-           const endWorld = new THREE.Vector3(pos.x + dx, this.sidewalkHeight, pos.z + dz);
-           const startGrid = this.worldToGrid(startWorld.x, startWorld.z);
-           const endGrid = this.worldToGrid(endWorld.x, endWorld.z);
-           markedCells += this.drawLineOnGrid(startGrid, endGrid, crosswalkGridThickness);
+            const originalPos = info.position; // Centre de la ligne du passage piéton
+            const angle = info.angle;
+            const originalLength = info.length; // Longueur le long de la direction de la route
+            const stripeCount = this.config.crosswalkStripeCount || 5;
+            const stripeWidth = this.config.crosswalkStripeWidth || 0.6;
+            const stripeGap = this.config.crosswalkStripeGap || 0.5;
+            const originalCrosswalkVisualWidth = (stripeCount * stripeWidth) + Math.max(0, stripeCount - 1) * stripeGap;
+
+            // Snapper la position centrale
+            const pos = {
+                x: Math.round(originalPos.x / cellSizeWorld) * cellSizeWorld,
+                z: Math.round(originalPos.z / cellSizeWorld) * cellSizeWorld
+            };
+
+            // Snapper les dimensions aux multiples de la taille de cellule
+            const length = Math.round(originalLength / cellSizeWorld) * cellSizeWorld;
+            const crosswalkVisualWidth = Math.round(originalCrosswalkVisualWidth / cellSizeWorld) * cellSizeWorld;
+
+            const halfLength = length / 2;
+            const halfVisualWidth = crosswalkVisualWidth / 2;
+
+            let minWorldX, maxWorldX, minWorldZ, maxWorldZ;
+
+            // Déterminer les limites MONDE exactes du rectangle du passage piéton
+            if (Math.abs(Math.sin(angle)) < 0.1) { // Passage horizontal (le long de l'axe Z)
+                // Route E-O, Passage N-S
+                minWorldX = pos.x - halfVisualWidth;
+                maxWorldX = pos.x + halfVisualWidth;
+                minWorldZ = pos.z - halfLength;
+                maxWorldZ = pos.z + halfLength;
+            } else { // Passage vertical (le long de l'axe X)
+                // Route N-S, Passage E-O
+                minWorldX = pos.x - halfLength;
+                maxWorldX = pos.x + halfLength;
+                minWorldZ = pos.z - halfVisualWidth;
+                maxWorldZ = pos.z + halfVisualWidth;
+            }
+
+            // Déterminer la zone de GRILLE à vérifier (avec une marge)
+            const startGrid = this.worldToGrid(minWorldX - 1, minWorldZ - 1);
+            const endGrid = this.worldToGrid(maxWorldX + 1, maxWorldZ + 1);
+
+            // Itérer sur les cellules de la grille dans cette zone
+            for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
+                for (let gx = startGrid.x; gx <= endGrid.x; gx++) {
+                    // Obtenir le centre de la cellule courante en coordonnées MONDE
+                    const cellCenterWorld = this.gridToWorld(gx, gy);
+                    const cx = cellCenterWorld.x;
+                    const cz = cellCenterWorld.z;
+
+                    // Vérifier si le centre de la cellule est dans les limites MONDE du rectangle
+                    // Utiliser <= pour les bornes max pour plus de robustesse
+                    if (cx >= minWorldX && cx <= maxWorldX && cz >= minWorldZ && cz <= maxWorldZ) {
+                        // Marquer la cellule si elle est dans les limites
+                        if (this.markCell(gx, gy)) {
+                            markedCells++;
+                        }
+                    }
+                }
+            }
+            // L'appel à drawLineOnGrid n'est plus nécessaire avec cette méthode
+            // markedCells += this.drawLineOnGrid(startGrid, endGrid, crosswalkGridThickness);
        });
-        console.log(`NavigationGraph: ${markedCells} cellules de passage piéton marquées.`);
+        console.log(`NavigationGraph: ${markedCells} cellules de passage piéton marquées (méthode centre).`);
     }
 
 	markSidewalksArea(plots, sidewalkW) {
-        console.log("NavigationGraph: Marquage de la ZONE des trottoirs (méthode par centre de cellule)...");
+        console.log("NavigationGraph: Marquage de la ZONE des trottoirs (origine snappée, dimensions snappées)...");
         let markedCells = 0;
+        const cellSizeWorld = 1.0 / this.gridScale;
+
+        // Snapper la largeur du trottoir
+        const snappedSidewalkW = Math.round(sidewalkW / cellSizeWorld) * cellSizeWorld;
+        if (snappedSidewalkW <= 0) {
+             console.warn(`Largeur de trottoir snappée est <= 0 (${snappedSidewalkW}).`);
+             return; // Ne rien marquer si la largeur snappée est nulle.
+        }
 
         plots.forEach(plot => {
-            const pX = plot.x; const pZ = plot.z;
-            const pW = plot.width; const pD = plot.depth;
+            const originalPX = plot.x; const originalPZ = plot.z;
+            const originalPW = plot.width; const originalPD = plot.depth;
 
-            // Définir les limites du trottoir en coordonnées MONDE
-            const outerMinWorldX = pX - sidewalkW;
-            const outerMaxWorldX = pX + pW + sidewalkW;
-            const outerMinWorldZ = pZ - sidewalkW;
-            const outerMaxWorldZ = pZ + pD + sidewalkW;
+            // Snapper l'origine de la parcelle (au multiple le plus proche)
+            const pX = Math.round(originalPX / cellSizeWorld) * cellSizeWorld;
+            const pZ = Math.round(originalPZ / cellSizeWorld) * cellSizeWorld;
 
-            // Limites internes du plot (où il NE FAUT PAS marquer)
+            // Snapper les dimensions de la parcelle (au multiple le plus proche)
+            const pW = Math.round(originalPW / cellSizeWorld) * cellSizeWorld;
+            const pD = Math.round(originalPD / cellSizeWorld) * cellSizeWorld;
+
+            // Définir les limites du trottoir en coordonnées MONDE en utilisant les dimensions snappées
+            const outerMinWorldX = pX - snappedSidewalkW;
+            const outerMaxWorldX = pX + pW + snappedSidewalkW;
+            const outerMinWorldZ = pZ - snappedSidewalkW;
+            const outerMaxWorldZ = pZ + pD + snappedSidewalkW;
+
+            // Limites internes du plot (où il NE FAUT PAS marquer) - utiliser aussi dimensions snappées
             const innerMinWorldX = pX;
             const innerMaxWorldX = pX + pW;
             const innerMinWorldZ = pZ;
@@ -128,8 +188,8 @@ export default class NavigationGraph {
                     const cz = cellCenterWorld.z;
 
                     // Vérifier si le centre de la cellule est DANS la zone du trottoir
-                    // 1. Doit être DANS les limites EXTERNES
-                    const isInOuterBounds = cx >= outerMinWorldX && cx < outerMaxWorldX && cz >= outerMinWorldZ && cz < outerMaxWorldZ;
+                    // 1. Doit être DANS les limites EXTERNES (utiliser <= pour max)
+                    const isInOuterBounds = cx >= outerMinWorldX && cx <= outerMaxWorldX && cz >= outerMinWorldZ && cz <= outerMaxWorldZ;
 
                     // 2. Doit être HORS des limites INTERNES
                     const isOutsideInnerBounds = cx < innerMinWorldX || cx >= innerMaxWorldX || cz < innerMinWorldZ || cz >= innerMaxWorldZ;
