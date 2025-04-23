@@ -38,9 +38,9 @@ export default class CityManager {
             // Crosswalks
             crosswalkWidth: 0.1,
             crosswalkHeight: 0.03,
-            crosswalkStripeCount: 5,
-            crosswalkStripeWidth: 0.6,
-            crosswalkStripeGap: 0.5,
+            crosswalkStripeCount: 6,
+            crosswalkStripeWidth: 0.4,
+            crosswalkStripeGap: 0.3,
             // Districts
             minDistrictSize: 5,
             maxDistrictSize: 10,
