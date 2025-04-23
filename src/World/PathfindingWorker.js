@@ -1,7 +1,6 @@
 // --- src/World/PathfindingWorker.js ---
 
-// (Imports et setup global du worker restent inchangés)
-import * as PF from 'pathfinding'; // Assurez-vous que l'import est correct
+// Supprimé: import * as PF from 'pathfinding';
 
 // --- Constantes partagées (doivent correspondre à NavigationGraph.js) ---
 const WALKABLE = 0;
@@ -12,7 +11,7 @@ const NON_WALKABLE = 1;
 let workerGridWalkableMap = null; // Uint8Array view on the SharedArrayBuffer
 let gridWidth = 0;
 let gridHeight = 0;
-let finder = null;
+// Supprimé: let finder = null;
 let gridScale = 1.0;
 let offsetX = 0;
 let offsetZ = 0;
@@ -46,7 +45,7 @@ self.onmessage = function(event) {
 
     try {
         if (type === 'init') {
-            console.log('[Worker] Initialisation reçue (mode SharedArrayBuffer).');
+            console.log('[Worker] Initialisation reçue (mode SharedArrayBuffer + A* interne).');
             // Modifier pour accepter gridBuffer au lieu de gridData
             // if (data && data.gridData && data.conversionParams) {
             if (data && data.gridBuffer && data.gridWidth && data.gridHeight && data.conversionParams) {
@@ -76,15 +75,15 @@ self.onmessage = function(event) {
                 //     const matrix = nodesWalkable.map(row => row.map(walkable => walkable ? 0 : 1));
                 //     pfGrid = new PF.Grid(width, height, matrix);
 
-                // Initialiser le finder (peut rester global)
-                finder = new PF.JumpPointFinder({ // Ou PF.AStarFinder
+                // Supprimer l'initialisation du finder
+                /* finder = new PF.JumpPointFinder({ // Ou PF.AStarFinder
                     allowDiagonal: true,
                     dontCrossCorners: true,
                     heuristic: PF.Heuristic.manhattan
-                });
+                }); */
 
-                // console.log(`[Worker] Grille ${width}x${height} et finder initialisés.`);
-                console.log(`[Worker] Finder initialisé.`);
+                // console.log(`[Worker] Finder initialisé.`);
+                console.log('[Worker] Prêt pour les requêtes A*.');
                 self.postMessage({ type: 'initComplete' });
                 // } else {
                 //     console.error("[Worker] Données de grille invalides ou dimensions incohérentes reçues.", { width, height, nodesWalkable_height: nodesWalkable?.length, nodesWalkable_width: nodesWalkable?.[0]?.length });
@@ -98,7 +97,7 @@ self.onmessage = function(event) {
         } else if (type === 'findPath') {
             // --- Vérifications initiales adaptées ---
             // if (!pfGrid || !finder) {
-            if (!workerGridWalkableMap || !finder) {
+            if (!workerGridWalkableMap) { // On vérifie juste la map maintenant
                 console.error(`[Worker] Tentative findPath Agent ${data?.agentId} mais worker non initialisé ou buffer manquant.`);
                  if(data?.agentId) {
                      self.postMessage({ type: 'pathResult', data: { agentId: data.agentId, path: null, pathLengthWorld: 0 } });
@@ -137,36 +136,34 @@ self.onmessage = function(event) {
             let worldPathData = null;
             let pathLengthWorld = 0;
 
+            // !!! Début de la zone à remplacer par l'implémentation A* !!!
             try {
-                // --- Création de la grille PF.Grid locale à la volée --- 
+                // --- Supprimer toute l'ancienne logique de PF.Grid et finder.findPath --- 
+                /* 
                 const matrix = [];
-                for (let y = 0; y < gridHeight; y++) {
-                    const row = [];
-                    for (let x = 0; x < gridWidth; x++) {
-                        // Lire depuis la map partagée. PF.Grid attend 0=walkable, 1=obstacle
-                        // ce qui correspond à nos constantes WALKABLE/NON_WALKABLE.
-                        row.push(workerGridWalkableMap[y * gridWidth + x]);
-                    }
-                    matrix.push(row);
-                }
+                // ... remplissage matrix ... 
                 const currentSearchGrid = new PF.Grid(gridWidth, gridHeight, matrix);
-
-                // --- Assurer que start/end sont marchables sur CETTE instance locale ---
-                // C'est important car JPS peut échouer sinon.
                 currentSearchGrid.setWalkableAt(startNode.x, startNode.y, true);
                 currentSearchGrid.setWalkableAt(endNode.x, endNode.y, true);
-
-                // Appel à findPath avec la grille locale
-                // gridPath = finder.findPath(startNode.x, startNode.y, endNode.x, endNode.y, gridClone);
                 gridPath = finder.findPath(startNode.x, startNode.y, endNode.x, endNode.y, currentSearchGrid);
+                */
 
-                // Traitement du chemin trouvé (inchangé)
+                // +++ Placeholder pour l'implémentation A* +++
+                console.time(`[Worker] A* Path ${agentId}`); // Timer pour mesurer A*
+                gridPath = findPathAStar(startNode, endNode);
+                console.timeEnd(`[Worker] A* Path ${agentId}`);
+                // --- Fin Placeholder ---
+
+                // Traitement du chemin trouvé (inchangé pour l'instant)
                 if (gridPath && gridPath.length > 0) {
-                    worldPathData = gridPath.map(node => gridToWorld(node[0], node[1]));
+                    worldPathData = gridPath.map(node => gridToWorld(node.x, node.y));
                     if (worldPathData.length > 1) {
+                        pathLengthWorld = 0; // Réinitialiser ici pour être sûr
                         for (let i = 0; i < worldPathData.length - 1; i++) {
                             pathLengthWorld += calculateWorldDistance(worldPathData[i], worldPathData[i+1]);
                         }
+                    } else {
+                         pathLengthWorld = 0; // Chemin d'un seul point
                     }
                 } else {
                     worldPathData = null;
@@ -185,6 +182,7 @@ self.onmessage = function(event) {
                 worldPathData = null;
                 pathLengthWorld = 0;
             }
+            // !!! Fin de la zone à remplacer par l'implémentation A* !!!
 
             // Envoyer le résultat (succès ou échec après tentative)
             self.postMessage({
@@ -212,6 +210,164 @@ self.onmessage = function(event) {
          // --- FIN CORRECTION DANS LE CATCH ---
     }
 };
+
+// --- Nouvelle section pour l'implémentation A* ---
+
+// Fonction Heuristique (Manhattan distance)
+function heuristic(nodeA, nodeB) {
+    const dx = Math.abs(nodeA.x - nodeB.x);
+    const dy = Math.abs(nodeA.y - nodeB.y);
+    return dx + dy;
+}
+
+// Vérifie si une coordonnée est dans la grille
+function isValid(x, y) {
+    return x >= 0 && x < gridWidth && y >= 0 && y < gridHeight;
+}
+
+// Vérifie si une cellule est marchable (utilise la map partagée)
+function isWalkable(x, y) {
+    if (!isValid(x, y)) return false;
+    const index = y * gridWidth + x;
+    return workerGridWalkableMap[index] === WALKABLE;
+}
+
+// Obtient les voisins marchables d'un nœud
+// TODO: Ajouter l'option dontCrossCorners si nécessaire
+function getNeighbors(node) {
+    const neighbors = [];
+    const x = node.x;
+    const y = node.y;
+    const allowDiagonal = true; // Option A*
+
+    // Voisins directs (haut, bas, gauche, droite)
+    const directNeighbors = [
+        { x: x, y: y + 1 }, { x: x, y: y - 1 },
+        { x: x + 1, y: y }, { x: x - 1, y: y }
+    ];
+    for (const neighbor of directNeighbors) {
+        if (isWalkable(neighbor.x, neighbor.y)) {
+            neighbors.push(neighbor);
+        }
+    }
+
+    if (allowDiagonal) {
+        // Voisins diagonaux
+        const diagonalNeighbors = [
+            { x: x + 1, y: y + 1 }, { x: x + 1, y: y - 1 },
+            { x: x - 1, y: y + 1 }, { x: x - 1, y: y - 1 }
+        ];
+        for (const neighbor of diagonalNeighbors) {
+            // Vérification simple pour l'instant (pas de dontCrossCorners)
+            if (isWalkable(neighbor.x, neighbor.y)) {
+                 // Vérifier les coins (si dontCrossCorners est activé) 
+                 // Exemple simple : si on va en diag (+1,+1), il faut que (+1,0) OU (0,+1) soit marchable
+                 // A adapter / raffiner selon la règle exacte souhaitée.
+                 /*
+                 if (dontCrossCorners) {
+                     const dx = neighbor.x - x;
+                     const dy = neighbor.y - y;
+                     if (!isWalkable(x + dx, y) && !isWalkable(x, y + dy)) {
+                         continue; // Bloqué par les coins
+                     }
+                 }*/
+                neighbors.push(neighbor);
+            }
+        }
+    }
+
+    return neighbors;
+}
+
+// Reconstruit le chemin à partir de la map cameFrom
+function reconstructPath(cameFrom, current) {
+    const path = [current];
+    let currentKey = `${current.x},${current.y}`;
+    while (cameFrom.has(currentKey)) {
+        const previousKey = cameFrom.get(currentKey);
+        const [px, py] = previousKey.split(',').map(Number);
+        const previousNode = { x: px, y: py };
+        path.unshift(previousNode); // Ajoute au début
+        currentKey = previousKey;
+    }
+    return path; // Le chemin est de start vers end
+}
+
+/**
+ * Fonction principale pour trouver un chemin avec A*.
+ * @param {{x: number, y: number}} start Coordonnées de départ.
+ * @param {{x: number, y: number}} end Coordonnées d'arrivée.
+ * @returns {Array<{x: number, y: number}> | null} Le chemin trouvé (liste de points grille) ou null.
+ */
+function findPathAStar(start, end) {
+    // Utilisation de Map pour une gestion plus simple des clés objet/string
+    const openSet = new Map(); // { "x,y": { node: {x,y}, fScore: number } }
+    const cameFrom = new Map(); // { "x,y": "px,py" } (stocke la clé du parent)
+    const gScore = new Map();   // { "x,y": number }
+
+    const startKey = `${start.x},${start.y}`;
+    const endKey = `${end.x},${end.y}`;
+
+    // Initialisation pour le nœud de départ
+    gScore.set(startKey, 0);
+    const startHeuristic = heuristic(start, end);
+    openSet.set(startKey, { node: start, fScore: startHeuristic });
+
+    while (openSet.size > 0) {
+        // 1. Trouver le nœud dans openSet avec le plus petit fScore
+        let currentKey = null;
+        let minFScore = Infinity;
+        for (const [key, data] of openSet.entries()) {
+            if (data.fScore < minFScore) {
+                minFScore = data.fScore;
+                currentKey = key;
+            }
+        }
+
+        if (currentKey === null) break; // Sécurité
+
+        const currentNodeData = openSet.get(currentKey);
+        const currentNode = currentNodeData.node;
+
+        // 2. Vérifier si on a atteint la destination
+        if (currentKey === endKey) {
+            return reconstructPath(cameFrom, currentNode);
+        }
+
+        // 3. Retirer le nœud courant de openSet
+        openSet.delete(currentKey);
+
+        // 4. Explorer les voisins
+        const neighbors = getNeighbors(currentNode);
+        for (const neighbor of neighbors) {
+            const neighborKey = `${neighbor.x},${neighbor.y}`;
+            // --- Calcul du coût du mouvement --- 
+            // Simple: coût 1 pour tous les mouvements
+            const moveCost = 1; 
+            // Alternative : coût différent pour diagonales
+            // const dx = Math.abs(neighbor.x - currentNode.x);
+            // const dy = Math.abs(neighbor.y - currentNode.y);
+            // const moveCost = (dx === 1 && dy === 1) ? Math.SQRT2 : 1;
+            
+            const tentativeGScore = (gScore.get(currentKey) ?? 0) + moveCost;
+
+            // Vérifier si ce chemin vers le voisin est meilleur que le précédent connu
+            if (tentativeGScore < (gScore.get(neighborKey) ?? Infinity)) {
+                // Meilleur chemin trouvé !
+                cameFrom.set(neighborKey, currentKey); // Stocker la clé du parent
+                gScore.set(neighborKey, tentativeGScore);
+                const neighborFScore = tentativeGScore + heuristic(neighbor, end);
+                
+                // Ajouter/Mettre à jour dans openSet (pas besoin de vérifier s'il y est déjà avec Map.set)
+                openSet.set(neighborKey, { node: neighbor, fScore: neighborFScore });
+            }
+        }
+    }
+
+    // Open set est vide mais destination non atteinte
+    console.log(`[Worker A*] Open set vide, pas de chemin trouvé de ${startKey} vers ${endKey}`);
+    return null;
+}
 
 // --- Gestionnaire onerror global (inchangé) ---
 self.onerror = function(error) {

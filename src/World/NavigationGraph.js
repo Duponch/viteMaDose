@@ -302,8 +302,10 @@ export default class NavigationGraph {
                 if (this.isWalkableAt(x, y)) {
                     const worldPos = this.gridToWorld(x, y);
                     const cellGeom = planeGeom.clone();
-                    cellGeom.translate(worldPos.x, worldPos.y, worldPos.z);
-                    cellGeom.rotateX(-Math.PI / 2);
+                    const matrix = new THREE.Matrix4(); 
+                    matrix.makeRotationX(-Math.PI / 2);
+                    matrix.setPosition(worldPos.x, worldPos.y - 0.01, worldPos.z);
+                    cellGeom.applyMatrix4(matrix);
                     geometries.push(cellGeom);
                 }
             }
