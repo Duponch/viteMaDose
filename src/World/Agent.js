@@ -158,7 +158,7 @@ export default class Agent {
 		this._calculateScheduledTimes();
     }
 
-    requestPath(startPosWorld, endPosWorld, startNodeOverride = null, endNodeOverride = null, nextStateIfSuccess) {
+    requestPath(startPosWorld, endPosWorld, startNodeOverride = null, endNodeOverride = null, nextStateIfSuccess, currentGameTimeForStats) {
         // nextStateIfSuccess sera par exemple READY_TO_LEAVE_FOR_WORK ou READY_TO_LEAVE_FOR_HOME
 
         // Réinitialiser les données du trajet précédent
@@ -177,6 +177,22 @@ export default class Agent {
 
         const agentManager = this.experience.world?.agentManager;
         const navGraph = this.experience.world?.cityManager?.getNavigationGraph(); // Accéder via cityManager
+
+        // Mettre à jour les statistiques pour les agents en attente de chemin
+        if (agentManager?.stats) {
+            const dayDurationMs = this.experience.world?.environment?.dayDurationMs || (24 * 60 * 60 * 1000);
+            const currentHour = Math.floor((currentGameTimeForStats % dayDurationMs) / (dayDurationMs / 24));
+
+            // --- DEBUG LOG (using parameter now) ---
+            console.log(`Agent ${this.id} requesting path. State: ${this.currentState}. TimeForStats: ${currentGameTimeForStats.toFixed(0)}, DayDur: ${dayDurationMs}, Calculated Hour: ${currentHour}`);
+            // --- FIN DEBUG LOG ---
+            
+            if (this.currentState === AgentState.REQUESTING_PATH_FOR_WORK) {
+                agentManager.stats.requestingPathForWorkByHour[currentHour] = (agentManager.stats.requestingPathForWorkByHour[currentHour] || 0) + 1;
+            } else if (this.currentState === AgentState.REQUESTING_PATH_FOR_HOME) {
+                agentManager.stats.requestingPathForHomeByHour[currentHour] = (agentManager.stats.requestingPathForHomeByHour[currentHour] || 0) + 1;
+            }
+        }
 
         // Vérifier si les managers nécessaires sont prêts
         if (!agentManager || !agentManager.isWorkerInitialized) {
@@ -340,7 +356,7 @@ export default class Agent {
                             // Marquer la requête pour ce départ
                             this.requestedPathForDepartureTime = nextScheduledDepartureWork;
                             // Demander le chemin (l'état passera à REQUESTING...)
-                            this.requestPath(this.homePosition, this.workPosition, this.homeGridNode, this.workGridNode, AgentState.READY_TO_LEAVE_FOR_WORK);
+                            this.requestPath(this.homePosition, this.workPosition, this.homeGridNode, this.workGridNode, AgentState.READY_TO_LEAVE_FOR_WORK, currentGameTime);
                         } else {
                             // Ne peut pas demander si nœuds/destination manquants. Reste AT_HOME.
                             // Marquer pour éviter spam de logs pour ce cycle.
@@ -382,7 +398,7 @@ export default class Agent {
                         if (this.homePosition && this.workGridNode && this.homeGridNode) {
                             // console.log(`Agent ${this.id}: Home departure time ${nextScheduledDepartureHome.toFixed(0)} passed at ${currentGameTime.toFixed(0)}. Requesting path.`);
                             this.requestedPathForDepartureTime = nextScheduledDepartureHome;
-                            this.requestPath(this.workPosition, this.homePosition, this.workGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME);
+                            this.requestPath(this.workPosition, this.homePosition, this.workGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME, currentGameTime);
                         } else {
                              if(this.requestedPathForDepartureTime < nextScheduledDepartureHome) {
                                 console.warn(`Agent ${this.id}: Cannot request home path for departure ${nextScheduledDepartureHome.toFixed(0)} due to missing nodes/position.`);
@@ -675,14 +691,14 @@ export default class Agent {
                 this.isVisible = false;
                 if (currentHour >= 8 && currentHour < 19 && this.workPosition && this.homeGridNode && this.workGridNode) {
                    // console.log(`Agent ${this.id} leaving home for work.`);
-                   this.requestPath(this.position, this.workPosition, this.homeGridNode, this.workGridNode);
+                   this.requestPath(this.position, this.workPosition, this.homeGridNode, this.workGridNode, currentHour);
                 }
                 break;
             case 'AT_WORK':
                 this.isVisible = false;
                 if ((currentHour >= 19 || currentHour < 8) && this.homePosition && this.workGridNode && this.homeGridNode) {
                     // console.log(`Agent ${this.id} leaving work for home.`);
-                    this.requestPath(this.position, this.homePosition, this.workGridNode, this.homeGridNode);
+                    this.requestPath(this.position, this.homePosition, this.workGridNode, this.homeGridNode, currentHour);
                 }
                 break;
         }

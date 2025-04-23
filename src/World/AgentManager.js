@@ -60,6 +60,8 @@ export default class AgentManager {
 		this.stats = {
 			pathsToWorkByHour: {},
 			pathsToHomeByHour: {},
+			requestingPathForWorkByHour: {},
+			requestingPathForHomeByHour: {},
 		};
 		this._initializeStats();
 
@@ -70,9 +72,13 @@ export default class AgentManager {
 	_initializeStats() {
         this.stats.pathsToWorkByHour = {};
         this.stats.pathsToHomeByHour = {};
+        this.stats.requestingPathForWorkByHour = {};
+        this.stats.requestingPathForHomeByHour = {};
         for (let i = 0; i < 24; i++) {
             this.stats.pathsToWorkByHour[i] = 0;
             this.stats.pathsToHomeByHour[i] = 0;
+            this.stats.requestingPathForWorkByHour[i] = 0;
+            this.stats.requestingPathForHomeByHour[i] = 0;
         }
     }
 
@@ -178,7 +184,9 @@ export default class AgentManager {
          // Initialiser tous les états possibles pour éviter les clés manquantes
         Object.values(Agent.prototype.constructor.AgentState || { // Accès à l'enum AgentState via Agent.js
             AT_HOME: 'AT_HOME', GOING_TO_WORK: 'GOING_TO_WORK', AT_WORK: 'AT_WORK',
-            GOING_HOME: 'GOING_HOME', IDLE: 'IDLE', WAITING_FOR_PATH: 'WAITING_FOR_PATH'
+            GOING_HOME: 'GOING_HOME', IDLE: 'IDLE', WAITING_FOR_PATH: 'WAITING_FOR_PATH',
+            REQUESTING_PATH_FOR_WORK: 'REQUESTING_PATH_FOR_WORK',
+            REQUESTING_PATH_FOR_HOME: 'REQUESTING_PATH_FOR_HOME'
         }).forEach(state => agentsByState[state] = []);
 
         if (this.agents) {
@@ -195,6 +203,8 @@ export default class AgentManager {
             agentsByState,
             pathsToWorkByHour: { ...this.stats.pathsToWorkByHour }, // Retourner une copie
             pathsToHomeByHour: { ...this.stats.pathsToHomeByHour }, // Retourner une copie
+            requestingPathForWorkByHour: { ...this.stats.requestingPathForWorkByHour },
+            requestingPathForHomeByHour: { ...this.stats.requestingPathForHomeByHour },
         };
     }
 
