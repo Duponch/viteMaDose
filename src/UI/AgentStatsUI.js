@@ -7,8 +7,6 @@ export default class AgentStatsUI {
         this.isVisible = false;
         this.elements = {};
         this.charts = { 
-            workChart: null, 
-            homeChart: null,
             requestingWorkChart: null,
             requestingHomeChart: null
         };
@@ -78,24 +76,6 @@ export default class AgentStatsUI {
 		this.elements.agentListSection.id = 'agent-list-section'; // ID pour CSS & JS update
 		// L'innerHTML sera défini dans _updateAgentList
 		this.elements.statsPanel.appendChild(this.elements.agentListSection);
-	
-		const workChartTitle = document.createElement('h4');
-		workChartTitle.id = 'agent-work-chart-title'; // ID optionnel pour CSS
-		workChartTitle.textContent = 'Agents allant au travail (par heure)';
-		this.elements.statsPanel.appendChild(workChartTitle);
-	
-		this.elements.workChartCanvas = document.createElement('canvas');
-		this.elements.workChartCanvas.id = 'agent-work-chart'; // ID pour JS (Chart.js) & CSS
-		this.elements.statsPanel.appendChild(this.elements.workChartCanvas);
-	
-		const homeChartTitle = document.createElement('h4');
-		homeChartTitle.id = 'agent-home-chart-title'; // ID optionnel pour CSS
-		homeChartTitle.textContent = 'Agents rentrant à la maison (par heure)';
-		this.elements.statsPanel.appendChild(homeChartTitle);
-	
-		this.elements.homeChartCanvas = document.createElement('canvas');
-		this.elements.homeChartCanvas.id = 'agent-home-chart'; // ID pour JS (Chart.js) & CSS
-		this.elements.statsPanel.appendChild(this.elements.homeChartCanvas);
 
 		const requestingWorkChartTitle = document.createElement('h4');
 		requestingWorkChartTitle.id = 'agent-requesting-work-chart-title';
@@ -205,20 +185,25 @@ export default class AgentStatsUI {
     }
 
     update() {
-        const agentManager = this.agentManager;
-        if (!agentManager) {
-            if (this.intervalId) {
-                clearInterval(this.intervalId);
-                this.intervalId = null;
-            }
-            return;
-        }
-        const stats = agentManager.getAgentStats();
+        if (!this.isVisible || !this.agentManager) return;
+
+        const stats = this.agentManager.getAgentStats();
         this._updateAgentList(stats.agentsByState);
-        this._updateChart(this.charts.workChart, this.elements.workChartCanvas, stats.pathsToWorkByHour, 'Agents allant au travail');
-        this._updateChart(this.charts.homeChart, this.elements.homeChartCanvas, stats.pathsToHomeByHour, 'Agents rentrant à la maison');
-        this._updateChart(this.charts.requestingWorkChart, this.elements.requestingWorkChartCanvas, stats.requestingPathForWorkByHour, 'Agents demandant un chemin pour le travail');
-        this._updateChart(this.charts.requestingHomeChart, this.elements.requestingHomeChartCanvas, stats.requestingPathForHomeByHour, 'Agents demandant un chemin pour la maison');
+
+        // Mettre à jour les graphiques de demande de chemin
+        this._updateChart(
+            this.charts.requestingWorkChart,
+            this.elements.requestingWorkChartCanvas,
+            stats.requestingPathForWorkByHour,
+            'Agents demandant un chemin pour le travail'
+        );
+
+        this._updateChart(
+            this.charts.requestingHomeChart,
+            this.elements.requestingHomeChartCanvas,
+            stats.requestingPathForHomeByHour,
+            'Agents demandant un chemin pour la maison'
+        );
     }
 
     _updateAgentList(agentsByState) {
@@ -286,7 +271,7 @@ export default class AgentStatsUI {
              responsive: true,
              maintainAspectRatio: true
          };
-         const chartKey = (canvasElement.id === 'agent-work-chart') ? 'workChart' : (canvasElement.id === 'agent-home-chart') ? 'homeChart' : (canvasElement.id === 'agent-requesting-work-chart') ? 'requestingWorkChart' : 'requestingHomeChart';
+         const chartKey = (canvasElement.id === 'agent-requesting-work-chart') ? 'requestingWorkChart' : 'requestingHomeChart';
          if (!this.charts[chartKey]) {
              this.charts[chartKey] = new Chart(ctx, {
                  type: 'bar',
@@ -308,8 +293,6 @@ export default class AgentStatsUI {
         document.removeEventListener('mouseup', this._boundHandleMouseUp, true);
 
         // ... (reste du destroy : charts, éléments DOM, références) ...
-        if (this.charts.workChart) this.charts.workChart.destroy();
-        if (this.charts.homeChart) this.charts.homeChart.destroy();
         if (this.charts.requestingWorkChart) this.charts.requestingWorkChart.destroy();
         if (this.charts.requestingHomeChart) this.charts.requestingHomeChart.destroy();
         this.elements.toggleButton?.remove();
