@@ -73,7 +73,8 @@ export default class NavigationGraph {
         const stripeWidth = this.config.crosswalkStripeWidth || 0.6;
         const stripeGap = this.config.crosswalkStripeGap || 0.5;
         const crosswalkVisualWidth = (stripeCount * stripeWidth) + Math.max(0, stripeCount - 1) * stripeGap;
-        const crosswalkGridThickness = Math.max(1, Math.round(crosswalkVisualWidth * this.gridScale));
+        // Utiliser Math.floor pour la cohérence avec worldToGrid
+        const crosswalkGridThickness = Math.max(1, Math.floor(crosswalkVisualWidth * this.gridScale));
         // console.log(` -> Largeur passage piéton calculée: ${crosswalkVisualWidth.toFixed(1)} unités monde -> ${crosswalkGridThickness} cellules grille.`);
         crosswalkInfos.forEach(info => {
            const pos = info.position; const angle = info.angle; const length = info.length;
@@ -94,47 +95,61 @@ export default class NavigationGraph {
     }
 
 	markSidewalksArea(plots, sidewalkW) {
-        console.log("NavigationGraph: Marquage de la ZONE des trottoirs...");
+        console.log("NavigationGraph: Marquage de la ZONE des trottoirs (méthode par centre de cellule)...");
         let markedCells = 0;
+
         plots.forEach(plot => {
             const pX = plot.x; const pZ = plot.z;
             const pW = plot.width; const pD = plot.depth;
-            const outerMinWorldX = pX - sidewalkW; const outerMaxWorldX = pX + pW + sidewalkW;
-            const outerMinWorldZ = pZ - sidewalkW; const outerMaxWorldZ = pZ + pD + sidewalkW;
-            const innerMinWorldX = pX; const innerMaxWorldX = pX + pW;
-            const innerMinWorldZ = pZ; const innerMaxWorldZ = pZ + pD;
 
-            // Utiliser worldToGrid (qui utilise maintenant round)
-            const outerMinGridX = this.worldToGrid(outerMinWorldX, 0).x;
-            const outerMaxGridX = this.worldToGrid(outerMaxWorldX, 0).x;
-            const outerMinGridY = this.worldToGrid(0, outerMinWorldZ).y;
-            const outerMaxGridY = this.worldToGrid(0, outerMaxWorldZ).y;
-            const innerMinGridX = this.worldToGrid(innerMinWorldX, 0).x;
-            const innerMaxGridX = this.worldToGrid(innerMaxWorldX, 0).x;
-            const innerMinGridY = this.worldToGrid(0, innerMinWorldZ).y;
-            const innerMaxGridY = this.worldToGrid(0, innerMaxWorldZ).y;
+            // Définir les limites du trottoir en coordonnées MONDE
+            const outerMinWorldX = pX - sidewalkW;
+            const outerMaxWorldX = pX + pW + sidewalkW;
+            const outerMinWorldZ = pZ - sidewalkW;
+            const outerMaxWorldZ = pZ + pD + sidewalkW;
 
-            // Itérer sur les cellules de grille.
-            // Attention: worldToGrid(outerMax...) peut donner un index inclusif à cause de round.
-            // La boucle doit aller jusqu'à `< outerMaxGridX + 1` pour inclure la dernière cellule potentielle.
-            for (let gx = outerMinGridX; gx <= outerMaxGridX; gx++) {
-                for (let gy = outerMinGridY; gy <= outerMaxGridY; gy++) {
-                     // Vérifier si DANS les limites externes ET HORS des limites internes
-                     const isOutsideInner = (gx < innerMinGridX || gx > innerMaxGridX || gy < innerMinGridY || gy > innerMaxGridY);
+            // Limites internes du plot (où il NE FAUT PAS marquer)
+            const innerMinWorldX = pX;
+            const innerMaxWorldX = pX + pW;
+            const innerMinWorldZ = pZ;
+            const innerMaxWorldZ = pZ + pD;
 
-                    if (isOutsideInner) {
-                        if (this.markCell(gx, gy)) markedCells++;
+            // Déterminer une zone de GRILLE à vérifier (un peu plus large pour être sûr)
+            // Convertir les coins externes monde en grille pour obtenir une estimation des boucles
+            const startGrid = this.worldToGrid(outerMinWorldX - 1, outerMinWorldZ - 1); // Marge de sécurité
+            const endGrid = this.worldToGrid(outerMaxWorldX + 1, outerMaxWorldZ + 1); // Marge de sécurité
+
+            // Itérer sur les cellules de la grille dans cette zone étendue
+            for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
+                for (let gx = startGrid.x; gx <= endGrid.x; gx++) {
+                    // Obtenir le centre de la cellule courante en coordonnées MONDE
+                    const cellCenterWorld = this.gridToWorld(gx, gy);
+                    const cx = cellCenterWorld.x;
+                    const cz = cellCenterWorld.z;
+
+                    // Vérifier si le centre de la cellule est DANS la zone du trottoir
+                    // 1. Doit être DANS les limites EXTERNES
+                    const isInOuterBounds = cx >= outerMinWorldX && cx < outerMaxWorldX && cz >= outerMinWorldZ && cz < outerMaxWorldZ;
+
+                    // 2. Doit être HORS des limites INTERNES
+                    const isOutsideInnerBounds = cx < innerMinWorldX || cx >= innerMaxWorldX || cz < innerMinWorldZ || cz >= innerMaxWorldZ;
+
+                    // Si les deux conditions sont vraies, la cellule appartient au trottoir
+                    if (isInOuterBounds && isOutsideInnerBounds) {
+                        if (this.markCell(gx, gy)) {
+                            markedCells++;
+                        }
                     }
                 }
             }
         });
-        console.log(`NavigationGraph: ${markedCells} cellules de ZONE de trottoir marquées.`);
+        console.log(`NavigationGraph: ${markedCells} cellules de ZONE de trottoir marquées (méthode centre).`);
     }
 
 	worldToGrid(worldX, worldZ) {
-        // Utiliser Math.round au lieu de Math.floor
-        const gridX = Math.round(worldX * this.gridScale + this.offsetX);
-        const gridY = Math.round(worldZ * this.gridScale + this.offsetZ); // world Z -> grid Y
+        // Utiliser Math.floor au lieu de Math.round pour un alignement précis avec les bords des éléments
+        const gridX = Math.floor(worldX * this.gridScale + this.offsetX);
+        const gridY = Math.floor(worldZ * this.gridScale + this.offsetZ); // world Z -> grid Y
 
         // Il faut s'assurer que le résultat est DANS les limites de la grille après l'arrondi
         const clampedX = Math.max(0, Math.min(this.gridWidth - 1, gridX));
@@ -145,6 +160,7 @@ export default class NavigationGraph {
 
     gridToWorld(gridX, gridY) {
         // Le +0.5 assure qu'on est au centre de la cellule de la grille
+        // Restaurer le +0.5 pour aligner correctement sur le centre de la cellule
         const worldX = (gridX + 0.5 - this.offsetX) / this.gridScale;
         const worldZ = (gridY + 0.5 - this.offsetZ) / this.gridScale;
         // Retourner une position légèrement au-dessus de la hauteur définie du trottoir
@@ -294,17 +310,24 @@ export default class NavigationGraph {
              if (child.geometry) child.geometry.dispose();
          }
         const cellSizeInWorld = 1.0 / this.gridScale;
-        const visualCellSize = cellSizeInWorld * 0.85; // Réduire pour voir les espaces
+        const visualCellSize = cellSizeInWorld * 0.95; // Ajuster la taille visuelle si besoin
         const planeGeom = new THREE.PlaneGeometry(visualCellSize, visualCellSize);
         const geometries = [];
         for (let y = 0; y < this.gridHeight; y++) {
             for (let x = 0; x < this.gridWidth; x++) {
                 if (this.isWalkableAt(x, y)) {
-                    const worldPos = this.gridToWorld(x, y);
+                    // Calculer la position du COIN de la cellule dans le monde
+                    const cornerWorldX = (x - this.offsetX) / this.gridScale;
+                    const cornerWorldZ = (y - this.offsetZ) / this.gridScale;
+                    // Positionner le centre du plan au milieu de la cellule, basé sur le coin
+                    const planeCenterX = cornerWorldX + cellSizeInWorld / 2;
+                    const planeCenterZ = cornerWorldZ + cellSizeInWorld / 2;
+
                     const cellGeom = planeGeom.clone();
-                    const matrix = new THREE.Matrix4(); 
+                    const matrix = new THREE.Matrix4();
                     matrix.makeRotationX(-Math.PI / 2);
-                    matrix.setPosition(worldPos.x, worldPos.y - 0.01, worldPos.z);
+                    // Utiliser la position calculée du centre du plan
+                    matrix.setPosition(planeCenterX, this.sidewalkHeight, planeCenterZ); // Positionner au niveau du trottoir
                     cellGeom.applyMatrix4(matrix);
                     geometries.push(cellGeom);
                 }
