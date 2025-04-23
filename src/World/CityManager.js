@@ -34,7 +34,7 @@ export default class CityManager {
             houseZoneProbability: 0.40,
             skyscraperZoneProbability: 0.10,
             // Grid
-            gridScale: 1.0,
+            gridScale: 0.5,
             // Crosswalks
             crosswalkWidth: 0.1,
             crosswalkHeight: 0.03,
