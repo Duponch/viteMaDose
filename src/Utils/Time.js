@@ -10,6 +10,7 @@ export default class Time extends EventTarget {
         this.current = this.start;
         this.elapsed = 0;
         this.delta = 16; // Delta initial (ne sera utilisé qu'au premier tick)
+        this.unscaledDelta = 16; // <-- AJOUT: Delta non affecté par pause/scale
 
         // Contrôle du temps
         this.timeScale = 1.0; // Échelle de temps (1.0 = vitesse normale)
@@ -56,6 +57,10 @@ export default class Time extends EventTarget {
 			// console.warn(`Time.tick: Delta time capped at ${maxDelta}ms`); // Optionnel: pour débug
 		}
 		// --------------------------------------
+
+        // --- AJOUT : Stocker le delta non modifié ---
+        this.unscaledDelta = rawDelta;
+        // ------------------------------------------
 
 		// Calculer le delta utilisé par le jeu (prend en compte pause, échelle ET bridage)
 		this.delta = this._isPaused ? 0 : rawDelta * this.timeScale;

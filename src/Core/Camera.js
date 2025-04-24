@@ -300,26 +300,18 @@ export default class Camera {
         this.desiredCameraPosition.copy(this.targetLookAtPosition).add(new THREE.Vector3(offsetX, offsetY, offsetZ));
 
         // --- Gestion de la pause --- 
-        const isPaused = deltaTimeSeconds === 0;
+        // Utiliser TOUJOURS unscaledDelta pour l'interpolation pour un mouvement fluide même en pause
+        const realDeltaTime = this.experience.time.unscaledDelta / 1000.0;
 
-        if (isPaused) {
-            // Si en pause, appliquer directement la position désirée (basée sur l'input souris)
-            // pour permettre le contrôle de la caméra autour de l'agent figé.
-            this.currentPosition.copy(this.desiredCameraPosition);
+        // Vérifier realDeltaTime pour éviter division par zéro si time.unscaledDelta est 0 (ne devrait pas arriver)
+        if (realDeltaTime > 0) {
+            const lerpAlpha = 1.0 - Math.exp(-this.followSpeed * realDeltaTime);
+            this.currentPosition.lerp(this.desiredCameraPosition, lerpAlpha);
         } else {
-            // Si pas en pause, interpoler doucement vers la position désirée.
-            // Utiliser le temps réel pour l'interpolation pour être indépendant de la vitesse du jeu.
-            const realDeltaTime = this.experience.time.delta / 1000.0; 
-            // Vérifier realDeltaTime pour éviter division par zéro si time.delta est aussi 0
-            if (realDeltaTime > 0) { 
-                const lerpAlpha = 1.0 - Math.exp(-this.followSpeed * realDeltaTime);
-                this.currentPosition.lerp(this.desiredCameraPosition, lerpAlpha);
-            } else {
-                // Fallback si realDeltaTime est aussi 0 (ne devrait pas arriver si time est bien géré)
-                this.currentPosition.copy(this.desiredCameraPosition);
-            }
+            // Fallback si realDeltaTime est 0
+            this.currentPosition.copy(this.desiredCameraPosition);
         }
-        // --- Fin Gestion de la pause ---
+        // --- Fin Gestion de la pause (simplifiée) ---
 
         // Appliquer la position et regarder la cible
         this.instance.position.copy(this.currentPosition);
@@ -336,7 +328,8 @@ export default class Camera {
     update(deltaTime) {
         // Priorité 1: Animation moveToTarget
         if (this.isMovingToTarget) {
-            const currentTime = this.experience.time.current;
+            // Utiliser le temps non modifié pour la progression de l'animation
+            const currentTime = this.experience.time.current; // Garder le temps absolu
             const elapsedTime = currentTime - this.moveStartTime;
             let progress = Math.min(1.0, elapsedTime / this.moveDuration);
 
@@ -389,6 +382,7 @@ export default class Camera {
         }
         // Priorité 2: Suivi d'agent
         else if (this.isFollowing && this.targetAgent) {
+            // On passe deltaTime ici, mais updateFollowLogic utilise maintenant unscaledDelta en interne
             const deltaTimeSeconds = deltaTime / 1000.0;
             this.updateFollowLogic(deltaTimeSeconds);
         }
