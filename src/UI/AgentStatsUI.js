@@ -34,19 +34,21 @@ export default class AgentStatsUI {
 
 	_handleMouseDown(event) {
         // Enregistrer l'état seulement si le bouton principal (gauche) est pressé
-        // ET si le clic est sur le panneau lui-même ou le bouton toggle (pour éviter conflits avec 3D)
-        const panel = this.elements.statsPanel;
-        const toggleButton = this.elements.toggleButton;
-        if (event.button === 0 && (panel?.contains(event.target) || toggleButton?.contains(event.target))) {
+        if (event.button === 0) {
             this.isPointerDown = true;
             this.pointerDownTime = Date.now();
             this.pointerDownPosition.x = event.clientX;
             this.pointerDownPosition.y = event.clientY;
-             // Empêcher la propagation si le mousedown est DANS le panneau pour ne pas démarrer un drag 3D
-            event.stopPropagation();
+            
+            // Si le clic est sur le panneau ou le bouton toggle, empêcher la propagation
+            const panel = this.elements.statsPanel;
+            const toggleButton = this.elements.toggleButton;
+            if (panel?.contains(event.target) || toggleButton?.contains(event.target)) {
+                event.stopPropagation();
+            }
         } else {
-            // Si mousedown en dehors, réinitialiser au cas où
-             this.isPointerDown = false;
+            // Si mousedown avec un autre bouton, réinitialiser
+            this.isPointerDown = false;
         }
     }
 
@@ -109,10 +111,10 @@ export default class AgentStatsUI {
 
     // --- NOUVEAU Gestionnaire MouseUp pour la fermeture du panneau ---
     _handlePanelMouseUp(event) {
-         // 1. Vérifier si le panneau est visible ET si un mousedown avait été enregistré par CETTE UI
+        // 1. Vérifier si le panneau est visible ET si un mousedown avait été enregistré
         if (!this.isVisible || !this.isPointerDown || event.button !== 0) {
-             // Important: Réinitialiser isPointerDown même si on sort tôt
-             this.isPointerDown = false;
+            // Important: Réinitialiser isPointerDown même si on sort tôt
+            this.isPointerDown = false;
             return;
         }
 
@@ -134,24 +136,29 @@ export default class AgentStatsUI {
 
         // 4. Si ce n'était PAS un vrai clic (c'était un drag ou un clic long), ne rien faire
         if (!isRealClick) {
-             // console.log("AgentStatsUI PanelMouseUp: Ignored (drag or long press)."); // Debug
             return;
         }
 
-        // 5. Si c'était un vrai clic, vérifier s'il était en dehors du panneau ET du bouton toggle
+        // 5. Vérifier si le clic était en dehors du panneau ET du bouton toggle
         const panel = this.elements.statsPanel;
         const toggleButton = this.elements.toggleButton;
-        const clickedOutside = (!panel || !panel.contains(event.target)) && 
-                               (!toggleButton || !toggleButton.contains(event.target));
+        
+        // Vérifier si le clic est sur un élément UI interactif
+        const clickedElement = event.target;
+        const isUIInteractive = clickedElement?.closest('[data-ui-interactive="true"]');
+        
+        // Le clic est considéré comme "en dehors" si :
+        // - Il n'est pas sur le panneau
+        // - Il n'est pas sur le bouton toggle
+        // - Il n'est pas sur un élément UI interactif
+        const clickedOutside = (!panel?.contains(event.target)) && 
+                             (!toggleButton?.contains(event.target)) &&
+                             (!isUIInteractive);
 
         // 6. Si clic valide ET en dehors -> Fermer
         if (clickedOutside) {
-            console.log("AgentStatsUI PanelMouseUp: Valid outside click detected, closing panel."); // Debug
+            console.log("Fermeture de l'infobulle des stats - clic en dehors détecté");
             this.hide();
-        } else {
-            // console.log("AgentStatsUI PanelMouseUp: Valid click detected, but inside UI."); // Debug
-            // Si le clic est à l'intérieur, l'événement a déjà été géré (ou sera géré)
-            // par les écouteurs spécifiques (toggle, lien agent). On ne fait rien de plus ici.
         }
     }
     // --- FIN NOUVEAU ---
@@ -191,23 +198,19 @@ export default class AgentStatsUI {
         this.update();
         if (this.intervalId) clearInterval(this.intervalId);
         this.intervalId = setInterval(() => this.update(), this.updateInterval);
-        // Ajouter les écouteurs globaux gérés par cette UI (léger délai)
-        setTimeout(() => {
-            // Mousedown pour savoir si on a initié le clic
-            document.addEventListener('mousedown', this._boundHandleMouseDown, true);
-            // Mouseup pour détecter clic extérieur
-            document.addEventListener('mouseup', this._boundPanelMouseUpHandler, true);
+        
+        // Ajouter les écouteurs globaux gérés par cette UI immédiatement
+        // Mousedown pour savoir si on a initié le clic
+        document.addEventListener('mousedown', this._boundHandleMouseDown, true);
+        // Mouseup pour détecter clic extérieur
+        document.addEventListener('mouseup', this._boundPanelMouseUpHandler, true);
 
-            // Ajouter l'écouteur pour les clics sur les agents DANS le panneau (via Experience)
-            if (this.elements.statsPanel && this.experience?._boundHandleStatsPanelClick) {
-                this.elements.statsPanel.removeEventListener('click', this.experience._boundHandleStatsPanelClick);
-                this.elements.statsPanel.addEventListener('click', this.experience._boundHandleStatsPanelClick);
-                // console.log("Stats panel click listener attached in AgentStatsUI.show()");
-            } else {
-                 // console.warn("Could not attach stats panel click listener in AgentStatsUI.show()");
-            }
-            // console.log("AgentStatsUI shown, listeners added.");
-        }, 0);
+        // Ajouter l'écouteur pour les clics sur les agents DANS le panneau (via Experience)
+        if (this.elements.statsPanel && this.experience?._boundHandleStatsPanelClick) {
+            this.elements.statsPanel.removeEventListener('click', this.experience._boundHandleStatsPanelClick);
+            this.elements.statsPanel.addEventListener('click', this.experience._boundHandleStatsPanelClick);
+        }
+        
         this.listToggleStates = {};
     }
 
