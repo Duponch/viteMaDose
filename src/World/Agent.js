@@ -1,5 +1,6 @@
 // src/World/Agent.js
 import * as THREE from 'three';
+import WorkScheduleStrategy from './Strategies/WorkScheduleStrategy.js';
 
 let nextAgentId = 0;
 
@@ -18,7 +19,7 @@ const AgentState = {
 };
 
 export default class Agent {
-    constructor(config, instanceId, experience) {
+    constructor(config, instanceId, experience, workScheduleStrategy = null) {
         this.id = `citizen_${nextAgentId++}`;
         this.instanceId = instanceId;
 
@@ -84,6 +85,8 @@ export default class Agent {
         this._tempV3_2 = new THREE.Vector3();
         this._tempQuat = new THREE.Quaternion();
         this._tempMatrix = new THREE.Matrix4();
+
+        this.workScheduleStrategy = workScheduleStrategy || new WorkScheduleStrategy();
 
         this._calculateScheduledTimes();
     }
@@ -334,10 +337,20 @@ export default class Agent {
         if (this.lastArrivalTimeWork === undefined) this.lastArrivalTimeWork = -1; // Pas encore arrivé au travail initialement
         if (this.requestedPathForDepartureTime === undefined) this.requestedPathForDepartureTime = -1;
 
+        // Récupérer la date courante du jeu
+        const environment = this.experience.world?.environment;
+        const calendarDate = environment?.getCurrentCalendarDate ? environment.getCurrentCalendarDate() : null;
+
         // --- Machine d'état ---
         switch (this.currentState) {
             case AgentState.AT_HOME:
                 this.isVisible = false; // Assurer invisibilité
+
+                // Empêcher de partir travailler le weekend
+                if (calendarDate && !this.workScheduleStrategy.shouldWorkToday(calendarDate)) {
+                    // On ne part pas travailler ce jour-là
+                    break;
+                }
 
                 // 1. Trouver la PROCHAINE heure de départ pour le travail prévue
                 //    qui est strictement APRÈS la dernière arrivée enregistrée à la maison.
