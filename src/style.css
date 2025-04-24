@@ -484,3 +484,9 @@ button {
     color: #ffffff; /* Blanc au survol */
     background-color: rgba(167, 197, 235, 0.2); /* Léger fond bleu */
 }
+
+.debug-category-button.active,
+.debug-sublayer-button.active {
+    background-color: rgba(0, 120, 150, 0.7) !important;
+    /* Optionnel : bordure ou autre effet visuel */
+}

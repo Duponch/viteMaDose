@@ -187,9 +187,11 @@ export default class TimeControlUI {
                      }
                      if (hasSubMenu) {
                          // NOUVEAU: Appeler la méthode pour basculer tous les enfants
+                         console.log(`[TimeControlUI] Clic sur catégorie ${categoryName}, appel de toggleAllSubLayersInCategory.`);
                          this.experience.toggleAllSubLayersInCategory(categoryName);
                      } else {
                          // COMPORTEMENT ORIGINAL: Basculer la catégorie elle-même si pas d'enfants
+                         console.log(`[TimeControlUI] Clic sur catégorie ${categoryName}, appel de toggleCategoryVisibility.`);
                          this.experience.toggleCategoryVisibility(categoryName);
                      }
                 });
@@ -306,6 +308,7 @@ export default class TimeControlUI {
                     this.elements[key].style.opacity = '0.5';
                     this.elements[key].style.border = '1px solid transparent';
                     this.elements[key].style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+                    this.elements[key].classList.remove('active');
                 }
             });
             return;
@@ -322,33 +325,22 @@ export default class TimeControlUI {
                 const categoryName = button.dataset.categoryName;
                 if (layerStates.hasOwnProperty(categoryName)) {
                     const categoryState = layerStates[categoryName];
-                    // --- MODIFICATION: L'état "actif" dépend maintenant si *tous* les enfants sont actifs ---
-                    // Ou plus simplement, on colore différemment si la catégorie est visible globalement (_visible).
                     const isCategoryVisible = categoryState._visible;
+                    console.log(`[TimeControlUI] UpdateAppearance pour ${categoryName}: isCategoryVisible=${isCategoryVisible}, isGlobalDebugActive=${isGlobalDebugActive}`);
 
                     // Style basé sur la visibilité de la catégorie ET le mode debug global
                     if (isCategoryVisible && isGlobalDebugActive) {
-                        //button.style.border = '1px solid #00ccff';
                         button.style.backgroundColor = 'rgba(0, 120, 150, 0.7)';
+                        button.classList.add('active');
                     } else {
-                        //button.style.border = '1px solid transparent';
                         button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+                        button.classList.remove('active');
                     }
+                    // Correction : le bouton reste cliquable si le mode debug est actif
                     button.disabled = !isGlobalDebugActive;
                     button.style.opacity = isGlobalDebugActive ? '1.0' : '0.5';
-                    //button.style.opacity = isGlobalDebugActive ? '1.0' : '0.5';
-
-                    // Mettre à jour la flèche si sous-menu
-                    /* const subMenu = this.elements[`subMenu_${categoryName}`];
-                     if (subMenu && button.textContent.includes('▼') || button.textContent.includes('►') ) {
-                          const showSubMenu = categoryState._showSubMenu;
-                          button.textContent = button.textContent.replace(/[▼►]/, showSubMenu ? '►' : '▼');
-                          // Afficher/cacher le sous-menu DOM element
-                          subMenu.style.display = showSubMenu ? 'flex' : 'none';
-                     } */
-
                 } else {
-                     button.disabled = true; button.style.opacity = '0.5'; // Catégorie inconnue
+                     button.disabled = true; button.style.opacity = '0.5'; button.classList.remove('active');
                 }
 
             } else if (key.startsWith('subLayerBtn_')) {
@@ -356,21 +348,20 @@ export default class TimeControlUI {
                 const subLayerName = button.dataset.subLayerName;
                 if (layerStates.hasOwnProperty(categoryName) && layerStates[categoryName].hasOwnProperty(subLayerName)) {
                     const categoryState = layerStates[categoryName];
-                    const isSubLayerActive = categoryState[subLayerName]; // État logique du sous-calque
+                    const isSubLayerActive = categoryState[subLayerName];
 
-                    // Style basé sur l'état logique du sous-calque ET si debug global est actif ET si la catégorie parente est visible
                     if (isSubLayerActive && isGlobalDebugActive && categoryState._visible) {
-                        //button.style.border = '1px solid #00aaff';
                         button.style.backgroundColor = 'rgba(0, 120, 150, 0.7)';
+                        button.classList.add('active');
                     } else {
-                        //button.style.border = '1px solid transparent';
                         button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+                        button.classList.remove('active');
                     }
-                    // Grisé si debug global inactif OU si catégorie parente cachée
-                    button.disabled = !isGlobalDebugActive || !categoryState._visible;
-                    button.style.opacity = (isGlobalDebugActive && categoryState._visible) ? '1.0' : '0.5';
+                    // Correction : le bouton reste cliquable si le mode debug est actif
+                    button.disabled = !isGlobalDebugActive;
+                    button.style.opacity = isGlobalDebugActive ? '1.0' : '0.5';
                 } else {
-                     button.disabled = true; button.style.opacity = '0.5';
+                     button.disabled = true; button.style.opacity = '0.5'; button.classList.remove('active');
                 }
             }
         });
