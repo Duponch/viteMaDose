@@ -32,13 +32,24 @@ export default class SidewalkGenerator {
     generateSidewalks(plots) {
         const sidewalkW = this.config.sidewalkWidth ?? 0;
         const sidewalkH = this.config.sidewalkHeight ?? 0.2;
+        // Récupérer gridScale et calculer cellSizeWorld
+        const gridScale = this.config.gridScale ?? 1.0; // Assurez-vous que gridScale est dans la config
+        const cellSizeWorld = 1.0 / gridScale;
 
         if (sidewalkW <= 0 || !plots || plots.length === 0) {
             console.log("SidewalkGenerator: Sidewalk width is 0 or no plots provided, skipping sidewalk generation.");
             return null;
         }
 
-        console.log("SidewalkGenerator: Generating sidewalk geometries...");
+        console.log("SidewalkGenerator: Generating sidewalk geometries using SNAPPED values...");
+        // Snapper la largeur du trottoir une seule fois
+        const snappedSidewalkW = Math.round(sidewalkW / cellSizeWorld) * cellSizeWorld;
+        if (snappedSidewalkW <= 0) {
+            console.warn(`SidewalkGenerator: Snapped sidewalk width is <= 0 (${snappedSidewalkW}). Skipping generation.`);
+            return null;
+        }
+        const halfSnappedSidewalkW = snappedSidewalkW / 2;
+
         const allSidewalkGeometries = [];
         const baseSidewalkGeom = new THREE.BoxGeometry(1, 1, 1); // Géométrie de base
 
@@ -56,34 +67,38 @@ export default class SidewalkGenerator {
         };
 
         plots.forEach(plot => {
-            const plotWidth = plot.width;
-            const plotDepth = plot.depth;
-            const plotX = plot.x;
-            const plotZ = plot.z;
+            // Dimensions et position originales
+            const originalPX = plot.x; const originalPZ = plot.z;
+            const originalPW = plot.width; const originalPD = plot.depth;
 
-            // Calculer les coordonnées nécessaires
-            const plotCenterX = plotX + plotWidth / 2;
-            const plotCenterZ = plotZ + plotDepth / 2;
-            const halfSidewalkW = sidewalkW / 2;
+            // Snapper l'origine et les dimensions de la parcelle comme dans NavigationGraph
+            const pX = Math.round(originalPX / cellSizeWorld) * cellSizeWorld;
+            const pZ = Math.round(originalPZ / cellSizeWorld) * cellSizeWorld;
+            const pW = Math.round(originalPW / cellSizeWorld) * cellSizeWorld;
+            const pD = Math.round(originalPD / cellSizeWorld) * cellSizeWorld;
 
-            // Positions des centres des segments de trottoir
-            const topZ = plotZ - halfSidewalkW;         // Centre du segment haut
-            const bottomZ = plotZ + plotDepth + halfSidewalkW; // Centre du segment bas
-            const leftX = plotX - halfSidewalkW;         // Centre du segment gauche
-            const rightX = plotX + plotWidth + halfSidewalkW; // Centre du segment droit
+            // Calculer les coordonnées nécessaires en utilisant les valeurs snappées
+            const snappedPlotCenterX = pX + pW / 2;
+            const snappedPlotCenterZ = pZ + pD / 2;
 
-            // --- Création des 8 segments (4 côtés, 4 coins) ---
-            // Côtés (longueur = dimension de la parcelle, largeur = sidewalkW)
-            allSidewalkGeometries.push(createTransformedGeom(plotWidth, sidewalkW, sidewalkH, plotCenterX, topZ));    // Haut
-            allSidewalkGeometries.push(createTransformedGeom(plotWidth, sidewalkW, sidewalkH, plotCenterX, bottomZ)); // Bas
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, plotDepth, sidewalkH, leftX, plotCenterZ));    // Gauche
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, plotDepth, sidewalkH, rightX, plotCenterZ));   // Droite
+            // Positions des centres des segments de trottoir (utilisant les valeurs snappées)
+            const topZ = pZ - halfSnappedSidewalkW;                     // Centre du segment haut
+            const bottomZ = pZ + pD + halfSnappedSidewalkW;             // Centre du segment bas
+            const leftX = pX - halfSnappedSidewalkW;                     // Centre du segment gauche
+            const rightX = pX + pW + halfSnappedSidewalkW;             // Centre du segment droit
 
-            // Coins (carrés de côté sidewalkW)
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, topZ));     // Coin Haut Gauche
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, topZ));    // Coin Haut Droit
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, leftX, bottomZ));  // Coin Bas Gauche
-            allSidewalkGeometries.push(createTransformedGeom(sidewalkW, sidewalkW, sidewalkH, rightX, bottomZ)); // Coin Bas Droit
+            // --- Création des 8 segments (utilisant les dimensions snappées) ---
+            // Côtés (longueur = dimension snappée de la parcelle, largeur = largeur snappée du trottoir)
+            allSidewalkGeometries.push(createTransformedGeom(pW, snappedSidewalkW, sidewalkH, snappedPlotCenterX, topZ));    // Haut
+            allSidewalkGeometries.push(createTransformedGeom(pW, snappedSidewalkW, sidewalkH, snappedPlotCenterX, bottomZ)); // Bas
+            allSidewalkGeometries.push(createTransformedGeom(snappedSidewalkW, pD, sidewalkH, leftX, snappedPlotCenterZ));    // Gauche
+            allSidewalkGeometries.push(createTransformedGeom(snappedSidewalkW, pD, sidewalkH, rightX, snappedPlotCenterZ));   // Droite
+
+            // Coins (carrés de côté = largeur snappée du trottoir)
+            allSidewalkGeometries.push(createTransformedGeom(snappedSidewalkW, snappedSidewalkW, sidewalkH, leftX, topZ));     // Coin Haut Gauche
+            allSidewalkGeometries.push(createTransformedGeom(snappedSidewalkW, snappedSidewalkW, sidewalkH, rightX, topZ));    // Coin Haut Droit
+            allSidewalkGeometries.push(createTransformedGeom(snappedSidewalkW, snappedSidewalkW, sidewalkH, leftX, bottomZ));  // Coin Bas Gauche
+            allSidewalkGeometries.push(createTransformedGeom(snappedSidewalkW, snappedSidewalkW, sidewalkH, rightX, bottomZ)); // Coin Bas Droit
         });
 
         baseSidewalkGeom.dispose(); // Nettoyer la géométrie de base
