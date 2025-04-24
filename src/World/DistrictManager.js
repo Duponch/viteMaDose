@@ -27,6 +27,11 @@ export default class DistrictManager {
         while (!districtLayoutValid && attempts < this.config.maxDistrictRegenAttempts) {
             attempts++;
             console.log(`\nTentative de formation/validation des districts #${attempts}...`);
+
+            // --- RÉINITIALISATION CRUCIALE --- 
+            this.districts = []; // Vider les districts de la tentative précédente
+            // ---------------------------------
+
             // Réinitialise la référence de district dans toutes les parcelles.
             this.leafPlots.forEach(plot => {
                 plot.districtId = null;
@@ -103,11 +108,17 @@ export default class DistrictManager {
                 const currentPlot = queue[head++];
                 const neighbors = this.findNeighbors(currentPlot, allPlots);
                 for (const neighbor of neighbors) {
-                    if (
-                        neighbor.zoneType !== 'unbuildable' &&
-                        !assignedPlotIds.has(neighbor.id) &&
-                        !currentDistrictAssigned.has(neighbor.id)
-                    ) {
+                    if (typeof neighbor.id === 'undefined') {
+                        console.error(`Neighbor plot has undefined ID! Skipping.`, neighbor);
+                        continue; // Skip this problematic neighbor
+                    }
+                    // --- DEBUG LOG --- 
+                    // console.log(`  -> Checking neighbor ${neighbor.id} for district ${newDistrict.id} (${newDistrict.type}). Already assigned? ${assignedPlotIds.has(neighbor.id)}.`);
+                    // --- END DEBUG LOG ---
+
+                    // Vérification CLAIRE et UNIQUE : la parcelle est constructible ET n'a JAMAIS été assignée globalement
+                    if (neighbor.zoneType !== 'unbuildable' && !assignedPlotIds.has(neighbor.id)) 
+                    {
                         let canAddNeighbor = true;
                         const neighborDistToCenter = neighbor.center.length();
                         const neighborNormalizedDistance = Math.max(0, Math.min(1, neighborDistToCenter / mapRadius));
@@ -141,9 +152,31 @@ export default class DistrictManager {
                 this.districts.push(newDistrict);
             } else {
                 console.warn(`District (type ${districtType}, seed ${seedPlot.id}) trop petit (${newDistrict.plots.length}/${this.config.minDistrictSize}). Libération des parcelles.`);
-                newDistrict.plots.forEach(p => {
-                    assignedPlotIds.delete(p.id);
-                    p.districtId = null;
+                // On ne retire une parcelle de l'assignation globale QUE si elle appartient TOUJOURS
+                // à ce district au moment de la libération. Sinon, elle a été "volée" et on la laisse au voleur.
+                const plotsToRelease = [...newDistrict.plots]; // Copie pour itérer
+                newDistrict.plots = []; // Vider la liste du district échoué
+
+                plotsToRelease.forEach(p => {
+                    const currentPlotDistrictId = p.districtId;
+                    const wasInGlobalSet = assignedPlotIds.has(p.id);
+                    console.log(`  -> Tentative Libération: Plot ${p.id}. Current districtId: ${currentPlotDistrictId}. ID district échoué: ${newDistrict.id}. Était dans assignedPlotIds? ${wasInGlobalSet}.`);
+
+                    if (currentPlotDistrictId === newDistrict.id) {
+                        // La parcelle appartient toujours à ce district échoué, on la libère complètement.
+                        if (wasInGlobalSet) {
+                            assignedPlotIds.delete(p.id);
+                        } else {
+                             console.error(`  -> !! ATTENTION Libération !! Plot ${p.id} (districtId ${currentPlotDistrictId}) devrait être dans assignedPlotIds mais ne l'est pas !`);
+                        }
+                        p.districtId = null;
+                         console.log(`     -> Libérée (districtId=null, retirée de assignedPlotIds)`);
+                    } else {
+                        // La parcelle a été volée par un autre district (districtId !== newDistrict.id)
+                        // On ne touche PAS à son districtId ni à assignedPlotIds.
+                        // Elle reste assignée au district qui l'a volée.
+                         console.warn(`  -> !! ATTENTION Libération !! Plot ${p.id} appartient maintenant au district ${currentPlotDistrictId} (pas ${newDistrict.id}). Non libérée globalement.`);
+                    }
                 });
             }
         }
@@ -177,6 +210,13 @@ export default class DistrictManager {
                         }
                     }
                     if (canAssign) {
+                        // --- DEBUG LOG Phase 2 --- 
+                        const oldDistrictId = plot.districtId;
+                        console.log(`  -> Phase 2 Assignation: Plot ${plot.id} (districtId actuel: ${oldDistrictId}) assigné au district ${bestDistrict.id} (${bestDistrict.type}).`);
+                        if (oldDistrictId !== null) {
+                            console.warn(`  -> !! ATTENTION Phase 2 !! Plot ${plot.id} avait déjà un districtId (${oldDistrictId}) avant d'être assigné au district ${bestDistrict.id}.`);
+                        }
+                        // --- END DEBUG LOG --- 
                         bestDistrict.addPlot(plot);
                         assignedPlotIds.add(plot.id);
                         assignedInPhase2++;
@@ -588,15 +628,54 @@ export default class DistrictManager {
     }
 
     /**
-     * Affiche dans la console la répartition finale des types de parcelles après ajustement.
+     * Affiche dans la console les types de zone finaux après ajustement et fallback,
+     * avec un décompte global et par district.
      */
     logAdjustedZoneTypes() {
-        if (!this.leafPlots) return;
-        const counts = {};
-        this.leafPlots.forEach(p => {
-            counts[p.zoneType] = (counts[p.zoneType] || 0) + 1;
+        console.log("Types de zone finaux après ajustement et fallback:");
+        const finalCountsGlobal = {};
+        this.leafPlots.forEach(plot => {
+            finalCountsGlobal[plot.zoneType] = (finalCountsGlobal[plot.zoneType] || 0) + 1;
         });
-        console.log("Répartition finale des types (après ajustement & fallback):", counts);
+        const finalCountsStrGlobal = Object.entries(finalCountsGlobal)
+            .map(([k, v]) => `${k}:${v}`)
+            .sort() // Trier pour la lisibilité
+            .join(', ');
+        console.log(` -> Répartition globale: { ${finalCountsStrGlobal} }`);
+
+        console.log(" -> Détail par district:");
+        this.districts.forEach(district => {
+            const finalCountsDistrict = {};
+            let plotsInDistrict = 0;
+            // Compter uniquement les parcelles qui appartiennent réellement à ce district
+            this.leafPlots.forEach(plot => {
+                if (plot.districtId === district.id) {
+                    finalCountsDistrict[plot.zoneType] = (finalCountsDistrict[plot.zoneType] || 0) + 1;
+                    plotsInDistrict++;
+                }
+            });
+
+            // Comparer au nombre de parcelles que le district *pense* avoir
+            const expectedPlots = district.plots.length;
+            const plotCountMatch = plotsInDistrict === expectedPlots ? "" : ` (ATTENTION: attendu ${expectedPlots})`;
+
+            const finalCountsStrDistrict = Object.entries(finalCountsDistrict)
+                .map(([k, v]) => `${k}:${v}`)
+                .sort() // Trier pour la lisibilité
+                .join(', ');
+
+            const centerX = district.center ? district.center.x.toFixed(1) : 'N/A';
+            const centerZ = district.center ? district.center.z.toFixed(1) : 'N/A';
+
+            console.log(`  - District ${district.id} (${district.type}): ${plotsInDistrict} parcelles${plotCountMatch} [${finalCountsStrDistrict || 'Aucune parcelle assignée'}]. Centre: (${centerX}, ${centerZ})`);
+        });
+
+        // Logguer les parcelles qui n'ont toujours pas de district (ne devrait pas arriver si fallback a fonctionné)
+        const stillUnassigned = this.leafPlots.filter(p => p.districtId === null && p.zoneType !== 'unbuildable');
+        if (stillUnassigned.length > 0) {
+            console.warn(` -> ATTENTION: ${stillUnassigned.length} parcelles constructibles sont toujours sans district après le fallback :`);
+            stillUnassigned.forEach(p => console.warn(`    - Parcelle ${p.id} (type final: ${p.zoneType})`));
+        }
     }
 
     /**
