@@ -217,21 +217,19 @@ export default class World {
      * @param {boolean} isVisible - True pour afficher, false pour masquer.
      */
     setSubLayerMeshVisibility(categoryName, subTypeName, isVisible) {
-		const targetGroup = this.debugGroups[categoryName];
-		if (!targetGroup) {
-			console.warn(`World.setSubLayerMeshVisibility: Group for category '${categoryName}' not found.`);
-			return;
-		}
+        const targetGroup = this.debugGroups[categoryName];
+        if (!targetGroup) {
+            console.warn(`[World] setSubLayerMeshVisibility: Group for category '${categoryName}' not found.`);
+            return;
+        }
+        const targetMesh = targetGroup.children.find(child => child.userData?.subType === subTypeName || child.name.endsWith(`_${subTypeName}`));
 
-		// Trouver le mesh correspondant dans le groupe (basé sur userData.subType ou le nom)
-		const targetMesh = targetGroup.children.find(child => child.userData?.subType === subTypeName || child.name.endsWith(`_${subTypeName}`));
-
-		if (targetMesh) {
-			targetMesh.visible = isVisible;
-			// console.log(`  [World Debug] SubLayer Mesh '${categoryName}.${subTypeName}' visibility set to ${isVisible}`);
-		} else {
-			console.warn(`World.setSubLayerMeshVisibility: Mesh for subType '${subTypeName}' not found in category '${categoryName}'.`);
-		}
+        if (targetMesh) {
+            console.log(`[World] Setting visibility for ${categoryName}.${subTypeName} (Mesh: ${targetMesh.name}) to ${isVisible}`);
+            targetMesh.visible = isVisible;
+        } else {
+            console.warn(`[World] setSubLayerMeshVisibility: Mesh for subType '${subTypeName}' not found in category '${categoryName}'.`);
+        }
     }
 
 	/**

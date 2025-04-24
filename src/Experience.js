@@ -1100,49 +1100,45 @@ export default class Experience extends EventTarget {
         console.log(`  Debug Sub-Layer '${categoryName}.${subTypeName}' visibility toggled to: ${newVisibility}`);
 
         let parentVisibilityChanged = false;
-        // --- AJOUT : Si on active l'enfant et que le parent est caché, on active le parent --- 
+        let applyIndividualChildVisibility = true; // Flag pour savoir si on doit mettre à jour l'enfant seul
+
+        // --- 1. Faut-il activer le parent ? --- 
         if (newVisibility && !category._visible) {
             console.log(`   Parent category '${categoryName}' was hidden, activating it.`);
             category._visible = true;
+            parentVisibilityChanged = true;
+            applyIndividualChildVisibility = false; // La synchro globale s'en chargera
             if (this.isDebugMode && this.world) {
                 this.world.setGroupVisibility(categoryName, true);
-                // --- CORRECTION : Synchroniser la visibilité 3D de TOUS les enfants --- 
                 const subLayerKeys = Object.keys(category).filter(key => !key.startsWith('_'));
                 subLayerKeys.forEach(key => {
-                    // Appelle setSubLayerMeshVisibility pour chaque enfant avec son état actuel
-                    // (seul l'enfant cliqué sera true, les autres false initialement)
                     console.log(`[Experience] Syncing child mesh visibility: ${categoryName}.${key} = ${category[key]}`);
                     this.world.setSubLayerMeshVisibility(categoryName, key, category[key]);
                 });
             }
-            parentVisibilityChanged = true;
         }
-        // --- FIN AJOUT & CORRECTION ---
-
-        // --- AJOUT : Si on désactive le dernier enfant, désactiver aussi le parent --- 
+        // --- 2. Faut-il désactiver le parent ? --- 
         else if (!newVisibility && category._visible) {
             const subLayerKeys = Object.keys(category).filter(key => !key.startsWith('_'));
             const allChildrenInactive = subLayerKeys.every(key => !category[key]);
             if (allChildrenInactive) {
                 console.log(`   Last active child of '${categoryName}' deactivated, hiding parent.`);
                 category._visible = false;
+                parentVisibilityChanged = true;
+                // Pas besoin de applyIndividualChildVisibility = false ici, car le groupe entier sera caché
                 if (this.isDebugMode && this.world) {
                     this.world.setGroupVisibility(categoryName, false);
                 }
-                parentVisibilityChanged = true;
             }
         }
-        // --- FIN AJOUT ---
 
-        // Si le mode debug global et la catégorie sont actifs, mettre à jour la visibilité du mesh correspondant
-        // --- MODIFICATION : N'appliquer QUE si le parent n'a PAS changé d'état dans ce même appel
-        //    (car la boucle de synchro ci-dessus s'en est déjà chargée)
-        else if (this.isDebugMode && category._visible && this.world && !parentVisibilityChanged) {
-           console.log(`[Experience] Appel setSubLayerMeshVisibility(${categoryName}, ${subTypeName}, ${newVisibility}) depuis toggleSubLayerVisibility (parent non changé)`);
+        // --- 3. Mettre à jour la visibilité 3D de l'enfant si le parent n'a pas changé OU n'a pas été activé --- 
+        if (applyIndividualChildVisibility && this.isDebugMode && category._visible && this.world) {
+           console.log(`[Experience] Applying individual child visibility: ${categoryName}.${subTypeName} = ${newVisibility}`);
            this.world.setSubLayerMeshVisibility(categoryName, subTypeName, newVisibility);
         }
 
-        // --- AJOUT : Déclencher l'événement pour le parent si sa visibilité a changé --- 
+        // --- 4. Dispatch des événements --- 
         if (parentVisibilityChanged) {
             this.dispatchEvent(new CustomEvent('debugcategoryvisibilitychanged', {
                 detail: {
@@ -1152,9 +1148,6 @@ export default class Experience extends EventTarget {
                 }
             }));
         }
-        // --- FIN AJOUT ---
-
-        // Toujours déclencher l'événement pour l'enfant
         this.dispatchEvent(new CustomEvent('debugsublayervisibilitychanged', {
             detail: {
                 categoryName: categoryName,
