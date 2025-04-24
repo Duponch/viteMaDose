@@ -40,7 +40,7 @@ export default class CityManager {
             crosswalkHeight: 0.03,
             crosswalkStripeCount: 6,
             crosswalkStripeWidth: 0.4,
-            crosswalkStripeGap: 0.3,
+            crosswalkStripeGap: 0.4,
             // Districts
             minDistrictSize: 5,
             maxDistrictSize: 10,
@@ -144,7 +144,7 @@ export default class CityManager {
             agentHeadTiltAmplitude: 0.08,
             agentHeadBobAmplitude: 0.06,
             agentAnimationSpeedFactor: 8,
-            maxAgents: 1,
+            maxAgents: 2000,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
