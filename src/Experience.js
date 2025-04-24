@@ -29,7 +29,7 @@ export default class Experience extends EventTarget {
         this.sizes = new Sizes();
         this.time = new Time();
         this.scene = new THREE.Scene();
-        this.originalFog = new THREE.FogExp2(0x1e2a36, 0.003);
+        this.originalFog = new THREE.FogExp2(0x1e2a36, 0.001);
         this.scene.fog = this.originalFog;
         this.camera = new Camera(this);
         this.renderer = new Renderer(this);

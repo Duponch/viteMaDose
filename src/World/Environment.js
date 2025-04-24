@@ -520,6 +520,11 @@ export default class Environment {
             // Facteur jour/nuit pour le shader
             this.skyUniforms.uDayFactor.value = dayNightFactor;
              // La couleur d'influence du soleil (uSunInfluenceColor) est généralement fixe
+
+            // Mise à jour de la couleur du fog
+            if (this.experience.scene.fog) {
+                this.experience.scene.fog.color.copy(this.skyUniforms.uCurrentZenithColor.value);
+            }
         }
 
         // --- Mise à jour Étoiles ---
