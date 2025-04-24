@@ -474,8 +474,7 @@ button {
 .resident-id-link /* Appliquer le même style */ {
     cursor: pointer;
     color: #a7c5eb; /* Même couleur que les titres/boutons pour cohérence */
-    text-decoration: underline;
-    text-decoration-style: dotted;
+    text-decoration: none;
     padding: 0 2px; /* Petit espace autour */
     transition: color 0.2s ease, background-color 0.2s ease;
 }
@@ -484,6 +483,4 @@ button {
 .resident-id-link:hover {
     color: #ffffff; /* Blanc au survol */
     background-color: rgba(167, 197, 235, 0.2); /* Léger fond bleu */
-    text-decoration: underline;
-    text-decoration-style: solid;
 }
