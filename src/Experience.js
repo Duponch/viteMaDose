@@ -1106,14 +1106,39 @@ export default class Experience extends EventTarget {
             category._visible = true;
             if (this.isDebugMode && this.world) {
                 this.world.setGroupVisibility(categoryName, true);
+                // --- CORRECTION : Synchroniser la visibilité 3D de TOUS les enfants --- 
+                const subLayerKeys = Object.keys(category).filter(key => !key.startsWith('_'));
+                subLayerKeys.forEach(key => {
+                    // Appelle setSubLayerMeshVisibility pour chaque enfant avec son état actuel
+                    // (seul l'enfant cliqué sera true, les autres false initialement)
+                    console.log(`[Experience] Syncing child mesh visibility: ${categoryName}.${key} = ${category[key]}`);
+                    this.world.setSubLayerMeshVisibility(categoryName, key, category[key]);
+                });
             }
             parentVisibilityChanged = true;
+        }
+        // --- FIN AJOUT & CORRECTION ---
+
+        // --- AJOUT : Si on désactive le dernier enfant, désactiver aussi le parent --- 
+        else if (!newVisibility && category._visible) {
+            const subLayerKeys = Object.keys(category).filter(key => !key.startsWith('_'));
+            const allChildrenInactive = subLayerKeys.every(key => !category[key]);
+            if (allChildrenInactive) {
+                console.log(`   Last active child of '${categoryName}' deactivated, hiding parent.`);
+                category._visible = false;
+                if (this.isDebugMode && this.world) {
+                    this.world.setGroupVisibility(categoryName, false);
+                }
+                parentVisibilityChanged = true;
+            }
         }
         // --- FIN AJOUT ---
 
         // Si le mode debug global et la catégorie sont actifs, mettre à jour la visibilité du mesh correspondant
-        if (this.isDebugMode && category._visible && this.world) {
-           console.log(`[Experience] Appel setSubLayerMeshVisibility(${categoryName}, ${subTypeName}, ${newVisibility}) depuis toggleSubLayerVisibility`); // LOG AJOUTÉ
+        // --- MODIFICATION : N'appliquer QUE si le parent n'a PAS changé d'état dans ce même appel
+        //    (car la boucle de synchro ci-dessus s'en est déjà chargée)
+        else if (this.isDebugMode && category._visible && this.world && !parentVisibilityChanged) {
+           console.log(`[Experience] Appel setSubLayerMeshVisibility(${categoryName}, ${subTypeName}, ${newVisibility}) depuis toggleSubLayerVisibility (parent non changé)`);
            this.world.setSubLayerMeshVisibility(categoryName, subTypeName, newVisibility);
         }
 
