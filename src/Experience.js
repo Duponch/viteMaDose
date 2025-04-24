@@ -491,91 +491,75 @@ export default class Experience extends EventTarget {
         const citizenManager = this.world?.cityManager?.citizenManager;
 
         if (agentIsInside && citizenManager) {
-            // --- CAS: AGENT À L'INTÉRIEUR (Logique existante inchangée) ---
+            // --- CAS: AGENT À L'INTÉRIEUR ---
             const buildingId = agent.currentState === 'AT_HOME' ? agent.homeBuildingId : agent.workBuildingId;
             const buildingInfo = citizenManager.getBuildingInfo(buildingId);
 
             if (buildingInfo) {
-                 console.log(`Agent ${agent.id} is inside ${buildingInfo.type} ${buildingId}. Moving camera above building.`);
-                 this.selectedAgent = agent; // Sélectionner l'agent logiquement
-                 this.isFollowingAgent = false; // NE PAS activer le suivi caméra
-                 this.controls.enabled = true; // Garder OrbitControls activé
+                console.log(`Agent ${agent.id} is inside ${buildingInfo.type} ${buildingId}. Moving camera above building.`);
+                this.selectedAgent = agent;
+                this.isFollowingAgent = false;
+                this.controls.enabled = false; // Désactiver les contrôles pendant la transition
 
-                 const buildingPos = buildingInfo.position;
-                 const camTargetPos = new THREE.Vector3(buildingPos.x, buildingPos.y + 60, buildingPos.z + 40);
-                 const camLookAt = buildingPos.clone();
+                const buildingPos = buildingInfo.position;
+                const camTargetPos = new THREE.Vector3(buildingPos.x, buildingPos.y + 60, buildingPos.z + 40);
+                const camLookAt = buildingPos.clone();
 
-                 // Utiliser moveToTarget pour aller au-dessus du bâtiment (pas de suivi ensuite)
-                 this.camera.moveToTarget(camTargetPos, camLookAt, 1200, null); // Dernier argument null: pas d'agent à suivre après
+                // Utiliser moveToTarget pour une transition fluide
+                this.camera.moveToTarget(camTargetPos, camLookAt, 1200, null);
 
-                 if (this.tooltipElement) {
+                if (this.tooltipElement) {
                     this.updateTooltipContent(agent);
-                 }
-
+                }
             } else {
-                 // Fallback: Bâtiment non trouvé, suivre l'agent (comportement existant)
-                 console.warn(`Could not find building info for ${buildingId}. Falling back to agent follow.`);
-                 this.selectedAgent = agent;
-                 // --- !! MODIFICATION ICI (Moins probable mais pour être complet) !! ---
-                 // Transition douce MÊME SI on ne trouve pas le bâtiment ?
-                 // Ou garder le comportement actuel de suivi immédiat ?
-                 // Pour l'instant, on garde le suivi immédiat comme fallback:
-                 // this.isFollowingAgent = true;
-                 // this.controls.enabled = false;
-                 // this.camera.followAgent(agent); // Suivi immédiat
-                 // --- Alternative: Transition douce vers l'agent caché ---
-                 const agentPos = agent.position.clone();
-                 const camTargetPos = agentPos.clone().add(new THREE.Vector3(0, 15, 10)); // Vue générique proche
-                 this.camera.moveToTarget(camTargetPos, agentPos, 1000, agent); // Suivre l'agent après
-                 // --- Fin Alternative ---
+                // Fallback: Bâtiment non trouvé, transition douce vers l'agent
+                console.warn(`Could not find building info for ${buildingId}. Falling back to agent follow.`);
+                this.selectedAgent = agent;
+                this.isFollowingAgent = false;
+                this.controls.enabled = false;
 
-                 if (this.tooltipElement) {
-                     this.updateTooltipContent(agent);
-                 }
+                const agentPos = agent.position.clone();
+                const camTargetPos = agentPos.clone().add(new THREE.Vector3(0, 15, 10));
+                this.camera.moveToTarget(camTargetPos, agentPos, 1000, agent);
+
+                if (this.tooltipElement) {
+                    this.updateTooltipContent(agent);
+                }
             }
-
         } else {
-            // --- CAS: AGENT À L'EXTÉRIEUR (Nouvelle logique de transition) ---
+            // --- CAS: AGENT À L'EXTÉRIEUR ---
             console.log(`Agent ${agent.id} is outside. Starting smooth transition to follow.`);
             this.selectedAgent = agent;
-            this.isFollowingAgent = false; // On ne suit PAS ENCORE
-            this.controls.enabled = false; // Désactiver OrbitControls PENDANT la transition
+            this.isFollowingAgent = false;
+            this.controls.enabled = false;
 
-            // 1. Calculer la position cible de la caméra DERRIÈRE l'agent
-            const followDistance = this.camera.followDistance || 8; // Récupérer depuis Camera.js
-            const followHeight = 3.0; // Hauteur souhaitée de la caméra par rapport à l'agent
-            const lookAtOffset = 1.0; // Regarder légèrement au-dessus des pieds
+            // Calculer la position cible de la caméra derrière l'agent
+            const followDistance = this.camera.followDistance || 8;
+            const followHeight = 3.0;
+            const lookAtOffset = 1.0;
 
             const agentPos = agent.position.clone();
             const agentOrientation = agent.orientation.clone();
 
             // Vecteur "arrière" relatif à l'orientation de l'agent
             const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(agentOrientation);
-            // Vecteur "haut"
             const up = new THREE.Vector3(0, 1, 0);
 
-            // Position finale souhaitée de la caméra pour le début du suivi
+            // Position finale souhaitée de la caméra
             const targetCamPos = agentPos.clone()
-                                      .addScaledVector(backward, followDistance) // Reculer
-                                      .addScaledVector(up, followHeight);          // Monter
+                .addScaledVector(backward, followDistance)
+                .addScaledVector(up, followHeight);
 
-            // Point que la caméra doit regarder (centre de l'agent, un peu en hauteur)
+            // Point que la caméra doit regarder
             const targetLookAt = agentPos.clone().addScaledVector(up, lookAtOffset);
 
-            // 2. Lancer l'animation de la caméra vers cette position, en indiquant l'agent à suivre APRÈS
-            const transitionDuration = 800; // Durée de la transition en ms (ajuster si besoin)
-            this.camera.moveToTarget(targetCamPos, targetLookAt, transitionDuration, agent); // Passer l'agent !
+            // Lancer l'animation de la caméra
+            const transitionDuration = 800;
+            this.camera.moveToTarget(targetCamPos, targetLookAt, transitionDuration, agent);
 
-            // 3. Mettre à jour le tooltip
             if (this.tooltipElement) {
                 this.updateTooltipContent(agent);
-                // La position du tooltip sera mise à jour dans la boucle update()
             }
-        }
-
-        // Cacher l'infobulle bâtiment (inchangé)
-        if (this.buildingTooltipElement) {
-            this.buildingTooltipElement.style.display = 'none';
         }
     }
 
@@ -584,25 +568,26 @@ export default class Experience extends EventTarget {
         if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
             this.tooltipElement.style.display = 'none';
         }
-        if (!this.selectedAgent) return; // Si aucun agent n'était sélectionné, ne rien faire
+        if (!this.selectedAgent) return;
 
-        const agentBeingDeselected = this.selectedAgent; // Garder une référence
+        const agentBeingDeselected = this.selectedAgent;
         this.selectedAgent = null;
-        this.isFollowingAgent = false; // Arrêter le suivi logique
+        this.isFollowingAgent = false;
 
-        // Appeler stopFollowing sur la caméra pour arrêter toute animation ou suivi
-        // et réactiver les contrôles Orbit si nécessaire.
-        if (this.camera) {
-            this.camera.stopFollowing();
-        }
+        // Calculer une position cible pour la caméra après la désélection
+        const currentCamPos = this.camera.instance.position.clone();
+        const currentLookAt = new THREE.Vector3();
+        this.camera.instance.getWorldDirection(currentLookAt).multiplyScalar(10).add(currentCamPos);
 
-        // Optionnel : Forcer la réactivation des contrôles au cas où stopFollowing ne le ferait pas
-         if (this.controls && !this.controls.enabled) {
-            console.log("DeselectAgent: Forcing OrbitControls enabled.");
-             this.controls.enabled = true;
-             // Peut-être copier la cible de la caméra actuelle pour une transition douce des contrôles
-             // this.controls.target.copy(this.camera.instance.position).add(this.camera.instance.getWorldDirection(new THREE.Vector3()).multiplyScalar(10));
-         }
+        // Position cible : légèrement plus haute et plus éloignée
+        const targetCamPos = currentCamPos.clone().add(new THREE.Vector3(0, 20, 30));
+        const targetLookAt = currentLookAt.clone().add(new THREE.Vector3(0, 10, 0));
+
+        // Lancer une transition douce vers cette position
+        this.camera.moveToTarget(targetCamPos, targetLookAt, 1000, null);
+
+        // Les contrôles seront réactivés automatiquement à la fin de la transition
+        // dans la méthode update de la caméra
     }
 
     // Sélectionne un bâtiment, active le highlight et le tooltip bâtiment
