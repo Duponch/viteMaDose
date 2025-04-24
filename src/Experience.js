@@ -622,12 +622,30 @@ export default class Experience extends EventTarget {
 
         // --- NOUVEAU : Déplacer la caméra au-dessus du bâtiment ---
         const buildingPos = buildingInfo.position;
-        // Définir une hauteur et un décalage Z pour la caméra
-        // Ajustez ces valeurs pour obtenir le cadrage souhaité
-        const cameraHeightAboveBuilding = 150 + (buildingInfo.type === 'skyscraper' ? 50 : 0); // Plus haut pour gratte-ciels
-        const cameraZOffset = 200 + (buildingInfo.type === 'skyscraper' ? 25 : 0);
-        const cameraTargetPos = new THREE.Vector3(buildingPos.x, buildingPos.y + cameraHeightAboveBuilding, buildingPos.z + cameraZOffset);
-        const cameraLookAt = buildingPos.clone(); // Regarder le bâtiment
+
+        // --- MODIFIÉ: Calculer la position cible en conservant l'orientation horizontale ---
+        const currentCamPos = this.camera.instance.position;
+        const currentTarget = this.controls.target; // Ou this.camera.targetLookAtPosition si controls désactivé
+
+        // 1. Vecteur direction horizontal actuel (Caméra -> Cible)
+        const direction = new THREE.Vector3().subVectors(currentTarget, currentCamPos);
+        direction.y = 0; // Ignorer la composante verticale
+        direction.normalize();
+
+        // 2. Définir la distance et la hauteur souhaitées par rapport au bâtiment
+        // Ajustez ces valeurs pour le cadrage
+        const desiredDistance = 150 + (buildingInfo.type === 'skyscraper' ? 50 : 0); // Distance horizontale par rapport au bâtiment
+        const desiredHeight = 100 + (buildingInfo.type === 'skyscraper' ? 80 : 0); // Hauteur au-dessus du bâtiment
+
+        // 3. Calculer la position cible de la caméra
+        // On part de la position du bâtiment, on recule selon la direction actuelle, et on monte
+        const cameraTargetPos = buildingPos.clone()
+            .addScaledVector(direction, -desiredDistance) // Reculer selon la direction
+            .add(new THREE.Vector3(0, desiredHeight, 0)); // Monter
+
+        // 4. Le point regardé reste le bâtiment
+        const cameraLookAt = buildingPos.clone();
+        // --- FIN MODIFICATION ---
 
         this.camera.moveToTarget(cameraTargetPos, cameraLookAt, 1000); // Animation de 1s
         // --- FIN NOUVEAU ---
