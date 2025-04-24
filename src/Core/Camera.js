@@ -26,6 +26,12 @@ export default class Camera {
         this.maxPitch = Math.PI / 2 - 0.1;
         this.isLeftMouseDown = false;
 
+        // --- NOUVEAU : Paramètres de zoom ---
+        this.minFollowDistance = 4;
+        this.maxFollowDistance = 150;
+        this.zoomSpeed = 0.1;
+        // --- FIN NOUVEAU ---
+
         // --- Vecteurs temporaires (EXISTANT) ---
         this.currentPosition = new THREE.Vector3();
         this.targetLookAtPosition = new THREE.Vector3();
@@ -48,6 +54,9 @@ export default class Camera {
         this._boundHandleMouseMove = this._handleMouseMove.bind(this);
         this._boundHandleMouseDown = this._handleMouseDown.bind(this);
         this._boundHandleMouseUp = this._handleMouseUp.bind(this);
+        // --- NOUVEAU : Lier la méthode de la molette ---
+        this._boundHandleMouseWheel = this._handleMouseWheel.bind(this);
+        // --- FIN NOUVEAU ---
     }
 
     setInstance() {
@@ -211,12 +220,18 @@ export default class Camera {
         document.addEventListener('mousemove', this._boundHandleMouseMove, false);
         document.addEventListener('mousedown', this._boundHandleMouseDown, false);
         document.addEventListener('mouseup', this._boundHandleMouseUp, false);
+        // --- NOUVEAU : Ajouter l'écouteur de la molette ---
+        window.addEventListener('wheel', this._boundHandleMouseWheel);
+        // --- FIN NOUVEAU ---
     }
 
     _removeEventListeners() {
         document.removeEventListener('mousemove', this._boundHandleMouseMove, false);
         document.removeEventListener('mousedown', this._boundHandleMouseDown, false);
         document.removeEventListener('mouseup', this._boundHandleMouseUp, false);
+        // --- NOUVEAU : Retirer l'écouteur de la molette ---
+        window.removeEventListener('wheel', this._boundHandleMouseWheel);
+        // --- FIN NOUVEAU ---
     }
 
     _handleMouseDown(event) {
@@ -245,6 +260,18 @@ export default class Camera {
         this.mouseYaw -= deltaX * this.mouseSensitivityX;
         this.mousePitch -= deltaY * this.mouseSensitivityY;
         this.mousePitch = THREE.MathUtils.clamp(this.mousePitch, this.minPitch, this.maxPitch);
+    }
+
+    _handleMouseWheel(event) {
+        if (!this.isFollowing || !this.targetAgent) return;
+        
+        // Ajuster la distance de suivi en fonction de la molette
+        const delta = event.deltaY * this.zoomSpeed;
+        this.followDistance = THREE.MathUtils.clamp(
+            this.followDistance + delta,
+            this.minFollowDistance,
+            this.maxFollowDistance
+        );
     }
 
     // --- MODIFIÉ : Logique de suivi d'agent ---
