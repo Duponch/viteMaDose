@@ -11,7 +11,7 @@ export default class NavigationGraph {
         this.config = config; // Assure-toi que config contient bien sidewalkWidth, crosswalkStripe*, roadWidth etc.
         this.gridBuffer = null;         // SharedArrayBuffer
         this.gridWalkableMap = null;    // Uint8Array view on gridBuffer
-        this.gridScale = config.gridScale ?? 1.0; // Utiliser la valeur de config ou 1.0 par défaut
+        this.gridScale = 0.5; // Utiliser la valeur de config ou 1.0 par défaut
         this.gridWidth = 0;
         this.gridHeight = 0;
         this.offsetX = 0;
