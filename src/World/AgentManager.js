@@ -498,15 +498,23 @@ export default class AgentManager {
 			const markerMesh = this.instanceMeshes.agentMarker;
 			if (markerMesh) {
 				if (isDebug) {
-					// Composer la matrice du losange au-dessus de l'agent
-					this.tempMatrix.identity();
-					this.tempMatrix.makeTranslation(
-						agent.position.x,
-						agent.position.y + fixedMarkerYOffset,
-						agent.position.z
-					);
-					this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
-					this.tempMatrix.scale(this.tempScale);
+					// Ne pas afficher le losange si l'agent est dans un bâtiment
+					const shouldShowMarker = agent.currentState !== 'AT_HOME' && agent.currentState !== 'AT_WORK';
+					
+					if (shouldShowMarker) {
+						// Composer la matrice du losange au-dessus de l'agent
+						this.tempMatrix.identity();
+						this.tempMatrix.makeTranslation(
+							agent.position.x,
+							agent.position.y + fixedMarkerYOffset,
+							agent.position.z
+						);
+						this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
+						this.tempMatrix.scale(this.tempScale);
+					} else {
+						// Masquer le losange (échelle 0)
+						this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
+					}
 				} else {
 					// Masquer le losange (échelle 0)
 					this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
