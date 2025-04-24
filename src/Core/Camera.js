@@ -142,14 +142,12 @@ export default class Camera {
             this.experience.controls.enabled = false;
         }
 
-        // --- NOUVEAU : Position initiale standardisée ---
-        // 1. Obtenir la position de l'agent
+        // Obtenir la position de l'agent
         this.worldAgentPosition.copy(this.targetAgent.position);
 
-        // 2. Calculer la cible du regard (légèrement au-dessus de l'agent)
+        // Calculer la cible du regard (légèrement au-dessus de l'agent)
         this.targetLookAtPosition.copy(this.worldAgentPosition).add(new THREE.Vector3(0, 1.0, 0));
 
-        // 3. Définir une position initiale standardisée (derrière l'agent)
         // Utiliser l'orientation de l'agent pour positionner la caméra derrière lui
         const agentOrientation = this.targetAgent.orientation;
         const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(agentOrientation);
@@ -159,21 +157,37 @@ export default class Camera {
         this.mousePitch = 0.3; // Angle de vue initial standard
         this.mouseYaw = Math.atan2(backward.x, backward.z); // Aligné avec l'orientation de l'agent
 
-        // 4. Calculer la position initiale de la caméra
+        // Calculer la position initiale de la caméra
         const offsetX = this.followDistance * Math.sin(this.mouseYaw) * Math.cos(this.mousePitch);
         const offsetY = this.followDistance * Math.sin(this.mousePitch);
         const offsetZ = this.followDistance * Math.cos(this.mouseYaw) * Math.cos(this.mousePitch);
         
+        // Calculer la position désirée
         this.desiredCameraPosition.copy(this.targetLookAtPosition).add(new THREE.Vector3(offsetX, offsetY, offsetZ));
-        this.currentPosition.copy(this.desiredCameraPosition);
-        this.instance.position.copy(this.desiredCameraPosition);
+        
+        // IMPORTANT: Ne pas copier directement la position désirée dans la position actuelle
+        // Utiliser une interpolation douce pour éviter l'ajustement abrupt
+        const currentToDesired = new THREE.Vector3().subVectors(this.desiredCameraPosition, this.instance.position);
+        const distanceToMove = currentToDesired.length();
+        
+        // Si la distance est significative, utiliser une interpolation
+        if (distanceToMove > 0.1) {
+            // Utiliser une interpolation rapide mais pas instantanée
+            const lerpFactor = 0.3; // Ajuster cette valeur pour contrôler la vitesse de transition
+            this.currentPosition.lerp(this.desiredCameraPosition, lerpFactor);
+        } else {
+            // Si très proche, copier directement
+            this.currentPosition.copy(this.desiredCameraPosition);
+        }
+        
+        // Appliquer la position et regarder la cible
+        this.instance.position.copy(this.currentPosition);
         this.instance.lookAt(this.targetLookAtPosition);
 
-        // 5. Mettre à jour la cible des OrbitControls
+        // Mettre à jour la cible des OrbitControls
         if (this.experience.controls) {
             this.experience.controls.target.copy(this.targetLookAtPosition);
         }
-        // --- FIN NOUVEAU ---
 
         // Ajouter les listeners pour le contrôle souris
         this._addEventListeners();
@@ -272,7 +286,9 @@ export default class Camera {
     updateFollowLogic(deltaTimeSeconds) {
         if (!this.targetAgent) return;
 
+        // Mettre à jour la position de l'agent
         this.worldAgentPosition.copy(this.targetAgent.position);
+        
         // La cible du regard est légèrement au-dessus de l'agent
         this.targetLookAtPosition.copy(this.worldAgentPosition).add(new THREE.Vector3(0, 1.0, 0));
 
@@ -280,11 +296,17 @@ export default class Camera {
         const offsetX = this.followDistance * Math.sin(this.mouseYaw) * Math.cos(this.mousePitch);
         const offsetY = this.followDistance * Math.sin(this.mousePitch);
         const offsetZ = this.followDistance * Math.cos(this.mouseYaw) * Math.cos(this.mousePitch);
+        
+        // Calculer la position désirée
         this.desiredCameraPosition.copy(this.targetLookAtPosition).add(new THREE.Vector3(offsetX, offsetY, offsetZ));
 
         // Utiliser le temps réel pour l'interpolation, indépendamment de la vitesse du jeu
         const realDeltaTime = this.experience.time.delta / 1000.0;
+        
+        // Utiliser une interpolation plus douce avec une fonction d'easing
         const lerpAlpha = 1.0 - Math.exp(-this.followSpeed * realDeltaTime);
+        
+        // Appliquer l'interpolation à la position actuelle
         this.currentPosition.lerp(this.desiredCameraPosition, lerpAlpha);
 
         // Appliquer la position et regarder la cible
@@ -327,6 +349,10 @@ export default class Camera {
                 // Assurer la position et la cible finales
                 this.instance.position.copy(this.moveToTargetPosition);
                 this.instance.lookAt(this.moveLookAtTargetPosition);
+                
+                // Mettre à jour la position actuelle pour une transition fluide
+                this.currentPosition.copy(this.moveToTargetPosition);
+                
                 if (this.experience.controls) {
                     this.experience.controls.target.copy(this.moveLookAtTargetPosition);
                 }
@@ -336,6 +362,8 @@ export default class Camera {
                     console.log(`Camera: Transition finished, starting follow for agent ${this.agentToFollowAfterMove.id}`);
                     const agentToFollow = this.agentToFollowAfterMove;
                     this.agentToFollowAfterMove = null;
+                    
+                    // Initialiser le suivi avec une transition douce
                     this.followAgent(agentToFollow);
                 } else {
                     // Si aucun agent n'est à suivre, réactiver OrbitControls
