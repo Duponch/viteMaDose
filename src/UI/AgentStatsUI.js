@@ -76,10 +76,10 @@ export default class AgentStatsUI {
 		this.container.appendChild(this.elements.statsPanel);
 	
 		// --- Contenu du panneau (Structure DOM uniquement) ---
-		const title = document.createElement('h3');
+		/* const title = document.createElement('h3');
 		title.id = 'agent-stats-title'; // ID optionnel pour CSS
 		title.textContent = 'Statistiques des Agents';
-		this.elements.statsPanel.appendChild(title);
+		this.elements.statsPanel.appendChild(title); */
 	
 		this.elements.agentListSection = document.createElement('div');
 		this.elements.agentListSection.id = 'agent-list-section'; // ID pour CSS & JS update

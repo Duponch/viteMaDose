@@ -419,8 +419,8 @@ button {
     margin-bottom: 25px; /* Plus d'espace avant les graphiques */
 }
 
-#agent-list-section h4 {
-    margin-bottom: 10px;
+#agent-stats-panel h4 {
+    margin-bottom: 20px;
     color: #a7c5eb;
 }
 
@@ -489,4 +489,8 @@ button {
 .debug-sublayer-button.active {
     background-color: rgba(0, 120, 150, 0.7) !important;
     /* Optionnel : bordure ou autre effet visuel */
+}
+
+#agent-requesting-work-chart {
+	margin-bottom: 50px;
 }
