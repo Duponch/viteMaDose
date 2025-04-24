@@ -68,19 +68,21 @@ export default class TimeUI {
         // Vérifier si le cycle jour/nuit est actif
         if (!this.environment.cycleEnabled) {
             this.element.textContent = "Cycle désactivé"; // Ou afficher l'heure fixe de début
-            // Pour afficher l'heure fixe de début:
-            // const startTime = this.environment.config.startTimeOfDay || 0.25;
-            // const fixedCycleTime = (this.environment.dayDurationMs * startTime) % this.environment.dayDurationMs;
-            // this.element.textContent = this.formatTime(fixedCycleTime, this.environment.dayDurationMs);
             return;
         }
 
         // Récupérer les valeurs actuelles du cycle
         const cycleTime = this.environment.cycleTime;
         const dayDurationMs = this.environment.dayDurationMs;
+        const heure = this.formatTime(cycleTime, dayDurationMs);
+
+        // Récupérer la date courante du calendrier
+        const cal = this.environment.getCurrentCalendarDate();
+        // Format : Jeudi 24/04/2025
+        const dateStr = `${cal.jourSemaine} ${cal.jour.toString().padStart(2, '0')}/${cal.mois.toString().padStart(2, '0')}/${cal.annee}`;
 
         // Mettre à jour le texte de l'élément
-        this.element.textContent = this.formatTime(cycleTime, dayDurationMs);
+        this.element.textContent = `${heure}  |  ${dateStr}`;
     }
 
     // Méthode pour nettoyer l'élément lors de la destruction de l'expérience

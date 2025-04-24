@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import Calendar from '../Utils/Calendar.js';
 
 // --- Objets temporaires pour l'update (performance) ---
 const _tempMatrix = new THREE.Matrix4();
@@ -72,6 +73,12 @@ export default class Environment {
         this.cloudBaseGeometries = []; // Stocke les K géométries de base
         this.cloudInstancedMeshes = []; // Stocke les K InstancedMesh
         // -----------------------------------------
+
+        // --- Intégration du calendrier ---
+        this.calendar = new Calendar({
+            startDate: '2025-04-24', // Peut être rendu configurable plus tard
+            dayDurationMs: this.dayDurationMs
+        });
 
         // --- Appels d'initialisation ---
         this.setSunLight();
@@ -684,5 +691,13 @@ export default class Environment {
                 }); // Fin boucle sur InstancedMeshes
             } // Fin animation nuages
         } // Fin if (isInitialized)
+    }
+
+    /**
+     * Retourne la date courante du jeu (jour, mois, année, jour de la semaine, etc.)
+     */
+    getCurrentCalendarDate() {
+        // Utilise le temps de jeu écoulé
+        return this.calendar.getCurrentDate(this.experience.time.elapsed);
     }
 }
