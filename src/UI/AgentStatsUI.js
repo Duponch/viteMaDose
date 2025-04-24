@@ -12,6 +12,7 @@ export default class AgentStatsUI {
         };
         this.updateInterval = 1000;
         this.intervalId = null;
+        this.listToggleStates = {};
 
         // --- NOUVEAU: États pour détecter clic vs drag ---
         this.isPointerDown = false;
@@ -23,9 +24,7 @@ export default class AgentStatsUI {
 
         // Liaisons des gestionnaires INTERNES à AgentStatsUI
         this._boundHandleMouseDown = this._handleMouseDown.bind(this);
-        this._boundHandleMouseUp = this._handleMouseUp.bind(this);
-        // Retirer la liaison pour le clic panneau stats d'ici
-        // this._boundHandleStatsPanelClick = this.experience._handleStatsPanelClick.bind(this.experience); // Pas besoin ici
+        this._boundPanelMouseUpHandler = this._handlePanelMouseUp.bind(this);
 
         // ... (vérification AgentManager) ...
         this._createElements();
@@ -35,11 +34,19 @@ export default class AgentStatsUI {
 
 	_handleMouseDown(event) {
         // Enregistrer l'état seulement si le bouton principal (gauche) est pressé
-        if (event.button === 0) {
+        // ET si le clic est sur le panneau lui-même ou le bouton toggle (pour éviter conflits avec 3D)
+        const panel = this.elements.statsPanel;
+        const toggleButton = this.elements.toggleButton;
+        if (event.button === 0 && (panel?.contains(event.target) || toggleButton?.contains(event.target))) {
             this.isPointerDown = true;
             this.pointerDownTime = Date.now();
             this.pointerDownPosition.x = event.clientX;
             this.pointerDownPosition.y = event.clientY;
+             // Empêcher la propagation si le mousedown est DANS le panneau pour ne pas démarrer un drag 3D
+            event.stopPropagation();
+        } else {
+            // Si mousedown en dehors, réinitialiser au cas où
+             this.isPointerDown = false;
         }
     }
 
@@ -100,16 +107,21 @@ export default class AgentStatsUI {
 		console.log("AgentStatsUI elements created (styles moved to CSS).");
 	}
 
-    // --- NOUVEAU : Gestionnaire pour les clics en dehors du panneau ---
-    _handleMouseUp(event) {
-        // 1. Vérifier si le panneau est visible ET si un mousedown avait été enregistré par CETTE UI
+    // --- NOUVEAU Gestionnaire MouseUp pour la fermeture du panneau ---
+    _handlePanelMouseUp(event) {
+         // 1. Vérifier si le panneau est visible ET si un mousedown avait été enregistré par CETTE UI
         if (!this.isVisible || !this.isPointerDown || event.button !== 0) {
-            this.isPointerDown = false; // Réinitialiser au cas où
+             // Important: Réinitialiser isPointerDown même si on sort tôt
+             this.isPointerDown = false;
             return;
         }
 
         // Marquer que le bouton est relâché
+        const wasPointerDown = this.isPointerDown;
         this.isPointerDown = false;
+
+        // Si le mousedown n'était pas actif pour cette UI, ignorer
+        if (!wasPointerDown) return;
 
         // 2. Calculer durée et distance
         const clickDuration = Date.now() - this.pointerDownTime;
@@ -122,19 +134,24 @@ export default class AgentStatsUI {
 
         // 4. Si ce n'était PAS un vrai clic (c'était un drag ou un clic long), ne rien faire
         if (!isRealClick) {
-            // console.log("MouseUp ignored (drag or long press). Duration:", clickDuration, "DistSq:", distanceSq); // Debug
+             // console.log("AgentStatsUI PanelMouseUp: Ignored (drag or long press)."); // Debug
             return;
         }
 
-        // 5. Si c'était un vrai clic, vérifier s'il était en dehors de l'UI interactive
-        const clickedOnInteractiveUI = event.target.closest('[data-ui-interactive="true"]');
+        // 5. Si c'était un vrai clic, vérifier s'il était en dehors du panneau ET du bouton toggle
+        const panel = this.elements.statsPanel;
+        const toggleButton = this.elements.toggleButton;
+        const clickedOutside = (!panel || !panel.contains(event.target)) && 
+                               (!toggleButton || !toggleButton.contains(event.target));
 
-        // 6. Si clic valide ET en dehors de l'UI -> Fermer
-        if (!clickedOnInteractiveUI) {
-            // console.log("Valid outside click detected, closing stats panel."); // Debug
+        // 6. Si clic valide ET en dehors -> Fermer
+        if (clickedOutside) {
+            console.log("AgentStatsUI PanelMouseUp: Valid outside click detected, closing panel."); // Debug
             this.hide();
         } else {
-            // console.log("Valid click detected, but inside UI:", clickedOnInteractiveUI); // Debug
+            // console.log("AgentStatsUI PanelMouseUp: Valid click detected, but inside UI."); // Debug
+            // Si le clic est à l'intérieur, l'événement a déjà été géré (ou sera géré)
+            // par les écouteurs spécifiques (toggle, lien agent). On ne fait rien de plus ici.
         }
     }
     // --- FIN NOUVEAU ---
@@ -144,8 +161,8 @@ export default class AgentStatsUI {
         this.elements.toggleButton.addEventListener('click', () => {
             this.toggleVisibility();
         });
-
-        // Note: L'ajout/suppression de l'écouteur 'outsideClick' se fait dans show/hide
+        // L'écouteur mousedown est ajouté/retiré dans show/hide
+        // L'écouteur mouseup pour fermeture est ajouté/retiré dans show/hide
     }
 
     hide() {
@@ -156,16 +173,15 @@ export default class AgentStatsUI {
             clearInterval(this.intervalId);
             this.intervalId = null;
         }
-        // Retirer les écouteurs globaux
-        document.removeEventListener('mousedown', this._boundHandleMouseDown, true); // Capture phase
-        document.removeEventListener('mouseup', this._boundHandleMouseUp, true);     // Capture phase
-
-        // --- NOUVEAU : Retirer l'écouteur pour les clics sur les agents DANS le panneau ---
+        // Retirer les écouteurs globaux gérés par cette UI
+        document.removeEventListener('mousedown', this._boundHandleMouseDown, true);
+        document.removeEventListener('mouseup', this._boundPanelMouseUpHandler, true);
+        // Retirer l'écouteur pour les clics INTERNES (sélection agent via Experience)
         if (this.elements.statsPanel && this.experience?._boundHandleStatsPanelClick) {
              this.elements.statsPanel.removeEventListener('click', this.experience._boundHandleStatsPanelClick);
         }
-        // --- FIN NOUVEAU ---
-        // console.log("AgentStatsUI hidden, listeners removed."); // Debug
+        // console.log("AgentStatsUI hidden, listeners removed.");
+        this.listToggleStates = {};
     }
 
     show() {
@@ -175,27 +191,24 @@ export default class AgentStatsUI {
         this.update();
         if (this.intervalId) clearInterval(this.intervalId);
         this.intervalId = setInterval(() => this.update(), this.updateInterval);
-        // Ajouter les écouteurs globaux (léger délai pour éviter fermeture immédiate)
-        // Utiliser la phase de capture (true) pour intercepter avant OrbitControls
+        // Ajouter les écouteurs globaux gérés par cette UI (léger délai)
         setTimeout(() => {
+            // Mousedown pour savoir si on a initié le clic
             document.addEventListener('mousedown', this._boundHandleMouseDown, true);
-            document.addEventListener('mouseup', this._boundHandleMouseUp, true);
+            // Mouseup pour détecter clic extérieur
+            document.addEventListener('mouseup', this._boundPanelMouseUpHandler, true);
 
-            // --- NOUVEAU : Ajouter l'écouteur pour les clics sur les agents DANS le panneau ---
-            // Assurer que la méthode liée existe dans Experience et que le panneau existe
+            // Ajouter l'écouteur pour les clics sur les agents DANS le panneau (via Experience)
             if (this.elements.statsPanel && this.experience?._boundHandleStatsPanelClick) {
-                // Vérifier si l'écouteur n'est pas déjà attaché (sécurité)
-                // Note: removeEventListener ne lèvera pas d'erreur s'il n'existe pas
                 this.elements.statsPanel.removeEventListener('click', this.experience._boundHandleStatsPanelClick);
                 this.elements.statsPanel.addEventListener('click', this.experience._boundHandleStatsPanelClick);
-                console.log("Stats panel click listener attached in AgentStatsUI.show()"); // Debug
+                // console.log("Stats panel click listener attached in AgentStatsUI.show()");
             } else {
-                 console.warn("Could not attach stats panel click listener in AgentStatsUI.show()"); // Debug
+                 // console.warn("Could not attach stats panel click listener in AgentStatsUI.show()");
             }
-            // --- FIN NOUVEAU ---
-
-            // console.log("AgentStatsUI shown, listeners added."); // Debug
+            // console.log("AgentStatsUI shown, listeners added.");
         }, 0);
+        this.listToggleStates = {};
     }
 
     toggleVisibility() {
@@ -229,39 +242,43 @@ export default class AgentStatsUI {
     }
 
     _updateAgentList(agentsByState) {
-        // Récupérer la section de la liste
         const listSection = this.elements.agentListSection;
         if (!listSection) return;
 
-        let html = '<h4>Agents par État :</h4><ul class=\"agent-state-list\">'; // Utiliser une classe pour un ciblage plus facile
+        let html = '<h4>Agents par État :</h4><ul class="agent-state-list">';
 
-        // Parcourir chaque état
         for (const state in agentsByState) {
             const agentIds = agentsByState[state];
             const count = agentIds.length;
-            const stateId = `agent-list-${state.replace(/\s+/g, '-')}`; // ID unique pour chaque liste d'état
+            const stateId = `agent-list-${state.replace(/\s+/g, '-')}`;
+            // Lire l'état actuel du toggle pour cette liste
+            const isExpanded = !!this.listToggleStates[stateId]; // !! pour convertir undefined en false
 
-            html += `<li class=\"agent-state-item\" data-state=\"${state}\">`; // Ajouter data-state
-            html += `<b style=\"color: #a7c5eb;\">${state} (${count})</b>: `;
+            html += `<li class="agent-state-item" data-state="${state}">`;
+            html += `<b style="color: #a7c5eb;">${state} (${count})</b>: `;
 
             if (count > 0) {
-                // Liste des IDs (initialement tronquée si nécessaire)
-                html += `<span class=\"agent-id-list-container\" id=\"${stateId}\">`;
+                html += `<span class="agent-id-list-container" id="${stateId}">`;
                 const initialDisplayCount = 10;
                 const displayIds = agentIds.slice(0, initialDisplayCount);
-                html += displayIds.map(id => `<span class=\"agent-id-link\" data-agent-id=\"${id}\" title=\"Sélectionner l\'agent ${id}\">${id}</span>`).join(', ');
+                html += displayIds.map(id => `<span class="agent-id-link" data-agent-id="${id}" title="Sélectionner l\'agent ${id}">${id}</span>`).join(', ');
 
                 if (count > initialDisplayCount) {
-                    // Ajouter les IDs cachés
-                    html += `<span class=\"agent-id-list-hidden\" style=\"display: none;\">, ${agentIds.slice(initialDisplayCount).map(id => `<span class=\"agent-id-link\" data-agent-id=\"${id}\" title=\"Sélectionner l\'agent ${id}\">${id}</span>`).join(', ')}</span>`;
-                    // Ajouter le bouton toggle - AJOUT de data-ui-interactive
-                    html += ` <button class=\"toggle-agent-list\" data-target=\"#${stateId}\" data-more-text=\"(... voir ${count - initialDisplayCount} de plus)\" data-less-text=\"(voir moins)\" style=\"cursor: pointer; background: none; border: none; color: #a7c5eb; padding: 0; font-size: 0.8em;\" data-ui-interactive="true">(... voir ${count - initialDisplayCount} de plus)</button>`;
+                    const hiddenSpanStyle = `display: ${isExpanded ? 'inline' : 'none'};`;
+                    const buttonText = isExpanded ? "(voir moins)" : `(... voir ${count - initialDisplayCount} de plus)`;
+                    const buttonDataLess = "(voir moins)";
+                    const buttonDataMore = `(... voir ${count - initialDisplayCount} de plus)`;
+
+                    // Span caché avec style basé sur l'état
+                    html += `<span class="agent-id-list-hidden" style="${hiddenSpanStyle}">, ${agentIds.slice(initialDisplayCount).map(id => `<span class="agent-id-link" data-agent-id="${id}" title="Sélectionner l\'agent ${id}">${id}</span>`).join(', ')}</span>`;
+                    // Bouton avec texte basé sur l'état
+                    html += ` <button class="toggle-agent-list" data-target="#${stateId}" data-more-text="${buttonDataMore}" data-less-text="${buttonDataLess}" style="cursor: pointer; background: none; border: none; color: #a7c5eb; padding: 0; font-size: 0.8em;" data-ui-interactive="true">${buttonText}</button>`;
                 }
-                html += `</span>`; // Fin agent-id-list-container
+                html += `</span>`;
             } else {
                 html += 'Aucun';
             }
-            html += `</li>`; // Fin agent-state-item
+            html += `</li>`;
         }
         html += '</ul>';
 
@@ -299,25 +316,36 @@ export default class AgentStatsUI {
 
     // NOUVELLE MÉTHODE pour gérer le clic sur un bouton toggle
     _handleToggleClick(event) {
-        console.log("AgentStatsUI: _handleToggleClick triggered"); // Log DEBUG
-        event.stopPropagation(); // Empêcher le clic de remonter au panneau (et d'être géré par Experience.js)
-        event.preventDefault(); // Empêcher le comportement par défaut du bouton (si applicable)
+        // console.log("AgentStatsUI: _handleToggleClick triggered"); // Debug
+        event.stopPropagation();
+        event.preventDefault();
 
         const button = event.target;
-        const targetId = button.dataset.target;
-        const container = document.querySelector(targetId);
-        if (!container) return;
+        const targetId = button.dataset.target.substring(1); // Retire le # pour l'utiliser comme clé
 
+        // Inverser l'état stocké pour cette liste spécifique
+        this.listToggleStates[targetId] = !this.listToggleStates[targetId];
+        console.log(`AgentStatsUI: Toggle state for ${targetId} set to ${this.listToggleStates[targetId]}`); // Debug
+
+        // Forcer la mise à jour pour regénérer le HTML avec le nouvel état
+        // Appeler update() mettra aussi à jour les graphiques, ce qui n'est pas idéal
+        // Appelons directement _updateAgentList si agentManager est disponible
+        if (this.agentManager) {
+            const stats = this.agentManager.getAgentStats(); // Récupérer les données fraîches
+            this._updateAgentList(stats.agentsByState);
+        } else {
+             // Fallback si agentManager n'est pas prêt (peu probable ici)
+             this.update();
+        }
+
+        // Retirer la manipulation directe du DOM
+        /*
+        const container = document.querySelector(`#${targetId}`);
+        if (!container) return;
         const hiddenSpan = container.querySelector('.agent-id-list-hidden');
         const isHidden = hiddenSpan.style.display === 'none';
-
-        if (isHidden) {
-            hiddenSpan.style.display = 'inline'; // Ou 'block' selon le rendu souhaité
-            button.textContent = button.dataset.lessText;
-        } else {
-            hiddenSpan.style.display = 'none';
-            button.textContent = button.dataset.moreText;
-        }
+        if (isHidden) { ... } else { ... }
+        */
     }
 
     _updateChart(chartInstance, canvasElement, dataByHour, label) {
@@ -391,7 +419,7 @@ export default class AgentStatsUI {
         if (this.intervalId) clearInterval(this.intervalId);
         // Retirer les écouteurs globaux
         document.removeEventListener('mousedown', this._boundHandleMouseDown, true);
-        document.removeEventListener('mouseup', this._boundHandleMouseUp, true);
+        document.removeEventListener('mouseup', this._boundPanelMouseUpHandler, true);
 
         // ... (reste du destroy : charts, éléments DOM, références) ...
         if (this.charts.requestingWorkChart) this.charts.requestingWorkChart.destroy();

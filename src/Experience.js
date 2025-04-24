@@ -270,71 +270,22 @@ export default class Experience extends EventTarget {
     // Gère la fin du clic : détermine si c'est un clic simple et lance le raycasting
     _handleMouseUp(event) {
         // --- Début Logique AgentStatsUI --- 
+        // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        // SECTION ENTIÈRE À SUPPRIMER
+        // La logique de fermeture du panneau AgentStatsUI est maintenant gérée DANS AgentStatsUI
+        /*
         const agentStatsPanel = this.agentStatsUI?.elements?.statsPanel;
         const isAgentStatsVisible = this.agentStatsUI?.isVisible;
-
-        // MODIFIÉ: Condition simplifiée pour la fermeture du panneau Stats
-        // Si le panneau est visible et qu'un mouseup (bouton gauche) se produit...
-        if (isAgentStatsVisible && event.button === 0) {
-            let clickedInsideStatsPanel = false;
-            if (agentStatsPanel) {
-                const rect = agentStatsPanel.getBoundingClientRect();
-                if (event.clientX >= rect.left && event.clientX <= rect.right &&
-                    event.clientY >= rect.top && event.clientY <= rect.bottom) {
-                    clickedInsideStatsPanel = true;
-                }
-            }
-
-            if (clickedInsideStatsPanel) {
-                 // Clic A L'INTERIEUR du panneau: Laisser AgentStatsUI gérer ses clics internes
-                 // (liens agents, boutons toggle via leurs propres listeners).
-                 // Empêcher ce mouseup de déclencher une désélection 3D.
-                 console.log("Experience._handleMouseUp: Click inside stats panel bounds. Preventing 3D deselection."); // Debug
-                 this.clickHandledByTooltip = true; // Réutiliser ce flag
-                 // Reset le mousedown d'Experience pour éviter un faux clic suivant
-                 this.mouseDownTime = 0;
-                 this.mouseDownPosition.x = null;
-                 this.mouseDownPosition.y = null;
-                 return; // Sortir, ne pas fermer et ne pas faire de raycast
-            } else {
-                // Clic A L'EXTERIEUR du panneau: vérifier si c'était un "vrai clic" pour fermer.
-                
-                // On a besoin de la logique mousedown originale pour vérifier si c'est un clic court
-                const isPointerDown = this.agentStatsUI ? this.agentStatsUI.isPointerDown : this.mouseDownTime > 0;
-                const pointerDownTime = this.agentStatsUI ? this.agentStatsUI.pointerDownTime : this.mouseDownTime;
-                const pointerDownPosition = this.agentStatsUI ? this.agentStatsUI.pointerDownPosition : this.mouseDownPosition;
-                const maxClickDuration = this.agentStatsUI?.MAX_CLICK_DURATION ?? this.MAX_CLICK_DURATION;
-                const maxClickDistanceSq = this.agentStatsUI?.MAX_CLICK_DISTANCE_SQ ?? this.MAX_CLICK_DISTANCE_SQ;
-
-                const clickDuration = Date.now() - pointerDownTime;
-                const deltaX = event.clientX - pointerDownPosition.x;
-                const deltaY = event.clientY - pointerDownPosition.y;
-                const distanceSq = deltaX * deltaX + deltaY * deltaY;
-                const isRealClick = clickDuration <= maxClickDuration && distanceSq <= maxClickDistanceSq;
-
-                // Important: On ne ferme que si c'était un vrai clic ET en dehors
-                if (isRealClick) {
-                    console.log("Experience._handleMouseUp: Valid click detected OUTSIDE stats panel. Closing."); // Debug
-                    this.agentStatsUI.hide();
-                    // On peut return ici aussi car ce clic extérieur ne concerne pas la 3D
-                     this.mouseDownTime = 0; // Reset Experience mousedown state
-                    this.mouseDownPosition.x = null;
-                     this.mouseDownPosition.y = null;
-                    return; 
-                } else {
-                    // Ce n'était pas un vrai clic (drag, etc.) -> ne pas fermer le panneau.
-                    // Laisser la logique 3D se poursuivre si nécessaire.
-                    console.log("Experience._handleMouseUp: Drag or long press detected outside stats panel. Not closing."); // Debug
-                }
-            }
-             // Dans tous les cas où on n'a pas return, il faut reset le mousedown d'Experience
-             this.mouseDownTime = 0;
-             this.mouseDownPosition.x = null;
-             this.mouseDownPosition.y = null;
-             // Et réinitialiser l'état de AgentStatsUI par sécurité
-              if(this.agentStatsUI) this.agentStatsUI.isPointerDown = false;
-        }
+        // ... (toute la logique if/else basée sur isAgentStatsVisible) ...
+         if(this.agentStatsUI) this.agentStatsUI.isPointerDown = false; // <- Garder potentiellement ce reset?
+        */
         // --- Fin Logique AgentStatsUI ---
+        // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+        // Réinitialiser isPointerDown de AgentStatsUI ici par sécurité, car Experience écoute aussi mouseup
+        if(this.agentStatsUI?.isVisible) { // Seulement si le panneau était potentiellement concerné
+             if(this.agentStatsUI) this.agentStatsUI.isPointerDown = false;
+        }
 
         // --- Logique Originale Raycasting / Désélection 3D --- 
         if (this.clickHandledByTooltip) {
