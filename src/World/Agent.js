@@ -1,6 +1,7 @@
 // src/World/Agent.js
 import * as THREE from 'three';
 import WorkScheduleStrategy from './Strategies/WorkScheduleStrategy.js';
+import WeekendWalkStrategy from './Strategies/WeekendWalkStrategy.js';
 
 let nextAgentId = 0;
 
@@ -16,10 +17,14 @@ const AgentState = {
     READY_TO_LEAVE_FOR_HOME: 'READY_TO_LEAVE_FOR_HOME',
     IN_TRANSIT_TO_HOME: 'IN_TRANSIT_TO_HOME',
     IDLE: 'IDLE',
+    WEEKEND_WALK_PREPARING: 'WEEKEND_WALK_PREPARING',
+    WEEKEND_WALK_REQUESTING_PATH: 'WEEKEND_WALK_REQUESTING_PATH',
+    WEEKEND_WALK_READY: 'WEEKEND_WALK_READY',
+    WEEKEND_WALKING: 'WEEKEND_WALKING',
 };
 
 export default class Agent {
-    constructor(config, instanceId, experience, workScheduleStrategy = null) {
+    constructor(config, instanceId, experience, workScheduleStrategy = null, weekendWalkStrategy = null) {
         this.id = `citizen_${nextAgentId++}`;
         this.instanceId = instanceId;
 
@@ -50,6 +55,8 @@ export default class Agent {
         this.workPosition = null;
         this.homeGridNode = null;
         this.workGridNode = null;
+        this.weekendWalkDestination = null;
+        this.weekendWalkGridNode = null;
 
         // --- Trajet Actuel ---
         this.currentPathPoints = null;
@@ -72,6 +79,7 @@ export default class Agent {
 		this.lastArrivalTimeHome = 0; // Temps de jeu (ms) de la dernière arrivée AT_HOME (0 initialement)
 		this.lastArrivalTimeWork = -1; // Temps de jeu (ms) de la dernière arrivée AT_WORK
 		this.requestedPathForDepartureTime = -1; // Pour éviter requêtes multiples pour le même départ
+        this.weekendWalkEndTime = -1; // Temps de jeu (ms) de la fin de la promenade du weekend
 
         // --- Animation Visuelle ---
         this.currentAnimationMatrix = {
@@ -87,6 +95,7 @@ export default class Agent {
         this._tempMatrix = new THREE.Matrix4();
 
         this.workScheduleStrategy = workScheduleStrategy || new WorkScheduleStrategy();
+        this.weekendWalkStrategy = weekendWalkStrategy || new WeekendWalkStrategy();
 
         this._calculateScheduledTimes();
     }
@@ -341,10 +350,39 @@ export default class Agent {
         const environment = this.experience.world?.environment;
         const calendarDate = environment?.getCurrentCalendarDate ? environment.getCurrentCalendarDate() : null;
 
+        // Enregistrer cet agent dans la stratégie de promenade du weekend si nécessaire
+        if (calendarDate && ["Samedi", "Dimanche"].includes(calendarDate.jourSemaine) && 
+            this.weekendWalkStrategy) {
+            this.weekendWalkStrategy.registerAgent(this.id, calendarDate);
+        }
+
         // --- Machine d'état ---
         switch (this.currentState) {
             case AgentState.AT_HOME:
                 this.isVisible = false; // Assurer invisibilité
+
+                // Vérifier si c'est le weekend et si l'agent doit se promener
+                if (calendarDate && ["Samedi", "Dimanche"].includes(calendarDate.jourSemaine) &&
+                    this.weekendWalkStrategy && this.weekendWalkStrategy.shouldWalkNow(this.id, calendarDate, currentHour)) {
+                    
+                    // Vérifier si l'agent a un endroit où aller pour sa promenade
+                    if (!this.weekendWalkDestination) {
+                        this._findRandomWalkDestination();
+                    }
+                    
+                    if (this.weekendWalkDestination && this.homeGridNode && this.weekendWalkGridNode) {
+                        this.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
+                        this.requestPath(
+                            this.homePosition, 
+                            this.weekendWalkDestination, 
+                            this.homeGridNode, 
+                            this.weekendWalkGridNode, 
+                            AgentState.WEEKEND_WALK_READY, 
+                            currentGameTime
+                        );
+                    }
+                    break;
+                }
 
                 // Empêcher de partir travailler le weekend
                 if (calendarDate && !this.workScheduleStrategy.shouldWorkToday(calendarDate)) {
@@ -422,9 +460,10 @@ export default class Agent {
                 }
                 break;
 
-             // --- États liés à la réception du chemin et au départ effectif ---
+            // --- États liés à la réception du chemin et au départ effectif ---
             case AgentState.REQUESTING_PATH_FOR_WORK:
             case AgentState.REQUESTING_PATH_FOR_HOME:
+            case AgentState.WEEKEND_WALK_REQUESTING_PATH:
                 this.isVisible = false; // Reste caché pendant la requête
                 // Attend passivement l'appel à setPath par AgentManager
                 break;
@@ -500,7 +539,7 @@ export default class Agent {
                     this.currentPathIndexVisual = 0;
                     this.visualInterpolationProgress = 0;
 
-                    // Incrémenter stats
+                    // Incrémenter stats (utilisation de l'heure effective de départ)
                     const departHourH = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24));
                     const agentManagerH = this.experience.world?.agentManager;
                      if (agentManagerH?.stats?.pathsToHomeByHour) {
@@ -509,7 +548,42 @@ export default class Agent {
                 }
                 break;
 
-            // --- États de Transit (vérification arrivée) ---
+            case AgentState.WEEKEND_WALK_READY:
+                this.isVisible = false;
+
+                // Vérifier si le chemin est valide
+                if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) {
+                    console.warn(`Agent ${this.id}: In WEEKEND_WALK_READY but path invalid. Reverting to AT_HOME.`);
+                    this.currentState = AgentState.AT_HOME;
+                    this.lastArrivalTimeHome = currentGameTime;
+                    this.requestedPathForDepartureTime = -1;
+                    this.weekendWalkDestination = null;
+                    this.weekendWalkGridNode = null;
+                    break;
+                }
+
+                // Départ immédiat pour la promenade
+                this.departureTimeGame = currentGameTime;
+                this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
+                
+                // Calculer le temps de fin de la promenade (aller-retour)
+                // La durée de promenade a été déterminée par la stratégie
+                const dayKey = `${calendarDate.jourSemaine}_${calendarDate.jour}_${calendarDate.mois}_${calendarDate.annee}`;
+                const agentWalkInfo = this.weekendWalkStrategy.agentWalkMap.get(dayKey).get(this.id);
+                if (agentWalkInfo) {
+                    const walkDurationMs = (agentWalkInfo.duration * dayDurationMs) / 24; // Convertir heures en ms
+                    this.weekendWalkEndTime = currentGameTime + walkDurationMs;
+                } else {
+                    // Fallback: promenade de 2 heures si pas d'info
+                    this.weekendWalkEndTime = currentGameTime + (2 * dayDurationMs) / 24;
+                }
+                
+                this.currentState = AgentState.WEEKEND_WALKING;
+                this.isVisible = true;
+                this.currentPathIndexVisual = 0;
+                this.visualInterpolationProgress = 0;
+                break;
+
             case AgentState.IN_TRANSIT_TO_WORK:
                 this.isVisible = true; // Assurer visibilité
 
@@ -552,13 +626,97 @@ export default class Agent {
                 // Le déplacement visuel est géré dans updateVisuals
                 break;
 
+            case AgentState.WEEKEND_WALKING:
+                this.isVisible = true;
+
+                // Vérifier si la promenade est terminée en fonction du temps écoulé
+                if (currentGameTime >= this.weekendWalkEndTime) {
+                    // La promenade est terminée, rentrer à la maison
+                    if (this.homePosition && this.weekendWalkGridNode && this.homeGridNode) {
+                        this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
+                        this.requestPath(
+                            this.weekendWalkDestination,
+                            this.homePosition,
+                            this.weekendWalkGridNode,
+                            this.homeGridNode,
+                            AgentState.READY_TO_LEAVE_FOR_HOME,
+                            currentGameTime
+                        );
+                    } else {
+                        // Fallback si problème avec les nœuds
+                        this.currentState = AgentState.AT_HOME;
+                        this.isVisible = false;
+                    }
+                    // Réinitialiser la destination de promenade pour la prochaine fois
+                    this.weekendWalkDestination = null;
+                    this.weekendWalkGridNode = null;
+                    break;
+                }
+
+                // Si l'agent est arrivé à sa destination de promenade
+                if (this.currentPathIndexVisual >= this.currentPathPoints.length - 1 && this.visualInterpolationProgress >= 0.95) {
+                    // L'agent est arrivé à sa destination de promenade, on va maintenant chercher un nouveau point aléatoire
+                    this._findRandomWalkDestination();
+                    
+                    if (this.weekendWalkDestination && this.weekendWalkGridNode && this.currentPathPoints) {
+                        // Obtenir la position actuelle comme point de départ
+                        const currentPosition = this.currentPathPoints[this.currentPathPoints.length - 1].clone();
+                        const navGraph = this.experience.world?.cityManager?.getNavigationGraph();
+                        const currentGridNode = navGraph?.getClosestWalkableNode(currentPosition);
+                        
+                        if (currentGridNode) {
+                            this.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
+                            this.requestPath(
+                                currentPosition,
+                                this.weekendWalkDestination,
+                                currentGridNode,
+                                this.weekendWalkGridNode,
+                                AgentState.WEEKEND_WALK_READY,
+                                currentGameTime
+                            );
+                        } else {
+                            // Si on ne peut pas trouver le nœud actuel, on retourne à la maison
+                            this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
+                            this.requestPath(
+                                currentPosition,
+                                this.homePosition,
+                                null, // On laisse au système trouver le nœud le plus proche
+                                this.homeGridNode,
+                                AgentState.READY_TO_LEAVE_FOR_HOME,
+                                currentGameTime
+                            );
+                            this.weekendWalkDestination = null;
+                            this.weekendWalkGridNode = null;
+                        }
+                    } else {
+                        // Si on ne peut pas générer une nouvelle destination, on retourne à la maison
+                        const currentPosition = this.currentPathPoints[this.currentPathPoints.length - 1].clone();
+                        this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
+                        this.requestPath(
+                            currentPosition,
+                            this.homePosition,
+                            null,
+                            this.homeGridNode,
+                            AgentState.READY_TO_LEAVE_FOR_HOME,
+                            currentGameTime
+                        );
+                        this.weekendWalkDestination = null;
+                        this.weekendWalkGridNode = null;
+                    }
+                }
+                break;
+
             case AgentState.IDLE:
-                // Reste IDLE, ne fait rien activement ici. Pourrait tenter de s'initialiser si besoin.
                 this.isVisible = false;
                 break;
 
-        } // Fin switch(this.currentState)
-    } // Fin updateState
+            default:
+                console.warn(`Agent ${this.id}: Unknown state ${this.currentState}, resetting to IDLE.`);
+                this.currentState = AgentState.IDLE;
+                this.isVisible = false;
+                break;
+        }
+    }
 
 	updateVisuals(deltaTime, currentGameTime) {
         if (this.currentState !== AgentState.IN_TRANSIT_TO_WORK && this.currentState !== AgentState.IN_TRANSIT_TO_HOME) {
@@ -815,5 +973,109 @@ export default class Agent {
         this.homeGridNode = null;
         this.workGridNode = null;
         this.experience = null; // Libérer la référence à Experience
+    }
+
+    /**
+     * Trouve une destination aléatoire pour la promenade du weekend
+     * @private
+     */
+    _findRandomWalkDestination() {
+        const cityManager = this.experience.world?.cityManager;
+        const navGraph = cityManager?.getNavigationGraph();
+        
+        if (!cityManager || !navGraph) {
+            console.warn(`Agent ${this.id}: Impossible de trouver une destination de promenade - CityManager ou NavigationGraph manquant.`);
+            return;
+        }
+        
+        // Récupérer les dimensions de la grille ou utiliser des valeurs par défaut
+        const gridSize = navGraph.gridSize || { width: 100, height: 100 };
+        
+        if (!gridSize || typeof gridSize.width !== 'number' || typeof gridSize.height !== 'number') {
+            console.warn(`Agent ${this.id}: Dimensions de grille invalides, utilisation de valeurs par défaut.`);
+            
+            // Essayer d'obtenir les dimensions d'une autre manière, ou utiliser des valeurs par défaut
+            // Trouver directement un lieu public ou proche du domicile
+            return this._findWalkDestinationFallback(cityManager, navGraph);
+        }
+        
+        // Générer des coordonnées aléatoires dans la grille
+        let attempts = 0;
+        const maxAttempts = 20;
+        
+        while (attempts < maxAttempts) {
+            attempts++;
+            
+            // Génération d'un point aléatoire dans la grille
+            const randomX = Math.floor(Math.random() * gridSize.width);
+            const randomY = Math.floor(Math.random() * gridSize.height);
+            
+            // Vérifier si le nœud est accessible
+            const gridNode = navGraph.getNodeAt && navGraph.getNodeAt(randomX, randomY);
+            
+            if (gridNode && gridNode.walkable) {
+                // Convertir le nœud de grille en position mondiale
+                const worldPosition = navGraph.gridToWorld(randomX, randomY);
+                
+                // Stocker la destination et le nœud
+                this.weekendWalkDestination = worldPosition;
+                this.weekendWalkGridNode = gridNode;
+                return;
+            }
+        }
+        
+        // Si nous n'avons pas trouvé de destination valide après plusieurs tentatives, 
+        // utiliser la méthode de fallback
+        return this._findWalkDestinationFallback(cityManager, navGraph);
+    }
+    
+    /**
+     * Méthode de secours pour trouver une destination de promenade si la méthode principale échoue
+     * @param {Object} cityManager - Le gestionnaire de ville
+     * @param {Object} navGraph - Le graphe de navigation
+     * @private
+     */
+    _findWalkDestinationFallback(cityManager, navGraph) {
+        // Essayer d'abord avec les bâtiments publics
+        const publicBuildings = cityManager.getBuildingsByType && cityManager.getBuildingsByType(['commercial', 'park']);
+        
+        if (publicBuildings && publicBuildings.length > 0) {
+            // Choisir un bâtiment public aléatoire
+            const randomBuilding = publicBuildings[Math.floor(Math.random() * publicBuildings.length)];
+            if (randomBuilding && randomBuilding.position) {
+                const buildingPosition = randomBuilding.position.clone();
+                const sidewalkHeight = navGraph.sidewalkHeight ?? 0.2;
+                buildingPosition.y = sidewalkHeight;
+                
+                // Trouver un nœud marchable proche du bâtiment
+                this.weekendWalkGridNode = navGraph.getClosestWalkableNode && navGraph.getClosestWalkableNode(buildingPosition);
+                if (this.weekendWalkGridNode) {
+                    this.weekendWalkDestination = navGraph.gridToWorld(this.weekendWalkGridNode.x, this.weekendWalkGridNode.y);
+                    return;
+                }
+            }
+        }
+        
+        // Si la solution avec les bâtiments publics échoue aussi, utiliser un point près du domicile
+        if (!this.homePosition) {
+            console.error(`Agent ${this.id}: Aucune position de domicile disponible pour destination de secours.`);
+            return;
+        }
+        
+        console.warn(`Agent ${this.id}: Aucune destination de promenade valide trouvée, utilisation d'un point proche du domicile.`);
+        const homeOffset = new THREE.Vector3(
+            (Math.random() - 0.5) * 20,
+            0,
+            (Math.random() - 0.5) * 20
+        );
+        const nearHomePosition = this.homePosition.clone().add(homeOffset);
+        this.weekendWalkGridNode = navGraph.getClosestWalkableNode && navGraph.getClosestWalkableNode(nearHomePosition);
+        if (this.weekendWalkGridNode) {
+            this.weekendWalkDestination = navGraph.gridToWorld(this.weekendWalkGridNode.x, this.weekendWalkGridNode.y);
+        } else {
+            // Vraiment ultime fallback
+            this.weekendWalkDestination = this.homePosition;
+            this.weekendWalkGridNode = this.homeGridNode;
+        }
     }
 }

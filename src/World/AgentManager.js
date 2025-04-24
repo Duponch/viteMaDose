@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import Agent from './Agent.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import WorkScheduleStrategy from './Strategies/WorkScheduleStrategy.js';
+import WeekendWalkStrategy from './Strategies/WeekendWalkStrategy.js';
 
 // --- Fonctions createCapsuleGeometry, createShoeGeometry (INCHANGÉES) ---
 // ... (coller les fonctions ici) ...
@@ -183,10 +185,18 @@ export default class AgentManager {
         const agentsByState = {};
          // Initialiser tous les états possibles pour éviter les clés manquantes
         Object.values(Agent.prototype.constructor.AgentState || { // Accès à l'enum AgentState via Agent.js
-            AT_HOME: 'AT_HOME', GOING_TO_WORK: 'GOING_TO_WORK', AT_WORK: 'AT_WORK',
-            GOING_HOME: 'GOING_HOME', IDLE: 'IDLE', WAITING_FOR_PATH: 'WAITING_FOR_PATH',
+            AT_HOME: 'AT_HOME', 
+            GOING_TO_WORK: 'GOING_TO_WORK', 
+            AT_WORK: 'AT_WORK',
+            GOING_HOME: 'GOING_HOME', 
+            IDLE: 'IDLE', 
+            WAITING_FOR_PATH: 'WAITING_FOR_PATH',
             REQUESTING_PATH_FOR_WORK: 'REQUESTING_PATH_FOR_WORK',
-            REQUESTING_PATH_FOR_HOME: 'REQUESTING_PATH_FOR_HOME'
+            REQUESTING_PATH_FOR_HOME: 'REQUESTING_PATH_FOR_HOME',
+            WEEKEND_WALK_PREPARING: 'WEEKEND_WALK_PREPARING',
+            WEEKEND_WALK_REQUESTING_PATH: 'WEEKEND_WALK_REQUESTING_PATH',
+            WEEKEND_WALK_READY: 'WEEKEND_WALK_READY',
+            WEEKEND_WALKING: 'WEEKEND_WALKING'
         }).forEach(state => agentsByState[state] = []);
 
         if (this.agents) {
@@ -297,7 +307,12 @@ export default class AgentManager {
 		agentConfig.torsoColorHex = agentConfig.torsoColor.getHex();
 		agentConfig.debugPathColor = agentConfig.torsoColorHex;
 		const instanceId = this.activeCount;                 // on prend la prochaine case libre
-		const newAgent = new Agent(agentConfig, instanceId, this.experience);
+		
+		// Créer les stratégies pour cet agent
+		const workScheduleStrategy = new WorkScheduleStrategy();
+		const weekendWalkStrategy = new WeekendWalkStrategy();
+		
+		const newAgent = new Agent(agentConfig, instanceId, this.experience, workScheduleStrategy, weekendWalkStrategy);
 	
 		// enregistrement, assignment home/work…
 		const cityManager = this.experience.world?.cityManager;
