@@ -647,7 +647,7 @@ export default class Experience extends EventTarget {
         const cameraLookAt = buildingPos.clone();
         // --- FIN MODIFICATION ---
 
-        this.camera.moveToTarget(cameraTargetPos, cameraLookAt, 1000); // Animation de 1s
+        this.camera.moveToTarget(cameraTargetPos, cameraLookAt, 500); // Animation de 0.5s au lieu de 1s
         // --- FIN NOUVEAU ---
 
         // Cacher l'infobulle agent
