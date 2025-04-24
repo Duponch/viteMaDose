@@ -1085,34 +1085,59 @@ export default class Experience extends EventTarget {
      * @param {string} subTypeName - Nom du sous-type (ex: 'house', 'residential').
      */
     toggleSubLayerVisibility(categoryName, subTypeName) {
-		// ... (le reste de la méthode toggleSubLayerVisibility reste identique) ...
         if (!this.debugLayerVisibility.hasOwnProperty(categoryName) ||
-			!this.debugLayerVisibility[categoryName].hasOwnProperty(subTypeName) ||
-			subTypeName.startsWith('_')) {
-			console.warn(`Experience.toggleSubLayerVisibility: Invalid category '${categoryName}' or subType '${subTypeName}'`);
-			return;
-		}
+            !this.debugLayerVisibility[categoryName].hasOwnProperty(subTypeName) ||
+            subTypeName.startsWith('_')) {
+            console.warn(`Experience.toggleSubLayerVisibility: Invalid category '${categoryName}' or subType '${subTypeName}'`);
+            return;
+        }
 
-		const category = this.debugLayerVisibility[categoryName];
-		const currentVisibility = category[subTypeName];
-		const newVisibility = !currentVisibility;
-		category[subTypeName] = newVisibility;
+        const category = this.debugLayerVisibility[categoryName];
+        const currentVisibility = category[subTypeName];
+        const newVisibility = !currentVisibility;
+        category[subTypeName] = newVisibility;
 
-		console.log(`  Debug Sub-Layer '${categoryName}.${subTypeName}' visibility toggled to: ${newVisibility}`);
+        console.log(`  Debug Sub-Layer '${categoryName}.${subTypeName}' visibility toggled to: ${newVisibility}`);
 
-		// Si le mode debug global et la catégorie sont actifs, mettre à jour la visibilité du mesh correspondant
-		if (this.isDebugMode && category._visible && this.world) {
-		   this.world.setSubLayerMeshVisibility(categoryName, subTypeName, newVisibility);
-		}
+        let parentVisibilityChanged = false;
+        // --- AJOUT : Si on active l'enfant et que le parent est caché, on active le parent --- 
+        if (newVisibility && !category._visible) {
+            console.log(`   Parent category '${categoryName}' was hidden, activating it.`);
+            category._visible = true;
+            if (this.isDebugMode && this.world) {
+                this.world.setGroupVisibility(categoryName, true);
+            }
+            parentVisibilityChanged = true;
+        }
+        // --- FIN AJOUT ---
 
-		this.dispatchEvent(new CustomEvent('debugsublayervisibilitychanged', {
-			detail: {
-				categoryName: categoryName,
-				subTypeName: subTypeName,
-				isVisible: newVisibility,
-				allStates: { ...this.debugLayerVisibility }
-			}
-		}));
+        // Si le mode debug global et la catégorie sont actifs, mettre à jour la visibilité du mesh correspondant
+        if (this.isDebugMode && category._visible && this.world) {
+           console.log(`[Experience] Appel setSubLayerMeshVisibility(${categoryName}, ${subTypeName}, ${newVisibility}) depuis toggleSubLayerVisibility`); // LOG AJOUTÉ
+           this.world.setSubLayerMeshVisibility(categoryName, subTypeName, newVisibility);
+        }
+
+        // --- AJOUT : Déclencher l'événement pour le parent si sa visibilité a changé --- 
+        if (parentVisibilityChanged) {
+            this.dispatchEvent(new CustomEvent('debugcategoryvisibilitychanged', {
+                detail: {
+                    categoryName: categoryName,
+                    isVisible: category._visible, 
+                    allStates: { ...this.debugLayerVisibility }
+                }
+            }));
+        }
+        // --- FIN AJOUT ---
+
+        // Toujours déclencher l'événement pour l'enfant
+        this.dispatchEvent(new CustomEvent('debugsublayervisibilitychanged', {
+            detail: {
+                categoryName: categoryName,
+                subTypeName: subTypeName,
+                isVisible: newVisibility,
+                allStates: { ...this.debugLayerVisibility }
+            }
+        }));
     }
 
 	toggleDebugLayer(layerName) {
