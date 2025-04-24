@@ -136,6 +136,9 @@ export default class Experience extends EventTarget {
         }
         // --- FIN NOUVEAU ---
 
+        // --- NOUVEAU : Gestionnaire pour les clics DANS le panneau de statistiques agent ---
+        this._boundHandleStatsPanelClick = this._handleStatsPanelClick.bind(this);
+
         this.createHighlightMesh(); // Créer le mesh de surbrillance
         console.log("Experience initialisée. Mode debug:", this.isDebugMode);
     }
@@ -461,6 +464,12 @@ export default class Experience extends EventTarget {
 
     // Gère les clics à l'intérieur du tooltip du BÂTIMENT (délégation)
     _handleBuildingTooltipClick(event) {
+        // --- AJOUT : Ignorer si le clic vient d'un bouton toggle --- 
+        if (event.target.closest('.toggle-building-occupant-list')) {
+            return; // Ne rien faire si le clic était sur le bouton toggle
+        }
+        // --- FIN AJOUT ---
+
         const clickedLink = event.target.closest('.resident-id-link');
         if (clickedLink) {
             const agentId = clickedLink.dataset.agentId;
@@ -719,6 +728,7 @@ export default class Experience extends EventTarget {
         let currentOccupantsInside = 0;
         const occupantsList = []; // Pourra contenir résidents OU employés
         let listLabel = "Occupants"; // Label par défaut
+        const buildingId = building.id; // ID du bâtiment pour l'unicité
 
         const agentManager = this.world?.agentManager;
 
@@ -745,12 +755,26 @@ export default class Experience extends EventTarget {
             });
         }
 
-        // Génère le HTML pour la liste (cliquable)
-        let occupantsListHTML = 'None';
-        if (occupantsList.length > 0) {
-            occupantsListHTML = occupantsList.map(id =>
-                `<span class="resident-id-link" data-agent-id="${id}">${id}</span>` // Garde la classe pour la fonctionnalité de clic
+        // Génère le HTML pour la liste (cliquable et avec toggle)
+        let occupantsListHTML = 'Aucun';
+        const count = occupantsList.length;
+        if (count > 0) {
+            const initialDisplayCount = 10;
+            const displayIds = occupantsList.slice(0, initialDisplayCount);
+            const listContainerId = `building-tooltip-list-${buildingId}`.replace(/\./g, '-'); // ID unique
+
+            occupantsListHTML = `<span class="building-occupant-list-container" id="${listContainerId}">`; // Conteneur pour le toggle
+            occupantsListHTML += displayIds.map(id =>
+                `<span class="resident-id-link" data-agent-id="${id}" title="Sélectionner l\'agent ${id}">${id}</span>`
             ).join(' | ');
+
+            if (count > initialDisplayCount) {
+                // IDs cachés
+                occupantsListHTML += `<span class="building-occupant-list-hidden" style="display: none;"> | ${occupantsList.slice(initialDisplayCount).map(id => `<span class="resident-id-link" data-agent-id="${id}" title="Sélectionner l\'agent ${id}">${id}</span>`).join(' | ')}</span>`;
+                // Bouton Toggle
+                occupantsListHTML += ` <button class="toggle-building-occupant-list" data-target="#${listContainerId}" data-more-text="(... voir ${count - initialDisplayCount} de plus)" data-less-text="(voir moins)" style="cursor: pointer; background: none; border: none; color: #a7c5eb; padding: 0; font-size: 0.9em; vertical-align: baseline;">(... voir ${count - initialDisplayCount} de plus)</button>`;
+            }
+             occupantsListHTML += `</span>`; // Fin building-occupant-list-container
         }
 
         // Construit le contenu final du tooltip
@@ -765,8 +789,76 @@ export default class Experience extends EventTarget {
         // Met à jour le DOM seulement si nécessaire
         if (this.buildingTooltipElement.innerHTML !== content) {
             this.buildingTooltipElement.innerHTML = content;
+            // (Ré)attacher les écouteurs pour les NOUVEAUX boutons toggle dans cette infobulle
+            this._setupBuildingTooltipToggleListeners();
         }
     }
+
+    // --- NOUVELLE MÉTHODE pour gérer les listeners du toggle dans l'infobulle bâtiment ---
+    _setupBuildingTooltipToggleListeners() {
+        if (!this.buildingTooltipElement) return;
+
+        this.buildingTooltipElement.querySelectorAll('.toggle-building-occupant-list').forEach(button => {
+            // Utiliser une fonction fléchée pour garder le contexte ou binder
+            const handler = (event) => {
+                event.stopPropagation(); // Empêche le clic de se propager au tooltip lui-même (qui pourrait déclencher autre chose)
+                const button = event.currentTarget;
+                const targetId = button.dataset.target;
+                const container = this.buildingTooltipElement.querySelector(targetId);
+                if (!container) return;
+
+                const hiddenSpan = container.querySelector('.building-occupant-list-hidden');
+                if (!hiddenSpan) return;
+
+                const isHidden = hiddenSpan.style.display === 'none';
+
+                if (isHidden) {
+                    hiddenSpan.style.display = 'inline';
+                    button.textContent = button.dataset.lessText;
+                } else {
+                    hiddenSpan.style.display = 'none';
+                    button.textContent = button.dataset.moreText;
+                }
+                // Important: Remettre à jour la position de l'infobulle après changement de contenu
+                this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
+            };
+
+            // Retirer l'ancien écouteur s'il existe (basé sur une propriété attachée)
+            if (button._clickHandler) {
+                button.removeEventListener('click', button._clickHandler);
+            }
+            // Attacher le nouvel écouteur et le stocker
+            button._clickHandler = handler; // Stocker la référence
+            button.addEventListener('click', handler);
+        });
+    }
+    // --- FIN NOUVELLE MÉTHODE ---
+
+    // --- NOUVEAU : Gère les clics dans le PANNEAU DE STATISTIQUES AGENT ---
+    _handleStatsPanelClick(event) {
+        // Recherche d'un lien d'agent cliqué
+        const clickedLink = event.target.closest('.agent-id-link');
+        if (clickedLink) {
+            const agentId = clickedLink.dataset.agentId;
+            if (agentId) {
+                const agentManager = this.world?.agentManager;
+                const agentToSelect = agentManager?.agents.find(a => a.id === agentId);
+                if (agentToSelect) {
+                    console.log(`Stats Panel: Clic sur l'ID agent: ${agentId}`);
+                    // Pas besoin de désélectionner bâtiment ici, car on est dans un panneau différent
+                    // this.deselectBuilding();
+                    this.selectAgent(agentToSelect); // Sélectionner l'agent cliqué
+                    // Optionnel : Fermer le panneau de stats après sélection ?
+                    // this.agentStatsUI?.hide();
+                    this.clickHandledByTooltip = true; // Considérer ce clic comme géré par l'UI
+                } else {
+                    console.warn(`Agent avec ID ${agentId} non trouvé depuis le panneau de stats.`);
+                }
+            }
+        }
+        // Note: Ne pas gérer les clics sur les boutons toggle ici, c'est fait dans AgentStatsUI
+    }
+    // --- FIN NOUVELLE MÉTHODE ---
 
     enableDebugMode() {
         if (!this.isDebugMode) {
@@ -827,39 +919,6 @@ export default class Experience extends EventTarget {
 
         this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: this.isDebugMode } }));
     }
-
-    /**
-     * Bascule l'état d'affichage du sous-menu pour une catégorie donnée.
-     * @param {string} categoryName - Le nom de la catégorie (ex: 'district', 'plot').
-     */
-    /* toggleSubMenu(categoryName) {
-	
-         if (this.debugLayerVisibility.hasOwnProperty(categoryName) && this.debugLayerVisibility[categoryName]._showSubMenu !== undefined) {
-             // Inverse l'état d'affichage du sous-menu
-             this.debugLayerVisibility[categoryName]._showSubMenu = !this.debugLayerVisibility[categoryName]._showSubMenu;
-
-             // Optionnel : Fermer les autres sous-menus quand un est ouvert
-             if (this.debugLayerVisibility[categoryName]._showSubMenu) {
-                  for (const otherCategory in this.debugLayerVisibility) {
-                      if (otherCategory !== categoryName && this.debugLayerVisibility[otherCategory]._showSubMenu !== undefined) {
-                          this.debugLayerVisibility[otherCategory]._showSubMenu = false;
-                      }
-                  }
-             }
-
-             console.log(`Submenu for '${categoryName}' toggled to ${this.debugLayerVisibility[categoryName]._showSubMenu}`);
-             // Notifier l'UI pour mettre à jour l'affichage des sous-menus
-             this.dispatchEvent(new CustomEvent('debugsubmenuvisibilitychanged', {
-                 detail: {
-                     categoryName: categoryName,
-                     showSubMenu: this.debugLayerVisibility[categoryName]._showSubMenu,
-                     allStates: { ...this.debugLayerVisibility } // Passer tous les états
-                 }
-             }));
-         } else {
-             console.warn(`Experience.toggleSubMenu: Unknown or non-submenu category '${categoryName}'`);
-         }
-    } */
 
 	/**
      * NOUVELLE MÉTHODE: Bascule l'état de *tous* les sous-calques d'une catégorie donnée.
@@ -1101,10 +1160,23 @@ export default class Experience extends EventTarget {
         this.canvas.removeEventListener('mouseup', this._boundHandleMouseUp);
         if (this.buildingTooltipElement) {
             this.buildingTooltipElement.removeEventListener('click', this._boundHandleBuildingTooltipClick);
+             // Retirer aussi l'écouteur du panneau stats SI attaché ici (ancienne méthode, sécurité)
+            if (this._boundHandleStatsPanelClick) {
+                this.buildingTooltipElement.removeEventListener('click', this._boundHandleStatsPanelClick); // Correction: Doit être statsPanel, pas buildingTooltipElement
+            }
         }
         if (this.tooltipElement) {
             this.tooltipElement.removeEventListener('click', this._boundHandleAgentTooltipClick);
         }
+        // L'écouteur du panneau de stats est retiré dans AgentStatsUI.hide() et AgentStatsUI.destroy()
+        // Mais il faut s'assurer que la référence est bien nullifiée ici aussi pour être propre
+         this._boundHandleStatsPanelClick = null;
+
+        // --- NOUVEAU : Retirer l'écouteur du panneau de stats (sécurité si AgentStatsUI.destroy échoue avant) ---
+        if (this.agentStatsUI?.elements?.statsPanel && this.experience?._boundHandleStatsPanelClick) {
+            this.agentStatsUI.elements.statsPanel.removeEventListener('click', this.experience._boundHandleStatsPanelClick);
+        }
+        // --- FIN NOUVEAU ---
 
         // ... (reste du code destroy existant) ...
         if (this.highlightMesh) {

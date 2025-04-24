@@ -21,9 +21,11 @@ export default class AgentStatsUI {
         this.MAX_CLICK_DISTANCE_SQ = 25; // pixels au carré (Doit correspondre à Experience.js)
         // --- FIN NOUVEAU ---
 
-        // Liaisons des gestionnaires
+        // Liaisons des gestionnaires INTERNES à AgentStatsUI
         this._boundHandleMouseDown = this._handleMouseDown.bind(this);
-        this._boundHandleMouseUp = this._handleMouseUp.bind(this); // Renommé pour clarté
+        this._boundHandleMouseUp = this._handleMouseUp.bind(this);
+        // Retirer la liaison pour le clic panneau stats d'ici
+        // this._boundHandleStatsPanelClick = this.experience._handleStatsPanelClick.bind(this.experience); // Pas besoin ici
 
         // ... (vérification AgentManager) ...
         this._createElements();
@@ -157,6 +159,12 @@ export default class AgentStatsUI {
         // Retirer les écouteurs globaux
         document.removeEventListener('mousedown', this._boundHandleMouseDown, true); // Capture phase
         document.removeEventListener('mouseup', this._boundHandleMouseUp, true);     // Capture phase
+
+        // --- NOUVEAU : Retirer l'écouteur pour les clics sur les agents DANS le panneau ---
+        if (this.elements.statsPanel && this.experience?._boundHandleStatsPanelClick) {
+             this.elements.statsPanel.removeEventListener('click', this.experience._boundHandleStatsPanelClick);
+        }
+        // --- FIN NOUVEAU ---
         // console.log("AgentStatsUI hidden, listeners removed."); // Debug
     }
 
@@ -172,6 +180,20 @@ export default class AgentStatsUI {
         setTimeout(() => {
             document.addEventListener('mousedown', this._boundHandleMouseDown, true);
             document.addEventListener('mouseup', this._boundHandleMouseUp, true);
+
+            // --- NOUVEAU : Ajouter l'écouteur pour les clics sur les agents DANS le panneau ---
+            // Assurer que la méthode liée existe dans Experience et que le panneau existe
+            if (this.elements.statsPanel && this.experience?._boundHandleStatsPanelClick) {
+                // Vérifier si l'écouteur n'est pas déjà attaché (sécurité)
+                // Note: removeEventListener ne lèvera pas d'erreur s'il n'existe pas
+                this.elements.statsPanel.removeEventListener('click', this.experience._boundHandleStatsPanelClick);
+                this.elements.statsPanel.addEventListener('click', this.experience._boundHandleStatsPanelClick);
+                console.log("Stats panel click listener attached in AgentStatsUI.show()"); // Debug
+            } else {
+                 console.warn("Could not attach stats panel click listener in AgentStatsUI.show()"); // Debug
+            }
+            // --- FIN NOUVEAU ---
+
             // console.log("AgentStatsUI shown, listeners added."); // Debug
         }, 0);
     }
@@ -207,16 +229,89 @@ export default class AgentStatsUI {
     }
 
     _updateAgentList(agentsByState) {
-        // ... (code inchangé) ...
-         let html = '<h4>Agents par État :</h4><ul style="padding-left: 20px; columns: 2; -webkit-columns: 2; -moz-columns: 2;">'; // Style colonnes
-         for (const state in agentsByState) {
-             const agentIds = agentsByState[state];
-             const count = agentIds.length;
-             const displayIds = agentIds.slice(0, 10).join(', ') + (count > 10 ? '...' : ''); // Moins d'IDs par ligne
-             html += `<li style="margin-bottom: 5px;"><b style="color: #a7c5eb;">${state} (${count})</b>: ${count > 0 ? displayIds : 'Aucun'}</li>`; // Un peu de couleur
-         }
-         html += '</ul>';
-         this.elements.agentListSection.innerHTML = html;
+        // Récupérer la section de la liste
+        const listSection = this.elements.agentListSection;
+        if (!listSection) return;
+
+        let html = '<h4>Agents par État :</h4><ul class=\"agent-state-list\">'; // Utiliser une classe pour un ciblage plus facile
+
+        // Parcourir chaque état
+        for (const state in agentsByState) {
+            const agentIds = agentsByState[state];
+            const count = agentIds.length;
+            const stateId = `agent-list-${state.replace(/\s+/g, '-')}`; // ID unique pour chaque liste d'état
+
+            html += `<li class=\"agent-state-item\" data-state=\"${state}\">`; // Ajouter data-state
+            html += `<b style=\"color: #a7c5eb;\">${state} (${count})</b>: `;
+
+            if (count > 0) {
+                // Liste des IDs (initialement tronquée si nécessaire)
+                html += `<span class=\"agent-id-list-container\" id=\"${stateId}\">`;
+                const initialDisplayCount = 10;
+                const displayIds = agentIds.slice(0, initialDisplayCount);
+                html += displayIds.map(id => `<span class=\"agent-id-link\" data-agent-id=\"${id}\" title=\"Sélectionner l\'agent ${id}\">${id}</span>`).join(', ');
+
+                if (count > initialDisplayCount) {
+                    // Ajouter les IDs cachés
+                    html += `<span class=\"agent-id-list-hidden\" style=\"display: none;\">, ${agentIds.slice(initialDisplayCount).map(id => `<span class=\"agent-id-link\" data-agent-id=\"${id}\" title=\"Sélectionner l\'agent ${id}\">${id}</span>`).join(', ')}</span>`;
+                    // Ajouter le bouton toggle
+                    html += ` <button class=\"toggle-agent-list\" data-target=\"#${stateId}\" data-more-text=\"(... voir ${count - initialDisplayCount} de plus)\" data-less-text=\"(voir moins)\" style=\"cursor: pointer; background: none; border: none; color: #a7c5eb; padding: 0; font-size: 0.8em;\">(... voir ${count - initialDisplayCount} de plus)</button>`;
+                }
+                html += `</span>`; // Fin agent-id-list-container
+            } else {
+                html += 'Aucun';
+            }
+            html += `</li>`; // Fin agent-state-item
+        }
+        html += '</ul>';
+
+        // Mettre à jour le HTML
+        if (listSection.innerHTML !== html) {
+            listSection.innerHTML = html;
+        }
+
+        // (Ré)attacher les écouteurs pour les boutons toggle après mise à jour du HTML
+        this._setupToggleListeners();
+    }
+
+    // NOUVELLE MÉTHODE pour gérer les écouteurs des boutons toggle
+    _setupToggleListeners() {
+        const listSection = this.elements.agentListSection;
+        if (!listSection) return;
+
+        listSection.querySelectorAll('.toggle-agent-list').forEach(button => {
+            // Si un gestionnaire existe déjà, le retirer
+            if (button._toggleClickHandler) {
+                button.removeEventListener('click', button._toggleClickHandler);
+            }
+            // Créer le nouveau gestionnaire (lié au contexte de la classe)
+            // Utiliser une fonction fléchée ou .bind(this) et stocker la référence
+            const handler = this._handleToggleClick.bind(this);
+            button._toggleClickHandler = handler; // Stocker la référence sur le bouton lui-même
+            // Ajouter le nouvel écouteur
+            button.addEventListener('click', handler);
+        });
+    }
+
+    // NOUVELLE MÉTHODE pour gérer le clic sur un bouton toggle
+    _handleToggleClick(event) {
+        event.stopPropagation(); // Empêcher le clic de remonter au panneau (et d'être géré par Experience.js)
+
+        const button = event.target;
+        const targetId = button.dataset.target;
+        const container = document.querySelector(targetId);
+        if (!container) return;
+
+        const hiddenSpan = container.querySelector('.agent-id-list-hidden');
+        const isHidden = hiddenSpan.style.display === 'none';
+
+        if (isHidden) {
+            hiddenSpan.style.display = 'inline'; // Ou 'block' selon le rendu souhaité
+            button.textContent = button.dataset.lessText;
+        } else {
+            hiddenSpan.style.display = 'none';
+            button.textContent = button.dataset.moreText;
+        }
     }
 
     _updateChart(chartInstance, canvasElement, dataByHour, label) {
