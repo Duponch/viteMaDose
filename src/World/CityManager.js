@@ -34,7 +34,7 @@ export default class CityManager {
             houseZoneProbability: 0.40,
             skyscraperZoneProbability: 0.10,
             // Grid
-            gridScale: 0.5,
+            gridScale: 1,
             // Crosswalks
             crosswalkWidth: 0.1,
             crosswalkHeight: 0.03,
@@ -144,7 +144,7 @@ export default class CityManager {
             agentHeadTiltAmplitude: 0.08,
             agentHeadBobAmplitude: 0.06,
             agentAnimationSpeedFactor: 8,
-            maxAgents: 2000,
+            maxAgents: 1,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
