@@ -33,7 +33,7 @@ export default class SidewalkGenerator {
         const sidewalkW = this.config.sidewalkWidth ?? 0;
         const sidewalkH = this.config.sidewalkHeight ?? 0.2;
         // Récupérer gridScale et calculer cellSizeWorld
-        const gridScale = this.config.gridScale ?? 1.0; // Assurez-vous que gridScale est dans la config
+        const gridScale = 0.5; // Assurez-vous que gridScale est dans la config
         const cellSizeWorld = 1.0 / gridScale;
 
         if (sidewalkW <= 0 || !plots || plots.length === 0) {
