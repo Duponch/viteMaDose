@@ -152,8 +152,8 @@ export default class Camera {
         const agentOrientation = this.targetAgent.orientation;
         const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(agentOrientation);
         
-        // Position initiale standardisée
-        this.followDistance = 8; // Distance initiale standard
+        // Initialiser la distance de suivi à une valeur par défaut
+        this.followDistance = 8.0; // <--- Valeur par défaut au début du suivi
         this.mousePitch = 0.3; // Angle de vue initial standard
         this.mouseYaw = Math.atan2(backward.x, backward.z); // Aligné avec l'orientation de l'agent
 
@@ -165,8 +165,7 @@ export default class Camera {
         // Calculer la position désirée
         this.desiredCameraPosition.copy(this.targetLookAtPosition).add(new THREE.Vector3(offsetX, offsetY, offsetZ));
         
-        // IMPORTANT: Ne pas copier directement la position désirée dans la position actuelle
-        // Utiliser une interpolation douce pour éviter l'ajustement abrupt
+        // Utiliser une interpolation douce pour la transition initiale
         const currentToDesired = new THREE.Vector3().subVectors(this.desiredCameraPosition, this.instance.position);
         const distanceToMove = currentToDesired.length();
         
@@ -286,34 +285,47 @@ export default class Camera {
     updateFollowLogic(deltaTimeSeconds) {
         if (!this.targetAgent) return;
 
-        // Mettre à jour la position de l'agent
+        // Mettre à jour la position de l'agent (utiliser sa dernière position connue si en pause)
         this.worldAgentPosition.copy(this.targetAgent.position);
         
         // La cible du regard est légèrement au-dessus de l'agent
         this.targetLookAtPosition.copy(this.worldAgentPosition).add(new THREE.Vector3(0, 1.0, 0));
 
-        // Calcul de la position désirée basée sur yaw/pitch/distance souris
+        // Calcul de la position désirée basée sur yaw/pitch/distance (modifiés par la souris même en pause)
         const offsetX = this.followDistance * Math.sin(this.mouseYaw) * Math.cos(this.mousePitch);
         const offsetY = this.followDistance * Math.sin(this.mousePitch);
         const offsetZ = this.followDistance * Math.cos(this.mouseYaw) * Math.cos(this.mousePitch);
         
-        // Calculer la position désirée
+        // Calculer la position désirée de la caméra
         this.desiredCameraPosition.copy(this.targetLookAtPosition).add(new THREE.Vector3(offsetX, offsetY, offsetZ));
 
-        // Utiliser le temps réel pour l'interpolation, indépendamment de la vitesse du jeu
-        const realDeltaTime = this.experience.time.delta / 1000.0;
-        
-        // Utiliser une interpolation plus douce avec une fonction d'easing
-        const lerpAlpha = 1.0 - Math.exp(-this.followSpeed * realDeltaTime);
-        
-        // Appliquer l'interpolation à la position actuelle
-        this.currentPosition.lerp(this.desiredCameraPosition, lerpAlpha);
+        // --- Gestion de la pause --- 
+        const isPaused = deltaTimeSeconds === 0;
+
+        if (isPaused) {
+            // Si en pause, appliquer directement la position désirée (basée sur l'input souris)
+            // pour permettre le contrôle de la caméra autour de l'agent figé.
+            this.currentPosition.copy(this.desiredCameraPosition);
+        } else {
+            // Si pas en pause, interpoler doucement vers la position désirée.
+            // Utiliser le temps réel pour l'interpolation pour être indépendant de la vitesse du jeu.
+            const realDeltaTime = this.experience.time.delta / 1000.0; 
+            // Vérifier realDeltaTime pour éviter division par zéro si time.delta est aussi 0
+            if (realDeltaTime > 0) { 
+                const lerpAlpha = 1.0 - Math.exp(-this.followSpeed * realDeltaTime);
+                this.currentPosition.lerp(this.desiredCameraPosition, lerpAlpha);
+            } else {
+                // Fallback si realDeltaTime est aussi 0 (ne devrait pas arriver si time est bien géré)
+                this.currentPosition.copy(this.desiredCameraPosition);
+            }
+        }
+        // --- Fin Gestion de la pause ---
 
         // Appliquer la position et regarder la cible
         this.instance.position.copy(this.currentPosition);
         this.instance.lookAt(this.targetLookAtPosition);
 
-        // Mettre à jour la cible des OrbitControls pour une transition douce si l'utilisateur reprend la main
+        // Mettre à jour la cible des OrbitControls (utile si on arrête le suivi)
         if (this.experience.controls) {
             this.experience.controls.target.copy(this.targetLookAtPosition);
         }

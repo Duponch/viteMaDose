@@ -533,8 +533,8 @@ export default class Experience extends EventTarget {
             this.isFollowingAgent = false;
             this.controls.enabled = false;
 
-            // Calculer la position cible de la caméra derrière l'agent
-            const followDistance = this.camera.followDistance || 8;
+            // Définir une distance de suivi initiale souhaitée
+            const initialFollowDistance = 8.0; // <--- Distance initiale fixe
             const followHeight = 3.0;
             const lookAtOffset = 1.0;
 
@@ -545,9 +545,9 @@ export default class Experience extends EventTarget {
             const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(agentOrientation);
             const up = new THREE.Vector3(0, 1, 0);
 
-            // Position finale souhaitée de la caméra
+            // Position finale souhaitée de la caméra calculée avec la distance initiale
             const targetCamPos = agentPos.clone()
-                .addScaledVector(backward, followDistance)
+                .addScaledVector(backward, initialFollowDistance) // Utilise la distance initiale
                 .addScaledVector(up, followHeight);
 
             // Point que la caméra doit regarder
