@@ -59,6 +59,7 @@ export default class Experience extends EventTarget {
         this.selectedBuildingInfo = null;
         this.selectedBuildingMesh = null;
         this.selectedBuildingInstanceId = -1;
+        this.isBuildingOccupantListExpanded = false;
         this.highlightMesh = null;
         this.buildingTooltipElement = document.getElementById('building-tooltip'); // Assurez-vous que cet ID existe
         if (this.buildingTooltipElement) {
@@ -268,7 +269,75 @@ export default class Experience extends EventTarget {
 
     // Gère la fin du clic : détermine si c'est un clic simple et lance le raycasting
     _handleMouseUp(event) {
-		if (this.clickHandledByTooltip) {
+        // --- Début Logique AgentStatsUI --- 
+        const agentStatsPanel = this.agentStatsUI?.elements?.statsPanel;
+        const isAgentStatsVisible = this.agentStatsUI?.isVisible;
+
+        // MODIFIÉ: Condition simplifiée pour la fermeture du panneau Stats
+        // Si le panneau est visible et qu'un mouseup (bouton gauche) se produit...
+        if (isAgentStatsVisible && event.button === 0) {
+            let clickedInsideStatsPanel = false;
+            if (agentStatsPanel) {
+                const rect = agentStatsPanel.getBoundingClientRect();
+                if (event.clientX >= rect.left && event.clientX <= rect.right &&
+                    event.clientY >= rect.top && event.clientY <= rect.bottom) {
+                    clickedInsideStatsPanel = true;
+                }
+            }
+
+            if (clickedInsideStatsPanel) {
+                 // Clic A L'INTERIEUR du panneau: Laisser AgentStatsUI gérer ses clics internes
+                 // (liens agents, boutons toggle via leurs propres listeners).
+                 // Empêcher ce mouseup de déclencher une désélection 3D.
+                 console.log("Experience._handleMouseUp: Click inside stats panel bounds. Preventing 3D deselection."); // Debug
+                 this.clickHandledByTooltip = true; // Réutiliser ce flag
+                 // Reset le mousedown d'Experience pour éviter un faux clic suivant
+                 this.mouseDownTime = 0;
+                 this.mouseDownPosition.x = null;
+                 this.mouseDownPosition.y = null;
+                 return; // Sortir, ne pas fermer et ne pas faire de raycast
+            } else {
+                // Clic A L'EXTERIEUR du panneau: vérifier si c'était un "vrai clic" pour fermer.
+                
+                // On a besoin de la logique mousedown originale pour vérifier si c'est un clic court
+                const isPointerDown = this.agentStatsUI ? this.agentStatsUI.isPointerDown : this.mouseDownTime > 0;
+                const pointerDownTime = this.agentStatsUI ? this.agentStatsUI.pointerDownTime : this.mouseDownTime;
+                const pointerDownPosition = this.agentStatsUI ? this.agentStatsUI.pointerDownPosition : this.mouseDownPosition;
+                const maxClickDuration = this.agentStatsUI?.MAX_CLICK_DURATION ?? this.MAX_CLICK_DURATION;
+                const maxClickDistanceSq = this.agentStatsUI?.MAX_CLICK_DISTANCE_SQ ?? this.MAX_CLICK_DISTANCE_SQ;
+
+                const clickDuration = Date.now() - pointerDownTime;
+                const deltaX = event.clientX - pointerDownPosition.x;
+                const deltaY = event.clientY - pointerDownPosition.y;
+                const distanceSq = deltaX * deltaX + deltaY * deltaY;
+                const isRealClick = clickDuration <= maxClickDuration && distanceSq <= maxClickDistanceSq;
+
+                // Important: On ne ferme que si c'était un vrai clic ET en dehors
+                if (isRealClick) {
+                    console.log("Experience._handleMouseUp: Valid click detected OUTSIDE stats panel. Closing."); // Debug
+                    this.agentStatsUI.hide();
+                    // On peut return ici aussi car ce clic extérieur ne concerne pas la 3D
+                     this.mouseDownTime = 0; // Reset Experience mousedown state
+                    this.mouseDownPosition.x = null;
+                     this.mouseDownPosition.y = null;
+                    return; 
+                } else {
+                    // Ce n'était pas un vrai clic (drag, etc.) -> ne pas fermer le panneau.
+                    // Laisser la logique 3D se poursuivre si nécessaire.
+                    console.log("Experience._handleMouseUp: Drag or long press detected outside stats panel. Not closing."); // Debug
+                }
+            }
+             // Dans tous les cas où on n'a pas return, il faut reset le mousedown d'Experience
+             this.mouseDownTime = 0;
+             this.mouseDownPosition.x = null;
+             this.mouseDownPosition.y = null;
+             // Et réinitialiser l'état de AgentStatsUI par sécurité
+              if(this.agentStatsUI) this.agentStatsUI.isPointerDown = false;
+        }
+        // --- Fin Logique AgentStatsUI ---
+
+        // --- Logique Originale Raycasting / Désélection 3D --- 
+        if (this.clickHandledByTooltip) {
 			this.clickHandledByTooltip = false; // Réinitialiser le drapeau immédiatement
 			// Réinitialiser aussi l'état du clic pour éviter des effets de bord
 			this.mouseDownTime = 0;
@@ -673,6 +742,7 @@ export default class Experience extends EventTarget {
     // Désélectionne le bâtiment, cache highlight et tooltip
     deselectBuilding() {
         if (!this.selectedBuildingInfo) return;
+        this.isBuildingOccupantListExpanded = false;
         this.selectedBuildingInfo = null;
         this.selectedBuildingMesh = null;
         this.selectedBuildingInstanceId = -1;
@@ -769,10 +839,15 @@ export default class Experience extends EventTarget {
             ).join(' | ');
 
             if (count > initialDisplayCount) {
-                // IDs cachés
-                occupantsListHTML += `<span class="building-occupant-list-hidden" style="display: none;"> | ${occupantsList.slice(initialDisplayCount).map(id => `<span class="resident-id-link" data-agent-id="${id}" title="Sélectionner l\'agent ${id}">${id}</span>`).join(' | ')}</span>`;
-                // Bouton Toggle
-                occupantsListHTML += ` <button class="toggle-building-occupant-list" data-target="#${listContainerId}" data-more-text="(... voir ${count - initialDisplayCount} de plus)" data-less-text="(voir moins)" style="cursor: pointer; background: none; border: none; color: #a7c5eb; padding: 0; font-size: 0.9em; vertical-align: baseline;">(... voir ${count - initialDisplayCount} de plus)</button>`;
+                // <<< UTILISATION DE L'ETAT STOCKE >>>
+                const isExpanded = this.isBuildingOccupantListExpanded;
+                const hiddenSpanStyle = `display: ${isExpanded ? 'inline' : 'none'};`;
+                const buttonText = isExpanded ? "(voir moins)" : `(... voir ${count - initialDisplayCount} de plus)`;
+                const buttonDataLess = "(voir moins)";
+                const buttonDataMore = `(... voir ${count - initialDisplayCount} de plus)`;
+
+                occupantsListHTML += `<span class="building-occupant-list-hidden" style="${hiddenSpanStyle}"> | ${occupantsList.slice(initialDisplayCount).map(id => `<span class="resident-id-link" data-agent-id="${id}" title="Sélectionner l\'agent ${id}">${id}</span>`).join(' | ')}</span>`;
+                occupantsListHTML += ` <button class="toggle-building-occupant-list" data-target="#${listContainerId}" data-more-text="${buttonDataMore}" data-less-text="${buttonDataLess}" style="cursor: pointer; background: none; border: none; color: #a7c5eb; padding: 0; font-size: 0.9em; vertical-align: baseline; pointer-events: auto;" data-ui-interactive="true">${buttonText}</button>`;
             }
              occupantsListHTML += `</span>`; // Fin building-occupant-list-container
         }
@@ -789,50 +864,37 @@ export default class Experience extends EventTarget {
         // Met à jour le DOM seulement si nécessaire
         if (this.buildingTooltipElement.innerHTML !== content) {
             this.buildingTooltipElement.innerHTML = content;
-            // (Ré)attacher les écouteurs pour les NOUVEAUX boutons toggle dans cette infobulle
             this._setupBuildingTooltipToggleListeners();
         }
     }
 
-    // --- NOUVELLE MÉTHODE pour gérer les listeners du toggle dans l'infobulle bâtiment ---
+    // --- MODIFIÉ : Le handler inverse l'état et force le re-rendu ---
     _setupBuildingTooltipToggleListeners() {
         if (!this.buildingTooltipElement) return;
 
         this.buildingTooltipElement.querySelectorAll('.toggle-building-occupant-list').forEach(button => {
-            // Utiliser une fonction fléchée pour garder le contexte ou binder
+            // --- Utiliser une fonction nommée pour faciliter le removeEventListener --- 
             const handler = (event) => {
-                event.stopPropagation(); // Empêche le clic de se propager au tooltip lui-même (qui pourrait déclencher autre chose)
-                const button = event.currentTarget;
-                const targetId = button.dataset.target;
-                const container = this.buildingTooltipElement.querySelector(targetId);
-                if (!container) return;
-
-                const hiddenSpan = container.querySelector('.building-occupant-list-hidden');
-                if (!hiddenSpan) return;
-
-                const isHidden = hiddenSpan.style.display === 'none';
-
-                if (isHidden) {
-                    hiddenSpan.style.display = 'inline';
-                    button.textContent = button.dataset.lessText;
-                } else {
-                    hiddenSpan.style.display = 'none';
-                    button.textContent = button.dataset.moreText;
-                }
-                // Important: Remettre à jour la position de l'infobulle après changement de contenu
-                this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
+                console.log("Building Tooltip: Toggle button clicked!");
+                event.stopPropagation();
+                // 1. Inverser l'état stocké
+                this.isBuildingOccupantListExpanded = !this.isBuildingOccupantListExpanded;
+                console.log(`Building Tooltip: Set isBuildingOccupantListExpanded to ${this.isBuildingOccupantListExpanded}`);
+                // 2. Forcer la mise à jour du contenu (qui lira le nouvel état)
+                this.updateBuildingTooltipContent();
+                 // 3. Mettre à jour la position (important car la hauteur change)
+                 this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
             };
 
-            // Retirer l'ancien écouteur s'il existe (basé sur une propriété attachée)
+            // Retirer l'ancien écouteur s'il existe (plus fiable avec fonction nommée)
             if (button._clickHandler) {
                 button.removeEventListener('click', button._clickHandler);
             }
             // Attacher le nouvel écouteur et le stocker
-            button._clickHandler = handler; // Stocker la référence
+            button._clickHandler = handler;
             button.addEventListener('click', handler);
         });
     }
-    // --- FIN NOUVELLE MÉTHODE ---
 
     // --- NOUVEAU : Gère les clics dans le PANNEAU DE STATISTIQUES AGENT ---
     _handleStatsPanelClick(event) {

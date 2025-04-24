@@ -254,8 +254,8 @@ export default class AgentStatsUI {
                 if (count > initialDisplayCount) {
                     // Ajouter les IDs cachés
                     html += `<span class=\"agent-id-list-hidden\" style=\"display: none;\">, ${agentIds.slice(initialDisplayCount).map(id => `<span class=\"agent-id-link\" data-agent-id=\"${id}\" title=\"Sélectionner l\'agent ${id}\">${id}</span>`).join(', ')}</span>`;
-                    // Ajouter le bouton toggle
-                    html += ` <button class=\"toggle-agent-list\" data-target=\"#${stateId}\" data-more-text=\"(... voir ${count - initialDisplayCount} de plus)\" data-less-text=\"(voir moins)\" style=\"cursor: pointer; background: none; border: none; color: #a7c5eb; padding: 0; font-size: 0.8em;\">(... voir ${count - initialDisplayCount} de plus)</button>`;
+                    // Ajouter le bouton toggle - AJOUT de data-ui-interactive
+                    html += ` <button class=\"toggle-agent-list\" data-target=\"#${stateId}\" data-more-text=\"(... voir ${count - initialDisplayCount} de plus)\" data-less-text=\"(voir moins)\" style=\"cursor: pointer; background: none; border: none; color: #a7c5eb; padding: 0; font-size: 0.8em;\" data-ui-interactive="true">(... voir ${count - initialDisplayCount} de plus)</button>`;
                 }
                 html += `</span>`; // Fin agent-id-list-container
             } else {
@@ -278,10 +278,13 @@ export default class AgentStatsUI {
     _setupToggleListeners() {
         const listSection = this.elements.agentListSection;
         if (!listSection) return;
+        // console.log("AgentStatsUI: Setting up toggle listeners..."); // Log DEBUG
 
         listSection.querySelectorAll('.toggle-agent-list').forEach(button => {
+            // console.log(`AgentStatsUI: Processing button for target ${button.dataset.target}`); // Log DEBUG
             // Si un gestionnaire existe déjà, le retirer
             if (button._toggleClickHandler) {
+                // console.log(`AgentStatsUI: Removing existing listener for ${button.dataset.target}`); // Log DEBUG
                 button.removeEventListener('click', button._toggleClickHandler);
             }
             // Créer le nouveau gestionnaire (lié au contexte de la classe)
@@ -289,13 +292,16 @@ export default class AgentStatsUI {
             const handler = this._handleToggleClick.bind(this);
             button._toggleClickHandler = handler; // Stocker la référence sur le bouton lui-même
             // Ajouter le nouvel écouteur
+            // console.log(`AgentStatsUI: Adding new listener for ${button.dataset.target}`); // Log DEBUG
             button.addEventListener('click', handler);
         });
     }
 
     // NOUVELLE MÉTHODE pour gérer le clic sur un bouton toggle
     _handleToggleClick(event) {
+        console.log("AgentStatsUI: _handleToggleClick triggered"); // Log DEBUG
         event.stopPropagation(); // Empêcher le clic de remonter au panneau (et d'être géré par Experience.js)
+        event.preventDefault(); // Empêcher le comportement par défaut du bouton (si applicable)
 
         const button = event.target;
         const targetId = button.dataset.target;
