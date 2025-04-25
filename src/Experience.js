@@ -737,14 +737,38 @@ export default class Experience extends EventTarget {
         const citizenInfo = citizenManager?.getCitizenInfo(agent.id);
 
         const content = `
-          ID: ${agent.id}<br>
-          État: ${agent.currentState || 'N/A'}<br>
-          Domicile: ${homeLink}<br>
-          Travail: ${workLink}<br>
-          <span title="Bonheur">☻ ${citizenInfo?.happiness?.toFixed(0) || 'N/A'}</span><br>
-          <span title="Santé">♥ ${citizenInfo?.health?.toFixed(0) || 'N/A'}/${citizenInfo?.maxHealth?.toFixed(0) || 'N/A'}</span><br>
-          <span title="Argent">$ ${citizenInfo?.money?.toFixed(0) || 'N/A'}</span><br>
-          <span title="Salaire moyen">✤ ${citizenInfo?.salary?.toFixed(0) || 'N/A'}</span>
+            <div class="tooltip-header">
+                <span class="agent-id">ID: ${agent.id}</span>
+                <span class="agent-state">${agent.currentState || 'N/A'}</span>
+            </div>
+            <div class="tooltip-section">
+                <div class="tooltip-row">
+                    <span class="tooltip-label">☗</span>
+                    <span class="tooltip-value">${homeLink}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">⚒</span>
+                    <span class="tooltip-value">${workLink}</span>
+                </div>
+            </div>
+            <div class="tooltip-section">
+                <div class="tooltip-row">
+                    <span class="tooltip-label" title="Bonheur">☻</span>
+                    <span class="tooltip-value">${citizenInfo?.happiness?.toFixed(0) || 'N/A'}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label" title="Santé">♥</span>
+                    <span class="tooltip-value">${citizenInfo?.health?.toFixed(0) || 'N/A'}/${citizenInfo?.maxHealth?.toFixed(0) || 'N/A'}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label" title="Argent">$</span>
+                    <span class="tooltip-value">${citizenInfo?.money?.toFixed(0) || 'N/A'}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label" title="Salaire moyen">✤</span>
+                    <span class="tooltip-value">${citizenInfo?.salary?.toFixed(0) || 'N/A'}</span>
+                </div>
+            </div>
         `;
         if (this.tooltipElement.innerHTML !== content) {
             this.tooltipElement.innerHTML = content;
