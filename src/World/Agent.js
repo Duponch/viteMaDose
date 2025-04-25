@@ -266,19 +266,18 @@ export default class Agent {
     }
 
 	setPath(pathPoints, pathLengthWorld) {
-        // Détermine l'état dans lequel l'agent se trouvait LORSQU'IL A DEMANDÉ le chemin
-        const wasRequestingWork = this.currentState === AgentState.REQUESTING_PATH_FOR_WORK;
-        const wasRequestingHome = this.currentState === AgentState.REQUESTING_PATH_FOR_HOME;
-        // --- AJOUT : Vérifier aussi si on demandait pour le weekend ---
-        const wasRequestingWeekendWalk = this.currentState === AgentState.WEEKEND_WALK_REQUESTING_PATH;
-        // --- FIN AJOUT ---
+        // --- MODIFICATION: Mémoriser l'état au début de l'appel --- 
+        const currentStateAtCall = this.currentState;
+        const wasRequestingWork = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_WORK;
+        const wasRequestingHome = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_HOME;
+        const wasRequestingWeekendWalk = currentStateAtCall === AgentState.WEEKEND_WALK_REQUESTING_PATH;
+        // --- FIN MODIFICATION ---
 
         // --- Cas 1: Chemin Valide Reçu ---
-        // Vérifie si le chemin existe, est un tableau non vide, et a une longueur significative.
         if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 0 && pathLengthWorld > 0.1) {
 
-            this.currentPathPoints = pathPoints.map(p => p.clone()); // Stocker une copie
-            this.currentPathLengthWorld = pathLengthWorld;           // Stocker la longueur
+            this.currentPathPoints = pathPoints.map(p => p.clone()); 
+            this.currentPathLengthWorld = pathLengthWorld;           
 
             // Calculer la durée du trajet en temps de jeu basé sur la longueur et la vitesse de base
             const travelSecondsGame = pathLengthWorld / this.agentBaseSpeed;
@@ -295,78 +294,55 @@ export default class Agent {
                 this.currentPathLengthWorld = 0; // Considérer longueur comme invalide si durée fallback
             }
 
-            // Transitionner vers l'état "Prêt à partir" correspondant
+            // --- MODIFICATION: Transitionner seulement si on était en état REQUESTING ---
             if (wasRequestingWork) {
                 this.currentState = AgentState.READY_TO_LEAVE_FOR_WORK;
             } else if (wasRequestingHome) {
                 this.currentState = AgentState.READY_TO_LEAVE_FOR_HOME;
-            } 
-            // --- AJOUT : Gérer la transition pour le weekend ---
-            else if (wasRequestingWeekendWalk) {
+            } else if (wasRequestingWeekendWalk) {
                 this.currentState = AgentState.WEEKEND_WALK_READY;
-            } 
-            // --- FIN AJOUT ---
-            else {
-                // Cas étrange : on reçoit un chemin sans l'avoir demandé récemment
-                console.warn(`Agent ${this.id}: Reçu path alors qu'en état ${this.currentState}. Path stocké, mais état inchangé.`);
-                // On garde le chemin mais on ne change pas l'état immédiatement
+            } else {
+                // Path reçu alors qu'on n'était pas en REQUESTING (ex: déjà READY ou WALKING)
+                // C'est normal à cause du timing. On a mis à jour les données du chemin,
+                // mais on ne change pas l'état actuel.
+                // On peut retirer le warning.
+                // console.log(`Agent ${this.id}: Path updated while in state ${currentStateAtCall}.`);
             }
-            // console.log(`Agent ${this.id}: Path reçu et traité. Length=${this.currentPathLengthWorld.toFixed(1)}, Duration=${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s game. Nouvel état: ${this.currentState}`);
+            // --- FIN MODIFICATION ---
 
         }
         // --- Cas 2: Chemin Invalide ou Échec Pathfinding ---
         else {
             console.warn(`Agent ${this.id}: setPath reçu avec chemin invalide (path: ${pathPoints ? 'Array['+pathPoints.length+']' : 'null'}) ou longueur ${pathLengthWorld}.`);
 
-            // Réinitialiser toutes les variables liées au chemin
             this.currentPathPoints = null;
             this.calculatedTravelDurationGame = 0;
             this.currentPathLengthWorld = 0;
             this.departureTimeGame = -1;
             this.arrivalTmeGame = -1;
 
-            // --- **CORRECTION LOGIQUE D'ÉTAT D'ÉCHEC** ---
-            if (wasRequestingHome) {
-                // Si la demande de chemin pour RENTRER échoue, l'agent doit revenir à l'état AT_WORK.
+            // --- MODIFICATION: Utiliser les états mémorisés pour gérer l'échec --- 
+            if (wasRequestingHome) { 
                 this.currentState = AgentState.AT_WORK;
                 console.warn(`Agent ${this.id}: Pathfinding HOME failed, returning to AT_WORK.`);
-                this.isVisible = false; // Agent est de retour à l'intérieur du travail
-            } else if (wasRequestingWork) {
-                // Si la demande de chemin pour ALLER AU TRAVAIL échoue, l'agent revient à AT_HOME (ou IDLE).
+                this.isVisible = false; 
+            } else if (wasRequestingWork) { 
                 this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
                 console.warn(`Agent ${this.id}: Pathfinding TO WORK failed, returning to ${this.currentState}.`);
-                this.isVisible = false; // Agent est de retour à l'intérieur de la maison ou disparaît
+                this.isVisible = false; 
             } 
-            // Pour gérer le cas de promenade du weekend qui échoue
-            else if (this.currentState === AgentState.WEEKEND_WALK_REQUESTING_PATH) {
+            else if (wasRequestingWeekendWalk) { 
                 console.warn(`Agent ${this.id}: Pathfinding WEEKEND WALK failed, finding a new destination...`);
-                
-                // Réessayer avec une autre destination
-                this._findRandomWalkDestination();
-                
-                if (this.weekendWalkDestination && this.homeGridNode && this.weekendWalkGridNode) {
-                    this.requestPath(
-                        this.homePosition, 
-                        this.weekendWalkDestination, 
-                        this.homeGridNode, 
-                        this.weekendWalkGridNode, 
-                        AgentState.WEEKEND_WALK_READY, 
-                        this.experience.time.elapsed // Utiliser le temps actuel
-                    );
-                } else {
-                    // Si on ne peut toujours pas trouver de destination, revenir à la maison
-                    this.currentState = AgentState.AT_HOME;
-                    this.isVisible = false;
-                    this.weekendWalkDestination = null;
-                    this.weekendWalkGridNode = null;
-                }
+                // --- ATTENTION: La logique interne ici a aussi été réinitialisée --- 
+                // Si _findRandomWalkDestination est appelé, il ne stockera plus currentParkPlotId
+                this._findRandomWalkDestination(); // Tenter de trouver une nouvelle destination
+                // Si la recherche réussit, requestPath sera appelé DANS _findRandomWalkDestination
+                // Si elle échoue, l'agent finira AT_HOME.
+                // On ne fait rien de plus ici.
+            } else { 
+                 console.warn(`Agent ${this.id}: Invalid path received while in state ${currentStateAtCall}. Ignored.`);
             }
-            // Si on reçoit un chemin invalide sans être en état REQUESTING, on logue l'avertissement
-            // mais on ne change pas l'état actuel de l'agent.
-             else {
-                  console.warn(`Agent ${this.id}: Reçu path invalide alors qu'en état ${this.currentState}. État inchangé.`);
-             }
-            // --- **FIN CORRECTION** ---
+            // --- FIN MODIFICATION ---
         }
     } // Fin setPath
 
