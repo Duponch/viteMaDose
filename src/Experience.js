@@ -738,7 +738,7 @@ export default class Experience extends EventTarget {
 
         const content = `
             <div class="tooltip-header">
-                <span class="agent-id">ID: ${agent.id}</span>
+                <span class="agent-id">${agent.id}</span>
                 <span class="agent-state">${agent.currentState || 'N/A'}</span>
             </div>
             <div class="tooltip-section">

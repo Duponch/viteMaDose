@@ -524,10 +524,9 @@ button {
     background: rgba(0, 0, 0, 0.85);
     color: #fff;
     padding: 12px;
-    border-radius: 9px;
+    border-radius: 8px;
     font-size: 1em;
     min-width: 200px;
-    /* backdrop-filter: blur(2px); */
     z-index: 1000;
     pointer-events: auto;
 }
@@ -548,10 +547,20 @@ button {
 
 #agent-tooltip .agent-state {
     color: #a7c5eb;
-	font-size: 1em;
 }
 
 #agent-tooltip .tooltip-section {
+    margin-bottom: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+	margin-bottom: 12px;
+    padding-bottom: 8px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+#agent-tooltip .tooltip-section:first-child {
+    display: block;
     margin-bottom: 12px;
 }
 
@@ -559,14 +568,11 @@ button {
     margin-bottom: 0;
 }
 
-#agent-tooltip .tooltip-row {
+#agent-tooltip .tooltip-section .tooltip-row {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    margin-bottom: 6px;
-}
-
-#agent-tooltip .tooltip-row:last-child {
+    gap: 8px;
     margin-bottom: 0;
 }
 
@@ -578,7 +584,7 @@ button {
 
 #agent-tooltip .tooltip-value {
     color: #fff;
-    text-align: right;
+    text-align: left;
 }
 
 #agent-tooltip .building-id-link {
@@ -591,4 +597,27 @@ button {
 #agent-tooltip .building-id-link:hover {
     color: #ffffff; /* Blanc au survol */
     background-color: rgba(167, 197, 235, 0.2); /* Léger fond bleu */
+}
+
+
+/* Nouveau style pour la section des statistiques du citoyen */
+#agent-tooltip .tooltip-section:last-child {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+#agent-tooltip .tooltip-section:last-child .tooltip-row {
+    margin-bottom: 0;
+}
+
+#agent-tooltip .tooltip-section:last-child .tooltip-label {
+    min-width: 24px;
+    color: #a7c5eb;
+    text-align: center;
+}
+
+#agent-tooltip .tooltip-section:last-child .tooltip-value {
+    color: #fff;
+    text-align: left;
 }
