@@ -590,37 +590,63 @@ export default class Agent {
 
                  // Vérifier si le chemin est valide
                 if (!this.currentPathPoints || this.currentPathLengthWorld <= 0) {
-                    console.warn(`Agent ${this.id}: In READY_TO_LEAVE_FOR_HOME but path invalid. Reverting to AT_WORK.`);
-                    this.currentState = AgentState.AT_WORK;
-                    this.lastArrivalTimeWork = currentGameTime;
+                    // --- MODIFICATION : Revenir AT_HOME si échec après promenade --- 
+                    if (this.weekendWalkEndTime > 0) {
+                        console.warn(`Agent ${this.id}: Path home from walk invalid. Reverting to AT_HOME.`);
+                        this.currentState = AgentState.AT_HOME;
+                        this.lastArrivalTimeHome = currentGameTime; // Marquer comme arrivé pour éviter boucle
+                    } else {
+                        console.warn(`Agent ${this.id}: Path home from work invalid. Reverting to AT_WORK.`);
+                        this.currentState = AgentState.AT_WORK;
+                        this.lastArrivalTimeWork = currentGameTime; // Marquer comme arrivé pour éviter boucle
+                    }
                     this.requestedPathForDepartureTime = -1;
+                    this.weekendWalkEndTime = -1; // Réinitialiser dans tous les cas d'échec
+                    // --- FIN MODIFICATION ---
                     break;
                 }
 
-                // Trouver l'heure de départ planifiée la plus récente <= temps actuel
-                const cyclesH = Math.floor((currentGameTime - this.exactHomeDepartureTimeGame) / dayDurationMs);
-                const lastSchedDepH = this.exactHomeDepartureTimeGame + cyclesH * dayDurationMs;
-                 let effectiveDepTimeH = lastSchedDepH;
-                 if (effectiveDepTimeH > currentGameTime) effectiveDepTimeH -= dayDurationMs;
-                 effectiveDepTimeH = Math.max(effectiveDepTimeH, this.exactHomeDepartureTimeGame);
+                // --- MODIFICATION : Gérer départ immédiat après promenade vs départ planifié travail --- 
+                let shouldDepartNow = false;
+                let departureTime = currentGameTime; // Par défaut: heure actuelle
 
-                // Si l'heure actuelle >= l'heure effective de départ calculée
-                if (currentGameTime >= effectiveDepTimeH) {
-                    // console.log(`Agent ${this.id}: Departing for home now. Game Time: ${currentGameTime.toFixed(0)} (Departure based on scheduled: ${effectiveDepTimeH.toFixed(0)})`);
-                    this.departureTimeGame = effectiveDepTimeH; // Utiliser le temps basé sur le schedule
+                if (this.weekendWalkEndTime > 0) {
+                    // Vient de finir la promenade -> départ immédiat
+                    shouldDepartNow = true;
+                    this.weekendWalkEndTime = -1; // Réinitialiser pour indiquer que le retour commence
+                } else {
+                    // Rentrer du travail -> vérifier l'heure planifiée
+                    const cyclesH = Math.floor((currentGameTime - this.exactHomeDepartureTimeGame) / dayDurationMs);
+                    const lastSchedDepH = this.exactHomeDepartureTimeGame + cyclesH * dayDurationMs;
+                    let effectiveDepTimeH = lastSchedDepH;
+                    if (effectiveDepTimeH > currentGameTime) effectiveDepTimeH -= dayDurationMs;
+                    effectiveDepTimeH = Math.max(effectiveDepTimeH, this.exactHomeDepartureTimeGame);
+
+                    if (currentGameTime >= effectiveDepTimeH) {
+                        shouldDepartNow = true;
+                        departureTime = effectiveDepTimeH; // Utiliser l'heure planifiée comme heure de départ
+                    }
+                }
+                // --- FIN MODIFICATION ---
+
+                // Si l'agent doit partir maintenant (soit après promenade, soit heure de travail atteinte)
+                if (shouldDepartNow) {
+                    // console.log(`Agent ${this.id}: Departing for home now. Game Time: ${currentGameTime.toFixed(0)} (Departure Time Set: ${departureTime.toFixed(0)})`);
+                    this.departureTimeGame = departureTime; // Utiliser l'heure déterminée
                     this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
                     this.currentState = AgentState.IN_TRANSIT_TO_HOME;
                     this.isVisible = true;
                     this.currentPathIndexVisual = 0;
                     this.visualInterpolationProgress = 0;
 
-                    // Incrémenter stats (utilisation de l'heure effective de départ)
+                    // Incrémenter stats (utilisation de l'heure de départ effective)
                     const departHourH = Math.floor((this.departureTimeGame % dayDurationMs) / (dayDurationMs / 24));
                     const agentManagerH = this.experience.world?.agentManager;
                      if (agentManagerH?.stats?.pathsToHomeByHour) {
                         agentManagerH.stats.pathsToHomeByHour[departHourH] = (agentManagerH.stats.pathsToHomeByHour[departHourH] || 0) + 1;
                     }
                 }
+                // Sinon (rentre du travail mais pas encore l'heure), l'agent attend dans cet état.
                 break;
 
             case AgentState.WEEKEND_WALK_READY:
