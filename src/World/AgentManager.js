@@ -417,9 +417,17 @@ export default class AgentManager {
 		this.agents.push(newAgent);
 		this.instanceIdToAgent[instanceId] = newAgent.id;
 		this.agentToInstanceId.set(newAgent.id, instanceId);
+
+		// 2.1) Définir la couleur initiale de l'instance (une seule fois)
+		if (this.instanceMeshes.torso?.instanceColor) {
+			this.instanceMeshes.torso.setColorAt(instanceId, newAgent.torsoColor);
+			// Important pour que la couleur soit envoyée au GPU la première fois (et si releaseAgent est utilisé)
+			this.instanceMeshes.torso.instanceColor.needsUpdate = true; 
+		}
+
 		this.activeCount++;
-	
-		// 3) on informe three.js qu'on a plus d'instances actives
+
+		// Incrémenter les compteurs de rendu pour les nouvelles instances
 		if (this.instanceMeshes.head) this.instanceMeshes.head.count = this.activeCount;
 		if (this.instanceMeshes.torso) this.instanceMeshes.torso.count = this.activeCount;
 		if (this.instanceMeshes.hand) this.instanceMeshes.hand.count = this.activeCount * 2;
@@ -584,11 +592,9 @@ export default class AgentManager {
 		});
 
 		// 2. Visuels
-		let needsBodyMatrixUpdate   = false;
-		let needsColorUpdate        = this.instanceMeshes.torso.instanceColor?.needsUpdate || false;
-		let needsAgentMarkerUpdate  = false;
-		let needsHomeMarkerUpdate   = false;
-		let needsWorkMarkerUpdate   = false;
+		let needsBodyMatrixUpdate = false;
+		let needsAgentMarkerUpdate = false;
+		let needsHomeMarkerUpdate = false;
 
         // --- Ajout des déclarations des matrices temporaires ---
         const tempLocalOffsetMatrix = new THREE.Matrix4();
@@ -688,14 +694,6 @@ export default class AgentManager {
 
             if (updated) needsBodyMatrixUpdate = true;
 
-
-			// --- Mise à jour Couleur du torse (par instance) ---
-			if (this.instanceMeshes.torso.instanceColor) {
-				this.tempColor.setHex(agent.torsoColor.getHex());
-				this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
-				needsColorUpdate = true;
-			}
-
 			// --- Mise à jour Debug marker (agentMarker) ---
 			const markerMesh = this.instanceMeshes.agentMarker;
 			if (markerMesh) {
@@ -736,10 +734,8 @@ export default class AgentManager {
 				}
 			});
 		}
-		if (needsColorUpdate)        this.instanceMeshes.torso.instanceColor.needsUpdate = true;
 		if (needsAgentMarkerUpdate)  this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
 		if (needsHomeMarkerUpdate)   this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
-		if (needsWorkMarkerUpdate)   this.instanceMeshes.workMarker.instanceMatrix.needsUpdate = true;
 	}
 
 	removeAgent(agentId) {
