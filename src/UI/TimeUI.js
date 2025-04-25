@@ -7,13 +7,19 @@ export default class TimeUI {
 
         if (!this.environment) {
             console.warn("TimeUI: Environment n'est pas prêt lors de l'initialisation.");
-            return; // Ne rien faire si l'environnement n'est pas chargé
+            // Allow creation but update will do nothing until ready
         }
 
-        this.container = document.body; // Ou un autre élément conteneur d'UI si tu en as un
+        this.container = document.body; // Ou un autre élément conteneur d'UI si tu en a un
         this.element = null;
 
         this.createTimeDisplay();
+
+        // Initialize average stats display properties
+        this.avgHappiness = 0;
+        this.avgHealth = 0;
+        this.avgMaxHealth = 0;
+        this.avgMoney = 0;
     }
 
     createTimeDisplay() {
@@ -58,31 +64,60 @@ export default class TimeUI {
     }
 
     update() {
-        // Vérifier si l'environnement et l'élément existent
+        // Vérifier si l'environnement et l'élément existent et si l'environnement est initialisé
         if (!this.environment || !this.element || !this.environment.isInitialized) {
              // Optionnel: masquer ou afficher "Chargement..." si l'env n'est pas prêt
-             if (this.element) this.element.textContent = "--:--";
+             if (this.element) this.element.textContent = "Chargement..."; // Indiquer chargement
             return;
         }
 
-        // Vérifier si le cycle jour/nuit est actif
-        if (!this.environment.cycleEnabled) {
-            this.element.textContent = "Cycle désactivé"; // Ou afficher l'heure fixe de début
-            return;
-        }
-
-        // Récupérer les valeurs actuelles du cycle
-        const cycleTime = this.environment.cycleTime;
-        const dayDurationMs = this.environment.dayDurationMs;
-        const heure = this.formatTime(cycleTime, dayDurationMs);
+        // Vérifier si le cycle jour/nuit est actif (pour l'affichage de l'heure)
+        const heure = this.environment.cycleEnabled 
+            ? this.formatTime(this.environment.cycleTime, this.environment.dayDurationMs)
+            : "Cycle désactivé"; // Afficher état si cycle désactivé
 
         // Récupérer la date courante du calendrier
         const cal = this.environment.getCurrentCalendarDate();
         // Format : Jeudi 24/04/2025
-        const dateStr = `${cal.jourSemaine} ${cal.jour.toString().padStart(2, '0')}/${cal.mois.toString().padStart(2, '0')}/${cal.annee}`;
+        const dateStr = cal ? `${cal.jourSemaine} ${cal.jour.toString().padStart(2, '0')}/${cal.mois.toString().padStart(2, '0')}/${cal.annee}` : "Date inconnue";
 
-        // Mettre à jour le texte de l'élément
-        this.element.textContent = `${heure}  |  ${dateStr}`;
+        // --- Récupérer et afficher les statistiques moyennes des citoyens ---
+        const citizenManager = this.experience.world?.cityManager?.citizenManager;
+        if (citizenManager && citizenManager.citizens.size > 0) {
+            this.avgHappiness = citizenManager.getAverageHappiness();
+            this.avgHealth = citizenManager.getAverageHealth();
+            this.avgMaxHealth = citizenManager.getAverageMaxHealth();
+            this.avgMoney = citizenManager.getAverageMoney();
+
+            // Format the stats (rounding to 2 decimal places)
+            const formattedHappiness = this.avgHappiness.toFixed(1);
+            const formattedHealth = this.avgHealth.toFixed(1);
+            const formattedMaxHealth = this.avgMaxHealth.toFixed(1);
+            const formattedMoney = this.avgMoney.toFixed(1);
+
+            // Update the text content with time, date, and stats
+            this.element.innerHTML = `
+                <div class="time-date">${heure} | ${dateStr}</div>
+                <div class="citizen-stats">
+                    Bonheur: ${formattedHappiness} %
+                    Santé: ${formattedHealth} / ${formattedMaxHealth}
+                    Argent: ${formattedMoney} $
+                </div>
+            `;
+        } else {
+            // Display only time/date if no citizens or manager not ready
+             this.element.innerHTML = `
+                 <div class="time-date">${heure} | ${dateStr}</div>
+                 <div class="citizen-stats">Aucun citoyen</div>
+             `;
+            // Optionally reset displayed averages if no citizens
+             this.avgHappiness = 0;
+             this.avgHealth = 0;
+             this.avgMaxHealth = 0;
+             this.avgMoney = 0;
+        }
+
+        // OLD line: this.element.textContent = `${heure}  |  ${dateStr}`;
     }
 
     // Méthode pour nettoyer l'élément lors de la destruction de l'expérience

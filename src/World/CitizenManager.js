@@ -81,6 +81,10 @@ export default class CitizenManager {
             agentLogic: agentLogic, // Conserve une référence à l'instance Agent
             homeBuildingId: null,
             workBuildingId: null,
+            happiness: 100, // Bonheur initial
+            health: 50, // Santé initiale
+            maxHealth: 100, // Santé max initiale
+            money: 0, // Argent initial
         };
         this.citizens.set(citizenId, citizenInfo);
         return citizenInfo;
@@ -202,5 +206,57 @@ export default class CitizenManager {
         this.citizens.clear();
         this.nextBuildingInstanceId = 0;
         console.log("CitizenManager reset.");
+    }
+
+    /**
+     * Calcule le bonheur moyen de tous les citoyens.
+     * @returns {number} Le bonheur moyen ou 0 si aucun citoyen.
+     */
+    getAverageHappiness() {
+        if (this.citizens.size === 0) return 0;
+        let totalHappiness = 0;
+        this.citizens.forEach(citizen => {
+            totalHappiness += citizen.happiness;
+        });
+        return totalHappiness / this.citizens.size;
+    }
+
+    /**
+     * Calcule la santé moyenne de tous les citoyens.
+     * @returns {number} La santé moyenne ou 0 si aucun citoyen.
+     */
+    getAverageHealth() {
+        if (this.citizens.size === 0) return 0;
+        let totalHealth = 0;
+        this.citizens.forEach(citizen => {
+            totalHealth += citizen.health;
+        });
+        return totalHealth / this.citizens.size;
+    }
+
+    /**
+     * Calcule la santé max moyenne de tous les citoyens.
+     * @returns {number} La santé max moyenne ou 0 si aucun citoyen.
+     */
+    getAverageMaxHealth() {
+        if (this.citizens.size === 0) return 0;
+        let totalMaxHealth = 0;
+        this.citizens.forEach(citizen => {
+            totalMaxHealth += citizen.maxHealth;
+        });
+        return totalMaxHealth / this.citizens.size;
+    }
+
+    /**
+     * Calcule l'argent moyen de tous les citoyens.
+     * @returns {number} L'argent moyen ou 0 si aucun citoyen.
+     */
+    getAverageMoney() {
+        if (this.citizens.size === 0) return 0;
+        let totalMoney = 0;
+        this.citizens.forEach(citizen => {
+            totalMoney += citizen.money;
+        });
+        return totalMoney / this.citizens.size;
     }
 }

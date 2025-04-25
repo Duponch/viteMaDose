@@ -90,18 +90,33 @@ button {
 .time-display {
 	position: absolute; /* Nécessaire pour top/left/right/bottom */
 	top: 20px;          /* Espace depuis le haut */
-	right: 20px;         /* Espace depuis la gauche */
+	/* right: 20px; */      /* Supprimer pour centrer */
+	left: 50%;          /* Centrer horizontalement */
+    transform: translateX(-50%); /* Ajuster la position pour un centrage parfait */
 	color: white;       /* Couleur du texte */
 	background-color: rgba(0, 0, 0, 0.5); /* Fond semi-transparent */
-	padding: 8px 12px;  /* Espacement intérieur */
+	padding: 10px 15px;  /* Espacement intérieur un peu augmenté */
 	border-radius: 10px; /* Coins arrondis */
 	font-family: 'Consolas', 'Courier New', monospace; /* Police à chasse fixe */
 	font-size: 1.6em;   /* Taille de police */
 	z-index: 100;       /* Assure qu'il est au-dessus du canvas */
 	pointer-events: none; /* Permet aux clics de passer à travers */
+    text-align: center; /* Centrer le texte à l'intérieur du bloc */
   }
-  
-  .time-controls {
+
+.time-display .time-date {
+    display: block; /* Assure que la date et l'heure sont sur une ligne séparée */
+    margin-bottom: 5px; /* Petit espace entre la date/heure et les stats */
+    font-size: 0.9em; /* Rendre la date/heure légèrement plus petite */
+}
+
+.time-display .citizen-stats {
+    display: block; /* Assure que les stats sont sur une ligne séparée */
+    font-size: 0.8em; /* Rendre les stats légèrement plus petites */
+    line-height: 1.6; /* Espacement entre les lignes de stats */
+}
+
+.time-controls {
 	position: absolute;   /* ESSENTIEL pour z-index */
 	bottom: 20px;
 	right: 20px;

@@ -16,6 +16,9 @@ export default class World {
         this.environment = new Environment(this.experience, this);
         this.agentManager = null;
 
+        // --- Daily Update Tracker ---
+        this.lastUpdatedDay = -1; // Initialize with a value indicating no update has occurred
+
         // --- NOUVEAU : Groupes de Debug par Catégorie ---
         // Ces groupes contiendront les InstancedMesh *par sous-type*.
         this.debugGroups = {
@@ -394,6 +397,27 @@ export default class World {
 	   const deltaTime = this.experience.time.delta;
 	   this.environment?.update(deltaTime);
 	   const currentHour = this.environment?.getCurrentHour() ?? 12;
+       const currentDay = this.environment?.getCurrentCalendarDate()?.jour ?? -1; // Get current day
+
+       // --- Daily Citizen Stats Update ---
+       // Check if it's noon (hour 12) and a new day
+       if (currentHour === 12 && currentDay !== this.lastUpdatedDay && currentDay !== -1) {
+           console.log(`World: Performing daily citizen stats update for day ${currentDay}`);
+           this.cityManager?.citizenManager?.citizens.forEach(citizen => {
+               // Decrease happiness by 1 (min 0)
+               citizen.happiness = Math.max(0, citizen.happiness - 1);
+
+               // Increase health by 1 (max maxHealth)
+               citizen.health = Math.min(citizen.maxHealth, citizen.health + 1);
+
+               // Decrease maxHealth by 1 (min 0)
+               citizen.maxHealth = Math.max(0, citizen.maxHealth - 1);
+
+               // Increase money by 10
+               citizen.money += 10;
+           });
+           this.lastUpdatedDay = currentDay; // Update the last updated day
+       }
 
 	   // PlotContentGenerator.update (fenêtres) est géré par CityManager ou ici si besoin
 	   if (this.cityManager?.contentGenerator) {

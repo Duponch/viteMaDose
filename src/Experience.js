@@ -733,11 +733,18 @@ export default class Experience extends EventTarget {
         const homeLink = createBuildingLink(agent.homeBuildingId);
         const workLink = createBuildingLink(agent.workBuildingId);
 
+        // Récupérer les statistiques du citoyen
+        const citizenManager = this.world?.cityManager?.citizenManager;
+        const citizenInfo = citizenManager?.getCitizenInfo(agent.id);
+
         const content = `
           ID: ${agent.id}<br>
-          State: ${agent.currentState || 'N/A'}<br>
-          Home: ${homeLink}<br>
-          Work: ${workLink}
+          État: ${agent.currentState || 'N/A'}<br>
+          Domicile: ${homeLink}<br>
+          Travail: ${workLink}<br>
+          Bonheur: ${citizenInfo?.happiness?.toFixed(1) || 'N/A'} %<br>
+          Santé: ${citizenInfo?.health?.toFixed(1) || 'N/A'} / ${citizenInfo?.maxHealth?.toFixed(1) || 'N/A'}<br>
+          Argent: ${citizenInfo?.money?.toFixed(1) || 'N/A'} $
         `;
         if (this.tooltipElement.innerHTML !== content) {
             this.tooltipElement.innerHTML = content;
