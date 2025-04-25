@@ -494,3 +494,25 @@ button {
 #agent-requesting-work-chart {
 	margin-bottom: 50px;
 }
+
+#city-map-button {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    z-index: 101;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color 0.2s ease;
+    border-radius: 100px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    width: 40px;
+    height: 40px;
+    font-size: 1.2em;
+    padding: 0;
+}
+
+#city-map-button:hover {
+    background-color: #eee;
+    color: #000000;
+}

@@ -43,6 +43,9 @@ export default class TimeControlUI {
         this.elements.speedDisplay.id = 'speed-display';
         this.elements.speedDisplay.textContent = `${this.time.timeScale}x`;
 
+        // --- Bouton Carte de la Ville ---
+        this.elements.cityMapButton = this._createButton('city-map-button', '🗺', "Afficher/Masquer la carte de la ville");
+
         // --- Bouton Debug Principal (inchangé) ---
         this.elements.debugToggleButton = this._createButton('debug-toggle-button', '♣', "Afficher/Masquer les contrôles Debug");
 
@@ -142,6 +145,7 @@ export default class TimeControlUI {
         this.container.appendChild(this.elements.decreaseButton);
         this.container.appendChild(this.elements.pausePlayButton);
         this.container.appendChild(this.elements.increaseButton);
+        this.container.appendChild(this.elements.cityMapButton);
     }
 
 	_createButton(id, textContent, title = '') {
@@ -260,6 +264,11 @@ export default class TimeControlUI {
               }
         };
         this.experience.addEventListener('debugsubmenuvisibilitychanged', this.subMenuVisibilityChangeHandler);
+
+        // Écouteur pour le bouton de carte
+        this.elements.cityMapButton.addEventListener('click', () => {
+            this.experience.world.cityManager.toggleCityMap();
+        });
     }
 
     /**
