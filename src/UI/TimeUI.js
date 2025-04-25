@@ -93,11 +93,11 @@ export default class TimeUI {
             this.avgMoney = citizenManager.getAverageMoney();
             this.avgSalary = citizenManager.getAverageSalary();
 
-            const formattedHappiness = this.avgHappiness.toFixed(1);
-            const formattedHealth = this.avgHealth.toFixed(1);
-            const formattedMaxHealth = this.avgMaxHealth.toFixed(1);
-            const formattedMoney = this.avgMoney.toFixed(1);
-            const formattedSalary = this.avgSalary.toFixed(1);
+            const formattedHappiness = this.avgHappiness.toFixed(0);
+            const formattedHealth = this.avgHealth.toFixed(0);
+            const formattedMaxHealth = this.avgMaxHealth.toFixed(0);
+            const formattedMoney = this.avgMoney.toFixed(0);
+            const formattedSalary = this.avgSalary.toFixed(0);
 
             this.statsElement.innerHTML = `
                 <span class="stat-item" title="Bonheur">☻ ${formattedHappiness}</span>
