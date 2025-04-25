@@ -87,33 +87,42 @@ button {
   }
 }
 
-.time-display {
-	position: absolute; /* Nécessaire pour top/left/right/bottom */
-	top: 20px;          /* Espace depuis le haut */
-	/* right: 20px; */      /* Supprimer pour centrer */
-	left: 50%;          /* Centrer horizontalement */
-    transform: translateX(-50%); /* Ajuster la position pour un centrage parfait */
-	color: white;       /* Couleur du texte */
-	background-color: rgba(0, 0, 0, 0.5); /* Fond semi-transparent */
-	padding: 10px 15px;  /* Espacement intérieur un peu augmenté */
-	border-radius: 10px; /* Coins arrondis */
-	font-family: 'Consolas', 'Courier New', monospace; /* Police à chasse fixe */
-	font-size: 1.6em;   /* Taille de police */
-	z-index: 100;       /* Assure qu'il est au-dessus du canvas */
-	pointer-events: none; /* Permet aux clics de passer à travers */
-    text-align: center; /* Centrer le texte à l'intérieur du bloc */
-  }
-
-.time-display .time-date {
-    display: block; /* Assure que la date et l'heure sont sur une ligne séparée */
-    margin-bottom: 5px; /* Petit espace entre la date/heure et les stats */
-    font-size: 0.9em; /* Rendre la date/heure légèrement plus petite */
+.time-date-display {
+	position: absolute;
+	top: 20px;
+	right: 20px; /* Position en haut à droite */
+	color: white;
+	background-color: rgba(0, 0, 0, 0.5);
+	padding: 8px 12px;
+	border-radius: 8px;
+	font-family: 'Consolas', 'Courier New', monospace;
+	font-size: 1.4em;
+	z-index: 100;
+	pointer-events: none;
+    text-align: right;
 }
 
-.time-display .citizen-stats {
-    display: block; /* Assure que les stats sont sur une ligne séparée */
-    font-size: 0.8em; /* Rendre les stats légèrement plus petites */
-    line-height: 1.6; /* Espacement entre les lignes de stats */
+.citizen-stats-display {
+	position: absolute;
+	top: 20px;
+	left: 50%; /* Centrer horizontalement */
+    transform: translateX(-50%); /* Ajuster pour centrage parfait */
+	color: white;
+	background-color: rgba(0, 0, 0, 0.5);
+	padding: 8px 15px;
+	border-radius: 8px;
+	font-family: 'Consolas', 'Courier New', monospace;
+	font-size: 1.3em;
+	z-index: 100;
+	pointer-events: none;
+    text-align: center;
+    white-space: nowrap; /* Empêche le retour à la ligne des stats */
+}
+
+.citizen-stats-display .stat-item {
+    display: inline-block; /* Afficher les stats en ligne */
+    margin: 0 10px; /* Ajouter un espace horizontal entre les stats */
+    font-size: 1em; /* Ajuster la taille si nécessaire */
 }
 
 .time-controls {
@@ -237,7 +246,7 @@ button {
   .debug-layer-button {
 	border: 1px solid transparent; /* Bordure par défaut */
 	padding: 0.4em 0.8em;
-	font-size: 0.9em; /* Un peu plus petit */
+	font-size: 1em; /* Un peu plus petit */
 	font-weight: 500;
 	font-family: inherit;
     background-color: rgba(0, 0, 0, 0.8);
