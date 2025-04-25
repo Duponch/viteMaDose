@@ -306,8 +306,8 @@ export default class AgentManager {
 		// Appliquer le décalage local des cheveux avant fusion
 		const hairOffset = this._getPartLocalOffsetMatrix('hair');
 		hairGeom.applyMatrix4(hairOffset);
-		// Fusionner tête + cheveux
-		this.baseGeometries.head = mergeGeometries([headGeom, hairGeom], false);
+		// Fusionner tête + cheveux en créant des groups pour appliquer plusieurs matériaux
+		this.baseGeometries.head = mergeGeometries([headGeom, hairGeom], true);
 		headGeom.dispose(); hairGeom.dispose();
 
 		this.baseGeometries.torso = createCapsuleGeometry(torsoRadius, torsoLength, 24);
@@ -326,27 +326,34 @@ export default class AgentManager {
 		// Création des InstancedMesh
 		const createInstMesh = (name, geom, mat, count, needsColor = false) => {
 			console.log(`Creating InstancedMesh '${name}' with count ${count}`);
+			// Créer l'InstancedMesh en passant mat tel quel (material ou array de materials)
 			const mesh = new THREE.InstancedMesh(geom, mat, count);
-			mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); // Important pour les mises à jour fréquentes
+			// Si mat est un tableau (multi-material), activer la mise à jour des groupes
+			if (Array.isArray(mat)) {
+				mesh.geometry.groupsNeedUpdate = true;
+			}
+			mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
-            mesh.frustumCulled = false;
+			mesh.frustumCulled = false;
 			mesh.name = `Agent_${name}_Instances`;
 			if (needsColor) {
-                // Activer les couleurs par instance si nécessaire (pour le torse par exemple)
-                mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
-                mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-                 console.log(` > Added instanceColor buffer to ${name}`);
-            }
+				mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+				mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+				console.log(` > Added instanceColor buffer to ${name}`);
+			}
 			this.scene.add(mesh);
 			this.instanceMeshes[name] = mesh;
 		};
 
-        // Créer les meshes instanciés pour chaque partie, y compris les cheveux
-        createInstMesh('head', this.baseGeometries.head, this.baseMaterials.skin, this.maxAgents);
-        createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents, true); // Activer instanceColor pour le torse
-        createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2); // 2 mains par agent
-        createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2); // 2 chaussures par agent
+        // Head fusionné avec cheveux : passer un tableau de matériaux (skin, hair)
+        createInstMesh('head', this.baseGeometries.head, [
+            this.baseMaterials.skin,
+            this.baseMaterials.hair
+        ], this.maxAgents);
+        createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents, true);
+        createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2);
+        createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2);
 
         // Créer les meshes pour les marqueurs de débogage
         if (this.experience.isDebugMode) {
