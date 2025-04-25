@@ -7,6 +7,8 @@ export default class WorkScheduleStrategy {
      */
     constructor(options = {}) {
         // Options réservées pour l'extension future
+        this.workDays = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"];
+        this.weekendDays = ["Samedi", "Dimanche"];
     }
 
     /**
@@ -15,7 +17,17 @@ export default class WorkScheduleStrategy {
      * @returns {boolean}
      */
     shouldWorkToday(calendarDate) {
+        if (!calendarDate || !calendarDate.jourSemaine) {
+            console.warn("WorkScheduleStrategy: calendarDate invalide");
+            return false; // Par défaut, ne pas travailler si date invalide
+        }
+        
+        // Vérification explicite que ce n'est PAS un weekend
+        if (this.weekendDays.includes(calendarDate.jourSemaine)) {
+            return false; // Le weekend, pas de travail!
+        }
+        
         // Par défaut : lundi à vendredi
-        return ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"].includes(calendarDate.jourSemaine);
+        return this.workDays.includes(calendarDate.jourSemaine);
     }
 } 

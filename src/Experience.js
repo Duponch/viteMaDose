@@ -12,6 +12,7 @@ import TimeControlUI from './UI/TimeControlUI.js';
 import AgentStatsUI from './UI/AgentStatsUI.js';
 // Import nécessaire pour la recherche de mesh par position
 import { Matrix4, Vector3 } from 'three';
+import * as DebugTools from './World/DebugTools.js';
 
 let instance = null;
 
@@ -140,6 +141,12 @@ export default class Experience extends EventTarget {
 
         this.createHighlightMesh(); // Créer le mesh de surbrillance
         console.log("Experience initialisée. Mode debug:", this.isDebugMode);
+
+        // Exposer l'instance pour un accès global
+        window.experience = this;
+
+        // Exposer les outils de debug
+        window.debugTools = DebugTools;
     }
 
 	/**

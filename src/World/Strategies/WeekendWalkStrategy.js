@@ -1,130 +1,124 @@
-// Stratégie pour les promenades du weekend pour les agents
-// Fait en sorte que 20-30% des agents se promènent quelques heures le samedi et dimanche
-// à des horaires aléatoires entre 6h et 23h
+// src/World/Strategies/WeekendWalkStrategy.js
+// Stratégie de promenade du weekend pour les agents.
+// Différences principales avec le WorkScheduleStrategy :
+//   - Active uniquement le samedi et le dimanche.
+//   - Fenêtre horaire par défaut de 6h00 à 23h00.
+//   - Définit pour chaque agent une heure de départ aléatoire
+//     ainsi qu'une durée de promenade (en heures)
+//     stockées dans `agentWalkMap` afin d'être lues par l'agent.
+//
+// L'agent utilise :
+//   * `registerAgent(agentId, calendarDate)`  -> enregistre un planning pour la date courante.
+//   * `shouldWalkNow(agentId, calendarDate, currentHour)` -> indique s'il est temps de débuter.
+//   * `agentWalkMap`                           -> accès direct pour récupérer la durée.
+//
+// REMARQUE : la sélection d'une destination proche d'un parc est gérée
+//            côté Agent via `_findRandomWalkDestination` qui privilégie
+//            déjà les plots "park" lorsqu'ils existent. Cette stratégie
+//            se concentre donc sur la planification temporelle.
 
 export default class WeekendWalkStrategy {
     /**
-     * @param {Object} [options] - Options de configuration
-     * @param {number} [options.minPercentage=20] - Pourcentage minimum d'agents qui se promènent (défaut: 20%)
-     * @param {number} [options.maxPercentage=30] - Pourcentage maximum d'agents qui se promènent (défaut: 30%)
-     * @param {number} [options.minDurationHours=1] - Durée minimum de la promenade en heures (défaut: 1h)
-     * @param {number} [options.maxDurationHours=3] - Durée maximum de la promenade en heures (défaut: 3h)
-     * @param {number} [options.minHour=6] - Heure minimum de début de promenade (défaut: 6h)
-     * @param {number} [options.maxHour=23] - Heure maximum de fin de promenade (défaut: 23h)
+     * @param {Object} [options] - Options de configuration.
+     *  @param {number} [options.startHourMin=6]        - Heure min de départ.
+     *  @param {number} [options.startHourMax=10]       - Heure max de départ (inclus).
+     *  @param {number} [options.minDurationHours=1]    - Durée min de la promenade.
+     *  @param {number} [options.maxDurationHours=3]    - Durée max de la promenade.
      */
     constructor(options = {}) {
-        this.minPercentage = options.minPercentage ?? 20;
-        this.maxPercentage = options.maxPercentage ?? 30;
-        this.minDurationHours = options.minDurationHours ?? 1;
-        this.maxDurationHours = options.maxDurationHours ?? 3;
-        this.minHour = options.minHour ?? 6;
-        this.maxHour = options.maxHour ?? 23;
-        
-        // Map pour stocker les agents qui vont se promener
+        this.startHourMin       = Number.isFinite(options.startHourMin)       ? options.startHourMin       : 6;
+        this.startHourMax       = Number.isFinite(options.startHourMax)       ? options.startHourMax       : 10;
+        this.minDurationHours   = Number.isFinite(options.minDurationHours)   ? options.minDurationHours   : 1;
+        this.maxDurationHours   = Number.isFinite(options.maxDurationHours)   ? options.maxDurationHours   : 3;
+
+        // Map clé = "Samedi_10_2_2024" (jourSemaine_jour_mois_annee)
+        // Valeur = Map(agentId -> { startHour, duration, hasStarted })
         this.agentWalkMap = new Map();
     }
 
     /**
-     * Détermine si un agent spécifique doit se promener ce jour-là
-     * @param {string} agentId - Identifiant unique de l'agent
-     * @param {Object} calendarDate - Objet retourné par getCurrentDate
-     * @returns {boolean}
+     * Renvoie la clé unique représentant une date de calendrier.
+     * @param {Object} calendarDate - Objet retourné par environment.getCurrentCalendarDate()
      */
-    shouldWalkToday(agentId, calendarDate) {
-        // Vérifier si c'est le weekend
-        const isWeekend = ["Samedi", "Dimanche"].includes(calendarDate.jourSemaine);
-        
-        if (!isWeekend) {
-            return false;
-        }
-        
-        // Si c'est un nouveau jour, réinitialiser la map et déterminer les agents qui se promèneront
-        const dayKey = `${calendarDate.jourSemaine}_${calendarDate.jour}_${calendarDate.mois}_${calendarDate.annee}`;
-        
+    _getDayKey(calendarDate) {
+        // Exemple : "Samedi_10_2_2024"
+        return `${calendarDate.jourSemaine}_${calendarDate.jour}_${calendarDate.mois}_${calendarDate.annee}`;
+    }
+
+    /**
+     * Enregistre l'agent pour la date courante s'il n'existe pas déjà.
+     * Génère une heure de départ aléatoire et une durée aléatoire.
+     * @param {string} agentId
+     * @param {Object} calendarDate
+     */
+    registerAgent(agentId, calendarDate) {
+        if (!agentId || !calendarDate) return;
+        // Limiter aux jours du weekend uniquement.
+        if (!["Samedi", "Dimanche"].includes(calendarDate.jourSemaine)) return;
+
+        const dayKey = this._getDayKey(calendarDate);
         if (!this.agentWalkMap.has(dayKey)) {
-            this.initializeDayWalks(dayKey);
+            this.agentWalkMap.set(dayKey, new Map());
         }
+        const dayMap = this.agentWalkMap.get(dayKey);
+        if (dayMap.has(agentId)) return; // déjà enregistré
+
+        // Générer l'heure de départ et la durée.
+        const startHour = this._randomIntInclusive(this.startHourMin, this.startHourMax);
+        const duration  = this._randomFloatInclusive(this.minDurationHours, this.maxDurationHours);
+
+        dayMap.set(agentId, {
+            startHour,
+            duration,
+            hasStarted: false,
+        });
         
-        // Vérifier si cet agent spécifique est dans la liste des promeneurs
-        const agentWalkInfo = this.agentWalkMap.get(dayKey).get(agentId);
-        return !!agentWalkInfo;
+        console.log(`WeekendWalkStrategy: Agent ${agentId} enregistré pour ${calendarDate.jourSemaine}, départ prévu à ${startHour}h pour ${duration.toFixed(1)}h`);
     }
-    
+
     /**
-     * Initialise les promenades pour une journée donnée
-     * @param {string} dayKey - Clé unique pour le jour
-     * @private
-     */
-    initializeDayWalks(dayKey) {
-        const agentsForDay = new Map();
-        this.agentWalkMap.set(dayKey, agentsForDay);
-    }
-    
-    /**
-     * Détermine si un agent doit se promener maintenant en fonction de l'heure
-     * @param {string} agentId - Identifiant unique de l'agent
-     * @param {Object} calendarDate - Objet retourné par getCurrentDate
-     * @param {number} currentHour - Heure actuelle (0-23)
+     * Détermine si l'agent doit commencer sa promenade maintenant.
+     * @param {string}  agentId
+     * @param {Object}  calendarDate
+     * @param {number}  currentHour - Heure courante du jeu (0-23).
      * @returns {boolean}
      */
     shouldWalkNow(agentId, calendarDate, currentHour) {
-        if (!this.shouldWalkToday(agentId, calendarDate)) {
-            return false;
+        if (!agentId || !calendarDate || typeof currentHour !== "number") return false;
+        if (!["Samedi", "Dimanche"].includes(calendarDate.jourSemaine)) return false;
+
+        const dayKey = this._getDayKey(calendarDate);
+        const dayMap = this.agentWalkMap.get(dayKey);
+        if (!dayMap) return false;
+
+        const info = dayMap.get(agentId);
+        if (!info) return false;
+
+        // Si déjà démarré, ne pas déclencher de nouveau.
+        if (info.hasStarted) return false;
+
+        // Déclenchement si heure courante >= heure prévue ET avant fin de journée (23h).
+        if (currentHour >= info.startHour && currentHour < 23) {
+            info.hasStarted = true; // Marquer comme déclenché pour ne pas répéter
+            console.log(`WeekendWalkStrategy: Agent ${agentId} - C'est l'heure! Départ à ${currentHour}h (prévu: ${info.startHour}h)`);
+            return true;
         }
-        
-        const dayKey = `${calendarDate.jourSemaine}_${calendarDate.jour}_${calendarDate.mois}_${calendarDate.annee}`;
-        const agentWalkInfo = this.agentWalkMap.get(dayKey).get(agentId);
-        
-        if (!agentWalkInfo) {
-            return false;
-        }
-        
-        // Vérifier si l'heure actuelle est dans la plage de promenade de l'agent
-        return currentHour >= agentWalkInfo.startHour && currentHour < agentWalkInfo.endHour;
+        return false;
     }
-    
+
     /**
-     * Enregistre un agent pour déterminer s'il doit se promener le weekend
-     * @param {string} agentId - Identifiant unique de l'agent
-     * @param {Object} calendarDate - Objet retourné par getCurrentDate
+     * Renvoie un entier aléatoire inclusif entre min et max.
      */
-    registerAgent(agentId, calendarDate) {
-        if (!["Samedi", "Dimanche"].includes(calendarDate.jourSemaine)) {
-            return;
-        }
-        
-        const dayKey = `${calendarDate.jourSemaine}_${calendarDate.jour}_${calendarDate.mois}_${calendarDate.annee}`;
-        
-        if (!this.agentWalkMap.has(dayKey)) {
-            this.initializeDayWalks(dayKey);
-        }
-        
-        const dayAgents = this.agentWalkMap.get(dayKey);
-        
-        // Si l'agent est déjà enregistré, on ne fait rien
-        if (dayAgents.has(agentId)) {
-            return;
-        }
-        
-        // Déterminer si cet agent se promène (basé sur le pourcentage configuré)
-        const walkProbability = this.minPercentage + Math.random() * (this.maxPercentage - this.minPercentage);
-        const willWalk = Math.random() * 100 < walkProbability;
-        
-        if (willWalk) {
-            // Déterminer les heures de début et de fin de promenade
-            const walkDuration = this.minDurationHours + Math.random() * (this.maxDurationHours - this.minDurationHours);
-            const latestPossibleStart = Math.min(this.maxHour - walkDuration, this.maxHour - 1);
-            const startHour = Math.floor(this.minHour + Math.random() * (latestPossibleStart - this.minHour));
-            const endHour = Math.min(Math.ceil(startHour + walkDuration), this.maxHour);
-            
-            dayAgents.set(agentId, {
-                startHour,
-                endHour,
-                duration: endHour - startHour
-            });
-        } else {
-            // L'agent ne se promène pas aujourd'hui
-            dayAgents.set(agentId, null);
-        }
+    _randomIntInclusive(min, max) {
+        const mn = Math.ceil(min);
+        const mx = Math.floor(max);
+        return Math.floor(Math.random() * (mx - mn + 1)) + mn;
+    }
+
+    /**
+     * Renvoie un flottant aléatoire inclusif entre min et max.
+     */
+    _randomFloatInclusive(min, max) {
+        return Math.random() * (max - min) + min;
     }
 } 
