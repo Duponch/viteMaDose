@@ -20,6 +20,7 @@ export default class TimeUI {
         this.avgHealth = 0;
         this.avgMaxHealth = 0;
         this.avgMoney = 0;
+        this.avgSalary = 0; // Initialize average salary
     }
 
     createTimeDisplay() {
@@ -88,12 +89,14 @@ export default class TimeUI {
             this.avgHealth = citizenManager.getAverageHealth();
             this.avgMaxHealth = citizenManager.getAverageMaxHealth();
             this.avgMoney = citizenManager.getAverageMoney();
+            this.avgSalary = citizenManager.getAverageSalary(); // Get average salary
 
-            // Format the stats (rounding to 2 decimal places)
+            // Format the stats (rounding to 1 decimal places)
             const formattedHappiness = this.avgHappiness.toFixed(1);
             const formattedHealth = this.avgHealth.toFixed(1);
             const formattedMaxHealth = this.avgMaxHealth.toFixed(1);
             const formattedMoney = this.avgMoney.toFixed(1);
+            const formattedSalary = this.avgSalary.toFixed(1); // Format average salary
 
             // Update the text content with time, date, and stats
             this.element.innerHTML = `
@@ -102,6 +105,7 @@ export default class TimeUI {
                     Bonheur: ${formattedHappiness} %
                     Santé: ${formattedHealth} / ${formattedMaxHealth}
                     Argent: ${formattedMoney} $
+                    Salaire moyen: ${formattedSalary} $/jour
                 </div>
             `;
         } else {
@@ -115,6 +119,7 @@ export default class TimeUI {
              this.avgHealth = 0;
              this.avgMaxHealth = 0;
              this.avgMoney = 0;
+             this.avgSalary = 0; // Reset average salary display
         }
 
         // OLD line: this.element.textContent = `${heure}  |  ${dateStr}`;

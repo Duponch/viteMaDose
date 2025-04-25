@@ -85,6 +85,7 @@ export default class CitizenManager {
             health: 50, // Santé initiale
             maxHealth: 100, // Santé max initiale
             money: 0, // Argent initial
+            salary: 10 // Salaire quotidien initial
         };
         this.citizens.set(citizenId, citizenInfo);
         return citizenInfo;
@@ -254,9 +255,18 @@ export default class CitizenManager {
     getAverageMoney() {
         if (this.citizens.size === 0) return 0;
         let totalMoney = 0;
-        this.citizens.forEach(citizen => {
-            totalMoney += citizen.money;
-        });
+        this.citizens.forEach(citizen => totalMoney += citizen.money);
         return totalMoney / this.citizens.size;
+    }
+
+    /**
+     * Calcule le salaire moyen de tous les citoyens.
+     * @returns {number} Le salaire moyen.
+     */
+    getAverageSalary() {
+        if (this.citizens.size === 0) return 0;
+        let totalSalary = 0;
+        this.citizens.forEach(citizen => totalSalary += citizen.salary);
+        return totalSalary / this.citizens.size;
     }
 }

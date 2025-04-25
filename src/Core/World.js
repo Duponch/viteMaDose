@@ -404,8 +404,8 @@ export default class World {
        if (currentHour === 12 && currentDay !== this.lastUpdatedDay && currentDay !== -1) {
            console.log(`World: Performing daily citizen stats update for day ${currentDay}`);
            this.cityManager?.citizenManager?.citizens.forEach(citizen => {
-               // Decrease happiness by 1 (min 0)
-               citizen.happiness = Math.max(0, citizen.happiness - 1);
+               // Calculate happiness based on health and salary (clamped between 0 and 100)
+               citizen.happiness = Math.max(0, Math.min(100, (citizen.health + citizen.salary) / 2));
 
                // Increase health by 1 (max maxHealth)
                citizen.health = Math.min(citizen.maxHealth, citizen.health + 1);
@@ -413,8 +413,8 @@ export default class World {
                // Decrease maxHealth by 1 (min 0)
                citizen.maxHealth = Math.max(0, citizen.maxHealth - 1);
 
-               // Increase money by 10
-               citizen.money += 10;
+               // Increase money by their salary
+               citizen.money += citizen.salary;
            });
            this.lastUpdatedDay = currentDay; // Update the last updated day
        }

@@ -744,7 +744,8 @@ export default class Experience extends EventTarget {
           Travail: ${workLink}<br>
           Bonheur: ${citizenInfo?.happiness?.toFixed(1) || 'N/A'} %<br>
           Santé: ${citizenInfo?.health?.toFixed(1) || 'N/A'} / ${citizenInfo?.maxHealth?.toFixed(1) || 'N/A'}<br>
-          Argent: ${citizenInfo?.money?.toFixed(1) || 'N/A'} $
+          Argent: ${citizenInfo?.money?.toFixed(1) || 'N/A'} $<br>
+          Salaire: ${citizenInfo?.salary?.toFixed(1) || 'N/A'} $/jour
         `;
         if (this.tooltipElement.innerHTML !== content) {
             this.tooltipElement.innerHTML = content;
