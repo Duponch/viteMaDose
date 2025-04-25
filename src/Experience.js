@@ -1219,22 +1219,8 @@ export default class Experience extends EventTarget {
 
         // --- 2. Mettre à jour le Monde ---
         if (this.world) {
-            // 2a. Mettre à jour l'environnement (soleil, lune, nuages)
-            //     Utilise deltaTime pour l'animation des nuages
-            this.world.environment?.update(deltaTime);
-
-            // 2b. Mettre à jour CityManager (fenêtres, lampadaires)
-            if (this.world.cityManager) {
-                this.world.cityManager.contentGenerator?.update(currentHour); // Fenêtres
-                this.world.cityManager.lampPostManager?.updateLampPostLights(currentHour); // Lampes
-            }
-
-            // 2c. Mettre à jour les Agents (Logique d'état PUIS Visuel)
-            if (this.world.agentManager) {
-                // --- APPEL SÉPARÉ ---
-                this.world.agentManager.update(deltaTime); // Appelle updateState puis updateVisuals DANS agentManager
-                // --------------------
-            }
+            // Appel unique à la méthode update du monde
+            this.world.update();
         }
 
         // --- 3. Mettre à jour les UI ---
