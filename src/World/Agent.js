@@ -107,6 +107,10 @@ export default class Agent {
         
         // Ajout pour la détection d'immobilité
         this._lastPositionCheck = null;
+        
+        // Propriétés pour les mécanismes de secours
+        this._pathRequestTimeout = null;
+        this._stateStartTime = null;
     }
 
 	_calculateScheduledTimes() {
@@ -394,24 +398,27 @@ export default class Agent {
                         console.log(`Agent ${this.id}: Téléporté au trottoir, demande de chemin vers la maison`);
                         this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
                         
-                        // Demander le chemin au prochain frame
-                        setTimeout(() => {
-                            if (this.homePosition && this.homeGridNode) {
-                                this.requestPath(
-                                    this.position.clone(),
-                                    this.homePosition,
-                                    currentGridNode,
-                                    this.homeGridNode,
-                                    AgentState.READY_TO_LEAVE_FOR_HOME,
-                                    this.experience.time.elapsed
-                                );
-                            }
-                        }, 0);
+                        // Marquer l'heure de début de la demande de chemin pour le mécanisme de sécurité
+                        this._pathRequestTimeout = this.experience.time.elapsed;
+                        
+                        // Demander directement le chemin sans setTimeout
+                        if (this.homePosition && this.homeGridNode) {
+                            this.requestPath(
+                                this.position.clone(),
+                                this.homePosition,
+                                currentGridNode,
+                                this.homeGridNode,
+                                AgentState.READY_TO_LEAVE_FOR_HOME,
+                                this.experience.time.elapsed
+                            );
+                        } else {
+                            // Si on n'a pas de position de maison valide, forcer le retour
+                            this.forceReturnHome(this.experience.time.elapsed);
+                        }
                     } else {
                         // Si on n'a pas de position du trottoir, aller directement à la maison
                         console.warn(`Agent ${this.id}: Position du trottoir inconnue, retour direct à la maison`);
-                        this.currentState = AgentState.AT_HOME;
-                        this.isVisible = false;
+                        this.forceReturnHome(this.experience.time.elapsed);
                     }
                 } else {
                     console.warn(`Agent ${this.id}: Pathfinding WEEKEND WALK failed, finding a new destination...`);
@@ -425,6 +432,29 @@ export default class Agent {
     } // Fin setPath
 
 	updateState(deltaTime, currentHour, currentGameTime) {
+        // Avant d'entrer dans le switch, vérifier si un agent est bloqué
+        if (this._pathRequestTimeout && currentGameTime - this._pathRequestTimeout > 10000) {
+            // Si plus de 10 secondes se sont écoulées depuis la demande de chemin, forcer le retour
+            console.warn(`Agent ${this.id}: Délai dépassé pour la demande de chemin (${(currentGameTime - this._pathRequestTimeout).toFixed(0)}ms), forçage du retour à la maison`);
+            this.forceReturnHome(currentGameTime);
+            this._pathRequestTimeout = null;
+            return;
+        }
+        
+        // Si l'agent est dans l'état WEEKEND_WALK_RETURNING_TO_SIDEWALK depuis trop longtemps
+        if (this.currentState === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+            if (!this._stateStartTime) {
+                this._stateStartTime = currentGameTime;
+            } else if (currentGameTime - this._stateStartTime > 30000) { // 30 secondes max dans cet état
+                console.warn(`Agent ${this.id}: Bloqué dans l'état WEEKEND_WALK_RETURNING_TO_SIDEWALK pendant ${(currentGameTime - this._stateStartTime).toFixed(0)}ms, forçage du retour à la maison`);
+                this.forceReturnHome(currentGameTime);
+                this._stateStartTime = null;
+                return;
+            }
+        } else {
+            this._stateStartTime = null; // Réinitialiser le timer si l'état change
+        }
+        
         // Récupérer les heures de départ planifiées et la durée du jour
         const departWorkTime = this.exactWorkDepartureTimeGame;
         const departHomeTime = this.exactHomeDepartureTimeGame;
@@ -1285,15 +1315,28 @@ export default class Agent {
                 // L'agent est visible pendant son retour au trottoir
                 this.isVisible = true;
                 
+                // Enregistrer le temps de début si ce n'est pas déjà fait
+                if (!this._stateStartTime) {
+                    this._stateStartTime = currentGameTime;
+                }
+                
                 // Logs pour déboguer
                 if (currentGameTime % 3000 < 100) { // Approximativement toutes les 3 secondes
-                    console.log(`Agent ${this.id}: RETOUR TROTTOIR - index=${this.currentPathIndexVisual}/${this.currentPathPoints?.length-1 || 0}, progress=${this.visualInterpolationProgress.toFixed(2)}, pos=[${this.position.x.toFixed(2)}, ${this.position.z.toFixed(2)}]`);
+                    console.log(`Agent ${this.id}: RETOUR TROTTOIR - index=${this.currentPathIndexVisual}/${this.currentPathPoints?.length-1 || 0}, progress=${this.visualInterpolationProgress.toFixed(2)}, pos=[${this.position.x.toFixed(2)}, ${this.position.z.toFixed(2)}], temps écoulé=${(currentGameTime - this._stateStartTime).toFixed(0)}ms`);
+                }
+                
+                // Vérifier si on est bloqué trop longtemps
+                if (currentGameTime - this._stateStartTime > 30000) { // 30 secondes max
+                    console.warn(`Agent ${this.id}: Bloqué trop longtemps dans l'état de retour au trottoir, forçage du retour à la maison`);
+                    this.forceReturnHome(currentGameTime);
+                    break;
                 }
                 
                 // L'agent a terminé son retour au trottoir, maintenant rentrer à la maison
                 if (this.currentPathIndexVisual >= this.currentPathPoints.length - 1 && this.visualInterpolationProgress >= 0.95) {
                     console.log(`Agent ${this.id}: Arrivé sur le trottoir, prêt à rentrer à la maison depuis [${this.position.x.toFixed(2)}, ${this.position.z.toFixed(2)}]`);
                     this.isInsidePark = false;
+                    this._stateStartTime = null; // Réinitialiser le timer
                     
                     if (this.homePosition && this.homeGridNode) {
                         // Position actuelle sur le trottoir - IMPORTANT: utilisons la position physique actuelle
@@ -1304,6 +1347,9 @@ export default class Agent {
                         // Trouver le nœud de grille le plus proche du trottoir actuel
                         const navGraph = this.experience.world?.cityManager?.getNavigationGraph();
                         const currentGridNode = navGraph?.getClosestWalkableNode(currentPosition);
+                        
+                        // Marquer l'heure de début de la demande de chemin pour le mécanisme de sécurité
+                        this._pathRequestTimeout = currentGameTime;
                         
                         // Ne PAS changer la position de l'agent ici pour éviter toute téléportation
                         this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
@@ -1318,8 +1364,7 @@ export default class Agent {
                     } else {
                         // Fallback
                         console.warn(`Agent ${this.id}: Impossible de trouver le chemin vers la maison, téléportation`);
-                        this.currentState = AgentState.AT_HOME;
-                        this.isVisible = false;
+                        this.forceReturnHome(currentGameTime);
                     }
                     
                     // Réinitialiser les informations de promenade
@@ -2012,5 +2057,38 @@ export default class Agent {
             );
             this.isInsidePark = false;
         }
+    }
+
+    // Ajouter une méthode de secours pour forcer le retour à la maison
+    forceReturnHome(currentGameTime) {
+        console.warn(`Agent ${this.id}: Forçage du retour à la maison par téléportation directe`);
+        
+        // Forcer la position de l'agent à son domicile
+        if (this.homePosition) {
+            this.position.copy(this.homePosition);
+            this.position.y += this.yOffset;
+        }
+        
+        // Réinitialiser tous les drapeaux et états
+        this.isInsidePark = false;
+        this.parkSidewalkPosition = null;
+        this.parkSidewalkGridNode = null;
+        this.weekendWalkDestination = null;
+        this.weekendWalkGridNode = null;
+        this.weekendWalkEndTime = -1;
+        this.currentPathPoints = null;
+        this.calculatedTravelDurationGame = 0;
+        this.departureTimeGame = -1;
+        this.arrivalTmeGame = -1;
+        this.currentPathIndexVisual = 0;
+        this.visualInterpolationProgress = 0;
+        
+        // Définir l'état à AT_HOME et cacher l'agent
+        this.currentState = AgentState.AT_HOME;
+        this.isVisible = false;
+        
+        // Enregistrer l'heure d'arrivée
+        this.lastArrivalTimeHome = currentGameTime;
+        this.requestedPathForDepartureTime = -1;
     }
 }
