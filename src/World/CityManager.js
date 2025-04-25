@@ -144,7 +144,7 @@ export default class CityManager {
             agentHeadTiltAmplitude: 0.08,
             agentHeadBobAmplitude: 0.06,
             agentAnimationSpeedFactor: 8,
-            maxAgents: 2000,
+            maxAgents: 200,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
@@ -288,6 +288,15 @@ export default class CityManager {
 
     getCitizenInfo(citizenId) {
         return this.citizenManager.getCitizenInfo(citizenId);
+    }
+
+    /**
+     * Récupère toutes les instances de bâtiments correspondant aux types spécifiés.
+     * @param {Array<string>} types - Un tableau de types de bâtiments à rechercher.
+     * @returns {Array<object>} Un tableau contenant les objets d'information des bâtiments correspondants.
+     */
+    getBuildingsByType(types) {
+        return this.citizenManager.getBuildingsByType(types);
     }
     // --- Fin délégation ---
 

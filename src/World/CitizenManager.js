@@ -165,6 +165,26 @@ export default class CitizenManager {
     }
 
     /**
+     * Récupère toutes les instances de bâtiments correspondant aux types spécifiés.
+     * @param {Array<string>} types - Un tableau de types de bâtiments à rechercher (ex: ['house', 'park']).
+     * @returns {Array<object>} Un tableau contenant les objets d'information des bâtiments correspondants.
+     */
+    getBuildingsByType(types) {
+        if (!Array.isArray(types) || types.length === 0) {
+            return []; // Retourner un tableau vide si les types sont invalides
+        }
+        
+        const matchingBuildings = [];
+        // Itérer sur les *valeurs* de la Map
+        for (const buildingInfo of this.buildingInstances.values()) {
+            if (types.includes(buildingInfo.type)) {
+                matchingBuildings.push(buildingInfo);
+            }
+        }
+        return matchingBuildings;
+    }
+
+    /**
      * Récupère les informations d'un citoyen à partir de son identifiant.
      * @param {string} citizenId - L'identifiant du citoyen.
      * @returns {object|null} L'objet du citoyen ou null s'il n'est pas trouvé.

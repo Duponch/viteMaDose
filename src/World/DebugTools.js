@@ -43,27 +43,29 @@ export function createDebugSphereOnParkSidewalk() {
     const sidewalkHeight = navGraph.sidewalkHeight ?? 0.2;
     parkPos.y = sidewalkHeight;
     
-    // Créer la sphère à cette position
+    // Créer la sphère jaune (initialement à la position du parc)
     const geometry = new THREE.SphereGeometry(3, 16, 16);
     const material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-    const sphere = new THREE.Mesh(geometry, material);
-    
-    // Placer la sphère sur le trottoir du parc
-    sphere.position.copy(parkPos);
-    sphere.position.y += 5; // Élever légèrement pour bien voir
-    
-    // Ajouter à la scène
-    experience.scene.add(sphere);
-    
-    console.log(`Debug: Sphère jaune créée à la position [${parkPos.x.toFixed(2)}, ${parkPos.y.toFixed(2)}, ${parkPos.z.toFixed(2)}] sur un trottoir de parc`);
+    const yellowSphere = new THREE.Mesh(geometry, material);
+    yellowSphere.position.copy(parkPos);
+    yellowSphere.position.y += 5; // Élever légèrement pour bien voir
+    experience.scene.add(yellowSphere);
+    console.log(`Debug: Sphère jaune créée initialement à [${parkPos.x.toFixed(2)}, ${parkPos.y.toFixed(2)}, ${parkPos.z.toFixed(2)}]`);
     
     // Essayer d'obtenir le nœud marchable le plus proche
     const node = navGraph.getClosestWalkableNode(parkPos);
     if (node) {
-        console.log(`Debug: Nœud marchable le plus proche: [${node.x}, ${node.y}]`);
+        console.log(`Debug: Nœud marchable le plus proche trouvé: [${node.x}, ${node.y}]`);
         
-        // Créer une deuxième sphère verte au point du nœud marchable
+        // Calculer la position mondiale du nœud marchable
         const worldPos = navGraph.gridToWorld(node.x, node.y);
+        
+        // Déplacer la sphère jaune vers le nœud marchable
+        yellowSphere.position.copy(worldPos);
+        yellowSphere.position.y += 5; // Ré-appliquer l'élévation
+        console.log(`Debug: Sphère jaune déplacée vers le nœud marchable [${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}]`);
+        
+        // Créer une deuxième sphère verte au même point pour confirmer
         const greenSphere = new THREE.Mesh(
             new THREE.SphereGeometry(2, 16, 16),
             new THREE.MeshBasicMaterial({ color: 0x00ff00 })
@@ -74,10 +76,13 @@ export function createDebugSphereOnParkSidewalk() {
         
         console.log(`Debug: Sphère verte créée à la position du nœud marchable [${worldPos.x.toFixed(2)}, ${worldPos.y.toFixed(2)}, ${worldPos.z.toFixed(2)}]`);
         
-        return { yellowSphere: sphere, greenSphere, parkPosition: parkPos, nodePosition: worldPos };
+        return { yellowSphere, greenSphere, parkPosition: parkPos, nodePosition: worldPos };
+    } else {
+        console.error(`Debug: Aucun nœud marchable trouvé près de [${parkPos.x.toFixed(2)}, ${parkPos.z.toFixed(2)}]`);
     }
     
-    return { sphere, position: parkPos };
+    // Si aucun noeud n'a été trouvé, on retourne juste la sphère jaune à sa position initiale
+    return { yellowSphere, position: parkPos };
 }
 
 // Exposer la fonction de debug globalement pour un accès facile depuis la console

@@ -269,6 +269,9 @@ export default class Agent {
         // Détermine l'état dans lequel l'agent se trouvait LORSQU'IL A DEMANDÉ le chemin
         const wasRequestingWork = this.currentState === AgentState.REQUESTING_PATH_FOR_WORK;
         const wasRequestingHome = this.currentState === AgentState.REQUESTING_PATH_FOR_HOME;
+        // --- AJOUT : Vérifier aussi si on demandait pour le weekend ---
+        const wasRequestingWeekendWalk = this.currentState === AgentState.WEEKEND_WALK_REQUESTING_PATH;
+        // --- FIN AJOUT ---
 
         // --- Cas 1: Chemin Valide Reçu ---
         // Vérifie si le chemin existe, est un tableau non vide, et a une longueur significative.
@@ -297,7 +300,13 @@ export default class Agent {
                 this.currentState = AgentState.READY_TO_LEAVE_FOR_WORK;
             } else if (wasRequestingHome) {
                 this.currentState = AgentState.READY_TO_LEAVE_FOR_HOME;
-            } else {
+            } 
+            // --- AJOUT : Gérer la transition pour le weekend ---
+            else if (wasRequestingWeekendWalk) {
+                this.currentState = AgentState.WEEKEND_WALK_READY;
+            } 
+            // --- FIN AJOUT ---
+            else {
                 // Cas étrange : on reçoit un chemin sans l'avoir demandé récemment
                 console.warn(`Agent ${this.id}: Reçu path alors qu'en état ${this.currentState}. Path stocké, mais état inchangé.`);
                 // On garde le chemin mais on ne change pas l'état immédiatement
@@ -806,7 +815,13 @@ export default class Agent {
     }
 
 	updateVisuals(deltaTime, currentGameTime) {
-        if (this.currentState !== AgentState.IN_TRANSIT_TO_WORK && this.currentState !== AgentState.IN_TRANSIT_TO_HOME) {
+        // --- MODIFICATION : Inclure WEEKEND_WALKING dans les états où l'agent se déplace --- 
+        const isVisuallyMoving = this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
+                                 this.currentState === AgentState.IN_TRANSIT_TO_HOME ||
+                                 this.currentState === AgentState.WEEKEND_WALKING;
+                                 
+        if (!isVisuallyMoving) {
+        // --- FIN MODIFICATION ---
              if(this.currentState === AgentState.AT_HOME && this.homePosition) {
                  this.position.copy(this.homePosition).setY(this.yOffset);
              } else if (this.currentState === AgentState.AT_WORK && this.workPosition) {
@@ -1091,13 +1106,24 @@ export default class Agent {
             for (const park of shuffledParks) {
                 if (park && park.position) {
                     // Créer plusieurs points autour du parc pour augmenter les chances de trouver un nœud valide
-                    const parkPos = park.position.clone();
+                    const parkPosOriginal = park.position.clone();
                     const sidewalkHeight = navGraph.sidewalkHeight ?? 0.2;
-                    parkPos.y = sidewalkHeight;
-                    
-                    // Obtenir directement le nœud le plus proche du parc
-                    const parkNode = navGraph.getClosestWalkableNode(parkPos);
-                    
+                    parkPosOriginal.y = sidewalkHeight;
+
+                    // --- AJOUT: Snapping de la position du parc ---
+                    let parkPosSnapped = parkPosOriginal.clone(); // Cloner pour ne pas modifier l'original
+                    if (navGraph.gridScale && navGraph.gridScale > 0) {
+                        const cellSizeWorld = 1.0 / navGraph.gridScale;
+                        parkPosSnapped.x = Math.round(parkPosOriginal.x / cellSizeWorld) * cellSizeWorld;
+                        parkPosSnapped.z = Math.round(parkPosOriginal.z / cellSizeWorld) * cellSizeWorld;
+                        // Laisser parkPosSnapped.y = sidewalkHeight
+                    }
+                    // Utiliser parkPosSnapped pour la recherche initiale
+                    // --- FIN AJOUT ---
+
+                    // Obtenir directement le nœud le plus proche du parc (avec la position snappée)
+                    const parkNode = navGraph.getClosestWalkableNode(parkPosSnapped);
+
                     if (parkNode && typeof parkNode.x === 'number' && typeof parkNode.y === 'number') {
                         // Convertir en position mondiale (s'assurer que gridToWorld renvoie une position valide)
                         const worldPos = navGraph.gridToWorld(parkNode.x, parkNode.y);
@@ -1134,9 +1160,21 @@ export default class Agent {
                         ];
                         
                         for (const o of offsets) {
-                            const offsetPos = parkPos.clone().add(new THREE.Vector3(o.x, 0, o.y));
-                            const offsetNode = navGraph.getClosestWalkableNode(offsetPos);
-                            
+                            const offsetPosOriginal = parkPosOriginal.clone().add(new THREE.Vector3(o.x, 0, o.y)); // Utiliser la position originale comme base pour l'offset
+
+                            // --- AJOUT: Snapping de la position offset ---
+                            let offsetPosSnapped = offsetPosOriginal.clone();
+                            if (navGraph.gridScale && navGraph.gridScale > 0) {
+                                const cellSizeWorld = 1.0 / navGraph.gridScale;
+                                offsetPosSnapped.x = Math.round(offsetPosOriginal.x / cellSizeWorld) * cellSizeWorld;
+                                offsetPosSnapped.z = Math.round(offsetPosOriginal.z / cellSizeWorld) * cellSizeWorld;
+                                // Laisser offsetPosSnapped.y = sidewalkHeight (implicite car basé sur parkPosOriginal cloné)
+                            }
+                            // --- FIN AJOUT ---
+
+                            // Utiliser la position offset snappée pour la recherche
+                            const offsetNode = navGraph.getClosestWalkableNode(offsetPosSnapped);
+
                             if (offsetNode && typeof offsetNode.x === 'number' && typeof offsetNode.y === 'number') {
                                 const worldPos = navGraph.gridToWorld(offsetNode.x, offsetNode.y);
                                 
