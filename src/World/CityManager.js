@@ -339,6 +339,7 @@ export default class CityManager {
             // Initialiser le visualiseur de carte APRÈS la génération des districts
             this.cityMapVisualizer = new CityMapVisualizer(this.config, this.leafPlots);
             this.cityMapVisualizer.setContainer(document.body);
+            this.cityMapVisualizer.setExperience(this.experience);
 
             console.time("RoadAndCrosswalkInfoGeneration");
             // Génère le réseau routier et les infos pour les passages piétons

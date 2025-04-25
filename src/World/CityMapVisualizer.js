@@ -23,10 +23,13 @@ export default class CityMapVisualizer {
             'house': '#0077ff', // Bleu pour les maisons (résidentiel)
             'building': '#0077ff', // Bleu pour les immeubles (résidentiel)
             'industrial': '#ffa500', // Orange pour les zones industrielles
-            'skyscraper': '#cc0000', // Rouge pour les gratte-ciels (affaires)m 
+            'skyscraper': '#cc0000', // Rouge pour les gratte-ciels (affaires)
             'park': '#32CD32', // Vert pour les parcs
             'unbuildable': '#cccccc' // Gris pour les zones non constructibles
         };
+
+        // État de visibilité des types de parcelles
+        this.visibleZoneTypes = new Set(Object.keys(this.zoneColors));
 
         // Taille d'une cellule de la grille (en unités du monde)
         this.cellSize = 10; // Ajuster selon la taille minimale souhaitée
@@ -37,16 +40,15 @@ export default class CityMapVisualizer {
     }
 
     initializeCanvas() {
-        // Taille du canvas basée sur la taille de la carte
-        const size = this.config.mapSize;
+        // Taille du canvas basée sur la taille de la carte (réduite de 40%)
+        const size = this.config.mapSize * 0.6; // 60% de la taille originale
         this.canvas.width = size;
         this.canvas.height = size;
         
         // Style du canvas
         this.canvas.style.position = 'absolute';
-        this.canvas.style.top = '50%';
-        this.canvas.style.left = '50%';
-        this.canvas.style.transform = 'translate(-50%, -50%)';
+        this.canvas.style.bottom = '20px'; // Position en bas
+        this.canvas.style.left = '70px'; // Position à gauche après le bouton agent-stats-toggle
         this.canvas.style.zIndex = '1000';
         this.canvas.style.display = 'none';
         this.canvas.style.border = '2px solid white';
@@ -87,6 +89,58 @@ export default class CityMapVisualizer {
         }
     }
 
+    setExperience(experience) {
+        this.experience = experience;
+        this.setupDebugListeners();
+    }
+
+    setupDebugListeners() {
+        if (!this.experience) return;
+
+        //Écouter les changements de mode debug
+        this.experience.addEventListener("debugmodechanged", (event) => {
+            const { isEnabled } = event.detail;
+            if (isEnabled) {
+                this.visibleZoneTypes.clear();
+            } else {
+                Object.keys(this.zoneColors).forEach(type => {
+                    this.visibleZoneTypes.add(type);
+                });
+            }
+            this.drawMap();
+        });
+
+        // Écouter les changements de visibilité des sous-calques
+        this.experience.addEventListener('debugsublayervisibilitychanged', (event) => {
+            const { categoryName, subTypeName, isVisible } = event.detail;
+            if (categoryName === 'plot') {
+                if (isVisible) {
+                    this.visibleZoneTypes.add(subTypeName);
+                } else {
+                    this.visibleZoneTypes.delete(subTypeName);
+                }
+                this.drawMap(); // Redessiner la carte
+            }
+        });
+
+        // Écouter les changements de visibilité des catégories
+        this.experience.addEventListener('debugcategoryvisibilitychanged', (event) => {
+            const { categoryName, isVisible } = event.detail;
+            if (categoryName === 'plot') {
+                // Si la catégorie plot est masquée, masquer tous les types de parcelles
+                if (!isVisible) {
+                    this.visibleZoneTypes.clear();
+                } else {
+                    // Sinon, réactiver tous les types
+                    Object.keys(this.zoneColors).forEach(type => {
+                        this.visibleZoneTypes.add(type);
+                    });
+                }
+                this.drawMap(); // Redessiner la carte
+            }
+        });
+    }
+
     drawMap() {
         // Effacer le canvas et la grille
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -104,23 +158,23 @@ export default class CityMapVisualizer {
                 const key = `${x},${z}`;
                 const cell = this.grid.get(key);
                 
-                if (cell) {
+                if (cell && this.visibleZoneTypes.has(cell.zoneType)) {
                     // Couleur basée sur le type de zone
                     const color = this.zoneColors[cell.zoneType] || '#FFFFFF';
                     this.ctx.fillStyle = color;
                     
                     // Position de la cellule sur le canvas (vue du ciel)
                     const worldPos = this.gridToWorld(x, z);
-                    const canvasX = worldPos.x + this.config.mapSize / 2;
-                    const canvasY = worldPos.z + this.config.mapSize / 2; // Plus d'inversion de Y
+                    const canvasX = (worldPos.x + this.config.mapSize / 2) * 0.6;
+                    const canvasY = (worldPos.z + this.config.mapSize / 2) * 0.6;
                     
                     // Dessiner la cellule
-                    this.ctx.fillRect(canvasX, canvasY, this.cellSize, this.cellSize);
+                    this.ctx.fillRect(canvasX, canvasY, this.cellSize * 0.6, this.cellSize * 0.6);
                     
                     // Contour de la cellule
                     this.ctx.strokeStyle = '#000000';
                     this.ctx.lineWidth = 1;
-                    this.ctx.strokeRect(canvasX, canvasY, this.cellSize, this.cellSize);
+                    this.ctx.strokeRect(canvasX, canvasY, this.cellSize * 0.6, this.cellSize * 0.6);
                 }
             }
         }
