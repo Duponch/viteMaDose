@@ -140,12 +140,12 @@ export default class TimeControlUI {
         } // Fin boucle sur layerStructure
 
         // --- Ajout final au container principal de l'UI (en bas à droite) ---
+        this.container.appendChild(this.elements.cityMapButton);
         this.container.appendChild(this.elements.debugToggleButton);
         this.container.appendChild(this.elements.speedDisplay);
         this.container.appendChild(this.elements.decreaseButton);
         this.container.appendChild(this.elements.pausePlayButton);
         this.container.appendChild(this.elements.increaseButton);
-        this.container.appendChild(this.elements.cityMapButton);
     }
 
 	_createButton(id, textContent, title = '') {

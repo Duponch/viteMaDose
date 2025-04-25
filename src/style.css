@@ -496,9 +496,9 @@ button {
 }
 
 #city-map-button {
-    position: absolute;
-    bottom: 20px;
-    right: 20px;
+    position: relative; /* Changé de absolute à relative */
+    bottom: auto; /* Supprimé le positionnement absolu */
+    right: auto; /* Supprimé le positionnement absolu */
     z-index: 101;
     cursor: pointer;
     font-family: inherit;
@@ -510,6 +510,10 @@ button {
     height: 40px;
     font-size: 1.2em;
     padding: 0;
+    margin: 0; /* Assure qu'il n'y a pas de marge */
+    display: inline-flex; /* Pour un meilleur alignement */
+    align-items: center;
+    justify-content: center;
 }
 
 #city-map-button:hover {
