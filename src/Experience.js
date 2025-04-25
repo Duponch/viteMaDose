@@ -723,7 +723,6 @@ export default class Experience extends EventTarget {
         // Fonction interne pour créer les liens
         const createBuildingLink = (buildingId) => {
             if (buildingId) {
-                // Utilise la classe 'building-id-link' pour le JS et le CSS
                 return `<span class="building-id-link" data-building-id="${buildingId}">${buildingId}</span>`;
             } else {
                 return 'N/A';
@@ -742,10 +741,10 @@ export default class Experience extends EventTarget {
           État: ${agent.currentState || 'N/A'}<br>
           Domicile: ${homeLink}<br>
           Travail: ${workLink}<br>
-          Bonheur: ${citizenInfo?.happiness?.toFixed(1) || 'N/A'} %<br>
-          Santé: ${citizenInfo?.health?.toFixed(1) || 'N/A'} / ${citizenInfo?.maxHealth?.toFixed(1) || 'N/A'}<br>
-          Argent: ${citizenInfo?.money?.toFixed(1) || 'N/A'} $<br>
-          Salaire: ${citizenInfo?.salary?.toFixed(1) || 'N/A'} $/jour
+          <span title="Bonheur">☻ ${citizenInfo?.happiness?.toFixed(0) || 'N/A'}</span><br>
+          <span title="Santé">♥ ${citizenInfo?.health?.toFixed(0) || 'N/A'}/${citizenInfo?.maxHealth?.toFixed(0) || 'N/A'}</span><br>
+          <span title="Argent">$ ${citizenInfo?.money?.toFixed(0) || 'N/A'}</span><br>
+          <span title="Salaire moyen">✤ ${citizenInfo?.salary?.toFixed(0) || 'N/A'}</span>
         `;
         if (this.tooltipElement.innerHTML !== content) {
             this.tooltipElement.innerHTML = content;
