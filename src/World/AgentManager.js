@@ -14,11 +14,31 @@ function createCapsuleGeometry(radius, length, radialSegments = 16, heightSegmen
     const bottomSphereGeometry = new THREE.SphereGeometry(sphereRadius, radialSegments, Math.ceil(radialSegments / 2), 0, Math.PI * 2, 0, Math.PI / 2); bottomSphereGeometry.rotateX(Math.PI); bottomSphereGeometry.translate(0, -cylinderHeight / 2, 0); geometries.push(bottomSphereGeometry);
     const mergedGeometry = mergeGeometries(geometries, false); geometries.forEach(geom => geom.dispose()); return mergedGeometry;
  }
+/**
+ * Crée les géométries séparées pour le dessus et la semelle d'une chaussure.
+ * @returns {{top: THREE.BufferGeometry, sole: THREE.BufferGeometry}} Un objet contenant les deux géométries.
+ */
 function createShoeGeometry() {
-    const shoeRadius = 1.2; const geometries = [];
-    const topPartGeometry = new THREE.SphereGeometry(shoeRadius, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2); topPartGeometry.rotateX(Math.PI); geometries.push(topPartGeometry);
-    const soleGeometry = new THREE.CircleGeometry(shoeRadius, 32); soleGeometry.rotateX(-Math.PI / 2); geometries.push(soleGeometry);
-    let mergedGeometry = mergeGeometries(geometries, false); geometries.forEach(geom => geom.dispose()); mergedGeometry.scale(1.0, 0.6, 1.5); return mergedGeometry;
+    const shoeRadius = 1.2; // Rayon de base
+    const soleHeight = 0.4; // Hauteur de la semelle
+    const shoeTopScale = new THREE.Vector3(1.0, 0.6, 1.5); // Échelle pour aplatir/allonger
+
+    // Partie supérieure (demi-sphère inversée)
+    const topPartGeometry = new THREE.SphereGeometry(shoeRadius, 32, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
+    topPartGeometry.rotateX(Math.PI); // Orienter la partie plate vers le haut (qui sera le bas de la chaussure)
+
+    // Semelle (cylindre)
+    const soleGeometry = new THREE.CylinderGeometry(shoeRadius, shoeRadius, soleHeight, 32);
+    // Positionner le *haut* de la semelle à y=0 pour qu'elle soit sous la partie supérieure
+    soleGeometry.translate(0, -soleHeight / 2, 0);
+
+    // Appliquer l'échelle aux géométries pour obtenir la forme désirée
+    topPartGeometry.scale(shoeTopScale.x, shoeTopScale.y, shoeTopScale.z);
+    soleGeometry.scale(shoeTopScale.x, shoeTopScale.y, shoeTopScale.z); // Échelle la semelle aussi
+
+    // Retourner les géométries séparées pour pouvoir potentiellement utiliser des matériaux différents
+    // Mais pour InstancedMesh, nous allons les fusionner plus tard.
+    return { top: topPartGeometry, sole: soleGeometry };
 }
 // --- FIN Fonctions Géométrie ---
 
@@ -43,7 +63,9 @@ export default class AgentManager {
 		this.baseGeometries = {};
 		this.baseMaterials = {};
 
-		this.headRadius = 2.5; // Sera écrasée
+		// Constantes pour la géométrie
+		this.headRadius = this.config.headRadius ?? 2.5;
+		this.headLength = this.config.headLength ?? 1.0; // Longueur partie cylindrique tête
 
 		// --- Objets temporaires ---
 		this.tempMatrix = new THREE.Matrix4();
@@ -245,48 +267,98 @@ export default class AgentManager {
     // 2) _initializeMeshes (modifiée pour démarrer à count=0)
 	_initializeMeshes() {
 		console.log("AgentManager: Initialisation des InstancedMesh...");
-		// Matériaux
+		// Matériaux (Ajout du matériau pour les cheveux)
 		this.baseMaterials.skin = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.6, metalness: 0.1, name: 'AgentSkinMat' });
-		this.baseMaterials.torso = new THREE.MeshStandardMaterial({ color: 0x800080, roughness: 0.5, metalness: 0.2, name: 'AgentTorsoMat', vertexColors: true });
-		this.baseMaterials.hand = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0.1, name: 'AgentHandMat' });
-		this.baseMaterials.shoe = new THREE.MeshStandardMaterial({ color: 0xffff00, roughness: 0.7, metalness: 0.1, name: 'AgentShoeMat' });
-		// Géométries
-		const headRadiusConst = 2.5; this.headRadius = headRadiusConst; const headLength = 1;
-		const torsoRadius = 1.5; const torsoLength = 1.5;
-		const handRadius = 0.8; const handLength = 1.0;
-		this.baseGeometries.head = createCapsuleGeometry(this.headRadius, headLength, 32);
+		// Torso Color sera appliqué par instance via vertexColors ou instanceColor
+		this.baseMaterials.torso = new THREE.MeshStandardMaterial({
+            color: this.config.torsoColor ?? 0x800080, // Couleur par défaut
+            roughness: 0.5, metalness: 0.2, name: 'AgentTorsoMat',
+            // vertexColors: true // Décommenter si on utilise des couleurs par vertex
+        });
+		this.baseMaterials.hand = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.7, metalness: 0.1, name: 'AgentHandMat' });
+        // Matériaux séparés pour la chaussure (si on voulait des couleurs différentes)
+		// this.baseMaterials.shoeTop = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7, metalness: 0.1, name: 'AgentShoeTopMat' });
+		// this.baseMaterials.shoeSole = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8, metalness: 0.1, name: 'AgentShoeSoleMat' });
+        // Pour InstancedMesh, un seul matériau est plus simple
+        this.baseMaterials.shoe = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7, metalness: 0.1, name: 'AgentShoeMat' });
+        this.baseMaterials.hair = new THREE.MeshStandardMaterial({
+            color: 0x332211, // Brun foncé
+            roughness: 0.8, // Assez rugueux
+            metalness: 0.1, // Peu métallique
+            name: 'AgentHairMat'
+        });
+		// Matériau pour le marqueur de débogage
+        this.baseMaterials.agentMarker = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
+		// this.baseMaterials.homeMarker = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+		// this.baseMaterials.workMarker = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+
+		// Géométries de base
+		const torsoRadius = this.config.torsoRadius ?? 1.5; const torsoLength = this.config.torsoLength ?? 1.5;
+		const handRadius = this.config.handRadius ?? 0.8; const handLength = this.config.handLength ?? 1.0;
+
+		this.baseGeometries.head = createCapsuleGeometry(this.headRadius, this.headLength, 32);
 		this.baseGeometries.torso = createCapsuleGeometry(torsoRadius, torsoLength, 24);
 		this.baseGeometries.hand = createCapsuleGeometry(handRadius, handLength, 12);
-		this.baseGeometries.shoe = createShoeGeometry();
-		// Debug Markers
-		const markerSize = 3; this.baseGeometries.debugMarker = new THREE.OctahedronGeometry(markerSize, 0);
-		this.baseMaterials.agentMarkerMat = new THREE.MeshBasicMaterial({ color: 0x0000ff, name: 'AgentMarkerMat' });
-		this.baseMaterials.homeMarkerMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, name: 'HomeMarkerMat' });
-		this.baseMaterials.workMarkerMat = new THREE.MeshBasicMaterial({ color: 0xff0000, name: 'WorkMarkerMat' });
-		// Création InstancedMesh
+
+		// Créer et fusionner la géométrie de la chaussure à partir des nouvelles parties
+        const shoeParts = createShoeGeometry();
+        this.baseGeometries.shoe = mergeGeometries([shoeParts.top, shoeParts.sole], false);
+        shoeParts.top.dispose(); shoeParts.sole.dispose(); // Libérer les géométries individuelles
+
+        // Créer la géométrie des cheveux
+        this.baseGeometries.hair = new THREE.SphereGeometry(this.headRadius * 1.05, 32, 16);
+        // Aplatir la géométrie des cheveux
+        this.baseGeometries.hair.scale(0.95, 0.45, 0.95);
+        // Positionner les cheveux RELATIVEMENT à l'origine de la tête (qui sera ajustée dans l'update)
+        // Le centre de la géométrie sera translaté par la matrice locale de la tête + une translation locale pour les cheveux.
+        // Cette translation locale sera ajoutée dans la boucle update.
+        // Pour l'instant, on crée juste la forme.
+
+
+		// Géométrie pour le marqueur de débogage (losange)
+        this.baseGeometries.agentMarker = new THREE.OctahedronGeometry(0.5);
+		// this.baseGeometries.homeMarker = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+		// this.baseGeometries.workMarker = new THREE.SphereGeometry(0.4);
+
+
+		// Création des InstancedMesh
 		const createInstMesh = (name, geom, mat, count, needsColor = false) => {
-			const meshMaterial = mat.clone();
-			const mesh = new THREE.InstancedMesh(geom, meshMaterial, count);
-			mesh.castShadow = !name.includes('Marker');
-			mesh.receiveShadow = !name.includes('Marker');
-			mesh.name = `${name}Instances`;
-			mesh.frustumCulled = false;
+			console.log(`Creating InstancedMesh '${name}' with count ${count}`);
+			const mesh = new THREE.InstancedMesh(geom, mat, count);
+			mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); // Important pour les mises à jour fréquentes
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
+            mesh.frustumCulled = false;
+			mesh.name = `Agent_${name}_Instances`;
 			if (needsColor) {
-				mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
-				meshMaterial.vertexColors = true;
-			}
+                // Activer les couleurs par instance si nécessaire (pour le torse par exemple)
+                mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+                mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+                 console.log(` > Added instanceColor buffer to ${name}`);
+            }
 			this.scene.add(mesh);
 			this.instanceMeshes[name] = mesh;
-			mesh.count = 0; // <-- démarrer sans instance active
 		};
-		createInstMesh('head', this.baseGeometries.head, this.baseMaterials.skin, this.maxAgents);
-		createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents, true);
-		createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2);
-		createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2);
-		createInstMesh('agentMarker', this.baseGeometries.debugMarker, this.baseMaterials.agentMarkerMat, this.maxAgents);
-		createInstMesh('homeMarker', this.baseGeometries.debugMarker, this.baseMaterials.homeMarkerMat, this.maxAgents);
-		createInstMesh('workMarker', this.baseGeometries.debugMarker, this.baseMaterials.workMarkerMat, this.maxAgents);
-		console.log(`AgentManager: ${Object.keys(this.instanceMeshes).length} InstancedMesh créés (Max Agents: ${this.maxAgents}), tous à count=0.`);
+
+        // Créer les meshes instanciés pour chaque partie, y compris les cheveux
+        createInstMesh('head', this.baseGeometries.head, this.baseMaterials.skin, this.maxAgents);
+        createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents, true); // Activer instanceColor pour le torse
+        createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2); // 2 mains par agent
+        createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2); // 2 chaussures par agent
+        createInstMesh('hair', this.baseGeometries.hair, this.baseMaterials.hair, this.maxAgents); // 1 chevelure par agent
+
+        // Créer les meshes pour les marqueurs de débogage
+        if (this.experience.isDebugMode) {
+             createInstMesh('agentMarker', this.baseGeometries.agentMarker, this.baseMaterials.agentMarker, this.maxAgents);
+            // createInstMesh('homeMarker', this.baseGeometries.homeMarker, this.baseMaterials.homeMarker, this.maxAgents);
+            // createInstMesh('workMarker', this.baseGeometries.workMarker, this.baseMaterials.workMarker, this.maxAgents);
+        }
+
+        // Réinitialiser le pool
+        this.activeCount = 0;
+        this.agentToInstanceId.clear();
+        this.instanceIdToAgent.fill(null); // Remplir de null
+		console.log("InstancedMeshes créés:", Object.keys(this.instanceMeshes));
 	}
 
 	createAgent() {
@@ -340,7 +412,12 @@ export default class AgentManager {
 		this.activeCount++;
 	
 		// 3) on informe three.js qu'on a plus d'instances actives
-		Object.values(this.instanceMeshes).forEach(mesh => mesh.count = this.activeCount);
+		if (this.instanceMeshes.head) this.instanceMeshes.head.count = this.activeCount;
+		if (this.instanceMeshes.torso) this.instanceMeshes.torso.count = this.activeCount;
+		if (this.instanceMeshes.hair) this.instanceMeshes.hair.count = this.activeCount;
+		if (this.instanceMeshes.hand) this.instanceMeshes.hand.count = this.activeCount * 2;
+		if (this.instanceMeshes.shoe) this.instanceMeshes.shoe.count = this.activeCount * 2;
+		if (this.instanceMeshes.agentMarker) this.instanceMeshes.agentMarker.count = this.activeCount;
 	
 		// 4) on initialise la matrice / couleur de ce slot
 		// … (votre code existant pour setMatrixAt et setColorAt sur instanceId) …
@@ -385,9 +462,12 @@ export default class AgentManager {
 	
 		// 2) décrémenter le compteur
 		this.activeCount--;
-		Object.values(this.instanceMeshes).forEach(mesh => {
-			mesh.count = this.activeCount;
-		});
+		if (this.instanceMeshes.head) this.instanceMeshes.head.count = this.activeCount;
+		if (this.instanceMeshes.torso) this.instanceMeshes.torso.count = this.activeCount;
+		if (this.instanceMeshes.hair) this.instanceMeshes.hair.count = this.activeCount;
+		if (this.instanceMeshes.hand) this.instanceMeshes.hand.count = this.activeCount * 2;
+		if (this.instanceMeshes.shoe) this.instanceMeshes.shoe.count = this.activeCount * 2;
+		if (this.instanceMeshes.agentMarker) this.instanceMeshes.agentMarker.count = this.activeCount;
 	
 		// 3) nettoyer le mapping pour l'agent libéré
 		this.instanceIdToAgent[lastId] = undefined;
@@ -437,14 +517,51 @@ export default class AgentManager {
 
 	 _getPartLocalOffsetMatrix(partType) {
 		this.partOffsetMatrix.identity();
-		const headY = 6.0, handX = 3.0, handY = 1.0, handBaseRotZ = Math.PI / 12;
-		const footX = 1.8, footY = -3.5, footZ = 0.5;
+		const headY = this.config.headY ?? 6.0;
+        const handX = this.config.handX ?? 3.0;
+        const handY = this.config.handY ?? 1.0;
+        const handBaseRotZ = this.config.handBaseRotZ ?? Math.PI / 12;
+        // --- AJOUT: Inclinaison de base des mains depuis config ou défaut ---
+        const handTiltX = this.config.handTiltX ?? Math.PI / 10; // Angle d'inclinaison (environ 18 degrés)
+
+		const footX = this.config.footX ?? 1.8;
+        const footY = this.config.footY ?? -3.5;
+        const footZ = this.config.footZ ?? 0.5;
+
 		switch (partType) {
-			case 'head': this.partOffsetMatrix.makeTranslation(0, headY, 0); break; case 'torso': break;
-			case 'leftHand': this.tempPosition.set(-handX, handY, 0); this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, -handBaseRotZ)); this.tempScale.set(1,1,1); this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); break;
-			case 'rightHand': this.tempPosition.set(handX, handY, 0); this.tempQuaternion.setFromEuler(new THREE.Euler(0, 0, handBaseRotZ)); this.tempScale.set(1,1,1); this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale); break;
-			case 'leftFoot': this.partOffsetMatrix.makeTranslation(-footX, footY, footZ); break; case 'rightFoot': this.partOffsetMatrix.makeTranslation(footX, footY, footZ); break;
-		} return this.partOffsetMatrix;
+			case 'head':
+                this.partOffsetMatrix.makeTranslation(0, headY, 0);
+                break;
+            case 'torso':
+                // Le torse est à l'origine locale
+                break;
+            case 'hair':
+                // Décalage local des cheveux PAR RAPPORT à l'origine de la tête
+                // Nouvelle position Y = (Centre Sphère Sup Tête) + (Petit Décalage) + (Demi-Hauteur Cheveux Aplaties)
+                // Centre Sphère Sup Tête = headLength / 2
+                // headLength vient des propriétés de la classe (this.headLength)
+                // headRadius vient des propriétés de la classe (this.headRadius)
+                const hairFlattenedHalfHeight = (this.headRadius * 1.05) * 0.45; // Utiliser le facteur d'échelle Y (0.45)
+                const hairOffsetY = (this.headLength / 2) + (this.headRadius * 0.1) + hairFlattenedHalfHeight;
+                const hairOffsetZ = this.headRadius * 0.1; // Légèrement vers l'avant
+                this.partOffsetMatrix.makeTranslation(0, hairOffsetY, hairOffsetZ);
+                break;
+			case 'leftHand':
+			case 'rightHand':
+                const sign = partType === 'leftHand' ? -1 : 1;
+                this.tempPosition.set(sign * handX, handY, 0);
+                // --- MODIFICATION: Appliquer la rotation X pour l'inclinaison ---
+                this.tempQuaternion.setFromEuler(new THREE.Euler(sign * -handTiltX, 0, sign * -handBaseRotZ, 'XYZ'));
+                this.tempScale.set(1,1,1);
+                this.partOffsetMatrix.compose(this.tempPosition, this.tempQuaternion, this.tempScale);
+                break;
+			case 'leftFoot':
+			case 'rightFoot':
+                const footSign = partType === 'leftFoot' ? -1 : 1;
+                this.partOffsetMatrix.makeTranslation(footSign * footX, footY, footZ);
+                break;
+		}
+        return this.partOffsetMatrix;
     }
 
 	update(deltaTime) {
@@ -467,6 +584,13 @@ export default class AgentManager {
 		let needsHomeMarkerUpdate   = false;
 		let needsWorkMarkerUpdate   = false;
 
+        // --- Ajout des déclarations des matrices temporaires ---
+        const tempLocalOffsetMatrix = new THREE.Matrix4();
+        const tempAnimationMatrix = new THREE.Matrix4();
+        const tempPartWorldMatrix = new THREE.Matrix4(); // Matrice mondiale finale pour une partie
+        const tempHairLocalOffset = this._getPartLocalOffsetMatrix('hair'); // Offset des cheveux relatif à la tête (calculé une fois)
+        const tempHeadWorldMatrix = new THREE.Matrix4(); // Pour stocker la matrice mondiale de la tête
+
 		for (const agent of this.agents) {
 			const instanceId = this.agentToInstanceId.get(agent.id);
 			if (instanceId === undefined) continue;
@@ -477,39 +601,79 @@ export default class AgentManager {
 			this.tempScale.set(actualScale, actualScale, actualScale);
 			this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
 
-			// Mise à jour des parties du corps…
-			const updatePart = (pName, mName, idxMult = 1, idxOff = 0) => {
-				const idx = instanceId * idxMult + idxOff;
-				const mesh = this.instanceMeshes[mName];
-				if (!mesh || idx >= mesh.count) return;
+			// --- Mise à jour des parties du corps instanciées ---
+            // Fonction utilitaire pour calculer et appliquer la matrice à une instance
+			const updatePartInstance = (partName, meshName, instanceIndex) => {
+				const mesh = this.instanceMeshes[meshName];
+				if (!mesh || instanceIndex >= mesh.count) return false; // Vérifier si le mesh existe et l'index est valide
 
 				if (agent.isVisible) {
-					const offsetMatrix    = this._getPartLocalOffsetMatrix(pName);
-					const animationMatrix = agent.currentAnimationMatrix[pName] || new THREE.Matrix4();
-					this.tempMatrix.multiplyMatrices(offsetMatrix, animationMatrix);
-					this.finalPartMatrix.multiplyMatrices(this.agentMatrix, this.tempMatrix);
-					mesh.setMatrixAt(idx, this.finalPartMatrix);
-				} else {
-					this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0));
-					mesh.setMatrixAt(idx, this.tempMatrix);
-				}
-			};
-			updatePart('head',     'head');
-			updatePart('torso',    'torso');
-			updatePart('leftHand', 'hand', 2, 0);
-			updatePart('rightHand','hand', 2, 1);
-			updatePart('leftFoot', 'shoe', 2, 0);
-			updatePart('rightFoot','shoe', 2, 1);
-			needsBodyMatrixUpdate = true;
+                    // --- Calcul commun pour toutes les parties ---
+					// 1. Obtenir le décalage local de la partie (position/rotation de base)
+                    // Note: Pour les cheveux, ceci récupère leur décalage relatif à la tête.
+                    tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix(partName));
 
-			// Couleur du torse
+					// 2. Obtenir la matrice d'animation de la partie (calculée dans agent.updateVisuals)
+                    // Note: L'animation pour les cheveux devrait être l'identité.
+                    tempAnimationMatrix.copy(agent.currentAnimationMatrix[partName] || this.tempMatrix.identity());
+
+                    // 3. Combiner : Matrice locale de la partie = Offset * Animation
+                    tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
+
+                    // 4. Combiner avec la matrice de l'agent : Matrice mondiale de la partie = Agent * LocalePartie
+                    tempPartWorldMatrix.premultiply(this.agentMatrix); // agentMatrix * (offsetMatrix * animationMatrix)
+
+                    // --- Application et cas spécifiques ---
+                    if (partName === 'hair') {
+                        // Pour les cheveux, la matrice calculée ci-dessus (tempPartWorldMatrix) est incorrecte.
+                        // On la recalcule en utilisant la matrice mondiale de la tête et l'offset local des cheveux.
+                        // Matrice mondiale cheveux = Matrice mondiale tête * Décalage local cheveux
+                        // tempHeadWorldMatrix a été stockée lors du traitement de la tête.
+                        // tempHairLocalOffset contient le décalage des cheveux relatif à la tête.
+                        tempPartWorldMatrix.multiplyMatrices(tempHeadWorldMatrix, tempHairLocalOffset);
+                        mesh.setMatrixAt(instanceIndex, tempPartWorldMatrix); // Appliquer la matrice spécifique des cheveux
+
+                    } else {
+                         // Pour toutes les autres parties (tête, torse, mains, pieds)
+                         mesh.setMatrixAt(instanceIndex, tempPartWorldMatrix); // Appliquer la matrice calculée
+
+                         // Si c'est la tête, stocker sa matrice mondiale pour les cheveux
+                         if (partName === 'head') {
+                            tempHeadWorldMatrix.copy(tempPartWorldMatrix);
+                         }
+                    }
+
+				} else {
+					// Masquer l'instance si l'agent n'est pas visible
+					this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0)); // Matrice d'échelle nulle
+					mesh.setMatrixAt(instanceIndex, this.tempMatrix);
+				}
+                return true; // Indique qu'une mise à jour a été tentée
+			};
+
+            // Appliquer la mise à jour pour chaque partie (L'ORDRE EST IMPORTANT : head AVANT hair)
+            let updated = false;
+            updated = updatePartInstance('head',      'head', instanceId) || updated;
+            updated = updatePartInstance('torso',     'torso', instanceId) || updated;
+            // Assurer que tempHairLocalOffset est défini avant d'appeler pour 'hair'
+            // tempHairLocalOffset a déjà été calculé et stocké en dehors de la boucle agent
+            updated = updatePartInstance('hair',      'hair', instanceId) || updated; // <-- Appel pour les cheveux
+            updated = updatePartInstance('leftHand',  'hand', instanceId * 2 + 0) || updated; // Index 0 pour gauche
+            updated = updatePartInstance('rightHand', 'hand', instanceId * 2 + 1) || updated; // Index 1 pour droite
+            updated = updatePartInstance('leftFoot',  'shoe', instanceId * 2 + 0) || updated; // Index 0 pour gauche
+            updated = updatePartInstance('rightFoot', 'shoe', instanceId * 2 + 1) || updated; // Index 1 pour droite
+
+            if (updated) needsBodyMatrixUpdate = true;
+
+
+			// --- Mise à jour Couleur du torse (par instance) ---
 			if (this.instanceMeshes.torso.instanceColor) {
 				this.tempColor.setHex(agent.torsoColor.getHex());
 				this.instanceMeshes.torso.setColorAt(instanceId, this.tempColor);
 				needsColorUpdate = true;
 			}
 
-			// Debug marker (agentMarker)
+			// --- Mise à jour Debug marker (agentMarker) ---
 			const markerMesh = this.instanceMeshes.agentMarker;
 			if (markerMesh) {
 				if (isDebug) {
@@ -537,11 +701,9 @@ export default class AgentManager {
 				markerMesh.setMatrixAt(instanceId, this.tempMatrix);
 				needsAgentMarkerUpdate = true;
 			}
-
-			// … Vous pouvez appliquer la même logique pour homeMarker & workMarker si nécessaire …
 		}
 
-		// 3. Pousser vers le GPU
+		// 3. Pousser vers le GPU (si des changements ont eu lieu)
 		if (needsBodyMatrixUpdate) {
 			['head','torso','hand','shoe'].forEach(k => {
 				const mesh = this.instanceMeshes[k];
