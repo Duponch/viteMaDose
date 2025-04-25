@@ -182,6 +182,9 @@ export default class Agent {
     requestPath(startPosWorld, endPosWorld, startNodeOverride = null, endNodeOverride = null, nextStateIfSuccess, currentGameTimeForStats) {
         // nextStateIfSuccess sera par exemple READY_TO_LEAVE_FOR_WORK ou READY_TO_LEAVE_FOR_HOME
 
+        // IMPORTANT : Stocker l'état cible pour que setPath puisse l'utiliser
+        this.targetStateFromWeekendWalk = nextStateIfSuccess;
+
         // Réinitialiser les données du trajet précédent
         this.currentPathPoints = null;
         this.calculatedTravelDurationGame = 0;
@@ -200,6 +203,11 @@ export default class Agent {
         else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_READY) {
             this.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
             console.log(`Agent ${this.id}: Requête de chemin pour PROMENADE WEEKEND.`);
+        }
+        else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+            // CORRECTION : Ajouter la gestion explicite de l'état WEEKEND_WALK_RETURNING_TO_SIDEWALK
+            this.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
+            console.log(`Agent ${this.id}: Requête de chemin pour RETOUR AU TROTTOIR depuis le parc.`);
         }
         else {
             // Cas par défaut (ne devrait pas arriver)
@@ -280,10 +288,35 @@ export default class Agent {
         const wasRequestingWork = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_WORK;
         const wasRequestingHome = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_HOME;
         const wasRequestingWeekendWalk = currentStateAtCall === AgentState.WEEKEND_WALK_REQUESTING_PATH;
+        
+        // Mémoriser l'état suivant visé pour le cas de retour au trottoir
+        const targetStateFromWeekendWalk = this.targetStateFromWeekendWalk;
         // --- FIN MODIFICATION ---
 
         // --- Cas 1: Chemin Valide Reçu ---
         if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 0 && pathLengthWorld > 0.1) {
+            // Si nous étions en train de retourner à la maison depuis le trottoir après une promenade,
+            // spécifiquement vérifier que nous commençons depuis la position actuelle
+            if (wasRequestingHome && this.currentState === AgentState.REQUESTING_PATH_FOR_HOME 
+                && this.weekendWalkEndTime > 0) {
+                
+                // Vérifier les points du chemin pour éviter la téléportation
+                if (pathPoints.length > 0) {
+                    const startPoint = pathPoints[0];
+                    const distanceToStart = this.position.distanceTo(startPoint);
+                    
+                    // Si le point de départ du chemin est trop loin de la position actuelle
+                    if (distanceToStart > 5.0) {
+                        console.warn(`Agent ${this.id}: Téléportation détectée! Distance au début du chemin: ${distanceToStart.toFixed(2)}m. Position actuelle: [${this.position.x.toFixed(2)}, ${this.position.z.toFixed(2)}], début du chemin: [${startPoint.x.toFixed(2)}, ${startPoint.z.toFixed(2)}]`);
+                        
+                        // Correction: remplacer le premier point du chemin par la position actuelle
+                        pathPoints[0] = this.position.clone();
+                        console.log(`Agent ${this.id}: Premier point du chemin corrigé pour éviter la téléportation`);
+                    } else {
+                        console.log(`Agent ${this.id}: Chemin pour rentrer à la maison commence correctement à partir de la position actuelle, distance = ${distanceToStart.toFixed(2)}m`);
+                    }
+                }
+            }
 
             this.currentPathPoints = pathPoints.map(p => p.clone()); 
             this.currentPathLengthWorld = pathLengthWorld;           
@@ -303,19 +336,23 @@ export default class Agent {
                 this.currentPathLengthWorld = 0; // Considérer longueur comme invalide si durée fallback
             }
 
-            // --- MODIFICATION: Transitionner seulement si on était en état REQUESTING ---
+            // --- MODIFICATION: Gérer correctement le retour au trottoir ---
             if (wasRequestingWork) {
                 this.currentState = AgentState.READY_TO_LEAVE_FOR_WORK;
             } else if (wasRequestingHome) {
                 this.currentState = AgentState.READY_TO_LEAVE_FOR_HOME;
             } else if (wasRequestingWeekendWalk) {
-                this.currentState = AgentState.WEEKEND_WALK_READY;
+                // Si nous sommes en train de retourner au trottoir depuis le parc
+                if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+                    console.log(`Agent ${this.id}: Chemin reçu pour retourner au trottoir depuis le parc, longueur = ${pathLengthWorld.toFixed(2)}m`);
+                    this.currentState = AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK;
+                } else {
+                    this.currentState = AgentState.WEEKEND_WALK_READY;
+                }
             } else {
-                // Path reçu alors qu'on n'était pas en REQUESTING (ex: déjà READY ou WALKING)
+                // Path reçu alors qu'on n'était pas en REQUESTING 
                 // C'est normal à cause du timing. On a mis à jour les données du chemin,
                 // mais on ne change pas l'état actuel.
-                // On peut retirer le warning.
-                // console.log(`Agent ${this.id}: Path updated while in state ${currentStateAtCall}.`);
             }
             // --- FIN MODIFICATION ---
 
@@ -341,13 +378,45 @@ export default class Agent {
                 this.isVisible = false; 
             } 
             else if (wasRequestingWeekendWalk) { 
-                console.warn(`Agent ${this.id}: Pathfinding WEEKEND WALK failed, finding a new destination...`);
-                // --- ATTENTION: La logique interne ici a aussi été réinitialisée --- 
-                // Si _findRandomWalkDestination est appelé, il ne stockera plus currentParkPlotId
-                this._findRandomWalkDestination(); // Tenter de trouver une nouvelle destination
-                // Si la recherche réussit, requestPath sera appelé DANS _findRandomWalkDestination
-                // Si elle échoue, l'agent finira AT_HOME.
-                // On ne fait rien de plus ici.
+                if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+                    // En cas d'échec du retour au trottoir, essayer une téléportation propre au trottoir
+                    console.warn(`Agent ${this.id}: Échec du chemin pour retourner au trottoir, téléportation directe`);
+                    if (this.parkSidewalkPosition) {
+                        // Placer directement l'agent sur le trottoir
+                        this.position.copy(this.parkSidewalkPosition);
+                        this.position.y += this.yOffset;
+                        this.isInsidePark = false;
+                        
+                        // Maintenant demander un chemin vers la maison depuis cette position
+                        const navGraph = this.experience.world?.cityManager?.getNavigationGraph();
+                        const currentGridNode = navGraph?.getClosestWalkableNode(this.position);
+                        
+                        console.log(`Agent ${this.id}: Téléporté au trottoir, demande de chemin vers la maison`);
+                        this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
+                        
+                        // Demander le chemin au prochain frame
+                        setTimeout(() => {
+                            if (this.homePosition && this.homeGridNode) {
+                                this.requestPath(
+                                    this.position.clone(),
+                                    this.homePosition,
+                                    currentGridNode,
+                                    this.homeGridNode,
+                                    AgentState.READY_TO_LEAVE_FOR_HOME,
+                                    this.experience.time.elapsed
+                                );
+                            }
+                        }, 0);
+                    } else {
+                        // Si on n'a pas de position du trottoir, aller directement à la maison
+                        console.warn(`Agent ${this.id}: Position du trottoir inconnue, retour direct à la maison`);
+                        this.currentState = AgentState.AT_HOME;
+                        this.isVisible = false;
+                    }
+                } else {
+                    console.warn(`Agent ${this.id}: Pathfinding WEEKEND WALK failed, finding a new destination...`);
+                    this._findRandomWalkDestination(); // Tenter de trouver une nouvelle destination
+                }
             } else { 
                  console.warn(`Agent ${this.id}: Invalid path received while in state ${currentStateAtCall}. Ignored.`);
             }
@@ -1039,6 +1108,9 @@ export default class Agent {
                     if (this.isInsidePark && this.parkSidewalkPosition && this.parkSidewalkGridNode) {
                         console.log(`Agent ${this.id}: Retour au trottoir depuis l'intérieur du parc avant de rentrer, trottoir: [${this.parkSidewalkPosition.x.toFixed(2)}, ${this.parkSidewalkPosition.z.toFixed(2)}]`);
                         
+                        // IMPORTANT: S'assurer que l'agent reste visible
+                        this.isVisible = true;
+                        
                         // Retourner au trottoir du parc avant de rentrer à la maison
                         const currentPosition = this.position.clone();
                         currentPosition.y = this.sidewalkHeight || 0.2; // Ajuster la hauteur
@@ -1046,13 +1118,15 @@ export default class Agent {
                         const navGraph = this.experience.world?.cityManager?.getNavigationGraph();
                         const currentGridNode = navGraph?.getClosestWalkableNode(currentPosition);
                         
+                        // Débuter le processus en deux étapes : d'abord retour au trottoir
+                        console.log(`Agent ${this.id}: Demande de chemin parc→trottoir avec position actuelle: [${currentPosition.x.toFixed(2)}, ${currentPosition.z.toFixed(2)}]`);
                         this.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
                         this.requestPath(
                             currentPosition,
                             this.parkSidewalkPosition,
                             currentGridNode,
                             this.parkSidewalkGridNode,
-                            AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK,
+                            AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK, // État suivant après avoir obtenu le chemin
                             currentGameTime
                         );
                     } else {
@@ -1213,16 +1287,16 @@ export default class Agent {
                 
                 // Logs pour déboguer
                 if (currentGameTime % 3000 < 100) { // Approximativement toutes les 3 secondes
-                    console.log(`Agent ${this.id}: RETOUR TROTTOIR - index=${this.currentPathIndexVisual}/${this.currentPathPoints?.length-1 || 0}, progress=${this.visualInterpolationProgress.toFixed(2)}`);
+                    console.log(`Agent ${this.id}: RETOUR TROTTOIR - index=${this.currentPathIndexVisual}/${this.currentPathPoints?.length-1 || 0}, progress=${this.visualInterpolationProgress.toFixed(2)}, pos=[${this.position.x.toFixed(2)}, ${this.position.z.toFixed(2)}]`);
                 }
                 
                 // L'agent a terminé son retour au trottoir, maintenant rentrer à la maison
                 if (this.currentPathIndexVisual >= this.currentPathPoints.length - 1 && this.visualInterpolationProgress >= 0.95) {
-                    console.log(`Agent ${this.id}: Arrivé sur le trottoir, prêt à rentrer à la maison`);
+                    console.log(`Agent ${this.id}: Arrivé sur le trottoir, prêt à rentrer à la maison depuis [${this.position.x.toFixed(2)}, ${this.position.z.toFixed(2)}]`);
                     this.isInsidePark = false;
                     
                     if (this.homePosition && this.homeGridNode) {
-                        // Position actuelle sur le trottoir
+                        // Position actuelle sur le trottoir - IMPORTANT: utilisons la position physique actuelle
                         const currentPosition = this.position.clone();
                         
                         console.log(`Agent ${this.id}: Demande de chemin pour rentrer à la maison depuis le trottoir [${currentPosition.x.toFixed(2)}, ${currentPosition.z.toFixed(2)}]`);
@@ -1231,6 +1305,7 @@ export default class Agent {
                         const navGraph = this.experience.world?.cityManager?.getNavigationGraph();
                         const currentGridNode = navGraph?.getClosestWalkableNode(currentPosition);
                         
+                        // Ne PAS changer la position de l'agent ici pour éviter toute téléportation
                         this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
                         this.requestPath(
                             currentPosition,
