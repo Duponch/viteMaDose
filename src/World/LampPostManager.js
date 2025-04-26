@@ -34,16 +34,16 @@ export default class LampPostManager {
         const poleSegments = 4;
         const baseRadiusTop = 0.2;
         const baseRadiusBottom = 0.25;
-        const baseHeight = 0.8;
+        const baseHeight = 0.6;
         const poleRadius = 0.1;
         const poleLowerHeight = 5;
         const poleTopY = baseHeight + poleLowerHeight;
         const armLength = 2.5;
-        const lampHeadWidth = 1.2;
-        const lampHeadHeight = 0.4;
-        const lampHeadDepth = 0.6;
+        const lampHeadWidth = 0.9;
+        const lampHeadHeight = 0.3;
+        const lampHeadDepth = 0.45;
         const lightSourceWidth = lampHeadWidth * 0.8;
-        const lightSourceHeight = 0.35;
+        const lightSourceHeight = 0.25;
         const lightSourceDepth = lampHeadDepth * 0.8;
         const lightSourceCenterY = poleTopY - lampHeadHeight - lightSourceHeight / 2;
         // Utilisation de la hauteur du trottoir depuis la config (avec valeur par défaut)
