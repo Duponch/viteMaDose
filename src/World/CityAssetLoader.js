@@ -7,11 +7,14 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import HouseRenderer from './HouseRenderer.js';
 import BuildingRenderer from './BuildingRenderer.js';
 import SkyscraperRenderer from './SkyscraperRenderer.js';
+import TreeRenderer from './TreeRenderer.js';
 
 export default class CityAssetLoader {
     // ----- CONSTRUCTEUR -----
-    constructor(config) {
+    constructor(config, materials, experience) {
         this.config = config;
+        this.materials = materials;
+        this.experience = experience;
         this.fbxLoader = new FBXLoader();
         this.gltfLoader = new GLTFLoader();
         this.assets = {
@@ -20,13 +23,17 @@ export default class CityAssetLoader {
             industrial: [],
             park: [],
             tree: [],
-            skyscraper: []
+            skyscraper: [],
+            crosswalk: []
         };
         this.assetIdCounter = 0;
+        this.loadedAssets = new Map();
+        this.loadingPromises = new Map();
         // Création des instances de HouseRenderer, BuildingRenderer et SkyscraperRenderer
         this.houseRenderer = new HouseRenderer(config, {});
         this.buildingRenderer = new BuildingRenderer(config, {});
         this.skyscraperRenderer = new SkyscraperRenderer(config, {});
+        this.treeRenderer = new TreeRenderer(config, materials);
         console.log("CityAssetLoader initialisé. Utilisation de HouseRenderer pour les maisons, BuildingRenderer pour les immeubles et SkyscraperRenderer pour les gratte-ciels.");
     }
 
@@ -179,7 +186,7 @@ export default class CityAssetLoader {
     // ----- reset -----
     reset() {
         this.disposeAssets();
-        this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [] };
+        this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [], crosswalk: [] };
         this.assetIdCounter = 0;
     }
 
@@ -224,7 +231,13 @@ export default class CityAssetLoader {
         }
         // Ajouter la logique de génération pour le type 'tree'
         if (type === 'tree') {
-            return this.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale);
+            console.log('[Tree Proc] Génération d\'un arbre procédural');
+            const treeAsset = this.treeRenderer.generateProceduralTree();
+            if (!treeAsset) {
+                console.error('[Tree Proc] Échec de la génération de l\'arbre');
+                return null;
+            }
+            return treeAsset;
         }
         // --- Logique existante pour les autres types (industrial, park) ---
         // Modifié la condition pour exclure 'tree' si path est null
@@ -363,177 +376,6 @@ export default class CityAssetLoader {
         });
     }
 
-    // ----- generateProceduralTree (Nouvelle méthode) -----
-    generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale = 1) {
-        console.log("[Tree Proc] Début de la génération de l'arbre procédural.");
-        const treeGroup = new THREE.Group(); // Groupe pour contenir les parties de l'arbre
-
-        // Matériaux (similaires à votre exemple)
-        const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513, name: "TreeTrunkMat" });
-        const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22, name: "TreeFoliageMat" });
-
-        // Tronc (Cylindre basique) - Dimensions initiales à ajuster
-        const trunkHeight = baseHeight * 0.4; // Exemple: 40% de la hauteur totale
-        const trunkRadiusBottom = baseWidth * 0.15;
-        const trunkRadiusTop = baseWidth * 0.1;
-        const trunkGeometry = new THREE.CylinderGeometry(trunkRadiusTop, trunkRadiusBottom, trunkHeight, 6);
-        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.position.y = trunkHeight / 2; // Placer la base du tronc à y=0
-        treeGroup.add(trunk);
-        console.log("[Tree Proc] Tronc créé et ajouté au groupe.");
-
-        // Feuillage (Icosaèdres) - Positions et tailles relatives
-        const foliageBaseY = trunkHeight;
-        const foliageHeightFactor = baseHeight * 0.6; // 60% restant pour le feuillage
-        const foliageWidthFactor = baseWidth * 0.5; // Rayon max du feuillage
-
-        const foliage1 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.9, 0), foliageMaterial);
-        foliage1.position.y = foliageBaseY + foliageHeightFactor * 0.3;
-        treeGroup.add(foliage1);
-
-        const foliage2 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.7, 0), foliageMaterial);
-        foliage2.position.y = foliageBaseY + foliageHeightFactor * 0.65;
-        foliage2.position.x = foliageWidthFactor * 0.3;
-        foliage2.rotation.z = Math.PI / 5;
-        treeGroup.add(foliage2);
-
-        const foliage3 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.6, 0), foliageMaterial);
-        foliage3.position.y = foliageBaseY + foliageHeightFactor * 0.55;
-        foliage3.position.x = -foliageWidthFactor * 0.25;
-        foliage3.rotation.z = -Math.PI / 6;
-        treeGroup.add(foliage3);
-        console.log("[Tree Proc] Feuillage créé et ajouté au groupe.");
-
-        // --- Fusion et calcul de BBox (similaire à loadAssetModel) ---
-        const allGeoms = [];
-        const materialMap = new Map(); // Pour regrouper par matériau si besoin
-
-        treeGroup.traverse((child) => {
-            if (child.isMesh && child.geometry && child.material) {
-                child.updateMatrixWorld(true);
-                const clonedGeom = child.geometry.clone();
-                clonedGeom.applyMatrix4(child.matrixWorld);
-
-                // Ajouter un attribut index à la géométrie si elle n'en a pas
-                if (!clonedGeom.index) {
-                    const position = clonedGeom.attributes.position;
-                    if (position) {
-                        const count = position.count;
-                        const indices = new Uint16Array(count);
-                        for (let i = 0; i < count; i++) {
-                            indices[i] = i;
-                        }
-                        clonedGeom.setIndex(new THREE.BufferAttribute(indices, 1));
-                    }
-                }
-
-                allGeoms.push(clonedGeom);
-
-                // Regrouper par matériau
-                const matName = child.material.name || 'default_tree_mat';
-                if (!materialMap.has(matName)) {
-                    materialMap.set(matName, { material: child.material.clone(), geoms: [] });
-                }
-                materialMap.get(matName).geoms.push(clonedGeom);
-            }
-        });
-        console.log("[Tree Proc] Parcours du groupe terminé. Nombre de géométries collectées:", allGeoms.length);
-
-        if (allGeoms.length === 0) {
-            console.error("[Tree Proc] Aucune géométrie valide trouvée après le parcours du groupe. Vérifiez la création des Meshes.");
-            // Nettoyage des géométries créées
-            trunkGeometry.dispose();
-            foliage1.geometry.dispose();
-            foliage2.geometry.dispose();
-            foliage3.geometry.dispose();
-            trunkMaterial.dispose();
-            foliageMaterial.dispose();
-            return null;
-        }
-
-        // Fusionner toutes les géométries en une seule pour le calcul de la BBox
-        const mergedGeometry = mergeGeometries(allGeoms, false); // false = ne pas créer de groupes
-        if (!mergedGeometry) {
-            // Log ajouté pour plus de détails
-            console.error("[Tree Proc] Échec de la fonction mergeGeometries. Géométries d'entrée:", allGeoms);
-            allGeoms.forEach(g => g.dispose());
-             trunkMaterial.dispose();
-             foliageMaterial.dispose();
-            return null;
-        }
-        console.log("[Tree Proc] Géométries fusionnées avec succès.");
-
-        mergedGeometry.computeBoundingBox();
-        const bbox = mergedGeometry.boundingBox;
-        const centerOffset = new THREE.Vector3();
-        bbox.getCenter(centerOffset);
-        const size = new THREE.Vector3();
-        bbox.getSize(size);
-
-        // Ajuster la géométrie pour que son centre soit à l'origine (0,0,0)
-        // Et que sa base soit à y=0 (en translatant par -min.y)
-        const minY = bbox.min.y;
-        mergedGeometry.translate(-centerOffset.x, -minY, -centerOffset.z); // Décale pour que le bas soit à y=0 et centré en XZ
-
-        // Recalculer BBox après translation
-        mergedGeometry.computeBoundingBox();
-        const finalBBox = mergedGeometry.boundingBox;
-        const finalSize = new THREE.Vector3();
-        finalBBox.getSize(finalSize);
-        finalSize.x = Math.max(finalSize.x, 0.001);
-        finalSize.y = Math.max(finalSize.y, 0.001);
-        finalSize.z = Math.max(finalSize.z, 0.001);
-
-        // Calculer le facteur d'échelle pour correspondre aux dimensions de base
-        const fittingScaleFactor = Math.min(baseWidth / finalSize.x, baseHeight / finalSize.y, baseDepth / finalSize.z);
-        const sizeAfterFitting = finalSize.clone().multiplyScalar(fittingScaleFactor);
-
-        // Créer les parts pour chaque matériau
-        const parts = [];
-        materialMap.forEach((groupData, matName) => {
-            if (groupData.geoms.length === 0) return;
-
-            const mergedPartGeometry = mergeGeometries(groupData.geoms, false);
-            if (!mergedPartGeometry) {
-                console.error(`[Tree Proc] Échec de la fusion des géométries pour le matériau ${matName}.`);
-                groupData.geoms.forEach(g => g.dispose());
-                return;
-            }
-
-            // Appliquer la même translation que la géométrie globale
-            mergedPartGeometry.translate(-centerOffset.x, -minY, -centerOffset.z);
-
-            const finalMaterial = groupData.material;
-            finalMaterial.name = `ProcTreeMat_${matName}_${this.assetIdCounter}`;
-
-            parts.push({
-                geometry: mergedPartGeometry,
-                material: finalMaterial
-            });
-
-            groupData.geoms.forEach(g => g.dispose());
-        });
-
-        // Nettoyage des géométries temporaires
-        allGeoms.forEach(g => g.dispose());
-        trunkMaterial.dispose();
-        foliageMaterial.dispose(); // Dispose l'original, on utilise le clone
-
-        const modelId = `tree_procedural_${this.assetIdCounter++}`;
-
-        // Retourner la structure d'asset attendue
-        const treeAsset = {
-            id: modelId,
-            parts: parts, // Utiliser parts au lieu de geometry et material
-            fittingScaleFactor: fittingScaleFactor,
-            userScale: userScale,
-            centerOffset: new THREE.Vector3(0, finalSize.y / 2, 0), // Le centre est maintenant à mi-hauteur (car base à y=0)
-            sizeAfterFitting: sizeAfterFitting
-        };
-        console.log("[Tree Proc] Asset d'arbre généré avec succès:", treeAsset);
-        return treeAsset;
-    }
-
     // ----- disposeAssets -----
     disposeAssets() {
         console.log("Disposition des assets chargés (traitement des assets procéduraux)...");
@@ -568,6 +410,6 @@ export default class CityAssetLoader {
         if (disposedGeometries > 0 || disposedMaterials > 0) {
             console.log(`  - ${disposedGeometries} géométries et ${disposedMaterials} matériaux disposés.`);
         }
-        this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [] };
+        this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [], crosswalk: [] };
     }
 }
