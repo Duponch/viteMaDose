@@ -47,7 +47,7 @@ export default class Agent {
         this.isLodActive = false; // État du LOD
 
         // --- Propriétés pour les voitures ---
-        this.hasVehicle = Math.random() < 1; // 40% de chance d'avoir une voiture (ajuster selon besoin)
+        this.hasVehicle = Math.random() < 0.5; // 40% de chance d'avoir une voiture (ajuster selon besoin)
         this.isUsingVehicle = false; // Indique si l'agent utilise actuellement sa voiture
         this.vehicleHomePosition = null; // Position où la voiture est "garée" à la maison
 
