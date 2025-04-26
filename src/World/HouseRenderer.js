@@ -207,12 +207,13 @@ export default class HouseRenderer {
         
         this.baseHouseMaterials.roof = new THREE.MeshStandardMaterial({
             color: roofColor, 
-            roughness: 0.7, 
+            roughness: 0.9,
+            metalness: 0.0,
             name: "HouseRoofMat",
             side: THREE.DoubleSide,
             map: roofTexture,
             normalMap: roofNormalMap,
-            normalScale: new THREE.Vector2(0.5, 0.5),
+            normalScale: new THREE.Vector2(0.9, 0.9),
             roughnessMap: roofRoughnessMap
         });
         
