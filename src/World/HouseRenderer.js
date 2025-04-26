@@ -12,6 +12,12 @@ export default class HouseRenderer {
         this.baseHouseMaterials = {};
         this.houseInstanceMatrices = {};
         this.assetIdCounter = 0; // Compteur pour générer des IDs uniques pour les maisons procédurales
+        
+        // Création des textures partagées pour le toit
+        this.sharedRoofTexture = this.createRoofTexture(256, 256);
+        this.sharedRoofNormalMap = this.createRoofNormalMap(256, 256);
+        this.sharedRoofRoughnessMap = this.createRoofRoughnessMap(256, 256);
+        
         this.defineHouseBaseMaterials();
         this.defineHouseBaseGeometries();
         this.initializeHouseMatrixArrays();
@@ -200,21 +206,17 @@ export default class HouseRenderer {
             color: facadeColor, roughness: 0.8, name: "HouseBase2Mat"
         });
         
-        // Création des textures procédurales pour le toit
-        const roofTexture = this.createRoofTexture(256, 256);
-        const roofNormalMap = this.createRoofNormalMap(256, 256);
-        const roofRoughnessMap = this.createRoofRoughnessMap(256, 256);
-        
+        // Utilisation des textures partagées pour le toit
         this.baseHouseMaterials.roof = new THREE.MeshStandardMaterial({
             color: roofColor, 
             roughness: 0.9,
             metalness: 0.0,
             name: "HouseRoofMat",
             side: THREE.DoubleSide,
-            map: roofTexture,
-            normalMap: roofNormalMap,
+            map: this.sharedRoofTexture,
+            normalMap: this.sharedRoofNormalMap,
             normalScale: new THREE.Vector2(0.9, 0.9),
-            roughnessMap: roofRoughnessMap
+            roughnessMap: this.sharedRoofRoughnessMap
         });
         
         this.baseHouseMaterials.door = new THREE.MeshStandardMaterial({
