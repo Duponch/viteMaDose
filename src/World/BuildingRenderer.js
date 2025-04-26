@@ -17,7 +17,7 @@ export default class BuildingRenderer {
     }
 
     /**
-     * Initialise les tableaux de matrices d’instances pour les immeubles.
+     * Initialise les tableaux de matrices d'instances pour les immeubles.
      */
     initializeBuildingMatrixArrays() {
         this.buildingInstanceMatrices = {
@@ -43,6 +43,67 @@ export default class BuildingRenderer {
      */
     defineBuildingBaseGeometries() {
         this.baseBuildingGeometries.default = new THREE.BoxGeometry(1, 1, 1);
+    }
+
+    /**
+     * Crée une texture procédurale pour les façades des immeubles
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.CanvasTexture} La texture générée
+     */
+    createFacadeTexture(width = 512, height = 512) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base
+        ctx.fillStyle = '#f0e6d2';
+        ctx.fillRect(0, 0, width, height);
+
+        // Ajout de variations de couleur pour simuler des briques
+        const brickWidth = width / 8;
+        const brickHeight = height / 16;
+        
+        for (let y = 0; y < height; y += brickHeight) {
+            for (let x = 0; x < width; x += brickWidth) {
+                // Variation aléatoire de la couleur de base
+                const variation = Math.random() * 20 - 10;
+                const r = Math.min(255, Math.max(0, 240 + variation));
+                const g = Math.min(255, Math.max(0, 230 + variation));
+                const b = Math.min(255, Math.max(0, 210 + variation));
+                
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(x, y, brickWidth - 1, brickHeight - 1);
+            }
+        }
+
+        // Ajout de lignes horizontales pour simuler des joints
+        ctx.strokeStyle = '#d7c4a3';
+        ctx.lineWidth = 2;
+        for (let y = brickHeight; y < height; y += brickHeight) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+
+        // Ajout de lignes verticales décalées
+        for (let y = 0; y < height; y += brickHeight * 2) {
+            for (let x = brickWidth; x < width; x += brickWidth * 2) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + brickHeight);
+                ctx.stroke();
+            }
+        }
+
+        // Création de la texture Three.js
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 1);
+        return texture;
     }
 
     /**
@@ -129,8 +190,23 @@ export default class BuildingRenderer {
         const doorColor = 0x8a7967;
         const equipmentColor = 0xaaaaaa;
 
-        const mainMaterial = new THREE.MeshStandardMaterial({ color: mainColor, name: "BuildingMainMat" });
-        const sideMaterial = new THREE.MeshStandardMaterial({ color: sideColor, name: "BuildingSideMat" });
+        // Création de la texture de façade
+        const facadeTexture = this.createFacadeTexture();
+
+        const mainMaterial = new THREE.MeshStandardMaterial({ 
+            color: mainColor, 
+            name: "BuildingMainMat",
+            map: facadeTexture,
+            roughness: 0.8,
+            metalness: 0.1
+        });
+        const sideMaterial = new THREE.MeshStandardMaterial({ 
+            color: sideColor, 
+            name: "BuildingSideMat",
+            map: facadeTexture,
+            roughness: 0.8,
+            metalness: 0.1
+        });
         const roofMaterial = new THREE.MeshStandardMaterial({ color: roofColor, name: "BuildingRoofMat" });
         const roofDetailMaterial = new THREE.MeshStandardMaterial({ color: roofDetailColor, name: "BuildingRoofDetailMat" });
         const windowMaterial = new THREE.MeshStandardMaterial({
