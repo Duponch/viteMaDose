@@ -10,12 +10,18 @@ export default class GrassInstancer {
         this.instancedMeshes = [];
         this.plotData = []; // Stocker les données des parcelles
         
-        // Paramètres de LOD - Très courts pour le débogage
+        // Paramètres de LOD - Optimisés pour les performances
         this.lodDistances = {
-            high: 10,    // Distance pour la haute densité
-            medium: 500, // Distance pour la densité moyenne
-            low: 1000    // Distance pour la basse densité
+            high: 20,     // Distance pour la haute densité
+            medium: 100,  // Distance pour la densité moyenne
+            low: 300      // Distance pour la basse densité
         };
+        
+        // Distance maximale de visibilité (en unités)
+        this.maxVisibilityDistance = config.maxVisibilityDistance || 300;
+        
+        // Facteur de visibilité pour les parcelles (pour une transition plus douce)
+        this.visibilityFactor = config.visibilityFactor || 1.2;
         
         // Carrés des distances pour éviter les calculs de racine carrée
         this.lodDistancesSquared = {
@@ -23,6 +29,9 @@ export default class GrassInstancer {
             medium: this.lodDistances.medium * this.lodDistances.medium,
             low: this.lodDistances.low * this.lodDistances.low
         };
+        
+        // Carré de la distance maximale de visibilité
+        this.maxVisibilityDistanceSquared = this.maxVisibilityDistance * this.maxVisibilityDistance;
         
         // Création de la géométrie de base pour une brin d'herbe
         this.geometry = new THREE.PlaneGeometry(0.1, 1, 1, 4);
@@ -40,18 +49,21 @@ export default class GrassInstancer {
         this.geometry.computeVertexNormals();
         
         // Optimisation: Fréquence de mise à jour du LOD
-        this.updateFrequency = 1; // Mettre à jour à chaque frame pour le débogage
+        this.updateFrequency = 2; // Mettre à jour tous les 2 frames
         this.frameCount = 0;
         
         // Mode débogage
-        this.debugMode = true;
+        this.debugMode = false; // Désactivé par défaut
         
         // Optimisation: Vecteur temporaire pour les calculs de distance
         this._tempVector = new THREE.Vector3();
         
         // Optimisation: Intervalle de mise à jour en millisecondes
-        this.updateInterval = 500; // Mettre à jour toutes les 500ms
+        this.updateInterval = 1000; // Mettre à jour toutes les secondes
         this.lastUpdateTime = 0;
+        
+        // Optimisation: Seuil de mouvement de la caméra
+        this.cameraMovementThreshold = 5; // Seuil de mouvement de la caméra (au carré)
     }
 
     setCamera(camera) {
@@ -89,7 +101,8 @@ export default class GrassInstancer {
             allocatedInstances: this.instanceNumber, // Nombre d'instances allouées
             lastUpdate: 0,
             id: plot.id || Math.random().toString(36).substr(2, 9), // ID unique pour le débogage
-            isVisible: true // Flag pour indiquer si la parcelle est visible
+            isVisible: true, // Flag pour indiquer si la parcelle est visible
+            isFullyVisible: true // Flag pour indiquer si la parcelle est complètement visible
         };
         this.plotData.push(plotInfo);
 
@@ -172,8 +185,8 @@ export default class GrassInstancer {
         // Mettre à jour la position précédente
         this._lastCameraPosition.copy(cameraPosition);
         
-        // Retourner true si la caméra a bougé de plus d'une unité
-        return distanceSquared > 1;
+        // Retourner true si la caméra a bougé de plus que le seuil
+        return distanceSquared > this.cameraMovementThreshold;
     }
     
     // Optimisation: Mettre à jour les distances des parcelles
@@ -188,7 +201,14 @@ export default class GrassInstancer {
             plotInfo.distanceSquared = tempVector.lengthSq();
             
             // Mettre à jour le flag de visibilité
-            plotInfo.isVisible = plotInfo.distanceSquared < this.lodDistancesSquared.low * 1.5;
+            const wasVisible = plotInfo.isVisible;
+            plotInfo.isVisible = plotInfo.distanceSquared < this.maxVisibilityDistanceSquared * this.visibilityFactor;
+            
+            // Mettre à jour le flag de visibilité complète
+            plotInfo.isFullyVisible = plotInfo.distanceSquared < this.lodDistancesSquared.high;
+            
+            // Si la visibilité a changé, mettre à jour le flag de changement
+            plotInfo.visibilityChanged = wasVisible !== plotInfo.isVisible;
         });
     }
     
@@ -197,7 +217,7 @@ export default class GrassInstancer {
         
         // Si une seule parcelle, lui donner toutes les instances
         if (this.plotData.length === 1) {
-            this.plotData[0].allocatedInstances = totalInstances;
+            this.plotData[0].allocatedInstances = this.instanceNumber;
             return;
         }
         
@@ -231,12 +251,16 @@ export default class GrassInstancer {
         
         // Si une seule parcelle est visible, lui donner toutes les instances
         if (visiblePlots.length === 1) {
-            visiblePlots[0].allocatedInstances = totalInstances;
+            visiblePlots[0].allocatedInstances = this.instanceNumber;
             return;
         }
         
+        // Optimisation: Limiter le nombre de parcelles traitées
+        const maxPlotsToProcess = 5; // Limiter à 5 parcelles maximum
+        const plotsToProcess = visiblePlots.slice(0, maxPlotsToProcess);
+        
         // Calculer les poids inverses à la distance (plus la distance est petite, plus le poids est grand)
-        const weights = visiblePlots.map(plot => {
+        const weights = plotsToProcess.map(plot => {
             // Éviter la division par zéro et les distances trop petites
             const distanceSquared = Math.max(plot.distanceSquared, 1);
             return 1 / distanceSquared;
@@ -246,23 +270,23 @@ export default class GrassInstancer {
         const weightSum = weights.reduce((sum, weight) => sum + weight, 0);
         
         // Distribuer les instances proportionnellement aux poids
-        let remainingInstances = totalInstances;
+        let remainingInstances = this.instanceNumber * plotsToProcess.length;
         
-        for (let i = 0; i < visiblePlots.length; i++) {
+        for (let i = 0; i < plotsToProcess.length; i++) {
             // Pour la dernière parcelle, utiliser toutes les instances restantes
-            if (i === visiblePlots.length - 1) {
-                visiblePlots[i].allocatedInstances = remainingInstances;
+            if (i === plotsToProcess.length - 1) {
+                plotsToProcess[i].allocatedInstances = remainingInstances;
             } else {
                 // Calculer le nombre d'instances pour cette parcelle
-                const allocatedCount = Math.floor(totalInstances * (weights[i] / weightSum));
-                visiblePlots[i].allocatedInstances = allocatedCount;
+                const allocatedCount = Math.floor(remainingInstances * (weights[i] / weightSum));
+                plotsToProcess[i].allocatedInstances = allocatedCount;
                 remainingInstances -= allocatedCount;
             }
         }
         
-        // Mettre à zéro les instances pour les parcelles non visibles
+        // Mettre à zéro les instances pour les parcelles non visibles ou non traitées
         this.plotData.forEach(plot => {
-            if (!plot.isVisible) {
+            if (!plot.isVisible || !plotsToProcess.includes(plot)) {
                 plot.allocatedInstances = 0;
             }
         });
@@ -289,6 +313,11 @@ export default class GrassInstancer {
                 }
             }
             mesh.instanceMatrix.needsUpdate = true;
+            return;
+        }
+        
+        // Optimisation: Si la parcelle est complètement visible, ne pas modifier les instances
+        if (plotInfo.isFullyVisible && allocatedCount === this.instanceNumber) {
             return;
         }
         
@@ -321,12 +350,15 @@ export default class GrassInstancer {
         console.log("=== GrassInstancer Debug Info ===");
         console.log(`Nombre total de parcelles: ${this.plotData.length}`);
         console.log(`Nombre d'instances par parcelle: ${this.instanceNumber}`);
+        console.log(`Distance maximale de visibilité: ${this.maxVisibilityDistance} unités`);
+        console.log(`Facteur de visibilité: ${this.visibilityFactor}`);
         
         this.plotData.forEach((plot, index) => {
             console.log(`Parcelle ${index} (ID: ${plot.id}):`);
             console.log(`  Distance au carré: ${plot.distanceSquared.toFixed(2)}`);
             console.log(`  Distance: ${Math.sqrt(plot.distanceSquared).toFixed(2)}`);
             console.log(`  Visible: ${plot.isVisible}`);
+            console.log(`  Complètement visible: ${plot.isFullyVisible}`);
             console.log(`  Instances allouées: ${plot.allocatedInstances} (${(plot.allocatedInstances / this.instanceNumber * 100).toFixed(1)}%)`);
         });
         
@@ -351,6 +383,7 @@ export default class GrassInstancer {
         this.plotData.forEach(plotInfo => {
             plotInfo.allocatedInstances = this.instanceNumber;
             plotInfo.isVisible = true;
+            plotInfo.isFullyVisible = true;
         });
     }
 } 
