@@ -334,7 +334,33 @@ export default class Agent {
         const startNode = startNodeOverride !== null ? startNodeOverride : navigationGraph.getClosestWalkableNode(startPosWorld);
         const endNode = endNodeOverride !== null ? endNodeOverride : navigationGraph.getClosestWalkableNode(endPosWorld);
 
-        // Vérifier si les noeuds ont été trouvés
+        // --- AJOUT: Vérifier si les noeuds ont été trouvés (surtout pour RoadNavGraph qui peut retourner null) ---
+        if (!startNode || !endNode) {
+            console.error(`Agent ${this.id} (${isVehicle ? 'véhicule' : 'piéton'}): Impossible de trouver un nœud de départ ou d'arrivée valide sur la NavGrid appropriée. StartNode: ${JSON.stringify(startNode)}, EndNode: ${JSON.stringify(endNode)}. Retour à l'état stable.`);
+            // Revenir à un état stable (AT_HOME ou AT_WORK selon le contexte)
+            if (this.currentState === AgentState.REQUESTING_PATH_FOR_WORK) {
+                 this.currentState = AgentState.AT_HOME;
+            } else if (this.currentState === AgentState.REQUESTING_PATH_FOR_HOME) {
+                 this.currentState = AgentState.AT_WORK; 
+            } else {
+                 // Fallback générique si l'état n'est pas clair
+                 this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+            }
+            this.isVisible = false;
+            return; // Arrêter la requête de chemin
+        }
+        // --- FIN AJOUT ---
+
+        // --- AJOUT: Visualisation Debug Start/End Nodes ---
+        if (this.experience.world && startNode && endNode) {
+            const startWorldPos = navigationGraph.gridToWorld(startNode.x, startNode.y);
+            const endWorldPos = navigationGraph.gridToWorld(endNode.x, endNode.y);
+            this.experience.world.showStartNodeDebugSphere(startWorldPos);
+            this.experience.world.showEndNodeDebugSphere(endWorldPos);
+        }
+        // --- FIN AJOUT ---
+
+        // Vérifier si les noeuds ont été trouvés (ancienne vérif, maintenant redondante mais gardée pour sécurité)
         if (startNode && endNode) {
             console.log(`Agent ${this.id}: Préparation envoi Worker. StartNode:`, JSON.stringify(startNode), `EndNode:`, JSON.stringify(endNode));
             
@@ -351,7 +377,7 @@ export default class Agent {
             }
 
             // Envoyer la requête au worker via AgentManager
-            agentManager.requestPathFromWorker(this.id, startNode, endNode);
+            agentManager.requestPathFromWorker(this.id, startNode, endNode, isVehicle); // <-- AJOUT isVehicle
         } else {
             console.error(`Agent ${this.id}: Noeuds de départ/arrivée non trouvés ou invalides pour requête path. StartNode:`, startNode, "EndNode:", endNode);
             this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
@@ -659,6 +685,9 @@ export default class Agent {
                         // Envoyer le chemin à la voiture
                         const car = carManager.getCarForAgent(this.id);
                         if (car && this.currentPathPoints) {
+                            // ---- AJOUT LOG ----
+                            console.log(`Agent ${this.id} (DRIVING_TO_WORK): Passant ${this.currentPathPoints.length} points à car.setPath(). Premier point Y: ${this.currentPathPoints[0]?.y.toFixed(2)}, Dernier point Y: ${this.currentPathPoints[this.currentPathPoints.length-1]?.y.toFixed(2)}`);
+                            // ---- FIN LOG ----
                             car.setPath(this.currentPathPoints);
                             // Calculer le temps de trajet pour la voiture
                             const carSpeed = car.speed;
@@ -667,6 +696,8 @@ export default class Agent {
                             this.departureTimeGame = currentGameTime;
                             this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
                             console.log(`Agent ${this.id}: Commence à conduire vers le travail, durée estimée: ${this.calculatedTravelDurationGame/1000}s`);
+                        } else {
+                             console.warn(`Agent ${this.id} (DRIVING_TO_WORK): Impossible de passer le chemin à la voiture (Car: ${!!car}, Path: ${!!this.currentPathPoints})`);
                         }
                     } else {
                         // Transition standard vers le trajet à pied (inchangé)
@@ -794,8 +825,13 @@ export default class Agent {
                         // Envoyer le chemin à la voiture
                         const car = carManager.getCarForAgent(this.id);
                         if (car && this.currentPathPoints) {
+                            // ---- AJOUT LOG ----
+                            console.log(`Agent ${this.id} (DRIVING_HOME): Passant ${this.currentPathPoints.length} points à car.setPath(). Premier point Y: ${this.currentPathPoints[0]?.y.toFixed(2)}, Dernier point Y: ${this.currentPathPoints[this.currentPathPoints.length-1]?.y.toFixed(2)}`);
+                            // ---- FIN LOG ----
                             car.setPath(this.currentPathPoints);
                             console.log(`Agent ${this.id}: Commence à conduire vers la maison`);
+                        } else {
+                            console.warn(`Agent ${this.id} (DRIVING_HOME): Impossible de passer le chemin à la voiture (Car: ${!!car}, Path: ${!!this.currentPathPoints})`);
                         }
                     } else {
                         // Transition standard vers le trajet à pied (inchangé)

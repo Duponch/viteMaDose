@@ -11,15 +11,21 @@ export default class NavigationGraph {
         this.config = config; // Assure-toi que config contient bien sidewalkWidth, crosswalkStripe*, roadWidth etc.
         this.gridBuffer = null;         // SharedArrayBuffer
         this.gridWalkableMap = null;    // Uint8Array view on gridBuffer
-        this.gridScale = config.gridScale ?? 1.0; // Utiliser la valeur de config ou 1.0 par défaut
+        this.gridScale = config.gridScale || 1.0; // Utiliser la valeur de config ou 1.0 par défaut
         this.gridWidth = 0;
         this.gridHeight = 0;
         this.offsetX = 0;
         this.offsetZ = 0;
-        this.sidewalkHeight = config.sidewalkHeight !== undefined ? config.sidewalkHeight : 0.2;
+        this.sidewalkHeight = config.sidewalkHeight || 0.2;
         this.debugMaterialWalkable = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
-        this.debugMaterialPath = new THREE.MeshBasicMaterial({ color: 0xff00ff, side: THREE.DoubleSide });
+        this.debugMaterialPath = new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 2 });
         console.log("NavigationGraph: Initialisé.");
+
+        // --- AJOUT : Hauteur spécifique du graphe ---
+        this.graphHeight = this.sidewalkHeight; // Valeur par défaut (utilisée par piétons)
+        // --- FIN AJOUT ---
+
+        this.grid = null; // Référence à PF.Grid pour compatibilité Pathfinder existant
     }
 
     buildGraph(plots, crosswalkInfos) {
@@ -449,7 +455,7 @@ export default class NavigationGraph {
                 gridScale: this.gridScale,
                 offsetX: this.offsetX,
                 offsetZ: this.offsetZ,
-                sidewalkHeight: this.sidewalkHeight
+                graphHeight: this.graphHeight
             }
         };
     }

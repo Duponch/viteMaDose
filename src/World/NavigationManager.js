@@ -99,6 +99,45 @@ export default class NavigationManager {
         return pathfinder;
     }
 
+    // --- AJOUT: Méthode pour obtenir les données des DEUX grilles pour le worker ---
+    getAllGridDataForWorker() {
+        const pedestrianData = this.pedestrianNavigationGraph?.getGridDataForWorker();
+        const roadData = this.roadNavigationGraph?.getGridDataForWorker();
+
+        if (!pedestrianData || !roadData) {
+            console.error("NavigationManager: Impossible d'obtenir les données de grille pour le worker - un ou les deux graphes ne sont pas prêts ou n'ont pas de buffer.");
+            return null;
+        }
+
+        // Vérifier que les dimensions et l'échelle sont cohérentes (important !)
+        if (pedestrianData.gridWidth !== roadData.gridWidth || 
+            pedestrianData.gridHeight !== roadData.gridHeight ||
+            pedestrianData.conversionParams.gridScale !== roadData.conversionParams.gridScale ||
+            pedestrianData.conversionParams.offsetX !== roadData.conversionParams.offsetX ||
+            pedestrianData.conversionParams.offsetZ !== roadData.conversionParams.offsetZ) {
+            console.error("NavigationManager: Incohérence dans les dimensions ou paramètres de conversion entre les grilles piétonne et routière!");
+            return null;
+        }
+
+        return {
+            pedestrian: {
+                gridBuffer: pedestrianData.gridBuffer,
+                graphHeight: pedestrianData.conversionParams.graphHeight
+            },
+            road: {
+                gridBuffer: roadData.gridBuffer,
+                graphHeight: roadData.conversionParams.graphHeight
+            },
+            // Paramètres communs
+            gridWidth: pedestrianData.gridWidth,
+            gridHeight: pedestrianData.gridHeight,
+            gridScale: pedestrianData.conversionParams.gridScale,
+            offsetX: pedestrianData.conversionParams.offsetX,
+            offsetZ: pedestrianData.conversionParams.offsetZ
+        };
+    }
+    // --- FIN AJOUT ---
+
     /**
      * Méthode d'update, à utiliser si vous souhaitez intégrer une logique de mise à jour
      * (par exemple pour une navigation dynamique ou lors de mise à jour du layout).

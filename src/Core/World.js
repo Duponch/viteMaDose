@@ -21,6 +21,11 @@ export default class World {
         // --- Daily Update Tracker ---
         this.lastUpdatedDay = -1; // Initialize with a value indicating no update has occurred
 
+        // --- AJOUT: Sphères de débogage Start/End Node ---
+        this.startNodeDebugSphere = null;
+        this.endNodeDebugSphere = null;
+        // --- FIN AJOUT ---
+
         // --- NOUVEAU : Groupes de Debug par Catégorie ---
         // Ces groupes contiendront les InstancedMesh *par sous-type*.
         this.debugGroups = {
@@ -375,13 +380,15 @@ export default class World {
             );
             console.log("World: CarManager instancié.");
 
-            const navGraph = this.cityManager.getNavigationGraph();
-            if (this.agentManager && navGraph) {
-                this.agentManager.initializePathfindingWorker(navGraph);
-                console.log("World: Initialisation du Pathfinding Worker demandée.");
+            // --- MODIFICATION: Initialiser le worker avec le NavigationManager ---
+            // const navGraph = this.cityManager.getNavigationGraph(); // Ancienne méthode
+            if (this.agentManager && this.cityManager.navigationManager) {
+                this.agentManager.initializePathfindingWorker(this.cityManager.navigationManager);
+                console.log("World: Initialisation du Pathfinding Worker (double grille) demandée.");
             } else {
-                 console.error("World: Echec initialisation Worker - AgentManager ou NavGraph manquant.");
+                 console.error("World: Echec initialisation Worker - AgentManager ou NavigationManager manquant.");
             }
+            // --- FIN MODIFICATION ---
 
             this.createAgents(maxAgents);
 
@@ -452,4 +459,34 @@ export default class World {
 	   this.agentManager?.update(deltaTime);
        this.carManager?.update(deltaTime); // Mettre à jour les voitures
    }
+
+    // --- AJOUT: Méthodes pour afficher les sphères de débogage ---
+    showStartNodeDebugSphere(position) {
+        if (!this.startNodeDebugSphere) {
+            const geometry = new THREE.SphereGeometry(7, 16, 8); // Sphère plus grosse
+            const material = new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true });
+            this.startNodeDebugSphere = new THREE.Mesh(geometry, material);
+            this.startNodeDebugSphere.name = "Debug_StartNodeSphere";
+            this.scene.add(this.startNodeDebugSphere);
+        }
+        this.startNodeDebugSphere.position.copy(position);
+        this.startNodeDebugSphere.position.y += 0.5; // Légèrement surélevée
+        this.startNodeDebugSphere.visible = true;
+        console.log(`[World Debug] Affichage Sphère Start Node Bleue à: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
+    }
+
+    showEndNodeDebugSphere(position) {
+        if (!this.endNodeDebugSphere) {
+            const geometry = new THREE.SphereGeometry(7, 16, 8); // Sphère plus grosse
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+            this.endNodeDebugSphere = new THREE.Mesh(geometry, material);
+            this.endNodeDebugSphere.name = "Debug_EndNodeSphere";
+            this.scene.add(this.endNodeDebugSphere);
+        }
+        this.endNodeDebugSphere.position.copy(position);
+        this.endNodeDebugSphere.position.y += 0.5; // Légèrement surélevée
+        this.endNodeDebugSphere.visible = true;
+        console.log(`[World Debug] Affichage Sphère End Node Verte à: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
+    }
+    // --- FIN AJOUT ---
 }

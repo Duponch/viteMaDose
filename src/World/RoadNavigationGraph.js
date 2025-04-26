@@ -12,6 +12,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
         this.config.roadWidth = 6.0;
         this.config.sidewalkWidth = 2.0;
         this.debugMaterialWalkable = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true }); // Rouge pour les routes
+        this.graphHeight = 0.1;
     }
 
     buildGraph(plots, crosswalkInfos) {
@@ -24,59 +25,60 @@ export default class RoadNavigationGraph extends NavigationGraph {
     }
 
     rebuildRoadGrid(plots, crosswalkInfos) {
-        console.log("RoadNavigationGraph: Reconstruction complète de la grille routière...");
+        console.log("RoadNavigationGraph: Reconstruction grille routière (Trottoirs NON marchables)...");
         
-        // Initialiser la grille à MARCHABLE
-        this.gridWalkableMap.fill(WALKABLE);
+        // Initialiser la grille à NON MARCHABLE
+        this.gridWalkableMap.fill(NON_WALKABLE);
         
-        // Marquer les parcelles comme zones NON marchables
-        console.log("RoadNavigationGraph: Marquage des parcelles comme non marchables...");
+        // Marquer les routes comme zones MARCHABLES
+        console.log("RoadNavigationGraph: Marquage des routes comme marchables...");
         const cellSizeWorld = 1.0 / this.gridScale;
-        let markedNonWalkable = 0;
-        const sidewalkWidth = this.config.sidewalkWidth || 0; // Récupérer la largeur du trottoir (0 par défaut)
+        let markedWalkable = 0;
+        const sidewalkWidth = this.config.sidewalkWidth || 0;
 
-        plots.forEach(plot => {
-            // Obtenir les limites de la parcelle SANS le trottoir
-            const plotMinX = plot.x;
-            const plotMaxX = plot.x + plot.width;
-            const plotMinZ = plot.z;
-            const plotMaxZ = plot.z + plot.depth;
+        // Itérer sur toutes les cellules de la grille
+        for (let gy = 0; gy < this.gridHeight; gy++) {
+            for (let gx = 0; gx < this.gridWidth; gx++) {
+                const index = gy * this.gridWidth + gx;
+                // Obtenir le centre de la cellule en coordonnées monde
+                const cellCenterWorld = this.gridToWorld(gx, gy); // Utilise la hauteur route (0.1)
+                const cx = cellCenterWorld.x;
+                const cz = cellCenterWorld.z;
+                
+                let isOverPlotOrSidewalk = false;
+                
+                // Vérifier si la cellule est sur une parcelle ou un trottoir
+                for (const plot of plots) {
+                    const plotMinX = plot.x;
+                    const plotMaxX = plot.x + plot.width;
+                    const plotMinZ = plot.z;
+                    const plotMaxZ = plot.z + plot.depth;
 
-            // Calculer les limites étendues INCLUANT le trottoir
-            const extendedMinX = plotMinX - sidewalkWidth;
-            const extendedMaxX = plotMaxX + sidewalkWidth;
-            const extendedMinZ = plotMinZ - sidewalkWidth;
-            const extendedMaxZ = plotMaxZ + sidewalkWidth;
+                    // Calculer les limites étendues INCLUANT le trottoir
+                    const extendedMinX = plotMinX - sidewalkWidth;
+                    const extendedMaxX = plotMaxX + sidewalkWidth;
+                    const extendedMinZ = plotMinZ - sidewalkWidth;
+                    const extendedMaxZ = plotMaxZ + sidewalkWidth;
 
-            // Convertir les coins étendus en coordonnées de grille pour définir une zone de recherche
-            // (Pas besoin d'élargir davantage ici car les limites étendues le font déjà)
-            const startGrid = this.worldToGrid(extendedMinX, extendedMinZ);
-            const endGrid = this.worldToGrid(extendedMaxX, extendedMaxZ);
-
-            // Itérer sur les cellules potentiellement affectées
-            for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
-                for (let gx = startGrid.x; gx <= endGrid.x; gx++) {
-                    // Vérifier si les coordonnées de la grille sont valides
-                    if (this.isValidGridCoord(gx, gy)) {
-                        // Obtenir le centre de la cellule en coordonnées monde
-                        const cellCenterWorld = this.gridToWorld(gx, gy);
-                        const cx = cellCenterWorld.x;
-                        const cz = cellCenterWorld.z;
-
-                        // Vérifier si le centre de la cellule est à l'intérieur de la zone étendue (parcelle + trottoir)
-                        if (cx >= extendedMinX && cx < extendedMaxX && cz >= extendedMinZ && cz < extendedMaxZ) {
-                            // Vérifier si elle était marchable avant de la marquer non marchable
-                            const index = gy * this.gridWidth + gx;
-                            if (this.gridWalkableMap[index] === WALKABLE) {
-                                this.gridWalkableMap[index] = NON_WALKABLE;
-                                markedNonWalkable++;
-                            }
-                        }
+                    // Si le centre de la cellule est dans la zone étendue, c'est non-marchable pour les voitures
+                    // Utiliser une tolérance pour les bords
+                    const tolerance = 0.01;
+                    if (cx > extendedMinX - tolerance && cx < extendedMaxX + tolerance && 
+                        cz > extendedMinZ - tolerance && cz < extendedMaxZ + tolerance) {
+                        isOverPlotOrSidewalk = true;
+                        break; // Pas besoin de vérifier les autres parcelles
                     }
                 }
+
+                // Si la cellule n'est PAS sur une parcelle ou un trottoir, elle est considérée comme une route marchable
+                if (!isOverPlotOrSidewalk) {
+                    this.gridWalkableMap[index] = WALKABLE;
+                    markedWalkable++;
+                }
             }
-        });
-        console.log(`RoadNavigationGraph: ${markedNonWalkable} cellules marquées comme non marchables (parcelles).`);
+        }
+        
+        console.log(`RoadNavigationGraph: ${markedWalkable} cellules marquées comme marchables (routes).`);
 
         // Mettre à jour la grille pathfinding après les modifications
         this.updatePFGrid();
@@ -155,6 +157,68 @@ export default class RoadNavigationGraph extends NavigationGraph {
             console.log("RoadNavigationGraph: Aucune cellule marchable à visualiser dans la grille routière.");
         }
     }
+
+    // --- Surcharge de getClosestWalkableNode pour les routes ---
+    // Recherche le nœud de route marchable le plus proche, en étendant la recherche
+    // si la position initiale tombe sur un trottoir ou une parcelle (non marchable ici).
+    getClosestWalkableNode(worldPos) {
+		if (!this.gridWalkableMap) {
+            console.error("RoadNavigationGraph.getClosestWalkableNode: gridWalkableMap non initialisé.");
+            return null;
+        }
+	
+		// 1) Position « brute » en grille
+		const startGrid = this.worldToGrid(worldPos.x, worldPos.z);
+	
+		// 2) Vérifier si cette cellule est DIRECTEMENT marchable (sur une route)
+		if (this.isWalkableAt(startGrid.x, startGrid.y)) {
+			return startGrid; // Le point est déjà sur une route valide
+		}
+        
+        // 3) Si non marchable (sur trottoir/parcelle), lancer la recherche en spirale ÉLARGIE
+        console.log(`RoadNavigationGraph: Node initial (${startGrid.x},${startGrid.y}) non marchable (route). Recherche étendue...`);
+		const maxSearchRadius = Math.max(this.gridWidth, this.gridHeight); // Rayon max
+		let bestNode = null;
+		let minGridDistSq = Infinity;
+	
+		for (let r = 1; r <= maxSearchRadius; r++) {
+			for (let dx = -r; dx <= r; dx++) {
+				for (let dy = -r; dy <= r; dy++) {
+                    // Ne considérer que les cellules sur le périmètre du rayon actuel
+					if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+	
+					const x = startGrid.x + dx;
+                    const y = startGrid.y + dy;
+                    
+                    // Vérifier si la cellule voisine est marchable SUR LA ROUTE
+					if (this.isWalkableAt(x, y)) { // isWalkableAt de RoadNavigationGraph
+                        const d2 = dx*dx + dy*dy;
+                        if (d2 < minGridDistSq) {
+                            minGridDistSq = d2;
+                            bestNode = { x, y };
+                        }
+                    }
+				}
+			}
+			// Si on a trouvé un nœud à ce rayon, c'est le plus proche, on arrête
+			if (bestNode) {
+                const bestNodeIndex = bestNode.y * this.gridWidth + bestNode.x;
+                const bestNodeValue = this.gridWalkableMap[bestNodeIndex];
+                console.log(`RoadNavigationGraph: Nœud routier le plus proche trouvé à (${bestNode.x},${bestNode.y}), Valeur Map: ${bestNodeValue} (0=Walkable). Distance grille^2 = ${minGridDistSq.toFixed(1)}`);
+                return bestNode;
+            }
+		}
+	
+		// 4) Si aucun nœud routier trouvé (très improbable sauf grille vide)
+		console.error(
+		  `RoadNavigationGraph: Aucun nœud de ROUTE marchable trouvé près de`, 
+		  worldPos, `(Grille origine: ${startGrid.x},${startGrid.y})`
+		);
+        // Renvoyer null ou le point d'origine comme fallback?
+        // Renvoyer null est peut-être plus sûr pour indiquer l'échec.
+		return null; 
+	}	
+    // --- FIN Surcharge ---
 
     // Surcharger gridToWorld pour retourner une position au niveau de la route
     gridToWorld(gridX, gridY) {

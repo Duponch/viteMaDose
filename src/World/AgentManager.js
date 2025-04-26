@@ -106,37 +106,48 @@ export default class AgentManager {
         }
     }
 
-    // --- NOUVELLE MÉTHODE : Initialise le Worker ---
-    initializePathfindingWorker(navigationGraph) {
+    // --- MODIFICATION : Initialise le Worker avec les DEUX grilles ---
+    initializePathfindingWorker(navigationManager) { // <-- Prend NavigationManager
         if (this.pathfindingWorker) {
             console.warn("AgentManager: Tentative de réinitialiser le worker déjà existant.");
             return;
         }
-        if (!navigationGraph) {
-            console.error("AgentManager: Impossible d'initialiser le worker - NavigationGraph manquant.");
+        // --- MODIFICATION: Vérifier navigationManager --- 
+        if (!navigationManager) {
+            console.error("AgentManager: Impossible d'initialiser le worker - NavigationManager manquant.");
             return;
         }
+        // --- FIN MODIFICATION ---
 
         try {
-            console.log("AgentManager: Initialisation du Pathfinding Worker (mode SharedArrayBuffer)...");
+            console.log("AgentManager: Initialisation du Pathfinding Worker (mode SharedArrayBuffer)... HORS LIGNE");
             this.pathfindingWorker = new Worker(new URL('./PathfindingWorker.js', import.meta.url), { type: 'module' });
             this.pathfindingWorker.onmessage = (event) => this._handleWorkerMessage(event);
-            this.pathfindingWorker.onerror = (error) => { /* ... gestion erreur worker ... */ };
+            this.pathfindingWorker.onerror = (error) => { 
+                 console.error("AgentManager: Erreur dans Pathfinding Worker:", error);
+                 this.pathfindingWorker = null;
+                 this.isWorkerInitialized = false;
+             }; // <-- Gestion erreur worker améliorée
 
-            const workerInitData = navigationGraph.getGridDataForWorker();
+            // --- MODIFICATION: Obtenir les données des DEUX grilles ---
+            const workerInitData = navigationManager.getAllGridDataForWorker();
+            // --- FIN MODIFICATION ---
 
-            if (!workerInitData || !workerInitData.gridBuffer) {
-                console.error("AgentManager: Échec de la récupération des données de grille (SharedArrayBuffer) depuis NavigationGraph.");
+            // --- MODIFICATION: Vérifier les nouvelles données --- 
+            if (!workerInitData || !workerInitData.pedestrian || !workerInitData.road || 
+                !workerInitData.pedestrian.gridBuffer || !workerInitData.road.gridBuffer) {
+                console.error("AgentManager: Échec de la récupération des données combinées de grille depuis NavigationManager.");
                  if (this.pathfindingWorker) this.pathfindingWorker.terminate();
                  this.pathfindingWorker = null;
                 return;
             }
+            // --- FIN MODIFICATION ---
 
             this.pathfindingWorker.postMessage({
                 type: 'init',
-                data: workerInitData
+                data: workerInitData // <-- Envoyer les données combinées
             });
-            console.log("AgentManager: Message d'initialisation (SharedArrayBuffer + params) envoyé au worker.");
+            console.log("AgentManager: Message d'initialisation combiné (SharedArrayBuffers + params) envoyé au worker.");
 
         } catch (error) {
             console.error("AgentManager: Échec de la création du Pathfinding Worker:", error);
@@ -144,7 +155,7 @@ export default class AgentManager {
             this.isWorkerInitialized = false;
         }
     }
-    // --- FIN NOUVELLE MÉTHODE ---
+    // --- FIN MODIFICATION ---
 
     _handleWorkerMessage(event) {
         const { type, data, error } = event.data;
@@ -241,25 +252,25 @@ export default class AgentManager {
     }
 
     // --- NOUVELLE MÉTHODE : Demande un chemin au Worker ---
-    requestPathFromWorker(agentId, startNode, endNode) {
+    requestPathFromWorker(agentId, startNode, endNode, isVehicle) {
         if (!this.pathfindingWorker || !this.isWorkerInitialized) {
             console.error(`AgentManager: Worker non prêt pour requête path Agent ${agentId}.`);
             // Informer l'agent de l'échec ?
              const agent = this.getAgentById(agentId);
-             if(agent) agent.setPath(null); // Indiquer échec à l'agent
+             if(agent) agent.setPath(null, 0); // Indiquer échec à l'agent
             return;
         }
         if(!startNode || !endNode) {
              console.error(`AgentManager: StartNode ou EndNode invalide pour requête path Agent ${agentId}.`);
              const agent = this.getAgentById(agentId);
-             if(agent) agent.setPath(null);
+             if(agent) agent.setPath(null, 0);
              return;
         }
 
-        // console.log(`AgentManager: Envoi requête path au worker pour Agent ${agentId}: (${startNode.x},${startNode.y}) -> (${endNode.x},${endNode.y})`);
+        console.log(`AgentManager: Envoi requête path au worker pour Agent ${agentId} (${isVehicle ? 'véhicule' : 'piéton'}): (${startNode.x},${startNode.y}) -> (${endNode.x},${endNode.y})`);
         this.pathfindingWorker.postMessage({
             type: 'findPath',
-            data: { agentId, startNode, endNode }
+            data: { agentId, startNode, endNode, isVehicle }
         });
     }
     // --- FIN NOUVELLE MÉTHODE ---
