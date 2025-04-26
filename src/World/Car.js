@@ -100,61 +100,81 @@ export default class Car {
 
     /**
      * Met à jour la position et l'orientation de la voiture
+     * avec une simulation par pas de temps fixes pour robustesse.
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame (en ms)
      */
-     update(deltaTime) {
+	update(deltaTime) {
         if (!this.isActive || !this.path || this.path.length === 0 || this.currentPathIndex >= this.path.length) {
-            if(this.isActive && (!this.path || this.path.length === 0)) {
-                // Si actif mais pas de chemin, désactiver
-                //console.warn(`Car ${this.instanceId}: Active but no path, deactivating.`);
-                //this.isActive = false; // Désactiver ici peut causer des problèmes si l'agent attend l'arrivée
-            }
+            // ... (logique existante pour voiture inactive ou sans chemin) ...
             return;
         }
 
-         const targetPoint = this.path[this.currentPathIndex];
+        // --- NOUVEAU: Simulation par pas de temps fixes ---
+        const fixedTimeStepSeconds = 1 / 60; // Simuler à ~60 FPS fixes (environ 16.67 ms)
+        let remainingDeltaTimeSeconds = deltaTime / 1000.0; // Convertir deltaTime en secondes
 
-         // Utiliser un Vector3 temporaire
-         const direction = this._tempVector.subVectors(targetPoint, this.position);
-         const distanceToTarget = direction.length();
+        while (remainingDeltaTimeSeconds > 0 && this.isActive) {
+            const timeStep = Math.min(remainingDeltaTimeSeconds, fixedTimeStepSeconds);
+            const targetPoint = this.path[this.currentPathIndex];
 
-         // Avancer vers le point cible
-         // Convertir deltaTime (ms) en secondes pour la vitesse
-         const moveDistance = Math.min(this.speed * (deltaTime / 1000.0), distanceToTarget);
+            const direction = this._tempVector.subVectors(targetPoint, this.position);
+            let distanceToTarget = direction.length();
 
-         if (distanceToTarget > 0.01) { // Éviter division par zéro et mouvements infimes
-             direction.normalize(); // Obtenir la direction normalisée
-             this.position.addScaledVector(direction, moveDistance); // Déplacer
+            // --- Vérification si cible déjà atteinte (pour boucle suivante) ---
+            if (distanceToTarget <= this.reachTolerance) {
+                this.currentPathIndex++;
+                if (this.currentPathIndex >= this.path.length) {
+                    // Fin du chemin ATTEINTE DANS CETTE BOUCLE
+                    this.position.copy(targetPoint); // Snap à la dernière position
+                    console.log(`Car ${this.instanceId}: Arrivée à destination (fin du chemin, boucle interne).`);
+                    this.isActive = false;
+                    this.path = null;
+                    this.currentPathIndex = 0;
+                    remainingDeltaTimeSeconds = 0; // Sortir de la boucle while
+                    break; // Sortir de la boucle while explicitement
+                }
+                // Si pas la fin, on reprendra au prochain tour de boucle avec le nouveau targetPoint
+                continue; // Passer à la prochaine itération du while
+            }
 
-             // Orientation : Slerp vers la direction
-             if (direction.lengthSq() > 0.001) {
-                 const forwardVector = new THREE.Vector3(0, 0, 1); // Direction avant du modèle
-                 this._lookDirection.copy(direction); // Direction actuelle du mouvement
-                 this._tempQuaternion.setFromUnitVectors(forwardVector, this._lookDirection);
-                 // Interpolation douce (Slerp) vers la nouvelle orientation
-                 this.quaternion.slerp(this._tempQuaternion, 0.15); // Ajuster le facteur 0.15 si besoin
-             }
-         }
+            // --- Calcul du mouvement pour CE pas de temps fixe ---
+            const moveDistanceThisStep = Math.min(this.speed * timeStep, distanceToTarget);
 
-         // Vérifier si le point cible est atteint (ou très proche)
-         // Recalculer la distance après le mouvement pour plus de précision
-         const remainingDistance = this.position.distanceTo(targetPoint);
+            if (distanceToTarget > 0.001) { // Éviter mouvements infimes
+                direction.normalize();
+                this.position.addScaledVector(direction, moveDistanceThisStep);
 
-         if (remainingDistance <= this.reachTolerance) {
-             this.currentPathIndex++; // Passer au point suivant
+                // Orientation (inchangée, mais appliquée à chaque pas)
+                const forwardVector = new THREE.Vector3(0, 0, 1);
+                this._lookDirection.copy(direction);
+                this._tempQuaternion.setFromUnitVectors(forwardVector, this._lookDirection);
+                // Utiliser une interpolation plus rapide car les pas sont petits
+                this.quaternion.slerp(this._tempQuaternion, 0.3); // Facteur plus grand pour petits pas
+            }
 
-             // Si c'est la fin du chemin
-             if (this.currentPathIndex >= this.path.length) {
-                 console.log(`Car ${this.instanceId}: Arrivée à destination (fin du chemin).`);
-                 this.isActive = false; // La voiture a terminé son trajet
-                 this.path = null;      // Nettoyer le chemin
-                 this.currentPathIndex = 0;
-                 // Ne pas retourner ici, mettre à jour la matrice une dernière fois
-             }
-             // Si ce n'est pas la fin, l'orientation sera gérée au prochain update vers le nouveau targetPoint
-         }
+            // Vérifier si on a atteint la cible APRES ce petit mouvement
+            distanceToTarget = this.position.distanceTo(targetPoint); // Recalculer la distance
+            if (distanceToTarget <= this.reachTolerance) {
+                this.currentPathIndex++;
+                if (this.currentPathIndex >= this.path.length) {
+                    // Fin du chemin ATTEINTE A LA FIN DE CE PAS
+                    this.position.copy(targetPoint); // Snap
+                    console.log(`Car ${this.instanceId}: Arrivée à destination (fin du chemin, fin de pas).`);
+                    this.isActive = false;
+                    this.path = null;
+                    this.currentPathIndex = 0;
+                    remainingDeltaTimeSeconds = 0; // Sortir de la boucle while
+                    break; // Sortir de la boucle while
+                }
+                // Sinon, on continue la boucle avec le prochain point cible
+            }
 
-         // Mettre à jour la matrice de transformation à chaque frame où la voiture est active
-         this.updateMatrix();
-     }
+            // Décrémenter le temps restant pour cette frame
+            remainingDeltaTimeSeconds -= timeStep;
+
+        } // Fin boucle while (remainingDeltaTimeSeconds > 0)
+
+        // --- Mise à jour finale de la matrice (une seule fois après la boucle) ---
+        this.updateMatrix();
+    }
 }
