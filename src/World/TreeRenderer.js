@@ -231,14 +231,14 @@ export default class TreeRenderer {
             this.createLowPolyFoliageGeometry(foliageWidthFactor * 1.1),
             foliageMaterial
         );
-        foliage1.position.y = foliageBaseY + foliageHeightFactor * 0.3;
+        foliage1.position.y = foliageBaseY + foliageHeightFactor * 0.25;
         treeGroup.add(foliage1);
 
         const foliage2 = new THREE.Mesh(
             this.createLowPolyFoliageGeometry(foliageWidthFactor * 0.9),
             foliageMaterial
         );
-        foliage2.position.y = foliageBaseY + foliageHeightFactor * 0.65;
+        foliage2.position.y = foliageBaseY + foliageHeightFactor * 0.6;
         foliage2.position.x = foliageWidthFactor * 0.4;
         foliage2.rotation.z = Math.PI / 5;
         treeGroup.add(foliage2);
@@ -247,7 +247,7 @@ export default class TreeRenderer {
             this.createLowPolyFoliageGeometry(foliageWidthFactor * 0.8),
             foliageMaterial
         );
-        foliage3.position.y = foliageBaseY + foliageHeightFactor * 0.55;
+        foliage3.position.y = foliageBaseY + foliageHeightFactor * 0.5;
         foliage3.position.x = -foliageWidthFactor * 0.35;
         foliage3.rotation.z = -Math.PI / 6;
         treeGroup.add(foliage3);
