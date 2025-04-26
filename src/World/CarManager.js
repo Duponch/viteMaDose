@@ -12,11 +12,18 @@ export default class CarManager {
         this.maxCars = 50;
         
         // Matériau et géométrie pour les voitures (simples cubes rouges pour l'instant)
-        this.carGeometry = new THREE.BoxGeometry(1.0, 0.5, 2.0);
+        this.carGeometry = new THREE.BoxGeometry(1.2, 0.6, 2.4);
+        // Ajuster la position de la géométrie pour qu'elle soit centrée
+        this.carGeometry.translate(0, 0.3, 0);
         this.carMaterial = new THREE.MeshStandardMaterial({ 
             color: 0xff0000,
             roughness: 0.5,
-            metalness: 0.2
+            metalness: 0.2,
+            side: THREE.FrontSide,  // Changé de DoubleSide à FrontSide
+            transparent: true,
+            opacity: 1.0,
+            depthWrite: true,
+            depthTest: true
         });
         
         // InstancedMesh pour les voitures
@@ -29,6 +36,8 @@ export default class CarManager {
         this.carInstancedMesh.castShadow = true;
         this.carInstancedMesh.receiveShadow = true;
         this.carInstancedMesh.name = "Cars";
+        this.carInstancedMesh.frustumCulled = false; // Désactive le frustum culling
+        this.carInstancedMesh.renderOrder = 1; // Assure que les voitures sont rendues après les autres objets
         
         // Ajouter l'InstancedMesh à la scène
         this.scene.add(this.carInstancedMesh);
@@ -128,17 +137,18 @@ export default class CarManager {
         let needsMatrixUpdate = false;
         let activeCarCount = 0;
         
-        // Mettre à jour chaque voiture active
+        // Mettre à jour chaque voiture
         for (const car of this.cars) {
+            // Mettre à jour la position et l'orientation si la voiture est active
             if (car.isActive) {
                 activeCarCount++;
                 car.update(deltaTime);
-                
-                // Mettre à jour la matrice de l'instance
-                car.updateMatrix();
-                this.carInstancedMesh.setMatrixAt(car.instanceId, car.matrix);
-                needsMatrixUpdate = true;
             }
+            
+            // Toujours mettre à jour la matrice de l'instance, même si la voiture est inactive
+            car.updateMatrix();
+            this.carInstancedMesh.setMatrixAt(car.instanceId, car.matrix);
+            needsMatrixUpdate = true;
         }
         
         // Mettre à jour les matrices des instances si nécessaire

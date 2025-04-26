@@ -686,30 +686,20 @@ export default class Agent {
                 // Vérifier si la voiture est arrivée à destination
                 if (carManager) {
                     const car = carManager.getCarForAgent(this.id);
-                    if (car && !car.isActive) {
-                        // La voiture est arrivée, l'agent arrive au travail
-                        console.log(`Agent ${this.id}: Voiture arrivée au travail`);
-                        this.currentState = AgentState.AT_WORK;
-                        this.isUsingVehicle = false;
-                        this.isVisible = false;
-                        this.lastArrivalTimeWork = currentGameTime;
+                    if (car) {
+                        // S'assurer que la voiture est visible
+                        car.isActive = true;
                         
-                        // Libérer la voiture
-                        carManager.releaseCarForAgent(this.id);
-                    } else if (car && currentGameTime >= this.arrivalTmeGame) {
-                        // Si le temps de trajet est dépassé, vérifier si la voiture est proche de la destination
-                        const distanceToWork = car.position.distanceTo(this.workPosition);
-                        if (distanceToWork < 5.0) { // Si la voiture est à moins de 5 unités du travail
-                            console.log(`Agent ${this.id}: Voiture proche du travail (${distanceToWork.toFixed(2)}m), forçage de l'arrivée`);
+                        if (!car.isActive) {
+                            // La voiture est arrivée, l'agent arrive au travail
+                            console.log(`Agent ${this.id}: Voiture arrivée au travail`);
                             this.currentState = AgentState.AT_WORK;
                             this.isUsingVehicle = false;
                             this.isVisible = false;
                             this.lastArrivalTimeWork = currentGameTime;
-                            car.isActive = false; // Désactiver la voiture
+                            
+                            // Libérer la voiture
                             carManager.releaseCarForAgent(this.id);
-                        } else {
-                            // La voiture n'est pas encore proche, continuer à attendre
-                            console.log(`Agent ${this.id}: Temps de trajet dépassé mais voiture encore loin (${distanceToWork.toFixed(2)}m), attente...`);
                         }
                     }
                 } else {
@@ -825,16 +815,21 @@ export default class Agent {
                 // Vérifier si la voiture est arrivée à destination
                 if (carManager) {
                     const car = carManager.getCarForAgent(this.id);
-                    if (car && !car.isActive) {
-                        // La voiture est arrivée, l'agent arrive à la maison
-                        console.log(`Agent ${this.id}: Voiture arrivée à la maison`);
-                        this.currentState = AgentState.AT_HOME;
-                        this.isUsingVehicle = false;
-                        this.isVisible = false;
-                        this.lastArrivalTimeHome = currentGameTime;
+                    if (car) {
+                        // S'assurer que la voiture est visible
+                        car.isActive = true;
                         
-                        // Libérer la voiture
-                        carManager.releaseCarForAgent(this.id);
+                        if (!car.isActive) {
+                            // La voiture est arrivée, l'agent arrive à la maison
+                            console.log(`Agent ${this.id}: Voiture arrivée à la maison`);
+                            this.currentState = AgentState.AT_HOME;
+                            this.isUsingVehicle = false;
+                            this.isVisible = false;
+                            this.lastArrivalTimeHome = currentGameTime;
+                            
+                            // Libérer la voiture
+                            carManager.releaseCarForAgent(this.id);
+                        }
                     }
                 } else {
                     // Si le carManager n'est pas disponible, revenir à l'état à pied
