@@ -31,11 +31,11 @@ export default class LampPostManager {
      */
     buildLampPostGeometries() {
         console.warn("--- UTILISATION GÉOMÉTRIE LAMPADAIRE SIMPLIFIÉE (SANS COURBE) ---");
-        const poleSegments = 16;
-        const baseRadiusTop = 0.4;
-        const baseRadiusBottom = 0.5;
+        const poleSegments = 4;
+        const baseRadiusTop = 0.2;
+        const baseRadiusBottom = 0.25;
         const baseHeight = 0.8;
-        const poleRadius = 0.2;
+        const poleRadius = 0.1;
         const poleLowerHeight = 5;
         const poleTopY = baseHeight + poleLowerHeight;
         const armLength = 2.5;
@@ -179,7 +179,7 @@ export default class LampPostManager {
     /**
      * À partir des données de position/rotation issues de addLampPosts(),
      * crée les instanced meshes pour les parties grises, lumineuses et les cônes lumineux.
-     * @param {Array} lampData - Tableau d’objets contenant position (Vector3) et angleY.
+     * @param {Array} lampData - Tableau d'objets contenant position (Vector3) et angleY.
      */
     createLampPostInstancedMeshes(lampData) {
         const { greyGeometry, lightGeometry, greyMaterial, lightMaterial } = this.buildLampPostGeometries();
