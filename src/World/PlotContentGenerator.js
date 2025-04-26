@@ -51,6 +51,7 @@ export default class PlotContentGenerator {
         this.plotGroundGenerator = new PlotGroundGenerator(config, materials);
         this.crosswalkInstancer = new CrosswalkInstancer(config, materials);
         this.grassInstancer = new GrassInstancer(config);
+        this.grassInstancer.setCamera(this.experience.camera.instance);
 
         // --- Stratégies (seront créées dans generateContent) ---
         this.zoneStrategies = {};

@@ -29,3 +29,7 @@ Check - découper CityManager
 - Le maire (joueur) a aussi un compte
 - A midi les citoyens prennent un cacheton : +1 santé et -1 santé max et -1 dollar en compte du golem et +1 dans le compte du maire
 - Tous les midi, tout le monde gagne 10 dollar (salaire du travail)
+
+
+
+Utilisation de lengthSq() au lieu de distanceToSquared() pour réduire les allocations
