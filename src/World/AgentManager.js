@@ -157,60 +157,55 @@ export default class AgentManager {
     }
     // --- FIN MODIFICATION ---
 
-    _handleWorkerMessage(event) {
-        const { type, data, error } = event.data;
-        // console.log("AgentManager: Message reçu du worker:", type, data); // Debug
+	_handleWorkerMessage(event) {
+		const { type, data, error } = event.data;
+		console.log(`[AgentManager DEBUG] Message reçu du worker: type=<span class="math-inline">\{type\}, agentId\=</span>{data?.agentId}`); // LOG 1
 
-        if (type === 'initComplete') {
-            this.isWorkerInitialized = true;
-            console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
+		if (type === 'initComplete') {
+			this.isWorkerInitialized = true;
+			console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
 
-        } else if (type === 'pathResult') {
-            // Vérifier si les données nécessaires sont présentes (y compris pathLengthWorld)
-            if (data && data.agentId && data.path !== undefined && data.pathLengthWorld !== undefined) {
-                const { agentId, path: worldPathData, pathLengthWorld } = data; // Extraire la longueur
-                const agent = this.getAgentById(agentId);
+		} else if (type === 'pathResult') {
+			if (data && data.agentId && data.path !== undefined && data.pathLengthWorld !== undefined) {
+				const { agentId, path: worldPathData, pathLengthWorld } = data;
+				console.log(`[AgentManager DEBUG] pathResult reçu pour Agent ${agentId}. Longueur Monde: ${pathLengthWorld}`); // LOG 2
 
-                if (agent) {
-                    let finalWorldPath = null;
-                    // Reconstruire les Vector3 (inchangé)
-                    if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) {
-                        try {
-                            finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
-                        } catch (vecError) {
-                            console.error(`Agent ${agentId}: Erreur reconstruction Vector3:`, vecError);
-                            finalWorldPath = null;
-                        }
-                    } else {
-                        finalWorldPath = null;
-                    }
+				const agent = this.getAgentById(agentId);
 
-                    // Passer le chemin ET la longueur à l'agent
-                    agent.setPath(finalWorldPath, pathLengthWorld);
+				if (agent) {
+					console.log(`[AgentManager DEBUG] Agent ${agentId} trouvé. Tentative reconstruction chemin...`); // LOG 3
+					let finalWorldPath = null;
+					if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) {
+						try {
+							finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
+							console.log(`[AgentManager DEBUG] Chemin reconstruit pour Agent <span class="math-inline">\{agentId\} \(</span>{finalWorldPath.length} points).`); // LOG 4
+						} catch (vecError) {
+							console.error(`[AgentManager ERREUR] Agent ${agentId}: Erreur reconstruction Vector3:`, vecError); // LOG ERREUR
+							finalWorldPath = null;
+						}
+					} else {
+						console.log(`[AgentManager DEBUG] worldPathData invalide ou vide pour Agent ${agentId}.`); // LOG 5
+						finalWorldPath = null;
+					}
 
-                    // Mise à jour debug (optionnel, peut utiliser agent.currentPathPoints)
-                    if (finalWorldPath && this.experience.isDebugMode && this.experience.world?.setAgentPathForAgent) {
-                        this.experience.world.setAgentPathForAgent(agent, finalWorldPath, agent.debugPathColor);
-                    }
-                } else {
-                    console.warn(`AgentManager: Agent ${agentId} non trouvé pour le résultat du chemin.`);
-                }
-            } else {
-                console.warn("AgentManager: Message 'pathResult' incomplet reçu du worker:", event.data);
-            }
-        } else if (type === 'workerError') {
-            console.error("AgentManager: Erreur rapportée par le worker:", error, "Data associée:", data);
-             if (data?.agentId) {
-                 const agentWithError = this.getAgentById(data.agentId);
-                 // Si l'agent attendait spécifiquement un chemin
-                 if(agentWithError && (agentWithError.currentState === 'REQUESTING_PATH_FOR_WORK' || agentWithError.currentState === 'REQUESTING_PATH_FOR_HOME')) {
-                     agentWithError.setPath(null, 0); // Force l'échec et le retour à un état stable
-                 }
-             }
-        } else {
-            console.warn("AgentManager: Type de message inconnu reçu du worker:", type);
-        }
-    }
+					// Appel setPath
+					console.log(`[AgentManager DEBUG] Appel de agent.setPath pour Agent ${agentId}...`); // LOG 6
+					agent.setPath(finalWorldPath, pathLengthWorld);
+					console.log(`[AgentManager DEBUG] Appel de agent.setPath TERMINÉ pour Agent ${agentId}.`); // LOG 7
+
+				} else {
+					console.warn(`[AgentManager WARN] Agent ${agentId} non trouvé pour le résultat du chemin.`); // LOG WARN
+				}
+			} else {
+				console.warn("[AgentManager WARN] Message 'pathResult' incomplet reçu:", event.data); // LOG WARN
+			}
+		} else if (type === 'workerError') {
+			console.error("[AgentManager ERREUR Worker]:", error, "Data:", data); // LOG ERREUR Worker
+			// ... (gestion erreur)
+		} else {
+			console.warn("[AgentManager WARN] Type de message inconnu reçu du worker:", type); // LOG WARN
+		}
+	}
     // --- FIN NOUVELLE MÉTHODE ---
 
 	getAgentStats() {

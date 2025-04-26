@@ -47,7 +47,7 @@ export default class Agent {
         this.isLodActive = false; // État du LOD
 
         // --- Propriétés pour les voitures ---
-        this.hasVehicle = Math.random() < 0.4; // 40% de chance d'avoir une voiture (ajuster selon besoin)
+        this.hasVehicle = Math.random() < 1; // 40% de chance d'avoir une voiture (ajuster selon besoin)
         this.isUsingVehicle = false; // Indique si l'agent utilise actuellement sa voiture
         this.vehicleHomePosition = null; // Position où la voiture est "garée" à la maison
 
@@ -242,643 +242,753 @@ export default class Agent {
         return true;
     }
 
+    /**
+     * Demande un chemin entre deux points via le worker.
+     * @param {THREE.Vector3} startPosWorld - Position de départ mondiale.
+     * @param {THREE.Vector3} endPosWorld - Position d'arrivée mondiale.
+     * @param {{x: number, y: number} | null} startNodeOverride - Nœud de grille de départ explicite (optionnel).
+     * @param {{x: number, y: number} | null} endNodeOverride - Nœud de grille d'arrivée explicite (optionnel).
+     * @param {string} nextStateIfSuccess - L'état vers lequel passer si le chemin est trouvé.
+     * @param {number} currentGameTimeForStats - Temps de jeu actuel pour les statistiques.
+     */
     requestPath(startPosWorld, endPosWorld, startNodeOverride = null, endNodeOverride = null, nextStateIfSuccess, currentGameTimeForStats) {
-        // nextStateIfSuccess sera par exemple READY_TO_LEAVE_FOR_WORK ou READY_TO_LEAVE_FOR_HOME
+        this.targetStateFromWeekendWalk = nextStateIfSuccess; // Stocker l'état cible
 
-        // IMPORTANT : Stocker l'état cible pour que setPath puisse l'utiliser
-        this.targetStateFromWeekendWalk = nextStateIfSuccess;
-
-        // Réinitialiser les données du trajet précédent
         this.currentPathPoints = null;
         this.calculatedTravelDurationGame = 0;
         this.departureTimeGame = -1;
         this.arrivalTmeGame = -1;
         this.currentPathIndexVisual = 0;
         this.visualInterpolationProgress = 0;
+        this.currentPathLengthWorld = 0; // Réinitialiser la longueur
 
-        // Déterminer l'état d'attente pendant la requête
-        if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_WORK) {
-            this.currentState = AgentState.REQUESTING_PATH_FOR_WORK;
+        // Déterminer l'état d'attente
+        let requestingState = AgentState.WAITING_FOR_PATH; // État générique
+        if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_WORK || nextStateIfSuccess === AgentState.DRIVING_TO_WORK) {
+             requestingState = AgentState.REQUESTING_PATH_FOR_WORK;
+        } else if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_HOME || nextStateIfSuccess === AgentState.DRIVING_HOME) {
+             requestingState = AgentState.REQUESTING_PATH_FOR_HOME;
+        } else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_READY) {
+             requestingState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
+        } else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+             requestingState = AgentState.WEEKEND_WALK_REQUESTING_PATH; // Utilise le même état d'attente
         }
-        else if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_HOME) {
-            this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
-        }
-        else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_READY) {
-            this.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
-            console.log(`Agent ${this.id}: Requête de chemin pour PROMENADE WEEKEND.`);
-        }
-        else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
-            this.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
-            console.log(`Agent ${this.id}: Requête de chemin pour RETOUR AU TROTTOIR depuis le parc.`);
-        }
-        else {
-            this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
-            console.warn(`Agent ${this.id}: État nextStateIfSuccess inconnu: ${nextStateIfSuccess}, fallback sur REQUESTING_PATH_FOR_HOME`);
-        }
-        this.isVisible = false;
+        this.currentState = requestingState;
+        this.isVisible = false; // Cacher pendant la requête
+
+        // --- Démarrer le timer de timeout ---
+        this._pathRequestTimeout = this.experience.time.elapsed; // Utiliser le temps global actuel
+        // -------------------------------------
 
         const agentManager = this.experience.world?.agentManager;
         const cityManager = this.experience.world?.cityManager;
+        const navigationManager = cityManager?.navigationManager;
 
-        // Vérifier si le NavigationManager est disponible
-        if (!this.checkNavigationManager()) {
-            console.warn(`Agent ${this.id}: NavigationManager non disponible. La ville n'est peut-être pas encore générée. Mise en attente...`);
-            this.currentState = AgentState.WAITING_FOR_PATH;
-            setTimeout(() => {
-                if (this.checkNavigationManager()) {
-                    this.requestPath(startPosWorld, endPosWorld, startNodeOverride, endNodeOverride, nextStateIfSuccess, currentGameTimeForStats);
-                } else {
-                    this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
-                    console.warn(`Agent ${this.id}: NavigationManager toujours non disponible après attente. Retour à l'état ${this.currentState}`);
-                }
-            }, 1000);
-            return;
-        }
+        // --- MODIFIÉ: Utiliser this.isInVehicle pour déterminer le mode ---
+        const isVehicle = this.isInVehicle;
+        // ---------------------------------------------------------------
 
-        // Mettre à jour les statistiques pour les agents en attente de chemin
+        // --- Mettre à jour stats AVANT les vérifications de managers ---
         if (agentManager?.stats) {
-            const dayDurationMs = this.experience.world?.environment?.dayDurationMs || (24 * 60 * 60 * 1000);
-            const currentHour = Math.floor((currentGameTimeForStats % dayDurationMs) / (dayDurationMs / 24));
-            
-            if (this.currentState === AgentState.REQUESTING_PATH_FOR_WORK) {
-                agentManager.stats.requestingPathForWorkByHour[currentHour] = (agentManager.stats.requestingPathForWorkByHour[currentHour] || 0) + 1;
-            } else if (this.currentState === AgentState.REQUESTING_PATH_FOR_HOME) {
-                agentManager.stats.requestingPathForHomeByHour[currentHour] = (agentManager.stats.requestingPathForHomeByHour[currentHour] || 0) + 1;
-            }
-        }
+             const dayDurationMs = this.experience.world?.environment?.dayDurationMs || (24*60*60*1000);
+             const currentHour = Math.floor((currentGameTimeForStats % dayDurationMs) / (dayDurationMs/24));
+             if (requestingState === AgentState.REQUESTING_PATH_FOR_WORK) {
+                  agentManager.stats.requestingPathForWorkByHour[currentHour] = (agentManager.stats.requestingPathForWorkByHour[currentHour] || 0) + 1;
+             } else if (requestingState === AgentState.REQUESTING_PATH_FOR_HOME) {
+                 agentManager.stats.requestingPathForHomeByHour[currentHour] = (agentManager.stats.requestingPathForHomeByHour[currentHour] || 0) + 1;
+             }
+             // Ajouter stats pour weekend si besoin
+         }
+        // -----------------------------------------------------------
 
-        // Vérifier si les managers nécessaires sont prêts
-        if (!agentManager || !agentManager.isWorkerInitialized) {
-            console.error(`Agent ${this.id}: AgentManager ou Worker non prêt pour requête path.`);
-            this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+        // --- Vérifications ---
+        if (!navigationManager || !agentManager || !agentManager.isWorkerInitialized) {
+            console.error(`Agent ${this.id}: Managers non prêts pour requête path (Nav: ${!!navigationManager}, AgentMgr: ${!!agentManager}, WorkerInit: ${agentManager?.isWorkerInitialized}).`);
+            this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE; // Fallback état stable
             this.isVisible = false;
+            this._pathRequestTimeout = null; // Clear timeout
             return;
         }
 
-        // Déterminer si l'agent est en voiture
-        const isVehicle = this.isInVehicle || this.hasVehicle || false;
-        console.log(`Agent ${this.id}: Mode de transport: ${isVehicle ? 'véhicule' : 'piéton'}`);
-
-        // Obtenir le bon graphe de navigation et pathfinder en fonction du mode de transport
-        const navigationGraph = cityManager.navigationManager.getNavigationGraph(isVehicle);
-        const pathfinder = cityManager.navigationManager.getPathfinder(isVehicle);
-
-        if (!navigationGraph || !pathfinder) {
-            console.error(`Agent ${this.id}: NavigationGraph ou Pathfinder non disponible pour le mode ${isVehicle ? 'véhicule' : 'piéton'}.`);
+        const navigationGraph = navigationManager.getNavigationGraph(isVehicle); // <-- Utiliser isVehicle
+        if (!navigationGraph) {
+            console.error(`Agent ${this.id}: NavigationGraph non disponible pour mode ${isVehicle ? 'véhicule' : 'piéton'}.`);
             this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
             this.isVisible = false;
+            this._pathRequestTimeout = null; // Clear timeout
             return;
         }
 
-        // Déterminer les noeuds de grille de départ et d'arrivée
-        const startNode = startNodeOverride !== null ? startNodeOverride : navigationGraph.getClosestWalkableNode(startPosWorld);
-        const endNode = endNodeOverride !== null ? endNodeOverride : navigationGraph.getClosestWalkableNode(endPosWorld);
+        // --- Calcul des nœuds ---
+        // Si les positions monde sont null (possible si on fournit directement les nœuds),
+        // on essaie de les déduire des nœuds, sinon on ne peut pas utiliser getClosestWalkableNode.
+        let effectiveStartPos = startPosWorld;
+        let effectiveEndPos = endPosWorld;
+        if (!effectiveStartPos && startNodeOverride) effectiveStartPos = navigationGraph.gridToWorld(startNodeOverride.x, startNodeOverride.y);
+        if (!effectiveEndPos && endNodeOverride) effectiveEndPos = navigationGraph.gridToWorld(endNodeOverride.x, endNodeOverride.y);
 
-        // --- AJOUT: Vérifier si les noeuds ont été trouvés (surtout pour RoadNavGraph qui peut retourner null) ---
+        // Utiliser les overrides s'ils sont fournis, sinon calculer depuis les positions monde.
+        // Important: s'assurer que les positions monde sont valides si les overrides sont null.
+        const startNode = startNodeOverride ?? (effectiveStartPos ? navigationGraph.getClosestWalkableNode(effectiveStartPos) : null);
+        const endNode = endNodeOverride ?? (effectiveEndPos ? navigationGraph.getClosestWalkableNode(effectiveEndPos) : null);
+
+        // --- Vérification finale des nœuds ---
         if (!startNode || !endNode) {
-            console.error(`Agent ${this.id} (${isVehicle ? 'véhicule' : 'piéton'}): Impossible de trouver un nœud de départ ou d'arrivée valide sur la NavGrid appropriée. StartNode: ${JSON.stringify(startNode)}, EndNode: ${JSON.stringify(endNode)}. Retour à l'état stable.`);
-            // Revenir à un état stable (AT_HOME ou AT_WORK selon le contexte)
-            if (this.currentState === AgentState.REQUESTING_PATH_FOR_WORK) {
-                 this.currentState = AgentState.AT_HOME;
-            } else if (this.currentState === AgentState.REQUESTING_PATH_FOR_HOME) {
-                 this.currentState = AgentState.AT_WORK; 
-            } else {
-                 // Fallback générique si l'état n'est pas clair
-                 this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
-            }
-            this.isVisible = false;
-            return; // Arrêter la requête de chemin
-        }
-        // --- FIN AJOUT ---
-
-        // --- AJOUT: Visualisation Debug Start/End Nodes ---
-        if (this.experience.world && startNode && endNode) {
-            const startWorldPos = navigationGraph.gridToWorld(startNode.x, startNode.y);
-            const endWorldPos = navigationGraph.gridToWorld(endNode.x, endNode.y);
-            this.experience.world.showStartNodeDebugSphere(startWorldPos);
-            this.experience.world.showEndNodeDebugSphere(endWorldPos);
-        }
-        // --- FIN AJOUT ---
-
-        // Vérifier si les noeuds ont été trouvés (ancienne vérif, maintenant redondante mais gardée pour sécurité)
-        if (startNode && endNode) {
-            console.log(`Agent ${this.id}: Préparation envoi Worker. StartNode:`, JSON.stringify(startNode), `EndNode:`, JSON.stringify(endNode));
-            
-            // Vérification supplémentaire du format
-            if (typeof startNode.x !== 'number' || !Number.isInteger(startNode.x) || startNode.x < 0 ||
-                typeof startNode.y !== 'number' || !Number.isInteger(startNode.y) || startNode.y < 0 ||
-                typeof endNode.x !== 'number' || !Number.isInteger(endNode.x) || endNode.x < 0 ||
-                typeof endNode.y !== 'number' || !Number.isInteger(endNode.y) || endNode.y < 0)
-            {
-                console.error(`Agent ${this.id}: ERREUR FORMAT NOEUDS AVANT ENVOI! Start:`, startNode, "End:", endNode);
-                this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
-                this.isVisible = false;
-                return;
-            }
-
-            // Envoyer la requête au worker via AgentManager
-            agentManager.requestPathFromWorker(this.id, startNode, endNode, isVehicle); // <-- AJOUT isVehicle
-        } else {
-            console.error(`Agent ${this.id}: Noeuds de départ/arrivée non trouvés ou invalides pour requête path. StartNode:`, startNode, "EndNode:", endNode);
+            console.error(`Agent ${this.id} (${isVehicle ? 'véhicule' : 'piéton'}): Nœud départ ou arrivée non trouvé/valide. StartNode: ${JSON.stringify(startNode)}, EndNode: ${JSON.stringify(endNode)}. Positions: StartW=${startPosWorld ? 'OK' : 'null'}, EndW=${endPosWorld ? 'OK' : 'null'}. Overrides: StartO=${startNodeOverride ? 'OK' : 'null'}, EndO=${endNodeOverride ? 'OK' : 'null'}. Fallback état stable.`);
             this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
             this.isVisible = false;
+            this._pathRequestTimeout = null; // Clear timeout
+            return;
         }
+
+        // --- Visualisation Debug ---
+        if (this.experience.world && startNode && endNode) {
+            const startWorldPosViz = navigationGraph.gridToWorld(startNode.x, startNode.y);
+            const endWorldPosViz = navigationGraph.gridToWorld(endNode.x, endNode.y);
+            this.experience.world.showStartNodeDebugSphere(startWorldPosViz);
+            this.experience.world.showEndNodeDebugSphere(endWorldPosViz);
+        }
+        // --- Fin Visualisation ---
+
+        // --- Vérification Format Nœuds (sécurité) ---
+        if (typeof startNode.x !== 'number' || !Number.isInteger(startNode.x) || startNode.x < 0 ||
+            typeof startNode.y !== 'number' || !Number.isInteger(startNode.y) || startNode.y < 0 ||
+            typeof endNode.x !== 'number' || !Number.isInteger(endNode.x) || endNode.x < 0 ||
+            typeof endNode.y !== 'number' || !Number.isInteger(endNode.y) || endNode.y < 0)
+        {
+            console.error(`Agent ${this.id}: FORMAT NOEUDS INVALIDE AVANT ENVOI WORKER! Start:`, startNode, "End:", endNode);
+            this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+            this.isVisible = false;
+             this._pathRequestTimeout = null; // Clear timeout
+            return;
+        }
+        // --- Fin Vérification Format ---
+
+        // --- Envoi Requête Worker ---
+        console.log(`Agent ${this.id}: Envoi requête path au worker. Mode: ${isVehicle ? 'Véhicule' : 'Piéton'}. StartNode: (${startNode.x},${startNode.y}), EndNode: (${endNode.x},${endNode.y}). NextState: ${nextStateIfSuccess}`);
+        agentManager.requestPathFromWorker(this.id, startNode, endNode, isVehicle); // <-- Passer isVehicle
     }
 
+	/**
+	 * Définit le chemin à suivre pour l'agent et met à jour son état.
+	 * Appelée par AgentManager lorsque le worker renvoie un résultat de pathfinding.
+	 * @param {Array<THREE.Vector3> | null} pathPoints - Tableau de points du chemin en coordonnées monde, ou null si échec.
+	 * @param {number} pathLengthWorld - Longueur calculée du chemin en unités monde.
+	 */
 	setPath(pathPoints, pathLengthWorld) {
-        // --- MODIFICATION: Mémoriser l'état au début de l'appel --- 
-        const currentStateAtCall = this.currentState;
-        const wasRequestingWork = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_WORK;
-        const wasRequestingHome = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_HOME;
-        const wasRequestingWeekendWalk = currentStateAtCall === AgentState.WEEKEND_WALK_REQUESTING_PATH;
-        
-        // Mémoriser l'état suivant visé pour le cas de retour au trottoir
-        const targetStateFromWeekendWalk = this.targetStateFromWeekendWalk;
-        // --- FIN MODIFICATION ---
+		// LOG A: Entrée dans la fonction
+		console.log(`[Agent ${this.id} DEBUG] Entrée dans setPath. État actuel: ${this.currentState}. Longueur reçue: ${pathLengthWorld}`);
 
-        // --- Cas 1: Chemin Valide Reçu ---
-        if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 0 && pathLengthWorld > 0.1) {
-            // Si nous étions en train de retourner à la maison depuis le trottoir après une promenade,
-            // spécifiquement vérifier que nous commençons depuis la position actuelle
-            if (wasRequestingHome && this.currentState === AgentState.REQUESTING_PATH_FOR_HOME 
-                && this.weekendWalkEndTime > 0) {
-                
-                // Vérifier les points du chemin pour éviter la téléportation
-                if (pathPoints.length > 0) {
-                    const startPoint = pathPoints[0];
-                    const distanceToStartSq = this.position.distanceToSquared(startPoint);
-                    const distanceToStart = Math.sqrt(distanceToStartSq);
-                    
-                    // Si le point de départ du chemin est trop loin de la position actuelle
-                    if (distanceToStart > 5.0) {
-                        console.warn(`Agent ${this.id}: Téléportation détectée! Distance au début du chemin: ${distanceToStart.toFixed(2)}m. Position actuelle: [${this.position.x.toFixed(2)}, ${this.position.z.toFixed(2)}], début du chemin: [${startPoint.x.toFixed(2)}, ${startPoint.z.toFixed(2)}]`);
-                        
-                        // Correction: remplacer le premier point du chemin par la position actuelle
-                        pathPoints[0] = this.position.clone();
-                        console.log(`Agent ${this.id}: Premier point du chemin corrigé pour éviter la téléportation`);
-                    } else {
-                        console.log(`Agent ${this.id}: Chemin pour rentrer à la maison commence correctement à partir de la position actuelle, distance = ${distanceToStart.toFixed(2)}m`);
-                    }
-                }
-            }
+		const currentStateAtCall = this.currentState;
+		const wasRequestingWork = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_WORK;
+		const wasRequestingHome = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_HOME;
+		const wasRequestingWeekendWalk = currentStateAtCall === AgentState.WEEKEND_WALK_REQUESTING_PATH;
+		const targetStateFromWeekendWalk = this.targetStateFromWeekendWalk; // Récupérer l'état cible mémorisé
 
-            this.currentPathPoints = pathPoints.map(p => p.clone()); 
-            this.currentPathLengthWorld = pathLengthWorld;           
+		// --- Cas 1: Chemin Valide Reçu ---
+		// Condition modifiée pour accepter longueur 0 si le chemin a 1 seul point (départ=arrivée)
+		if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 0 && (pathPoints.length === 1 || pathLengthWorld > 0.1)) {
+			// LOG B: Chemin considéré comme valide
+			console.log(`[Agent ${this.id} DEBUG] setPath: Chemin VALIDE reçu (${pathPoints.length} points, longueur ${pathLengthWorld.toFixed(2)}).`);
 
-            // Calculer la durée du trajet en temps de jeu basé sur la longueur et la vitesse de base
-            const travelSecondsGame = pathLengthWorld / this.agentBaseSpeed;
-            const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
+			// Vérification anti-téléportation (spécifique au retour de promenade)
+			if (currentStateAtCall === AgentState.REQUESTING_PATH_FOR_HOME && this.weekendWalkEndTime > 0 && pathPoints.length > 0) {
+				const startPoint = pathPoints[0];
+				const distanceToStart = this.position.distanceTo(startPoint);
+				if (distanceToStart > 5.0) {
+					console.warn(`Agent ${this.id}: Correction téléportation! Distance au début chemin retour maison: ${distanceToStart.toFixed(2)}m. Remplacement par position actuelle.`);
+					pathPoints[0] = this.position.clone();
+					// Recalculer la longueur pourrait être nécessaire si la correction est significative,
+					// mais pour l'instant on garde la longueur calculée par le worker.
+				}
+			}
 
-            if (dayDurationMs > 0) {
-                // Convertir les secondes de jeu en millisecondes de jeu
-                const travelRatioOfDay = travelSecondsGame / (dayDurationMs / 1000); // Ratio du trajet par rapport à une journée en secondes
-                this.calculatedTravelDurationGame = travelRatioOfDay * dayDurationMs; // Durée en ms de jeu
-            } else {
-                // Fallback si la durée du jour est invalide (ne devrait pas arriver si l'env est prêt)
-                console.error(`Agent ${this.id}: dayDurationMs invalide (${dayDurationMs}) lors du calcul de la durée du trajet. Utilisation d'un fallback.`);
-                this.calculatedTravelDurationGame = 10 * 60 * 1000; // Fallback (ex: 10 minutes jeu)
-                this.currentPathLengthWorld = 0; // Considérer longueur comme invalide si durée fallback
-            }
+			// --- Assignation des données du chemin ---
+			this.currentPathPoints = pathPoints.map(p => p.clone());
+			this.currentPathLengthWorld = pathLengthWorld;
 
-            // --- MODIFICATION: Gérer correctement le retour au trottoir ---
-            if (wasRequestingWork) {
-                this.currentState = AgentState.READY_TO_LEAVE_FOR_WORK;
-            } else if (wasRequestingHome) {
-                this.currentState = AgentState.READY_TO_LEAVE_FOR_HOME;
-            } else if (wasRequestingWeekendWalk) {
-                // Si nous sommes en train de retourner au trottoir depuis le parc
-                if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
-                    console.log(`Agent ${this.id}: Chemin reçu pour retourner au trottoir depuis le parc, longueur = ${pathLengthWorld.toFixed(2)}m`);
-                    this.currentState = AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK;
-                } else {
-                    this.currentState = AgentState.WEEKEND_WALK_READY;
-                }
-            } else {
-                // Path reçu alors qu'on n'était pas en REQUESTING 
-                // C'est normal à cause du timing. On a mis à jour les données du chemin,
-                // mais on ne change pas l'état actuel.
-            }
-            // --- FIN MODIFICATION ---
+			// --- Calcul durée trajet ---
+			const travelSecondsGame = pathLengthWorld / this.agentBaseSpeed;
+			const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
+			if (dayDurationMs > 0) {
+				const travelRatioOfDay = travelSecondsGame / (dayDurationMs / 1000);
+				this.calculatedTravelDurationGame = travelRatioOfDay * dayDurationMs;
+			} else {
+				console.error(`Agent ${this.id}: dayDurationMs invalide (${dayDurationMs}) pour calcul durée trajet. Fallback.`);
+				this.calculatedTravelDurationGame = 10 * 60 * 1000; // 10 mins jeu
+				this.currentPathLengthWorld = 0; // Longueur invalide dans ce cas
+			}
 
+			// --- Transition d'état ---
+			let nextState = this.currentState; // Pour logger l'état final
+			if (wasRequestingWork) {
+				// Si on était en requête pour le travail, on est prêt à partir (en voiture ou à pied)
+				nextState = this.isInVehicle ? AgentState.READY_TO_LEAVE_FOR_WORK : AgentState.READY_TO_LEAVE_FOR_WORK; // Dans les 2 cas, on est prêt
+			} else if (wasRequestingHome) {
+				// Si on était en requête pour la maison, on est prêt à partir (en voiture ou à pied)
+				nextState = this.isInVehicle ? AgentState.READY_TO_LEAVE_FOR_HOME : AgentState.READY_TO_LEAVE_FOR_HOME; // Dans les 2 cas, on est prêt
+			} else if (wasRequestingWeekendWalk) {
+				// Gérer le cas spécifique du retour du parc
+				if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+					nextState = AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK;
+				} else {
+					nextState = AgentState.WEEKEND_WALK_READY;
+				}
+			} else {
+				console.warn(`[Agent ${this.id} WARN] setPath: Chemin valide reçu mais état initial (${currentStateAtCall}) n'était pas REQUESTING_... Pas de changement d'état forcé.`);
+				nextState = this.currentState; // Garder l'état actuel
+			}
+			// LOG C: Log du changement d'état
+			console.log(`[Agent ${this.id} DEBUG] setPath: Changement d'état de ${currentStateAtCall} vers ${nextState}`);
+			this.currentState = nextState;
+
+			// --- Annulation du Timeout ---
+			// LOG D: Log avant annulation
+			console.log(`[Agent ${this.id} DEBUG] setPath (succès): Annulation du _pathRequestTimeout (était ${this._pathRequestTimeout}).`);
+			this._pathRequestTimeout = null; // Annuler le timer car le chemin est reçu
+
+		}
+		// --- Cas 2: Chemin Invalide ou Échec Pathfinding ---
+		else {
+			// LOG E: Log chemin invalide
+			console.warn(`[Agent ${this.id} DEBUG] setPath: Chemin INVALIDE reçu (path: ${pathPoints ? 'Array['+pathPoints.length+']' : 'null'}, length: ${pathLengthWorld}).`);
+
+			// --- Réinitialisation des données de chemin ---
+			this.currentPathPoints = null;
+			this.calculatedTravelDurationGame = 0;
+			this.currentPathLengthWorld = 0;
+			this.departureTimeGame = -1;
+			this.arrivalTmeGame = -1;
+			this.currentPathIndexVisual = 0;
+			this.visualInterpolationProgress = 0;
+
+			// --- Détermination de l'état de repli ---
+			let fallbackState = this.currentState; // Pour logger l'état final
+			if (wasRequestingWork) {
+				fallbackState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+				console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding WORK échoué, retour à ${fallbackState}.`);
+			} else if (wasRequestingHome) {
+				fallbackState = this.workPosition ? AgentState.AT_WORK : AgentState.IDLE;
+				console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding HOME échoué, retour à ${fallbackState}.`);
+			} else if (wasRequestingWeekendWalk) {
+				if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+					console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding RETOUR TROTTOIR échoué. Tentative téléportation...`);
+					if (this.parkSidewalkPosition) {
+						this.position.copy(this.parkSidewalkPosition).setY(this.yOffset);
+						this.isInsidePark = false;
+						console.log(`[Agent ${this.id}] Téléporté au trottoir. Redemande chemin maison.`);
+						// Redemander chemin maison immédiatement
+						fallbackState = AgentState.REQUESTING_PATH_FOR_HOME; // Nouvel état
+						this._pathRequestTimeout = this.experience.time.elapsed; // Relancer timeout
+						const currentGridNode = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(false)?.getClosestWalkableNode(this.position);
+						this.requestPath(this.position, this.homePosition, currentGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME, this.experience.time.elapsed);
+						// IMPORTANT: On sort de setPath ici car une nouvelle requête est lancée
+						console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après requête retour maison depuis trottoir.`);
+						return;
+					} else {
+						console.warn(`[Agent ${this.id} WARN] setPath: Position trottoir inconnue pour fallback retour. Forçage maison.`);
+						this.forceReturnHome(this.experience.time.elapsed); // Forcer retour direct
+						fallbackState = AgentState.AT_HOME; // État final après forceReturnHome
+					}
+				} else {
+					console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding PROMENADE échoué. Tentative nouvelle destination...`);
+					this._findRandomWalkDestination(this.experience.time.elapsed); // Cherche une autre destination
+					// L'état sera changé par _findRandomWalkDestination si elle réussit
+					fallbackState = this.currentState; // Garder l'état actuel en attendant
+				}
+			} else {
+				console.warn(`[Agent ${this.id} WARN] setPath: Chemin invalide reçu mais état initial (${currentStateAtCall}) n'était pas REQUESTING_... Pas de changement d'état forcé.`);
+				fallbackState = this.currentState;
+			}
+			this.currentState = fallbackState;
+			this.isVisible = false; // Cacher l'agent en cas d'échec pour éviter qu'il reste bloqué visiblement
+
+			// --- Annulation du Timeout ---
+			// LOG F: Log annulation sur échec
+			console.log(`[Agent ${this.id} DEBUG] setPath (échec): Annulation du _pathRequestTimeout (était ${this._pathRequestTimeout}).`);
+			this._pathRequestTimeout = null; // Annuler le timer même en cas d'échec
+		}
+
+		// LOG G: Sortie de fonction
+		console.log(`[Agent ${this.id} DEBUG] Sortie de setPath. État final: ${this.currentState}`);
+	}
+
+	/**
+     * Met à jour l'état logique de l'agent (décisions, demandes de chemin).
+     * @param {number} deltaTime - Temps écoulé depuis la dernière frame (non utilisé ici, mais potentiellement utile).
+     * @param {number} currentHour - Heure actuelle du jeu (0-23).
+     * @param {number} currentGameTime - Temps total écoulé dans le jeu (ms).
+     */
+    updateState(deltaTime, currentHour, currentGameTime) {
+		
+        // --- Section de débogage pour start/end aléatoires (Véhicule) ---
+        const DEBUG_RANDOM_PATH = true; // Mettez à true pour activer le debug
+
+        if (DEBUG_RANDOM_PATH && this.hasVehicle && this.currentState === AgentState.AT_HOME) {
+            console.log(`[Debug Agent ${this.id}] Tentative de path aléatoire (Véhicule)...`);
+
+		   // ***** AJOUTER CETTE VÉRIFICATION *****
+          const agentManagerForDebugCheck = this.experience.world?.agentManager;
+		  const carManager = this.experience.world?.carManager; // Récupérer la référence au CarManager
+          if (!agentManagerForDebugCheck || !agentManagerForDebugCheck.isWorkerInitialized) {
+               // Log différent pour indiquer que c'est le debug qui attend
+               console.log(`[Debug Agent ${this.id}] Worker non prêt pour path aléatoire (attente init...).`);
+               // NE PAS appeler requestPath si le worker n'est pas prêt.
+               // Sortir de cette section de debug pour cette frame.
+               // La logique normale de l'agent (si elle existe en dehors du debug) continuera.
+               // Si seule la logique debug existe dans AT_HOME, l'agent attendra simplement.
+          } else {
+
+				const navigationManager = this.experience.world?.cityManager?.navigationManager;
+				const roadNavGraph = navigationManager?.getNavigationGraph(true); // true pour véhicule
+
+				if (roadNavGraph && typeof roadNavGraph.getRandomWalkableNode === 'function') { // Vérifier si la fonction existe
+					const randomStartNode = roadNavGraph.getRandomWalkableNode();
+					const randomEndNode = roadNavGraph.getRandomWalkableNode();
+
+					if (randomStartNode && randomEndNode &&
+						(randomStartNode.x !== randomEndNode.x || randomStartNode.y !== randomEndNode.y))
+					{
+						const startPosWorld = roadNavGraph.gridToWorld(randomStartNode.x, randomStartNode.y);
+						const endPosWorld = roadNavGraph.gridToWorld(randomEndNode.x, randomEndNode.y);
+
+						console.log(`[Debug Agent ${this.id}] Points routiers aléatoires trouvés: Start(${randomStartNode.x},${randomStartNode.y}) -> End(${randomEndNode.x},${randomEndNode.y})`);
+
+						// --- Visualisation Debug ---
+						if (this.experience.world) {
+							this.experience.world.showStartNodeDebugSphere(startPosWorld); // Sphère bleue
+							this.experience.world.showEndNodeDebugSphere(endPosWorld);     // Sphère verte
+						}
+						// -------------------------
+
+						// ***** VÉRIFIER/CRÉER LA VOITURE AVANT LA REQUÊTE DE CHEMIN *****
+                      let canProceedWithVehicle = false;
+                      if (carManager) {
+                          if (!carManager.hasCarForAgent(this.id)) {
+                              // Déterminer une position de départ sensée pour la voiture en mode debug
+                              // Utiliser vehicleHomePosition si défini, sinon homePosition, sinon la position de départ aléatoire
+                              const carStartPosition = this.vehicleHomePosition || this.homePosition || startPosWorld;
+                              const carTargetPosition = endPosWorld; // Viser la destination aléatoire
+                              const car = carManager.createCarForAgent(this, carStartPosition, carTargetPosition);
+                              if (car) {
+                                  console.log(`[Debug Agent ${this.id}] Voiture créée pour path aléatoire.`);
+                                  canProceedWithVehicle = true;
+                              } else {
+                                  console.warn(`[Debug Agent ${this.id}] Échec création voiture pour path aléatoire.`);
+                                  // Optionnel : forcer en mode piéton ici? Ou simplement annuler.
+                              }
+                          } else {
+                              console.log(`[Debug Agent ${this.id}] Voiture déjà existante pour path aléatoire.`);
+                              canProceedWithVehicle = true; // L'agent a déjà une voiture
+                          }
+                      } else {
+                           console.warn(`[Debug Agent ${this.id}] CarManager non trouvé, impossible de créer/vérifier voiture.`);
+                      }
+                      // *****-----------------------------------------------*****
+
+                      // Continuer SEULEMENT si la voiture existe ou a été créée
+                      if (canProceedWithVehicle) {
+						// Forcer l'état pour demander le chemin pour véhicule
+						const nextStateIfSuccess = AgentState.DRIVING_TO_WORK; // Ou un état dédié au debug
+						this.isInVehicle = true; // Important: Indiquer qu'on demande un chemin véhicule
+						this.currentState = AgentState.REQUESTING_PATH_FOR_WORK; // Ou un état dédié
+						this.requestPath(
+							null,                  // startPosWorld (non nécessaire si nœud fourni)
+							null,                  // endPosWorld (non nécessaire si nœud fourni)
+							randomStartNode,       // Nœud de départ
+							randomEndNode,         // Nœud d'arrivée
+							nextStateIfSuccess,
+							currentGameTime
+						);
+						console.log(`[Debug Agent ${this.id}] Requête de chemin aléatoire véhicule envoyée.`);
+						// Empêcher l'exécution de la logique de départ normale pour cette frame
+						return;
+
+					} else {
+					     // Si la voiture n'a pas pu être créée/vérifiée, annuler la tentative de path aléatoire
+					     console.warn(`[Debug Agent ${this.id}] Impossible de procéder avec le véhicule, annulation requête path aléatoire.`);
+					     // L'agent restera dans AT_HOME pour cette frame
+					}
+
+					} else {
+						console.warn(`[Debug Agent ${this.id}] Impossible de trouver des points routiers aléatoires valides ou identiques.`);
+					}
+				} else {
+					console.warn(`[Debug Agent ${this.id}] RoadNavigationGraph non trouvé ou getRandomWalkableNode n'existe pas.`);
+				}
+			}
         }
-        // --- Cas 2: Chemin Invalide ou Échec Pathfinding ---
-        else {
-            console.warn(`Agent ${this.id}: setPath reçu avec chemin invalide (path: ${pathPoints ? 'Array['+pathPoints.length+']' : 'null'}) ou longueur ${pathLengthWorld}.`);
+        // --- Fin Section Debug ---
 
-            this.currentPathPoints = null;
-            this.calculatedTravelDurationGame = 0;
-            this.currentPathLengthWorld = 0;
-            this.departureTimeGame = -1;
-            this.arrivalTmeGame = -1;
 
-            // --- MODIFICATION: Utiliser les états mémorisés pour gérer l'échec --- 
-            if (wasRequestingHome) { 
-                this.currentState = AgentState.AT_WORK;
-                console.warn(`Agent ${this.id}: Pathfinding HOME failed, returning to AT_WORK.`);
-                this.isVisible = false; 
-            } else if (wasRequestingWork) { 
-                this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
-                console.warn(`Agent ${this.id}: Pathfinding TO WORK failed, returning to ${this.currentState}.`);
-                this.isVisible = false; 
-            } 
-            else if (wasRequestingWeekendWalk) { 
-                if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
-                    // En cas d'échec du retour au trottoir, essayer une téléportation propre au trottoir
-                    console.warn(`Agent ${this.id}: Échec du chemin pour retourner au trottoir, téléportation directe`);
-                    if (this.parkSidewalkPosition) {
-                        // Placer directement l'agent sur le trottoir
-                        this.position.copy(this.parkSidewalkPosition);
-                        this.position.y += this.yOffset;
-                        this.isInsidePark = false;
-                        
-                        // Maintenant demander un chemin vers la maison depuis cette position
-                        const navGraph = this.experience.world?.cityManager?.getNavigationGraph();
-                        const currentGridNode = navGraph?.getClosestWalkableNode(this.position);
-                        
-                        console.log(`Agent ${this.id}: Téléporté au trottoir, demande de chemin vers la maison`);
-                        this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
-                        
-                        // Marquer l'heure de début de la demande de chemin pour le mécanisme de sécurité
-                        this._pathRequestTimeout = this.experience.time.elapsed;
-                        
-                        // Demander directement le chemin sans setTimeout
-                        if (this.homePosition && this.homeGridNode) {
-                            this.requestPath(
-                                this.position.clone(),
-                                this.homePosition,
-                                currentGridNode,
-                                this.homeGridNode,
-                                AgentState.READY_TO_LEAVE_FOR_HOME,
-                                this.experience.time.elapsed
-                            );
-                        } else {
-                            // Si on n'a pas de position de maison valide, forcer le retour
-                            this.forceReturnHome(this.experience.time.elapsed);
-                        }
-                    } else {
-                        // Si on n'a pas de position du trottoir, aller directement à la maison
-                        console.warn(`Agent ${this.id}: Position du trottoir inconnue, retour direct à la maison`);
-                        this.forceReturnHome(this.experience.time.elapsed);
-                    }
-                } else {
-                    console.warn(`Agent ${this.id}: Pathfinding WEEKEND WALK failed, finding a new destination...`);
-                    this._findRandomWalkDestination(); // Tenter de trouver une nouvelle destination
-                }
-            } else { 
-                 console.warn(`Agent ${this.id}: Invalid path received while in state ${currentStateAtCall}. Ignored.`);
-            }
-            // --- FIN MODIFICATION ---
-        }
-    } // Fin setPath
-
-	updateState(deltaTime, currentHour, currentGameTime) {
-        // Avant d'entrer dans le switch, vérifier si un agent est bloqué
-        if (this._pathRequestTimeout && currentGameTime - this._pathRequestTimeout > 10000) {
-            // Si plus de 10 secondes se sont écoulées depuis la demande de chemin, forcer le retour
+        // --- Logique normale ---
+        if (this._pathRequestTimeout && currentGameTime - this._pathRequestTimeout > 100000) {
             console.warn(`Agent ${this.id}: Délai dépassé pour la demande de chemin (${(currentGameTime - this._pathRequestTimeout).toFixed(0)}ms), forçage du retour à la maison`);
             this.forceReturnHome(currentGameTime);
             this._pathRequestTimeout = null;
             return;
         }
-        
-        // Si l'agent est dans l'état WEEKEND_WALK_RETURNING_TO_SIDEWALK depuis trop longtemps
+
         if (this.currentState === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
             if (!this._stateStartTime) {
                 this._stateStartTime = currentGameTime;
-            } else if (currentGameTime - this._stateStartTime > 30000) { // 30 secondes max dans cet état
+            } else if (currentGameTime - this._stateStartTime > 30000) {
                 console.warn(`Agent ${this.id}: Bloqué dans l'état WEEKEND_WALK_RETURNING_TO_SIDEWALK pendant ${(currentGameTime - this._stateStartTime).toFixed(0)}ms, forçage du retour à la maison`);
                 this.forceReturnHome(currentGameTime);
                 this._stateStartTime = null;
                 return;
             }
         } else {
-            this._stateStartTime = null; // Réinitialiser le timer si l'état change
+            this._stateStartTime = null;
         }
-        
-        // Récupérer les heures de départ planifiées et la durée du jour
+
         const departWorkTime = this.exactWorkDepartureTimeGame;
         const departHomeTime = this.exactHomeDepartureTimeGame;
         const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
 
-        // Vérification initiale de la validité des temps planifiés et de l'environnement
         if (!dayDurationMs || dayDurationMs <= 0 || departWorkTime < 0 || departHomeTime < 0 ) {
             if (this.currentState !== AgentState.IDLE) {
-                // console.warn(`Agent ${this.id}: Temps planifiés invalides (${departWorkTime}, ${departHomeTime}) ou environnement non prêt (dayDur: ${dayDurationMs}), passage en IDLE.`);
                 this.currentState = AgentState.IDLE;
                 this.isVisible = false;
             }
-            return; // Impossible de continuer sans planification valide
+            return;
         }
 
-        // Initialisation paresseuse des temps d'arrivée si nécessaire (pour le premier cycle)
         if (this.lastArrivalTimeHome === undefined) this.lastArrivalTimeHome = 0;
-        if (this.lastArrivalTimeWork === undefined) this.lastArrivalTimeWork = -1; // Pas encore arrivé au travail initialement
+        if (this.lastArrivalTimeWork === undefined) this.lastArrivalTimeWork = -1;
         if (this.requestedPathForDepartureTime === undefined) this.requestedPathForDepartureTime = -1;
 
-        // Récupérer la date courante du jeu
         const environment = this.experience.world?.environment;
         const calendarDate = environment?.getCurrentCalendarDate ? environment.getCurrentCalendarDate() : null;
 
-        // Enregistrer cet agent dans la stratégie de promenade du weekend si nécessaire
-        if (calendarDate && ["Samedi", "Dimanche"].includes(calendarDate.jourSemaine) && 
-            this.weekendWalkStrategy) {
+        // --- Stratégie Weekend ---
+        let shouldStartWeekendWalk = false;
+        if (calendarDate && ["Samedi", "Dimanche"].includes(calendarDate.jourSemaine) && this.weekendWalkStrategy) {
             this.weekendWalkStrategy.registerAgent(this.id, calendarDate);
+            // Vérifier si l'agent doit commencer sa promenade MAINTENANT
+            shouldStartWeekendWalk = this.weekendWalkStrategy.shouldWalkNow(this.id, calendarDate, currentHour);
+            if (shouldStartWeekendWalk) {
+                console.log(`Agent ${this.id}: Ordre de promenade weekend reçu via stratégie!`);
+            }
         }
-        
-        // Référence au CarManager
+        // --- Fin Stratégie Weekend ---
+
         const carManager = this.experience.world?.carManager;
 
-        // --- Machine d'état ---
         switch (this.currentState) {
             case AgentState.AT_HOME:
-                this.isVisible = false; // Assurer invisibilité
+                this.isVisible = false;
+                const shouldWorkToday = this.workScheduleStrategy ? this.workScheduleStrategy.shouldWorkToday(calendarDate) : false;
 
-                // --- Code existant pour quitter la maison pour le travail ---
-                // Vérifier si c'est l'heure de demander un chemin vers le travail
-                if (this.workPosition && 
-                    currentGameTime >= this.prepareWorkDepartureTimeGame && 
-                    this.requestedPathForDepartureTime !== currentGameTime && 
-                    calendarDate && !["Samedi", "Dimanche"].includes(calendarDate.jourSemaine)) {
-                    
-                    // Code de transition vers le travail, modifié pour gérer la voiture
-                    
-                    // Si l'agent utilise sa voiture pour aller au travail
-                    if (this.hasVehicle && carManager) {
-                        console.log(`Agent ${this.id}: Préparation départ pour le travail avec voiture`);
-                        
-                        // Créer une voiture pour cet agent
+                // 1. Priorité : Départ travail (si jour de travail et heure)
+                if (this.workPosition && shouldWorkToday &&
+                    currentGameTime >= this.prepareWorkDepartureTimeGame &&
+                    this.requestedPathForDepartureTime !== currentGameTime)
+                {
+                    this.requestedPathForDepartureTime = currentGameTime;
+                    const targetNode = this.workGridNode;
+                    const startNode = this.homeGridNode;
+                    this.isInVehicle = this.hasVehicle; // Définir le mode avant la requête
+
+                    console.log(`Agent ${this.id}: Préparation départ pour travail. Mode: ${this.isInVehicle ? 'Voiture' : 'Pied'}.`);
+
+                    if (this.isInVehicle && carManager) {
                         if (!carManager.hasCarForAgent(this.id)) {
-                            // La voiture apparaît au début du chemin
-                            const car = carManager.createCarForAgent(
-                                this,
-                                this.vehicleHomePosition || this.homePosition,
-                                this.workPosition
-                            );
-                            
-                            if (car) {
-                                // L'agent devient visible brièvement pour sortir de la maison
-                                this.isVisible = true;
-                                
-                                // Demander un chemin pour la voiture
-                                this.requestedPathForDepartureTime = currentGameTime;
-                                this.currentState = AgentState.REQUESTING_PATH_FOR_WORK;
-                                
-                                // Demander le même chemin que ce que l'agent aurait pris, mais pour la voiture
-                                this.requestPath(
-                                    this.homePosition, 
-                                    this.workPosition,
-                                    this.homeGridNode,
-                                    this.workGridNode, 
-                                    AgentState.READY_TO_LEAVE_FOR_WORK,
-                                    currentGameTime
-                                );
-                            } else {
-                                // Si création de voiture échoue, utiliser le comportement normal de l'agent
-                                console.warn(`Agent ${this.id}: Échec création voiture, utilisation comportement piéton`);
-                                this.hasVehicle = false; // Désactiver la voiture pour cet agent
-                                
-                                // Code standard pour demander un chemin à pied
-                                this.requestedPathForDepartureTime = currentGameTime;
-                                this.requestPath(
-                                    this.homePosition, 
-                                    this.workPosition,
-                                    this.homeGridNode,
-                                    this.workGridNode, 
-                                    AgentState.READY_TO_LEAVE_FOR_WORK,
-                                    currentGameTime
-                                );
+                            const car = carManager.createCarForAgent(this, this.vehicleHomePosition || this.homePosition, this.workPosition);
+                            if (!car) {
+                                console.warn(`Agent ${this.id}: Échec création voiture, passage en mode piéton.`);
+                                this.isInVehicle = false; // Fallback piéton
                             }
                         }
-                    } else {
-                        // Code standard pour demander un chemin à pied (inchangé)
-                        console.log(`Agent ${this.id}: Préparation départ pour le travail à pied`);
-                        this.requestedPathForDepartureTime = currentGameTime;
-                        this.requestPath(
-                            this.homePosition, 
-                            this.workPosition,
-                            this.homeGridNode,
-                            this.workGridNode, 
-                            AgentState.READY_TO_LEAVE_FOR_WORK,
-                            currentGameTime
-                        );
                     }
-                }
-                // --- Fin code départ pour travail ---
 
-                // Code pour promenade weekend (inchangé)
-                else if (calendarDate && ["Samedi", "Dimanche"].includes(calendarDate.jourSemaine) &&
-                        this.weekendWalkStrategy && this.weekendWalkStrategy.shouldStartWalk(this.id, currentGameTime)) {
-                    
-                    this._findRandomWalkDestination(currentGameTime);
-                }
-                break;
-                
-            case AgentState.READY_TO_LEAVE_FOR_WORK:
-                // Modifié pour gérer le départ en voiture
-                if (currentGameTime >= this.exactWorkDepartureTimeGame) {
-                    if (this.hasVehicle && carManager && carManager.hasCarForAgent(this.id)) {
-                        // Transition vers l'état de conduite
-                        this.currentState = AgentState.DRIVING_TO_WORK;
-                        this.isVisible = false; // L'agent devient invisible, la voiture prend le relais
-                        this.isUsingVehicle = true;
-                        
-                        // Envoyer le chemin à la voiture
-                        const car = carManager.getCarForAgent(this.id);
-                        if (car && this.currentPathPoints) {
-                            // ---- AJOUT LOG ----
-                            console.log(`Agent ${this.id} (DRIVING_TO_WORK): Passant ${this.currentPathPoints.length} points à car.setPath(). Premier point Y: ${this.currentPathPoints[0]?.y.toFixed(2)}, Dernier point Y: ${this.currentPathPoints[this.currentPathPoints.length-1]?.y.toFixed(2)}`);
-                            // ---- FIN LOG ----
-                            car.setPath(this.currentPathPoints);
-                            // Calculer le temps de trajet pour la voiture
-                            const carSpeed = car.speed;
-                            const pathLength = this.currentPathLengthWorld;
-                            this.calculatedTravelDurationGame = (pathLength / carSpeed) * 1000; // Convertir en ms
-                            this.departureTimeGame = currentGameTime;
-                            this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
-                            console.log(`Agent ${this.id}: Commence à conduire vers le travail, durée estimée: ${this.calculatedTravelDurationGame/1000}s`);
-                        } else {
-                             console.warn(`Agent ${this.id} (DRIVING_TO_WORK): Impossible de passer le chemin à la voiture (Car: ${!!car}, Path: ${!!this.currentPathPoints})`);
-                        }
+                    if (startNode && targetNode) {
+                         this.currentState = AgentState.REQUESTING_PATH_FOR_WORK;
+                         this._pathRequestTimeout = currentGameTime; // Start timeout timer
+                         this.requestPath(
+                             this.homePosition, this.workPosition,
+                             startNode, targetNode,
+                             AgentState.READY_TO_LEAVE_FOR_WORK,
+                             currentGameTime
+                         );
                     } else {
-                        // Transition standard vers le trajet à pied (inchangé)
-                        console.log(`Agent ${this.id}: Départ pour le travail à pied depuis READY_TO_LEAVE_FOR_WORK`);
-                        this.currentState = AgentState.IN_TRANSIT_TO_WORK;
-                        this.isVisible = true;
-                        this.departureTimeGame = currentGameTime;
-                        this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                         console.error(`Agent ${this.id}: Nœuds domicile ou travail invalides pour requête départ travail.`);
+                         this.requestedPathForDepartureTime = -1; // Annuler la tentative
                     }
+                }
+                // 2. Sinon : Départ promenade weekend (si weekend et heure)
+                else if (shouldStartWeekendWalk) {
+                    console.log(`Agent ${this.id}: Déclenchement promenade weekend depuis AT_HOME.`);
+                    this._findRandomWalkDestination(currentGameTime);
+                     // _findRandomWalkDestination gère la requête de chemin et le changement d'état vers REQUESTING
                 }
                 break;
-            
+
+			case AgentState.READY_TO_LEAVE_FOR_WORK:
+				if (currentGameTime >= this.exactWorkDepartureTimeGame) {
+					// Check if the agent INTENDS to use a vehicle for this trip
+					if (this.isInVehicle) {
+						// Now, check if the car actually exists and path is valid
+						const car = carManager?.getCarForAgent(this.id); // Use optional chaining safely
+						if (car && this.currentPathPoints) {
+							// Car exists and path is valid -> Start Driving
+							car.setPath(this.currentPathPoints);
+							this.currentState = AgentState.DRIVING_TO_WORK;
+							this.isVisible = false; // Agent invisible dans la voiture
+							this.departureTimeGame = currentGameTime;
+							// Recalculate travel duration based on car speed if needed
+							const carSpeed = car.speed;
+							if (carSpeed > 0 && this.currentPathLengthWorld > 0) {
+								this.calculatedTravelDurationGame = (this.currentPathLengthWorld / carSpeed) * 1000; // in ms
+							}
+							this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+							console.log(`Agent ${this.id}: Départ pour le travail en voiture. Durée estimée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
+						} else {
+							// Car doesn't exist OR path is invalid
+							// This might indicate an issue elsewhere, but handle it defensively.
+							console.warn(`Agent ${this.id} (Voiture): Impossible de démarrer trajet travail (voiture ou chemin manquant). Tentative de fallback piéton.`);
+							// Fallback to walking ONLY if a path exists
+							if (this.currentPathPoints) {
+								console.warn(`Agent ${this.id}: Voiture non disponible, départ à pied.`);
+								this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+								this.isVisible = true;
+								this.departureTimeGame = currentGameTime;
+								// Use original duration (might be inaccurate for walking, but better than nothing)
+								this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+								console.log(`Agent ${this.id}: Départ pour le travail à pied (Fallback voiture). Durée estimée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
+							} else {
+								// No car AND no path? Critical failure.
+								console.error(`Agent ${this.id}: Voiture ET chemin manquants. Retour AT_HOME.`);
+								this.currentState = AgentState.AT_HOME;
+							}
+							this.isInVehicle = false; // Reset mode as we are falling back
+						}
+					} else {
+						// Agent did NOT intend to use a vehicle (this.isInVehicle was false)
+						// Proceed with walking logic
+						if (this.currentPathPoints) {
+							this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+							this.isVisible = true;
+							this.departureTimeGame = currentGameTime;
+							this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+							console.log(`Agent ${this.id}: Départ pour le travail à pied. Durée estimée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
+						} else {
+							// Should not happen if state transition logic is correct, but handle defensively
+							console.error(`Agent ${this.id}: Mode piéton mais chemin manquant dans READY_TO_LEAVE_FOR_WORK. Retour AT_HOME.`);
+							this.currentState = AgentState.AT_HOME;
+							this.isInVehicle = false; // Ensure reset
+						}
+					}
+					this._pathRequestTimeout = null; // Clear timeout timer once action is taken
+				}
+				break;
+
+            case AgentState.REQUESTING_PATH_FOR_WORK:
+                // Attente passive de la réponse du worker (gérée par setPath)
+                // Le timeout est vérifié au début de updateState
+                break;
+
+            case AgentState.IN_TRANSIT_TO_WORK:
+                 this.isVisible = true;
+                 if(currentGameTime >= this.arrivalTmeGame) {
+                     this.currentState = AgentState.AT_WORK;
+                     this.lastArrivalTimeWork = currentGameTime; // Enregistrer heure arrivée
+                     this.requestedPathForDepartureTime = -1; // Prêt pour prochaine requête (retour maison)
+                     this.isVisible = false;
+                     console.log(`Agent ${this.id}: Arrivé au travail (à pied).`);
+                 }
+                 break;
+
             case AgentState.DRIVING_TO_WORK:
-                // Nouvel état - l'agent est en train de conduire vers le travail
-                this.isVisible = false; // L'agent est invisible pendant qu'il conduit
-                
-                // Vérifier si la voiture est arrivée à destination
-                if (carManager) {
-                    const car = carManager.getCarForAgent(this.id);
-                    if (car) {
-                        // S'assurer que la voiture est visible
-                        car.isActive = true;
-                        
-                        if (!car.isActive) {
-                            // La voiture est arrivée, l'agent arrive au travail
-                            console.log(`Agent ${this.id}: Voiture arrivée au travail`);
-                            this.currentState = AgentState.AT_WORK;
-                            this.isUsingVehicle = false;
-                            this.isVisible = false;
-                            this.lastArrivalTimeWork = currentGameTime;
-                            
-                            // Libérer la voiture
-                            carManager.releaseCarForAgent(this.id);
-                        }
+                this.isVisible = false; // Agent invisible
+                const carToWork = carManager?.getCarForAgent(this.id);
+                if (carToWork) {
+                    carToWork.isActive = true; // Assurer que la voiture est active/visible
+                    if (!carToWork.isActive && carToWork.path === null) { // Vérifier si la voiture a fini son chemin
+                         this.currentState = AgentState.AT_WORK;
+                         this.lastArrivalTimeWork = currentGameTime;
+                         this.requestedPathForDepartureTime = -1;
+                         this.isUsingVehicle = false; // Sort de la voiture
+                         carManager.releaseCarForAgent(this.id); // Libère la voiture
+                         console.log(`Agent ${this.id}: Arrivé au travail (en voiture). Voiture libérée.`);
                     }
-                } else {
-                    // Si le carManager n'est pas disponible, revenir à l'état à pied
-                    console.warn(`Agent ${this.id}: CarManager non disponible pendant le trajet, passage en mode piéton`);
-                    this.currentState = AgentState.IN_TRANSIT_TO_WORK;
-                    this.isVisible = true;
-                    this.isUsingVehicle = false;
-                }
+                 } else {
+                     // Si la voiture disparaît (ne devrait pas arriver), fallback piéton ?
+                     console.warn(`Agent ${this.id}: Voiture non trouvée pendant trajet travail. Passage en mode piéton.`);
+                     this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                     this.isVisible = true;
+                     this.isUsingVehicle = false;
+                 }
                 break;
 
             case AgentState.AT_WORK:
-                this.isVisible = false; // Assurer invisibilité
+                this.isVisible = false;
+                if (this.homePosition &&
+                    currentGameTime >= this.prepareHomeDepartureTimeGame &&
+                    this.requestedPathForDepartureTime !== currentGameTime)
+                {
+                    this.requestedPathForDepartureTime = currentGameTime;
+                    const targetNode = this.homeGridNode;
+                    const startNode = this.workGridNode;
+                    this.isInVehicle = this.hasVehicle; // Mode véhicule si l'agent en a une
 
-                // Vérifier si c'est l'heure de demander un chemin vers la maison
-                if (this.homePosition && 
-                    currentGameTime >= this.prepareHomeDepartureTimeGame && 
-                    this.requestedPathForDepartureTime !== currentGameTime) {
-                    
-                    // Si l'agent utilise sa voiture pour rentrer à la maison
-                    if (this.hasVehicle && carManager) {
-                        console.log(`Agent ${this.id}: Préparation départ pour la maison avec voiture`);
-                        
-                        // Créer une voiture pour cet agent
+                    console.log(`Agent ${this.id}: Préparation départ pour maison. Mode: ${this.isInVehicle ? 'Voiture' : 'Pied'}.`);
+
+                    if (this.isInVehicle && carManager) {
+                        // La voiture DOIT exister car elle a été utilisée pour venir
                         if (!carManager.hasCarForAgent(this.id)) {
-                            // La voiture apparaît au début du chemin
-                            const car = carManager.createCarForAgent(
-                                this,
-                                this.workPosition,
-                                this.vehicleHomePosition || this.homePosition
-                            );
-                            
-                            if (car) {
-                                // L'agent devient visible brièvement pour sortir du travail
-                                this.isVisible = true;
-                                
-                                // Demander un chemin pour la voiture
-                                this.requestedPathForDepartureTime = currentGameTime;
-                                this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
-                                
-                                // Demander le même chemin que ce que l'agent aurait pris, mais pour la voiture
-                                this.requestPath(
-                                    this.workPosition, 
-                                    this.homePosition,
-                                    this.workGridNode,
-                                    this.homeGridNode, 
-                                    AgentState.READY_TO_LEAVE_FOR_HOME,
-                                    currentGameTime
-                                );
-                            } else {
-                                // Si création de voiture échoue, utiliser le comportement normal de l'agent
-                                console.warn(`Agent ${this.id}: Échec création voiture, utilisation comportement piéton`);
-                                this.hasVehicle = false; // Désactiver la voiture pour cet agent
-                                
-                                // Code standard pour demander un chemin à pied
-                                this.requestedPathForDepartureTime = currentGameTime;
-                                this.requestPath(
-                                    this.workPosition, 
-                                    this.homePosition,
-                                    this.workGridNode,
-                                    this.homeGridNode, 
-                                    AgentState.READY_TO_LEAVE_FOR_HOME,
-                                    currentGameTime
-                                );
+                            // Créer/Récupérer la voiture (devrait être garée près du travail ?)
+                            // Pour l'instant, on la fait apparaître à la position de travail
+                            const car = carManager.createCarForAgent(this, this.workPosition, this.vehicleHomePosition || this.homePosition);
+                             if (!car) {
+                                 console.warn(`Agent ${this.id}: Échec récupération/création voiture pour retour, passage en mode piéton.`);
+                                 this.isInVehicle = false;
                             }
                         }
+                    }
+
+                     if (startNode && targetNode) {
+                         this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
+                          this._pathRequestTimeout = currentGameTime; // Start timeout
+                         this.requestPath(
+                             this.workPosition, this.homePosition,
+                             startNode, targetNode,
+                             AgentState.READY_TO_LEAVE_FOR_HOME,
+                             currentGameTime
+                         );
                     } else {
-                        // Code standard pour demander un chemin à pied (inchangé)
-                        console.log(`Agent ${this.id}: Préparation départ pour la maison à pied`);
-                        this.requestedPathForDepartureTime = currentGameTime;
-                        this.requestPath(
-                            this.workPosition, 
-                            this.homePosition,
-                            this.workGridNode,
-                            this.homeGridNode, 
-                            AgentState.READY_TO_LEAVE_FOR_HOME,
-                            currentGameTime
-                        );
+                         console.error(`Agent ${this.id}: Nœuds travail ou domicile invalides pour requête départ maison.`);
+                         this.requestedPathForDepartureTime = -1;
                     }
                 }
                 break;
-                
+
             case AgentState.READY_TO_LEAVE_FOR_HOME:
-                // Modifié pour gérer le départ en voiture
                 if (currentGameTime >= this.exactHomeDepartureTimeGame) {
-                    if (this.hasVehicle && carManager && carManager.hasCarForAgent(this.id)) {
-                        // Transition vers l'état de conduite
-                        this.currentState = AgentState.DRIVING_HOME;
-                        this.isVisible = false; // L'agent devient invisible, la voiture prend le relais
-                        this.isUsingVehicle = true;
-                        
-                        // Envoyer le chemin à la voiture
-                        const car = carManager.getCarForAgent(this.id);
-                        if (car && this.currentPathPoints) {
-                            // ---- AJOUT LOG ----
-                            console.log(`Agent ${this.id} (DRIVING_HOME): Passant ${this.currentPathPoints.length} points à car.setPath(). Premier point Y: ${this.currentPathPoints[0]?.y.toFixed(2)}, Dernier point Y: ${this.currentPathPoints[this.currentPathPoints.length-1]?.y.toFixed(2)}`);
-                            // ---- FIN LOG ----
-                            car.setPath(this.currentPathPoints);
-                            console.log(`Agent ${this.id}: Commence à conduire vers la maison`);
-                        } else {
-                            console.warn(`Agent ${this.id} (DRIVING_HOME): Impossible de passer le chemin à la voiture (Car: ${!!car}, Path: ${!!this.currentPathPoints})`);
-                        }
+                    if (this.isInVehicle && carManager?.hasCarForAgent(this.id)) {
+                         const car = carManager.getCarForAgent(this.id);
+                         if (car && this.currentPathPoints) {
+                             car.setPath(this.currentPathPoints);
+                             this.currentState = AgentState.DRIVING_HOME;
+                             this.isVisible = false;
+                             this.departureTimeGame = currentGameTime;
+                             // Recalcul durée trajet
+                             const carSpeed = car.speed;
+                             if (carSpeed > 0 && this.currentPathLengthWorld > 0) {
+                                 this.calculatedTravelDurationGame = (this.currentPathLengthWorld / carSpeed) * 1000;
+                             }
+                             this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                              console.log(`Agent ${this.id}: Départ pour la maison en voiture. Durée estimée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
+                         } else {
+                             console.warn(`Agent ${this.id} (Voiture): Impossible de démarrer trajet maison (voiture ou chemin manquant).`);
+                             this.currentState = AgentState.AT_WORK;
+                             this.isInVehicle = false;
+                         }
                     } else {
-                        // Transition standard vers le trajet à pied (inchangé)
-                        console.log(`Agent ${this.id}: Départ pour la maison à pied depuis READY_TO_LEAVE_FOR_HOME`);
+                         // Départ à pied
                         this.currentState = AgentState.IN_TRANSIT_TO_HOME;
                         this.isVisible = true;
                         this.departureTimeGame = currentGameTime;
                         this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                        console.log(`Agent ${this.id}: Départ pour la maison à pied. Durée estimée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
                     }
-                }
-                break;
-                
-            case AgentState.DRIVING_HOME:
-                // Nouvel état - l'agent est en train de conduire vers la maison
-                this.isVisible = false; // L'agent est invisible pendant qu'il conduit
-                
-                // Vérifier si la voiture est arrivée à destination
-                if (carManager) {
-                    const car = carManager.getCarForAgent(this.id);
-                    if (car) {
-                        // S'assurer que la voiture est visible
-                        car.isActive = true;
-                        
-                        if (!car.isActive) {
-                            // La voiture est arrivée, l'agent arrive à la maison
-                            console.log(`Agent ${this.id}: Voiture arrivée à la maison`);
-                            this.currentState = AgentState.AT_HOME;
-                            this.isUsingVehicle = false;
-                            this.isVisible = false;
-                            this.lastArrivalTimeHome = currentGameTime;
-                            
-                            // Libérer la voiture
-                            carManager.releaseCarForAgent(this.id);
-                        }
-                    }
-                } else {
-                    // Si le carManager n'est pas disponible, revenir à l'état à pied
-                    console.warn(`Agent ${this.id}: CarManager non disponible pendant le trajet, passage en mode piéton`);
-                    this.currentState = AgentState.IN_TRANSIT_TO_HOME;
-                    this.isVisible = true;
-                    this.isUsingVehicle = false;
+                     this._pathRequestTimeout = null; // Clear timeout
                 }
                 break;
 
-            // --- Les autres états restent inchangés ---
-            
-            // ... Autres cas du switch ...
+            case AgentState.REQUESTING_PATH_FOR_HOME:
+                 // Attente passive
+                 break;
+
+            case AgentState.IN_TRANSIT_TO_HOME:
+                 this.isVisible = true;
+                 if(currentGameTime >= this.arrivalTmeGame) {
+                     this.currentState = AgentState.AT_HOME;
+                     this.lastArrivalTimeHome = currentGameTime; // Enregistrer heure arrivée
+                     this.requestedPathForDepartureTime = -1;
+                     this.isVisible = false;
+                     console.log(`Agent ${this.id}: Arrivé à la maison (à pied).`);
+                 }
+                 break;
+
+            case AgentState.DRIVING_HOME:
+                 this.isVisible = false;
+                 const carToHome = carManager?.getCarForAgent(this.id);
+                 if (carToHome) {
+                      carToHome.isActive = true;
+                      if (!carToHome.isActive && carToHome.path === null) {
+                         this.currentState = AgentState.AT_HOME;
+                         this.lastArrivalTimeHome = currentGameTime;
+                         this.requestedPathForDepartureTime = -1;
+                         this.isUsingVehicle = false;
+                         carManager.releaseCarForAgent(this.id);
+                         console.log(`Agent ${this.id}: Arrivé à la maison (en voiture). Voiture libérée.`);
+                      }
+                 } else {
+                     console.warn(`Agent ${this.id}: Voiture non trouvée pendant trajet maison. Passage en mode piéton.`);
+                     this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                     this.isVisible = true;
+                     this.isUsingVehicle = false;
+                 }
+                break;
+
+            // --- États Weekend ---
+             case AgentState.WEEKEND_WALK_REQUESTING_PATH:
+                 // Attente passive
+                 break;
+             case AgentState.WEEKEND_WALK_READY:
+                  // Si on a un chemin, démarrer la promenade
+                  if (this.currentPathPoints) {
+                     this.currentState = AgentState.WEEKEND_WALKING;
+                     this.isVisible = true;
+                     this.departureTimeGame = currentGameTime;
+                     this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                     // Calculer l'heure de fin de promenade basée sur la durée fournie par la stratégie
+                      const walkInfo = this.weekendWalkStrategy?.agentWalkMap.get(this.weekendWalkStrategy._getDayKey(calendarDate))?.get(this.id);
+                      if (walkInfo && dayDurationMs > 0) {
+                           this.weekendWalkEndTime = currentGameTime + (walkInfo.duration * msPerHour); // Convertir heures en ms
+                           console.log(`Agent ${this.id}: Début promenade weekend vers [${this.weekendWalkDestination.x.toFixed(1)}, ${this.weekendWalkDestination.z.toFixed(1)}]. Durée estimée trajet: ${(this.calculatedTravelDurationGame/1000).toFixed(1)}s. Fin promenade prévue à: ${this.weekendWalkEndTime.toFixed(0)}ms`);
+                      } else {
+                           this.weekendWalkEndTime = currentGameTime + (1 * msPerHour); // Fallback: 1h
+                           console.warn(`Agent ${this.id}: Durée promenade non trouvée, utilisation fallback 1h.`);
+                      }
+                      this._pathRequestTimeout = null; // Clear timeout
+                  }
+                 break;
+             case AgentState.WEEKEND_WALKING:
+                  this.isVisible = true;
+                  // Si arrivé à destination OU temps de promenade écoulé
+                  if (currentGameTime >= this.arrivalTmeGame || (this.weekendWalkEndTime > 0 && currentGameTime >= this.weekendWalkEndTime)) {
+                      console.log(`Agent ${this.id}: Promenade weekend terminée (Arrivé: ${currentGameTime >= this.arrivalTmeGame}, Temps écoulé: ${currentGameTime >= this.weekendWalkEndTime}). Retour à la maison.`);
+                      this.weekendWalkDestination = null; // Nettoyer destination
+                      this.weekendWalkGridNode = null;
+                      this.weekendWalkEndTime = -1; // Réinitialiser heure fin
+                      // Demander chemin retour maison
+                       if (this.homePosition && this.homeGridNode) {
+                           this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
+                           this._pathRequestTimeout = currentGameTime; // Start timeout
+                            const currentGridNode = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(false)?.getClosestWalkableNode(this.position);
+                           this.requestPath(
+                               this.position, // Position actuelle comme départ
+                               this.homePosition,
+                               currentGridNode, // Nœud actuel comme départ
+                               this.homeGridNode,
+                               AgentState.READY_TO_LEAVE_FOR_HOME, // Destination finale
+                               currentGameTime
+                           );
+                       } else {
+                           console.error(`Agent ${this.id}: Impossible de rentrer (infos domicile manquantes). Passage IDLE.`);
+                            this.currentState = AgentState.IDLE;
+                            this.isVisible = false;
+                       }
+                  }
+                  break;
+              // --- FIN États Weekend ---
+
+            default:
+                this.currentState = AgentState.IDLE; // Fallback sécurité
+                this.isVisible = false;
+                break;
         }
     }
 

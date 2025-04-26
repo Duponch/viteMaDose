@@ -75,16 +75,14 @@ export default class CarManager {
         
         // Créer une nouvelle voiture
         const carIndex = this.cars.length;
-        const car = new Car(carIndex, this.experience, startPosition, targetPosition);
-        
-        // Associer la voiture à l'agent
-        this.agentToCar.set(agent.id, car);
-        
-        // Ajouter la voiture à notre liste
-        this.cars.push(car);
-        
-        // Mise à jour du nombre d'instances rendues
-        this.carInstancedMesh.count = this.cars.length;
+		const car = new Car(carIndex, this.experience, startPosition, targetPosition);
+		console.log(`[CarManager DEBUG] Voiture créée (instanceId: ${carIndex}) pour Agent ${agent.id}`); // LOG
+
+		this.agentToCar.set(agent.id, car);
+		this.cars.push(car);
+		console.log(`[CarManager DEBUG] Voiture pour Agent ${agent.id} ajoutée. agentToCar size: ${this.agentToCar.size}, cars array length: ${this.cars.length}`); // LOG
+
+		this.carInstancedMesh.count = this.cars.length;
         
         return car;
     }
@@ -104,8 +102,10 @@ export default class CarManager {
      * @returns {boolean} - true si l'agent a une voiture
      */
     hasCarForAgent(agentId) {
-        return this.agentToCar.has(agentId);
-    }
+		const hasCar = this.agentToCar.has(agentId);
+		console.log(`[CarManager DEBUG] hasCarForAgent(${agentId}) -> ${hasCar}`); // LOG
+		return hasCar;
+	}
     
     /**
      * Libère une voiture associée à un agent
