@@ -235,33 +235,29 @@ export default class NavigationGraph {
             const innerMaxWorldZ = pZ + pD;
 
             // Déterminer une zone de GRILLE à vérifier (un peu plus large pour être sûr)
-            // Convertir les coins externes monde en grille pour obtenir une estimation des boucles
-            const startGrid = this.worldToGrid(outerMinWorldX - 1, outerMinWorldZ - 1); // Marge de sécurité
-            const endGrid = this.worldToGrid(outerMaxWorldX + 1, outerMaxWorldZ + 1); // Marge de sécurité
+            const startGrid = this.worldToGrid(outerMinWorldX - 1, outerMinWorldZ - 1);
+            const endGrid = this.worldToGrid(outerMaxWorldX + 1, outerMaxWorldZ + 1);
 
             // Itérer sur les cellules de la grille dans cette zone étendue
             for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
                 for (let gx = startGrid.x; gx <= endGrid.x; gx++) {
-                    // Calculer les limites mondiales de la cellule (gx, gy)
-                    const cellMinX = (gx - this.offsetX) / this.gridScale;
-                    const cellMinZ = (gy - this.offsetZ) / this.gridScale;
-                    const cellMaxX = (gx + 1 - this.offsetX) / this.gridScale;
-                    const cellMaxZ = (gy + 1 - this.offsetZ) / this.gridScale;
+                    // Obtenir le centre de la cellule en coordonnées MONDE
+                    const cellCenter = this.gridToWorld(gx, gy);
+                    const cx = cellCenter.x;
+                    const cz = cellCenter.z;
 
-                    // Vérifier si la cellule chevauche la zone du trottoir
-                    // 1. La cellule doit chevaucher les limites EXTERNES
-                    const overlapsOuterX = cellMinX < outerMaxWorldX && cellMaxX > outerMinWorldX;
-                    const overlapsOuterZ = cellMinZ < outerMaxWorldZ && cellMaxZ > outerMinWorldZ;
-                    const overlapsOuterBounds = overlapsOuterX && overlapsOuterZ;
+                    // Vérifier si le centre de la cellule est sur le trottoir
+                    const isOnSidewalk = 
+                        // Trottoir gauche
+                        (cx >= outerMinWorldX && cx < innerMinWorldX) ||
+                        // Trottoir droit
+                        (cx > innerMaxWorldX && cx <= outerMaxWorldX) ||
+                        // Trottoir bas
+                        (cz >= outerMinWorldZ && cz < innerMinWorldZ) ||
+                        // Trottoir haut
+                        (cz > innerMaxWorldZ && cz <= outerMaxWorldZ);
 
-                    // 2. La cellule ne doit PAS être entièrement DANS les limites INTERNES (elle peut les toucher/chevaucher partiellement)
-                    //    On vérifie si la cellule est complètement à l'intérieur
-                    const isFullyInsideInnerX = cellMinX >= innerMinWorldX && cellMaxX <= innerMaxWorldX;
-                    const isFullyInsideInnerZ = cellMinZ >= innerMinWorldZ && cellMaxZ <= innerMaxWorldZ;
-                    const isFullyInsideInnerBounds = isFullyInsideInnerX && isFullyInsideInnerZ;
-
-                    // Si la cellule chevauche la zone externe ET n'est pas entièrement contenue dans la zone interne, elle appartient au trottoir
-                    if (overlapsOuterBounds && !isFullyInsideInnerBounds) {
+                    if (isOnSidewalk) {
                         if (this.markCell(gx, gy)) {
                             markedCells++;
                         }
@@ -269,7 +265,7 @@ export default class NavigationGraph {
                 }
             }
         });
-        console.log(`NavigationGraph: ${markedCells} cellules de ZONE de trottoir marquées (méthode chevauchement).`);
+        console.log(`NavigationGraph: ${markedCells} cellules de ZONE de trottoir marquées (méthode centre).`);
     }
 
 	worldToGrid(worldX, worldZ) {

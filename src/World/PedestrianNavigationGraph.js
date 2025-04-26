@@ -28,25 +28,46 @@ export default class PedestrianNavigationGraph extends NavigationGraph {
             const plotWidth = plot.width;
             const plotDepth = plot.depth;
 
+            // Snapper les coordonnées et dimensions
+            const pX = Math.round(plotX / cellSizeWorld) * cellSizeWorld;
+            const pZ = Math.round(plotZ / cellSizeWorld) * cellSizeWorld;
+            const pW = Math.round(plotWidth / cellSizeWorld) * cellSizeWorld;
+            const pD = Math.round(plotDepth / cellSizeWorld) * cellSizeWorld;
+
             // Définir les limites des trottoirs en coordonnées MONDE
-            const sidewalkMinX = plotX - sidewalkWidth;
-            const sidewalkMaxX = plotX + plotWidth + sidewalkWidth;
-            const sidewalkMinZ = plotZ - sidewalkWidth;
-            const sidewalkMaxZ = plotZ + plotDepth + sidewalkWidth;
+            const outerMinWorldX = pX - sidewalkWidth;
+            const outerMaxWorldX = pX + pW + sidewalkWidth;
+            const outerMinWorldZ = pZ - sidewalkWidth;
+            const outerMaxWorldZ = pZ + pD + sidewalkWidth;
+
+            // Limites internes du plot
+            const innerMinWorldX = pX;
+            const innerMaxWorldX = pX + pW;
+            const innerMinWorldZ = pZ;
+            const innerMaxWorldZ = pZ + pD;
 
             // Convertir en coordonnées de grille
-            const startGrid = this.worldToGrid(sidewalkMinX, sidewalkMinZ);
-            const endGrid = this.worldToGrid(sidewalkMaxX, sidewalkMaxZ);
+            const startGrid = this.worldToGrid(outerMinWorldX - 1, outerMinWorldZ - 1);
+            const endGrid = this.worldToGrid(outerMaxWorldX + 1, outerMaxWorldZ + 1);
 
             // Marquer les cellules des trottoirs
             for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
                 for (let gx = startGrid.x; gx <= endGrid.x; gx++) {
-                    // Vérifier si la cellule est sur le trottoir
+                    // Obtenir le centre de la cellule en coordonnées MONDE
+                    const cellCenter = this.gridToWorld(gx, gy);
+                    const cx = cellCenter.x;
+                    const cz = cellCenter.z;
+
+                    // Vérifier si le centre de la cellule est sur le trottoir
                     const isOnSidewalk = 
-                        (gx >= startGrid.x && gx <= startGrid.x + 1) || // Trottoir gauche
-                        (gx >= endGrid.x - 1 && gx <= endGrid.x) || // Trottoir droit
-                        (gy >= startGrid.y && gy <= startGrid.y + 1) || // Trottoir bas
-                        (gy >= endGrid.y - 1 && gy <= endGrid.y); // Trottoir haut
+                        // Trottoir gauche
+                        (cx >= outerMinWorldX && cx < innerMinWorldX) ||
+                        // Trottoir droit
+                        (cx > innerMaxWorldX && cx <= outerMaxWorldX) ||
+                        // Trottoir bas
+                        (cz >= outerMinWorldZ && cz < innerMinWorldZ) ||
+                        // Trottoir haut
+                        (cz > innerMaxWorldZ && cz <= outerMaxWorldZ);
 
                     if (isOnSidewalk) {
                         if (this.markCell(gx, gy)) {
@@ -60,7 +81,6 @@ export default class PedestrianNavigationGraph extends NavigationGraph {
         // Marquer les passages piétons
         crosswalkInfos.forEach(crosswalk => {
             // Vérifier que les coordonnées du passage piéton sont valides
-            // Si position est un objet Vector3, on doit accéder à ses propriétés x, y, z
             if (!crosswalk.position || 
                 (typeof crosswalk.position.x === 'undefined' && typeof crosswalk.position.getX === 'undefined') || 
                 (typeof crosswalk.position.z === 'undefined' && typeof crosswalk.position.getZ === 'undefined')) {
@@ -68,7 +88,7 @@ export default class PedestrianNavigationGraph extends NavigationGraph {
                 return; // Ignorer ce passage piéton
             }
             
-            // Extraire les coordonnées x et z de l'objet position (qu'il s'agisse d'un objet simple ou d'un Vector3)
+            // Extraire les coordonnées x et z de l'objet position
             const startX = typeof crosswalk.position.x !== 'undefined' ? crosswalk.position.x : crosswalk.position.getX();
             const startZ = typeof crosswalk.position.z !== 'undefined' ? crosswalk.position.z : crosswalk.position.getZ();
             const endX = typeof crosswalk.endX !== 'undefined' ? crosswalk.endX : startX;
