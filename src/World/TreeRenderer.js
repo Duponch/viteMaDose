@@ -256,6 +256,124 @@ export default class TreeRenderer {
     }
 
     /**
+     * Crée une texture procédurale pour les feuillages
+     * @param {number} baseColor - Couleur de base du feuillage
+     * @returns {THREE.CanvasTexture} Texture générée pour les feuillages
+     */
+    createFoliageTexture(baseColor) {
+        // Créer un canvas pour dessiner la texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        
+        // Convertir la couleur de base en RGB
+        const color = new THREE.Color(baseColor);
+        ctx.fillStyle = `rgb(${color.r * 255}, ${color.g * 255}, ${color.b * 255})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Ajouter des variations de couleur pour simuler les feuilles
+        for (let i = 0; i < 200; i++) {
+            // Position aléatoire
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            
+            // Taille aléatoire
+            const size = Math.random() * 15 + 5;
+            
+            // Variation de couleur (plus claire ou plus foncée)
+            const variation = Math.random() * 40 - 10;
+            const r = Math.max(0, Math.min(255, color.r * 255 + variation));
+            const g = Math.max(0, Math.min(255, color.g * 255 + variation));
+            const b = Math.max(0, Math.min(255, color.b * 255 + variation));
+            
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            
+            // Dessiner une forme de feuille
+            ctx.beginPath();
+            
+            // Forme de feuille stylisée
+            const leafType = Math.floor(Math.random() * 3);
+            
+            if (leafType === 0) {
+                // Feuille ovale
+                ctx.ellipse(x, y, size, size * 0.6, 0, 0, Math.PI * 2);
+            } else if (leafType === 1) {
+                // Feuille pointue
+                ctx.moveTo(x, y - size);
+                ctx.quadraticCurveTo(x + size, y, x, y + size);
+                ctx.quadraticCurveTo(x - size, y, x, y - size);
+            } else {
+                // Feuille dentelée
+                const numPoints = 8;
+                for (let j = 0; j < numPoints; j++) {
+                    const angle = (j / numPoints) * Math.PI * 2;
+                    const radius = size * (0.8 + Math.random() * 0.4);
+                    const px = x + Math.cos(angle) * radius;
+                    const py = y + Math.sin(angle) * radius;
+                    
+                    if (j === 0) {
+                        ctx.moveTo(px, py);
+                    } else {
+                        ctx.lineTo(px, py);
+                    }
+                }
+                ctx.closePath();
+            }
+            
+            ctx.fill();
+            
+            // Ajouter des détails (veines) à certaines feuilles
+            if (Math.random() > 0.7) {
+                ctx.strokeStyle = `rgba(${r * 0.7}, ${g * 0.7}, ${b * 0.7}, 0.5)`;
+                ctx.lineWidth = 1;
+                
+                if (leafType === 0 || leafType === 1) {
+                    // Veine centrale
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - size * 0.8);
+                    ctx.lineTo(x, y + size * 0.8);
+                    ctx.stroke();
+                    
+                    // Veines latérales
+                    for (let j = 1; j <= 3; j++) {
+                        const offset = size * 0.3 * j;
+                        ctx.beginPath();
+                        ctx.moveTo(x, y - size * 0.5 + offset);
+                        ctx.lineTo(x + offset, y - size * 0.2 + offset);
+                        ctx.stroke();
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(x, y - size * 0.5 + offset);
+                        ctx.lineTo(x - offset, y - size * 0.2 + offset);
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+        
+        // Ajouter quelques points plus clairs pour simuler la lumière sur les feuilles
+        for (let i = 0; i < 50; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 3 + 1;
+            
+            ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.3 + 0.1})`;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Créer la texture à partir du canvas
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 2); // Répéter pour couvrir toute la surface
+        
+        return texture;
+    }
+
+    /**
      * Génère un arbre procédural
      * @returns {object} Asset data contenant les parties de l'arbre
      */
@@ -275,11 +393,16 @@ export default class TreeRenderer {
         
         // Sélection aléatoire d'une couleur de feuillage
         const foliageColor = this.foliageColors[Math.floor(Math.random() * this.foliageColors.length)];
+        
+        // Créer la texture procédurale pour le feuillage
+        const foliageTexture = this.createFoliageTexture(foliageColor);
+        
         const foliageMaterial = new THREE.MeshStandardMaterial({ 
             color: foliageColor, 
             name: "TreeFoliageMat",
             metalness: 0.0,
             roughness: 0.8,
+            map: foliageTexture,
             emissive: new THREE.Color(foliageColor).multiplyScalar(0.05) // Réduit l'émission pour moins de luminosité nocturne
         });
 
