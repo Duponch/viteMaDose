@@ -23,6 +23,14 @@ export default class TreeRenderer {
             0x8fa46d, // Vert olive
             0x8fa46d  // Vert mer
         ];
+
+        // Création des textures partagées
+        this.sharedTrunkTexture = this.createTrunkTexture();
+        this.sharedFoliageTextures = new Map();
+        // Pré-créer une texture de feuillage pour chaque couleur
+        this.foliageColors.forEach(color => {
+            this.sharedFoliageTextures.set(color, this.createFoliageTexture(color));
+        });
     }
 
     /**
@@ -381,29 +389,23 @@ export default class TreeRenderer {
         console.log("[Tree Proc] Début de la génération de l'arbre procédural.");
         const treeGroup = new THREE.Group();
 
-        // Créer la texture procédurale pour le tronc
-        const trunkTexture = this.createTrunkTexture();
-        
         // Matériaux
         const trunkMaterial = new THREE.MeshLambertMaterial({ 
             color: 0x8B4513, 
             name: "TreeTrunkMat",
-            map: trunkTexture
+            map: this.sharedTrunkTexture
         });
         
         // Sélection aléatoire d'une couleur de feuillage
         const foliageColor = this.foliageColors[Math.floor(Math.random() * this.foliageColors.length)];
-        
-        // Créer la texture procédurale pour le feuillage
-        const foliageTexture = this.createFoliageTexture(foliageColor);
         
         const foliageMaterial = new THREE.MeshStandardMaterial({ 
             color: foliageColor, 
             name: "TreeFoliageMat",
             metalness: 0.0,
             roughness: 0.8,
-            map: foliageTexture,
-            emissive: new THREE.Color(foliageColor).multiplyScalar(0.05) // Réduit l'émission pour moins de luminosité nocturne
+            map: this.sharedFoliageTextures.get(foliageColor),
+            emissive: new THREE.Color(foliageColor).multiplyScalar(0.05)
         });
 
         // Tronc courbé
