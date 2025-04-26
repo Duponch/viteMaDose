@@ -113,6 +113,10 @@ export default class Agent {
         // Propriétés pour les mécanismes de secours
         this._pathRequestTimeout = null;
         this._stateStartTime = null;
+
+        // --- OPTIMISATION ---
+        this._nextStateCheckTime = -1; // Heure du prochain contrôle d'état nécessaire (optimisation)
+        // --- FIN OPTIMISATION ---
     }
 
 	_calculateScheduledTimes() {
@@ -492,6 +496,12 @@ export default class Agent {
             case AgentState.AT_HOME:
                 this.isVisible = false; // Assurer invisibilité
 
+                // --- OPTIMISATION: Vérification rapide ---
+                if (this._nextStateCheckTime > 0 && currentGameTime < this._nextStateCheckTime) {
+                    return; // Pas besoin de vérifier maintenant
+                }
+                // --- FIN OPTIMISATION ---
+
                 // VÉRIFICATION PRIORITAIRE: Vérifier d'abord si c'est le weekend
                 if (calendarDate && ["Samedi", "Dimanche"].includes(calendarDate.jourSemaine)) {
                     // Vérifier si l'agent doit se promener
@@ -556,10 +566,20 @@ export default class Agent {
                     // else : Chemin déjà demandé pour ce départ ou départ déjà effectué.
                 }
                 // else : Pas encore l'heure pour le prochain départ travail.
+
+                // --- OPTIMISATION: Recalculer le prochain check après évaluation ---
+                this._calculateAndSetNextCheckTime(currentGameTime, true); // true pour indiquer qu'on vient d'évaluer
+                // --- FIN OPTIMISATION ---
                 break;
 
             case AgentState.AT_WORK:
                 this.isVisible = false; // Assurer invisibilité
+
+                // --- OPTIMISATION: Vérification rapide ---
+                if (this._nextStateCheckTime > 0 && currentGameTime < this._nextStateCheckTime) {
+                    return; // Pas besoin de vérifier maintenant
+                }
+                // --- FIN OPTIMISATION ---
 
                 // Vérification prioritaire: si c'est le weekend, l'agent devrait être à la maison, pas au travail!
                 if (calendarDate && ["Samedi", "Dimanche"].includes(calendarDate.jourSemaine)) {
@@ -619,6 +639,10 @@ export default class Agent {
                         }
                     }
                 }
+
+                // --- OPTIMISATION: Recalculer le prochain check après évaluation ---
+                this._calculateAndSetNextCheckTime(currentGameTime, true); // true pour indiquer qu'on vient d'évaluer
+                // --- FIN OPTIMISATION ---
                 break;
 
             // --- États liés à la réception du chemin et au départ effectif ---
@@ -2102,6 +2126,10 @@ export default class Agent {
         // Enregistrer l'heure d'arrivée
         this.lastArrivalTimeHome = currentGameTime;
         this.requestedPathForDepartureTime = -1;
+
+        // --- OPTIMISATION: Calculer le prochain check ---
+        this._calculateAndSetNextCheckTime(currentGameTime);
+        // --- FIN OPTIMISATION ---
     }
 
     // Nouvelle méthode pour réinitialiser les matrices d'animation
@@ -2110,5 +2138,15 @@ export default class Agent {
         Object.keys(this.currentAnimationMatrix).forEach(key => {
             this.currentAnimationMatrix[key].identity();
         });
+    }
+
+    // Ajouter une méthode pour calculer et définir le prochain contrôle d'état nécessaire
+    _calculateAndSetNextCheckTime(currentGameTime, recalculate = false) {
+        // Calculer le prochain contrôle d'état nécessaire
+        const nextCheckTime = currentGameTime + 10000; // 10 secondes à partir de maintenant
+        this._nextStateCheckTime = nextCheckTime;
+        if (recalculate) {
+            this._nextStateCheckTime = currentGameTime + 10000; // 10 secondes à partir de maintenant
+        }
     }
 }
