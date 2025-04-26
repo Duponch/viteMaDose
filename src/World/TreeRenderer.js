@@ -135,8 +135,8 @@ export default class TreeRenderer {
             trunkRadiusTop, 
             trunkRadiusBottom, 
             trunkHeight, 
-            8, // Plus de segments horizontaux
-            16, // Plus de segments verticaux
+            4, // Plus de segments horizontaux
+            8, // Plus de segments verticaux
             false
         );
         
@@ -144,7 +144,7 @@ export default class TreeRenderer {
         const positions = trunkGeometry.attributes.position.array;
         
         // Paramètres de courbure
-        const curveAmount = trunkHeight * 0.15; // Intensité de la courbure (15% de la hauteur)
+        const curveAmount = trunkHeight * 0.1; // Intensité de la courbure (15% de la hauteur)
         const curveDirection = new THREE.Vector3(
             THREE.MathUtils.randFloatSpread(1),
             0,
@@ -215,10 +215,10 @@ export default class TreeRenderer {
         console.log("[Tree Proc] Tronc courbé créé et ajouté au groupe.");
         
         // Ajouter des nœuds au tronc
-        const trunkKnots = this.createTrunkKnots(trunkHeight, trunkRadiusBottom, trunkMaterial);
+        /* const trunkKnots = this.createTrunkKnots(trunkHeight, trunkRadiusBottom, trunkMaterial);
         trunkKnots.forEach(knot => {
             treeGroup.add(knot);
-        });
+        }); */
         console.log("[Tree Proc] Nœuds ajoutés au tronc.");
 
         // Feuillage
