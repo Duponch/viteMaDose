@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
  * Gère la génération et le rendu des arbres procéduraux
@@ -12,6 +13,69 @@ export default class TreeRenderer {
         this.config = config;
         this.materials = materials;
         this.assetIdCounter = 0;
+        
+        // Palette de couleurs de feuillage
+        this.foliageColors = [
+            0x228B22, // Vert forêt
+            0x32CD32, // Vert lime
+            0x006400, // Vert foncé
+            0x90EE90, // Vert clair
+            0x556B2F, // Vert olive
+            0x2E8B57  // Vert mer
+        ];
+    }
+
+    /**
+     * Crée une géométrie de feuillage en assemblant plusieurs icosaèdres
+     * @param {number} baseSize - Taille de base pour le feuillage
+     * @returns {THREE.BufferGeometry} Géométrie fusionnée du feuillage
+     */
+    createLowPolyFoliageGeometry(baseSize) {
+        const foliagePartGeometries = [];
+        const baseGeometry = new THREE.IcosahedronGeometry(baseSize, 0);
+
+        // Paramètres de randomisation
+        const numParts = THREE.MathUtils.randInt(4, 7); // Nombre de parties du feuillage
+        const maxOffset = baseSize * 0.8; // Déplacement maximum des parties
+        const minPartScale = 0.4;
+        const maxPartScale = 0.8;
+
+        for (let i = 0; i < numParts; i++) {
+            // Position aléatoire avec plus de variation en hauteur
+            const randomPosition = new THREE.Vector3(
+                (Math.random() - 0.5) * 2 * maxOffset,
+                (Math.random() - 0.5) * 2 * maxOffset * 0.7, // Plus de variation verticale
+                (Math.random() - 0.5) * 2 * maxOffset
+            );
+            
+            // Échelle aléatoire
+            const randomScale = THREE.MathUtils.randFloat(minPartScale, maxPartScale);
+            const scaleVector = new THREE.Vector3(randomScale, randomScale, randomScale);
+            
+            // Matrice de transformation
+            const matrix = new THREE.Matrix4();
+            matrix.compose(randomPosition, new THREE.Quaternion(), scaleVector);
+
+            // Cloner et transformer la géométrie
+            const clonedGeom = baseGeometry.clone();
+            clonedGeom.applyMatrix4(matrix);
+            foliagePartGeometries.push(clonedGeom);
+        }
+
+        // Fusionner toutes les parties
+        const mergedGeometry = mergeGeometries(foliagePartGeometries, false);
+        
+        // Nettoyer les géométries temporaires
+        foliagePartGeometries.forEach(geom => geom.dispose());
+        baseGeometry.dispose();
+
+        if (mergedGeometry) {
+            mergedGeometry.center(); // Centrer la forme finale
+            return mergedGeometry;
+        } else {
+            console.warn("Échec de la fusion de la géométrie du feuillage.");
+            return new THREE.IcosahedronGeometry(baseSize, 0); // Fallback
+        }
     }
 
     /**
@@ -24,7 +88,15 @@ export default class TreeRenderer {
 
         // Matériaux
         const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513, name: "TreeTrunkMat" });
-        const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22, name: "TreeFoliageMat" });
+        
+        // Sélection aléatoire d'une couleur de feuillage
+        const foliageColor = this.foliageColors[Math.floor(Math.random() * this.foliageColors.length)];
+        const foliageMaterial = new THREE.MeshLambertMaterial({ 
+            color: foliageColor, 
+            name: "TreeFoliageMat",
+            // Ajout d'une légère variation de couleur pour plus de naturel
+            emissive: new THREE.Color(foliageColor).multiplyScalar(0.1)
+        });
 
         // Tronc
         const trunkHeight = baseHeight * 0.5;
@@ -41,17 +113,27 @@ export default class TreeRenderer {
         const foliageHeightFactor = baseHeight * 0.7;
         const foliageWidthFactor = baseWidth * 0.7;
 
-        const foliage1 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 1.1, 0), foliageMaterial);
+        // Créer les trois parties du feuillage avec des tailles différentes
+        const foliage1 = new THREE.Mesh(
+            this.createLowPolyFoliageGeometry(foliageWidthFactor * 1.1),
+            foliageMaterial
+        );
         foliage1.position.y = foliageBaseY + foliageHeightFactor * 0.3;
         treeGroup.add(foliage1);
 
-        const foliage2 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.9, 0), foliageMaterial);
+        const foliage2 = new THREE.Mesh(
+            this.createLowPolyFoliageGeometry(foliageWidthFactor * 0.9),
+            foliageMaterial
+        );
         foliage2.position.y = foliageBaseY + foliageHeightFactor * 0.65;
         foliage2.position.x = foliageWidthFactor * 0.4;
         foliage2.rotation.z = Math.PI / 5;
         treeGroup.add(foliage2);
 
-        const foliage3 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.8, 0), foliageMaterial);
+        const foliage3 = new THREE.Mesh(
+            this.createLowPolyFoliageGeometry(foliageWidthFactor * 0.8),
+            foliageMaterial
+        );
         foliage3.position.y = foliageBaseY + foliageHeightFactor * 0.55;
         foliage3.position.x = -foliageWidthFactor * 0.35;
         foliage3.rotation.z = -Math.PI / 6;
