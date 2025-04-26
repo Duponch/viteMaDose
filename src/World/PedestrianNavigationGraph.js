@@ -47,8 +47,8 @@ export default class PedestrianNavigationGraph extends NavigationGraph {
             const innerMaxWorldZ = pZ + pD;
 
             // Convertir en coordonnées de grille
-            const startGrid = this.worldToGrid(outerMinWorldX - 1, outerMinWorldZ - 1);
-            const endGrid = this.worldToGrid(outerMaxWorldX + 1, outerMaxWorldZ + 1);
+            const startGrid = this.worldToGrid(outerMinWorldX, outerMinWorldZ);
+            const endGrid = this.worldToGrid(outerMaxWorldX, outerMaxWorldZ);
 
             // Marquer les cellules des trottoirs
             for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
@@ -59,19 +59,27 @@ export default class PedestrianNavigationGraph extends NavigationGraph {
                     const cz = cellCenter.z;
 
                     // Vérifier si le centre de la cellule est sur le trottoir
+                    // Exclure les coins pour éviter le dépassement
                     const isOnSidewalk = 
-                        // Trottoir gauche
-                        (cx >= outerMinWorldX && cx < innerMinWorldX) ||
-                        // Trottoir droit
-                        (cx > innerMaxWorldX && cx <= outerMaxWorldX) ||
-                        // Trottoir bas
-                        (cz >= outerMinWorldZ && cz < innerMinWorldZ) ||
-                        // Trottoir haut
-                        (cz > innerMaxWorldZ && cz <= outerMaxWorldZ);
+                        // Trottoir gauche (exclure les coins)
+                        (cx >= outerMinWorldX && cx < innerMinWorldX && 
+                         cz >= innerMinWorldZ && cz <= innerMaxWorldZ) ||
+                        // Trottoir droit (exclure les coins)
+                        (cx > innerMaxWorldX && cx <= outerMaxWorldX && 
+                         cz >= innerMinWorldZ && cz <= innerMaxWorldZ) ||
+                        // Trottoir bas (exclure les coins)
+                        (cz >= outerMinWorldZ && cz < innerMinWorldZ && 
+                         cx >= innerMinWorldX && cx <= innerMaxWorldX) ||
+                        // Trottoir haut (exclure les coins)
+                        (cz > innerMaxWorldZ && cz <= outerMaxWorldZ && 
+                         cx >= innerMinWorldX && cx <= innerMaxWorldX);
 
                     if (isOnSidewalk) {
-                        if (this.markCell(gx, gy)) {
-                            markedCells++;
+                        // Vérifier si la cellule est déjà marchable (pour éviter les chevauchements)
+                        if (!this.isWalkableAt(gx, gy)) {
+                            if (this.markCell(gx, gy)) {
+                                markedCells++;
+                            }
                         }
                     }
                 }
@@ -94,14 +102,23 @@ export default class PedestrianNavigationGraph extends NavigationGraph {
             const endX = typeof crosswalk.endX !== 'undefined' ? crosswalk.endX : startX;
             const endZ = typeof crosswalk.endZ !== 'undefined' ? crosswalk.endZ : startZ;
             
-            const startGrid = this.worldToGrid(startX, startZ);
-            const endGrid = this.worldToGrid(endX, endZ);
+            // Snapper les coordonnées des passages piétons
+            const snappedStartX = Math.round(startX / cellSizeWorld) * cellSizeWorld;
+            const snappedStartZ = Math.round(startZ / cellSizeWorld) * cellSizeWorld;
+            const snappedEndX = Math.round(endX / cellSizeWorld) * cellSizeWorld;
+            const snappedEndZ = Math.round(endZ / cellSizeWorld) * cellSizeWorld;
+            
+            const startGrid = this.worldToGrid(snappedStartX, snappedStartZ);
+            const endGrid = this.worldToGrid(snappedEndX, snappedEndZ);
 
             // Marquer les cellules du passage piéton
             for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
                 for (let gx = startGrid.x; gx <= endGrid.x; gx++) {
-                    if (this.markCell(gx, gy)) {
-                        markedCells++;
+                    // Vérifier si la cellule est déjà marchable (pour éviter les chevauchements)
+                    if (!this.isWalkableAt(gx, gy)) {
+                        if (this.markCell(gx, gy)) {
+                            markedCells++;
+                        }
                     }
                 }
             }

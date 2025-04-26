@@ -235,8 +235,8 @@ export default class NavigationGraph {
             const innerMaxWorldZ = pZ + pD;
 
             // Déterminer une zone de GRILLE à vérifier (un peu plus large pour être sûr)
-            const startGrid = this.worldToGrid(outerMinWorldX - 1, outerMinWorldZ - 1);
-            const endGrid = this.worldToGrid(outerMaxWorldX + 1, outerMaxWorldZ + 1);
+            const startGrid = this.worldToGrid(outerMinWorldX, outerMinWorldZ);
+            const endGrid = this.worldToGrid(outerMaxWorldX, outerMaxWorldZ);
 
             // Itérer sur les cellules de la grille dans cette zone étendue
             for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
@@ -247,15 +247,20 @@ export default class NavigationGraph {
                     const cz = cellCenter.z;
 
                     // Vérifier si le centre de la cellule est sur le trottoir
+                    // Exclure les coins pour éviter le dépassement
                     const isOnSidewalk = 
-                        // Trottoir gauche
-                        (cx >= outerMinWorldX && cx < innerMinWorldX) ||
-                        // Trottoir droit
-                        (cx > innerMaxWorldX && cx <= outerMaxWorldX) ||
-                        // Trottoir bas
-                        (cz >= outerMinWorldZ && cz < innerMinWorldZ) ||
-                        // Trottoir haut
-                        (cz > innerMaxWorldZ && cz <= outerMaxWorldZ);
+                        // Trottoir gauche (exclure les coins)
+                        (cx >= outerMinWorldX && cx < innerMinWorldX && 
+                         cz >= innerMinWorldZ && cz <= innerMaxWorldZ) ||
+                        // Trottoir droit (exclure les coins)
+                        (cx > innerMaxWorldX && cx <= outerMaxWorldX && 
+                         cz >= innerMinWorldZ && cz <= innerMaxWorldZ) ||
+                        // Trottoir bas (exclure les coins)
+                        (cz >= outerMinWorldZ && cz < innerMinWorldZ && 
+                         cx >= innerMinWorldX && cx <= innerMaxWorldX) ||
+                        // Trottoir haut (exclure les coins)
+                        (cz > innerMaxWorldZ && cz <= outerMaxWorldZ && 
+                         cx >= innerMinWorldX && cx <= innerMaxWorldX);
 
                     if (isOnSidewalk) {
                         if (this.markCell(gx, gy)) {
@@ -305,9 +310,8 @@ export default class NavigationGraph {
 
     gridToWorld(gridX, gridY) {
         // Le +0.5 assure qu'on est au centre de la cellule de la grille
-        // Restaurer le +0.5 pour aligner correctement sur le centre de la cellule
-        const worldX = (gridX + 0.5 - this.offsetX) / this.gridScale;
-        const worldZ = (gridY + 0.5 - this.offsetZ) / this.gridScale;
+        const worldX = (gridX - this.offsetX + 0.5) / this.gridScale;
+        const worldZ = (gridY - this.offsetZ + 0.5) / this.gridScale;
         // Retourner une position légèrement au-dessus de la hauteur définie du trottoir
         return new THREE.Vector3(worldX, this.sidewalkHeight + 0.05, worldZ);
     }
@@ -462,12 +466,10 @@ export default class NavigationGraph {
         for (let y = 0; y < this.gridHeight; y++) {
             for (let x = 0; x < this.gridWidth; x++) {
                 if (this.isWalkableAt(x, y)) {
-                    // Calculer la position du COIN de la cellule dans le monde
-                    const cornerWorldX = (x - this.offsetX) / this.gridScale;
-                    const cornerWorldZ = (y - this.offsetZ) / this.gridScale;
-                    // Positionner le centre du plan au milieu de la cellule, basé sur le coin
-                    const planeCenterX = cornerWorldX + cellSizeInWorld / 2;
-                    const planeCenterZ = cornerWorldZ + cellSizeInWorld / 2;
+                    // Utiliser gridToWorld pour obtenir le centre exact de la cellule
+                    const cellCenter = this.gridToWorld(x, y);
+                    const planeCenterX = cellCenter.x;
+                    const planeCenterZ = cellCenter.z;
 
                     const cellGeom = planeGeom.clone();
                     const matrix = new THREE.Matrix4();
@@ -479,7 +481,7 @@ export default class NavigationGraph {
                 }
             }
         }
-        planeGeom.dispose(); // Disposer la géométrie de base
+        planeGeom.dispose();
 
         if (geometries.length > 0) {
              const mergedGeometry = mergeGeometries(geometries);

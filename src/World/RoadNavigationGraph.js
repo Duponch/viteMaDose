@@ -33,12 +33,18 @@ export default class RoadNavigationGraph extends NavigationGraph {
             const plotWidth = plot.width;
             const plotDepth = plot.depth;
 
+            // Snapper les coordonnées et dimensions
+            const pX = Math.round(plotX / cellSizeWorld) * cellSizeWorld;
+            const pZ = Math.round(plotZ / cellSizeWorld) * cellSizeWorld;
+            const pW = Math.round(plotWidth / cellSizeWorld) * cellSizeWorld;
+            const pD = Math.round(plotDepth / cellSizeWorld) * cellSizeWorld;
+
             // Définir les limites de la route en coordonnées MONDE
             // La route est entre le trottoir et la parcelle
-            const roadMinX = plotX - roadWidth;
-            const roadMaxX = plotX + plotWidth + roadWidth;
-            const roadMinZ = plotZ - roadWidth;
-            const roadMaxZ = plotZ + plotDepth + roadWidth;
+            const roadMinX = pX - roadWidth;
+            const roadMaxX = pX + pW + roadWidth;
+            const roadMinZ = pZ - roadWidth;
+            const roadMaxZ = pZ + pD + roadWidth;
 
             // Convertir en coordonnées de grille
             const startGrid = this.worldToGrid(roadMinX, roadMinZ);
@@ -55,13 +61,13 @@ export default class RoadNavigationGraph extends NavigationGraph {
                     // Vérifier si la cellule est sur la route (et non sur le trottoir)
                     const isOnRoad = 
                         // Route à gauche de la parcelle
-                        (cx >= plotX - roadWidth && cx < plotX - sidewalkWidth) ||
+                        (cx >= pX - roadWidth && cx < pX - sidewalkWidth) ||
                         // Route à droite de la parcelle
-                        (cx > plotX + plotWidth + sidewalkWidth && cx <= plotX + plotWidth + roadWidth) ||
+                        (cx > pX + pW + sidewalkWidth && cx <= pX + pW + roadWidth) ||
                         // Route en bas de la parcelle
-                        (cz >= plotZ - roadWidth && cz < plotZ - sidewalkWidth) ||
+                        (cz >= pZ - roadWidth && cz < pZ - sidewalkWidth) ||
                         // Route en haut de la parcelle
-                        (cz > plotZ + plotDepth + sidewalkWidth && cz <= plotZ + plotDepth + roadWidth);
+                        (cz > pZ + pD + sidewalkWidth && cz <= pZ + pD + roadWidth);
 
                     if (isOnRoad) {
                         // Vérifier si la cellule est déjà marchable
@@ -80,8 +86,23 @@ export default class RoadNavigationGraph extends NavigationGraph {
 
         // Marquer les intersections (zones où les routes se croisent)
         crosswalkInfos.forEach(crosswalk => {
-            const crosswalkPos = crosswalk.position;
-            const crosswalkGrid = this.worldToGrid(crosswalkPos.x, crosswalkPos.z);
+            // Vérifier que les coordonnées du passage piéton sont valides
+            if (!crosswalk.position || 
+                (typeof crosswalk.position.x === 'undefined' && typeof crosswalk.position.getX === 'undefined') || 
+                (typeof crosswalk.position.z === 'undefined' && typeof crosswalk.position.getZ === 'undefined')) {
+                console.error("RoadNavigationGraph: Coordonnées invalides pour un passage piéton:", crosswalk);
+                return; // Ignorer ce passage piéton
+            }
+            
+            // Extraire les coordonnées x et z de l'objet position
+            const posX = typeof crosswalk.position.x !== 'undefined' ? crosswalk.position.x : crosswalk.position.getX();
+            const posZ = typeof crosswalk.position.z !== 'undefined' ? crosswalk.position.z : crosswalk.position.getZ();
+            
+            // Snapper les coordonnées des passages piétons
+            const snappedPosX = Math.round(posX / cellSizeWorld) * cellSizeWorld;
+            const snappedPosZ = Math.round(posZ / cellSizeWorld) * cellSizeWorld;
+            
+            const crosswalkGrid = this.worldToGrid(snappedPosX, snappedPosZ);
             
             // Marquer une zone carrée autour du passage piéton pour l'intersection
             const intersectionSize = Math.ceil(roadWidth * this.gridScale);
