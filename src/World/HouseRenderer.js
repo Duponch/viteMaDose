@@ -18,6 +18,11 @@ export default class HouseRenderer {
         this.sharedRoofNormalMap = this.createRoofNormalMap(256, 256);
         this.sharedRoofRoughnessMap = this.createRoofRoughnessMap(256, 256);
         
+        // Création de la texture de briques
+        this.sharedBrickTexture = this.createBrickTexture(512, 512);
+        this.sharedBrickNormalMap = this.createBrickNormalMap(512, 512);
+        this.sharedBrickRoughnessMap = this.createBrickRoughnessMap(512, 512);
+        
         this.defineHouseBaseMaterials();
         this.defineHouseBaseGeometries();
         this.initializeHouseMatrixArrays();
@@ -188,6 +193,145 @@ export default class HouseRenderer {
     }
 
     /**
+     * Crée une texture de briques procédurale
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.Texture} - Texture générée
+     */
+    createBrickTexture(width, height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Couleurs de base pour les briques
+        const brickColor = '#B76E79';  // Rose brique
+        const mortarColor = '#8B5A5A'; // Rose plus foncé pour le mortier
+        
+        // Dimensions des briques (plus petites)
+        const brickWidth = width / 12;  // Augmenté de 8 à 12 pour des briques plus petites
+        const brickHeight = height / 6;  // Augmenté de 4 à 6 pour des briques plus petites
+        const mortarWidth = 3;  // Réduit de 4 à 3 pour un mortier plus fin
+        
+        // Fond de base
+        ctx.fillStyle = mortarColor;
+        ctx.fillRect(0, 0, width, height);
+        
+        // Dessin des briques
+        for (let y = 0; y < 6; y++) {  // Ajusté pour correspondre à la nouvelle hauteur
+            // Décalage alterné pour l'effet de briques
+            const offsetX = (y % 2 === 0) ? 0 : brickWidth / 2;
+            
+            for (let x = 0; x < 12; x++) {  // Ajusté pour correspondre à la nouvelle largeur
+                ctx.fillStyle = brickColor;
+                ctx.fillRect(
+                    x * brickWidth + offsetX + mortarWidth/2,
+                    y * brickHeight + mortarWidth/2,
+                    brickWidth - mortarWidth,
+                    brickHeight - mortarWidth
+                );
+            }
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(3, 3);  // Augmenté de 2 à 3 pour plus de répétition
+        
+        return texture;
+    }
+
+    /**
+     * Crée une normal map pour les briques
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.Texture} - Texture générée
+     */
+    createBrickNormalMap(width, height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Fond de base (bleu = plat)
+        ctx.fillStyle = '#8080FF';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Dimensions des briques (plus petites)
+        const brickWidth = width / 12;  // Ajusté pour correspondre à la texture
+        const brickHeight = height / 6;  // Ajusté pour correspondre à la texture
+        const mortarWidth = 3;  // Ajusté pour correspondre à la texture
+        
+        // Dessin des briques avec effet de relief
+        for (let y = 0; y < 6; y++) {
+            const offsetX = (y % 2 === 0) ? 0 : brickWidth / 2;
+            
+            for (let x = 0; x < 12; x++) {
+                // Légère élévation pour les briques
+                ctx.fillStyle = '#A0A0FF';
+                ctx.fillRect(
+                    x * brickWidth + offsetX + mortarWidth/2,
+                    y * brickHeight + mortarWidth/2,
+                    brickWidth - mortarWidth,
+                    brickHeight - mortarWidth
+                );
+            }
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(3, 3);  // Ajusté pour correspondre à la texture
+        
+        return texture;
+    }
+
+    /**
+     * Crée une roughness map pour les briques
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.Texture} - Texture générée
+     */
+    createBrickRoughnessMap(width, height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Fond de base (gris moyen = rugosité moyenne)
+        ctx.fillStyle = '#808080';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Dimensions des briques (plus petites)
+        const brickWidth = width / 12;  // Ajusté pour correspondre à la texture
+        const brickHeight = height / 6;  // Ajusté pour correspondre à la texture
+        const mortarWidth = 3;  // Ajusté pour correspondre à la texture
+        
+        // Dessin des briques avec rugosité différente
+        for (let y = 0; y < 6; y++) {
+            const offsetX = (y % 2 === 0) ? 0 : brickWidth / 2;
+            
+            for (let x = 0; x < 12; x++) {
+                // Briques plus rugueuses que le mortier
+                ctx.fillStyle = '#606060';
+                ctx.fillRect(
+                    x * brickWidth + offsetX + mortarWidth/2,
+                    y * brickHeight + mortarWidth/2,
+                    brickWidth - mortarWidth,
+                    brickHeight - mortarWidth
+                );
+            }
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(3, 3);  // Ajusté pour correspondre à la texture
+        
+        return texture;
+    }
+
+    /**
      * Définit les matériaux de base utilisés pour les différentes parties de la maison.
      */
     defineHouseBaseMaterials() {
@@ -199,11 +343,27 @@ export default class HouseRenderer {
 
         this.baseHouseMaterials = {};
 
+        // Matériaux des murs avec texture de briques
         this.baseHouseMaterials.base_part1 = new THREE.MeshStandardMaterial({
-            color: facadeColor, roughness: 0.8, name: "HouseBase1Mat"
+            color: facadeColor,
+            roughness: 0.8,
+            metalness: 0.0,
+            name: "HouseBase1Mat",
+            map: this.sharedBrickTexture,
+            normalMap: this.sharedBrickNormalMap,
+            normalScale: new THREE.Vector2(0.5, 0.5),
+            roughnessMap: this.sharedBrickRoughnessMap
         });
+        
         this.baseHouseMaterials.base_part2 = new THREE.MeshStandardMaterial({
-            color: facadeColor, roughness: 0.8, name: "HouseBase2Mat"
+            color: facadeColor,
+            roughness: 0.8,
+            metalness: 0.0,
+            name: "HouseBase2Mat",
+            map: this.sharedBrickTexture,
+            normalMap: this.sharedBrickNormalMap,
+            normalScale: new THREE.Vector2(0.5, 0.5),
+            roughnessMap: this.sharedBrickRoughnessMap
         });
         
         // Utilisation des textures partagées pour le toit
@@ -577,8 +737,8 @@ export default class HouseRenderer {
                     material.emissiveIntensity = 0.0;
                     if (experience && experience.scene && experience.scene.environment) {
                         material.envMap = experience.scene.environment;
-                        material.roughness = 0.05;
-                        material.metalness = 0.9;
+                        material.roughness = 0.9;
+                        material.metalness = 0;
                         material.needsUpdate = true;
                     } else {
                         console.warn(`[InstancedMesh] Env map non trouvée pour fenêtres maison (${partName}).`);
