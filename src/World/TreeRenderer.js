@@ -91,11 +91,12 @@ export default class TreeRenderer {
         
         // Sélection aléatoire d'une couleur de feuillage
         const foliageColor = this.foliageColors[Math.floor(Math.random() * this.foliageColors.length)];
-        const foliageMaterial = new THREE.MeshLambertMaterial({ 
+        const foliageMaterial = new THREE.MeshStandardMaterial({ 
             color: foliageColor, 
             name: "TreeFoliageMat",
-            // Ajout d'une légère variation de couleur pour plus de naturel
-            emissive: new THREE.Color(foliageColor).multiplyScalar(0.1)
+            metalness: 0.0,
+            roughness: 0.8,
+            emissive: new THREE.Color(foliageColor).multiplyScalar(0.05) // Réduit l'émission pour moins de luminosité nocturne
         });
 
         // Tronc
