@@ -18,7 +18,7 @@ export default class TreeRenderer {
      * Génère un arbre procédural
      * @returns {object} Asset data contenant les parties de l'arbre
      */
-    generateProceduralTree(baseWidth = 1, baseHeight = 2, baseDepth = 1, userScale = 1) {
+    generateProceduralTree(baseWidth = 4, baseHeight = 8, baseDepth = 4, userScale = 1) {
         console.log("[Tree Proc] Début de la génération de l'arbre procédural.");
         const treeGroup = new THREE.Group();
 
@@ -27,7 +27,7 @@ export default class TreeRenderer {
         const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22, name: "TreeFoliageMat" });
 
         // Tronc
-        const trunkHeight = baseHeight * 0.4;
+        const trunkHeight = baseHeight * 0.5;
         const trunkRadiusBottom = baseWidth * 0.15;
         const trunkRadiusTop = baseWidth * 0.1;
         const trunkGeometry = new THREE.CylinderGeometry(trunkRadiusTop, trunkRadiusBottom, trunkHeight, 6);
@@ -38,22 +38,22 @@ export default class TreeRenderer {
 
         // Feuillage
         const foliageBaseY = trunkHeight;
-        const foliageHeightFactor = baseHeight * 0.6;
-        const foliageWidthFactor = baseWidth * 0.5;
+        const foliageHeightFactor = baseHeight * 0.7;
+        const foliageWidthFactor = baseWidth * 0.7;
 
-        const foliage1 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.9, 0), foliageMaterial);
+        const foliage1 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 1.1, 0), foliageMaterial);
         foliage1.position.y = foliageBaseY + foliageHeightFactor * 0.3;
         treeGroup.add(foliage1);
 
-        const foliage2 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.7, 0), foliageMaterial);
+        const foliage2 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.9, 0), foliageMaterial);
         foliage2.position.y = foliageBaseY + foliageHeightFactor * 0.65;
-        foliage2.position.x = foliageWidthFactor * 0.3;
+        foliage2.position.x = foliageWidthFactor * 0.4;
         foliage2.rotation.z = Math.PI / 5;
         treeGroup.add(foliage2);
 
-        const foliage3 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.6, 0), foliageMaterial);
+        const foliage3 = new THREE.Mesh(new THREE.IcosahedronGeometry(foliageWidthFactor * 0.8, 0), foliageMaterial);
         foliage3.position.y = foliageBaseY + foliageHeightFactor * 0.55;
-        foliage3.position.x = -foliageWidthFactor * 0.25;
+        foliage3.position.x = -foliageWidthFactor * 0.35;
         foliage3.rotation.z = -Math.PI / 6;
         treeGroup.add(foliage3);
         console.log("[Tree Proc] Feuillage créé et ajouté au groupe.");
