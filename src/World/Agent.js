@@ -313,7 +313,8 @@ export default class Agent {
                 // Vérifier les points du chemin pour éviter la téléportation
                 if (pathPoints.length > 0) {
                     const startPoint = pathPoints[0];
-                    const distanceToStart = this.position.distanceTo(startPoint);
+                    const distanceToStartSq = this.position.distanceToSquared(startPoint);
+                    const distanceToStart = Math.sqrt(distanceToStartSq);
                     
                     // Si le point de départ du chemin est trop loin de la position actuelle
                     if (distanceToStart > 5.0) {
@@ -876,7 +877,8 @@ export default class Agent {
                         // On est presque arrivé, aider l'agent à entrer dans le parc
                         // On vérifie à quelle distance nous sommes de la position finale
                         const finalPathPoint = this.currentPathPoints[this.currentPathPoints.length - 1];
-                        const distanceToFinal = this.position.distanceTo(finalPathPoint);
+                        const distanceToFinalSq = this.position.distanceToSquared(finalPathPoint);
+                        const distanceToFinal = Math.sqrt(distanceToFinalSq);
                         
                         console.log(`Agent ${this.id}: Proche de la destination finale, distance=${distanceToFinal.toFixed(2)}m, finalPoint=[${finalPathPoint.x.toFixed(2)}, ${finalPathPoint.z.toFixed(2)}]`);
                         
@@ -898,7 +900,8 @@ export default class Agent {
                                 
                                 for (const park of parks) {
                                     if (park && park.position) {
-                                        const distance = this.position.distanceTo(park.position);
+                                        const distanceSq = this.position.distanceToSquared(park.position);
+                                        const distance = Math.sqrt(distanceSq);
                                         if (distance < minDistance) {
                                             minDistance = distance;
                                             closestPark = park;
@@ -935,7 +938,8 @@ export default class Agent {
                             time: currentGameTime
                         };
                     } else if (currentGameTime - this._lastPositionCheck.time > 2000) { // Vérifier toutes les 2 secondes
-                        const distance = this.position.distanceTo(this._lastPositionCheck.position);
+                        const distanceSq = this.position.distanceToSquared(this._lastPositionCheck.position);
+                        const distance = Math.sqrt(distanceSq);
                         
                         // Si l'agent s'est peu déplacé et est proche de la fin du chemin
                         if (distance < 0.5 && this.currentPathIndexVisual >= this.currentPathPoints.length * 0.9) {
@@ -951,7 +955,8 @@ export default class Agent {
                                 
                                 for (const park of parks) {
                                     if (park && park.position) {
-                                        const distance = this.position.distanceTo(park.position);
+                                        const distanceSq = this.position.distanceToSquared(park.position);
+                                        const distance = Math.sqrt(distanceSq);
                                         if (distance < minDistance) {
                                             minDistance = distance;
                                             closestPark = park;
@@ -1008,7 +1013,8 @@ export default class Agent {
                             
                             for (const park of parks) {
                                 if (park && park.position) {
-                                    const distance = this.position.distanceTo(park.position);
+                                    const distanceSq = this.position.distanceToSquared(park.position);
+                                    const distance = Math.sqrt(distanceSq);
                                     if (distance < minDistance) {
                                         minDistance = distance;
                                         closestPark = park;
@@ -1107,7 +1113,8 @@ export default class Agent {
                             time: currentGameTime
                         };
                     } else if (currentGameTime - this._lastPositionCheck.time > 2000) { // Vérifier toutes les 2 secondes
-                        const distance = this.position.distanceTo(this._lastPositionCheck.position);
+                        const distanceSq = this.position.distanceToSquared(this._lastPositionCheck.position);
+                        const distance = Math.sqrt(distanceSq);
                         
                         // Si l'agent s'est peu déplacé et est proche de la fin du chemin
                         if (distance < 0.5 && this.currentPathIndexVisual >= this.currentPathPoints.length * 0.9) {
@@ -1123,7 +1130,8 @@ export default class Agent {
                                 
                                 for (const park of parks) {
                                     if (park && park.position) {
-                                        const distance = this.position.distanceTo(park.position);
+                                        const distanceSq = this.position.distanceToSquared(park.position);
+                                        const distance = Math.sqrt(distanceSq);
                                         if (distance < minDistance) {
                                             minDistance = distance;
                                             closestPark = park;
@@ -1243,7 +1251,8 @@ export default class Agent {
                             
                             for (const park of parks) {
                                 if (park && park.position) {
-                                    const distance = this.position.distanceTo(park.position);
+                                    const distanceSq = this.position.distanceToSquared(park.position);
+                                    const distance = Math.sqrt(distanceSq);
                                     if (distance < minDistance) {
                                         minDistance = distance;
                                         closestPark = park;
@@ -1431,7 +1440,8 @@ export default class Agent {
 
         // Calculer la distance à la caméra
         const cameraPosition = this.experience.camera.instance.position;
-        const distanceToCamera = this.position.distanceTo(cameraPosition);
+        const distanceToCameraSq = this.position.distanceToSquared(cameraPosition);
+        const distanceToCamera = Math.sqrt(distanceToCameraSq);
         
         // Mettre à jour l'état du LOD
         this.isLodActive = distanceToCamera > this.lodDistance;
@@ -2010,7 +2020,8 @@ export default class Agent {
         const endPos = targetPos.clone();
         
         // Calculer la distance
-        const distance = startPos.distanceTo(endPos);
+        const distanceSq = startPos.distanceToSquared(endPos);
+        const distance = Math.sqrt(distanceSq);
         
         // Définir une vitesse de déplacement (peut être ajustée)
         const speed = 1.2; // mètres par seconde
@@ -2057,7 +2068,8 @@ export default class Agent {
             
             for (const park of parks) {
                 if (park && park.position) {
-                    const distance = this.position.distanceTo(park.position);
+                    const distanceSq = this.position.distanceToSquared(park.position);
+                    const distance = Math.sqrt(distanceSq);
                     if (distance < minDistance) {
                         minDistance = distance;
                         closestPark = park;
