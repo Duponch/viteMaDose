@@ -1493,6 +1493,8 @@ export default class Agent {
         if (this.position.distanceToSquared(this._tempV3_1) > 0.01) {
             this._tempMatrix.lookAt(this.position, this._tempV3_1, THREE.Object3D.DEFAULT_UP);
             this._tempQuat.setFromRotationMatrix(this._tempMatrix);
+            // Ajouter une rotation de 180 degrés autour de l'axe Y
+            this._tempQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
             const deltaSeconds = deltaTime / 1000.0;
             const slerpAlpha = 1.0 - Math.exp(-this.rotationSpeed * deltaSeconds);
             this.orientation.slerp(this._tempQuat, slerpAlpha);
