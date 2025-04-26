@@ -132,7 +132,7 @@ export default class GrassInstancer {
             const z = plot.z + (Math.random() * plot.depth);
             
             this.dummy.position.set(x, 0, z);
-            this.dummy.scale.setScalar(0.5 + Math.random() * 0.5);
+            this.dummy.scale.setScalar(0.3 + Math.random() * 0.5);
             this.dummy.rotation.y = Math.random() * Math.PI;
             
             this.dummy.updateMatrix();
