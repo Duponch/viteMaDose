@@ -110,14 +110,10 @@ export default class TreePlacementStrategy extends IZonePlacementStrategy {
             console.warn("TreePlacementStrategy: Could not get random tree asset.");
             return false; // Échec de l'ajout
         }
-         if (!assetInfo.sizeAfterFitting || !assetInfo.centerOffset || !assetInfo.fittingScaleFactor || !assetInfo.id) {
-             console.error(`TreePlacementStrategy: Tree asset data (ID: ${assetInfo.id}) is incomplete or invalid.`);
-             return false; // Échec de l'ajout
-         }
-         if (assetInfo.parts && assetInfo.parts.length > 0) {
-             console.warn(`TreePlacementStrategy: Tree asset ${assetInfo.id} has 'parts'. Treating as a simple asset.`);
-         }
-
+        if (!assetInfo.sizeAfterFitting || !assetInfo.centerOffset || !assetInfo.fittingScaleFactor || !assetInfo.id) {
+            console.error(`TreePlacementStrategy: Tree asset data (ID: ${assetInfo.id}) is incomplete or invalid.`);
+            return false; // Échec de l'ajout
+        }
 
         // Échelle et rotation aléatoires
         const randomScaleMultiplier = THREE.MathUtils.randFloat(0.85, 1.15);
@@ -125,7 +121,28 @@ export default class TreePlacementStrategy extends IZonePlacementStrategy {
         const randomRotationY = Math.random() * Math.PI * 2;
         const plotGroundY = this.config.plotGroundY ?? 0.005;
 
-        // Calculer la matrice d'instance
+        // Si l'asset a des parts, on doit gérer chaque partie séparément
+        if (assetInfo.parts && assetInfo.parts.length > 0) {
+            // Pour chaque partie, créer une matrice d'instance
+            assetInfo.parts.forEach((part, index) => {
+                const instanceMatrix = this.calculateInstanceMatrix(
+                    treeX,
+                    treeZ,
+                    assetInfo.sizeAfterFitting.y,
+                    assetInfo.fittingScaleFactor,
+                    assetInfo.centerOffset,
+                    finalUserScale,
+                    randomRotationY,
+                    plotGroundY
+                );
+
+                // Utiliser l'ID de l'asset original pour toutes les parties
+                instanceDataManager.addData('tree', assetInfo.id, instanceMatrix);
+            });
+            return true;
+        }
+
+        // Si l'asset n'a pas de parts, on le traite comme avant
         const instanceMatrix = this.calculateInstanceMatrix(
             treeX,
             treeZ,

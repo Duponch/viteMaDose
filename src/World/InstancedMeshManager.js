@@ -173,8 +173,42 @@ export default class InstancedMeshManager {
                         case 'tree': {
                             const assetId = idOrKey; // Pour standard, idOrKey est l'assetId
                             const assetData = this.assetLoader.getAssetDataById(assetId);
-                            if (!assetData || !assetData.geometry || !assetData.material) {
-                                console.warn(`[IMM] Asset data not found or invalid for ${type} ID: ${assetId}`);
+                            if (!assetData) {
+                                console.warn(`[IMM] Asset data not found for ${type} ID: ${assetId}`);
+                                continue;
+                            }
+
+                            // Si l'asset a des parts, on doit gérer chaque partie séparément
+                            if (assetData.parts && assetData.parts.length > 0) {
+                                // Pour chaque partie, créer un InstancedMesh
+                                assetData.parts.forEach((part, index) => {
+                                    if (!part.geometry || !part.material) {
+                                        console.warn(`[IMM] Invalid part data for ${type} asset ${assetId}, part index: ${index}`);
+                                        return;
+                                    }
+
+                                    const count = matrices.length;
+                                    const instancedMesh = new THREE.InstancedMesh(part.geometry, part.material, count);
+                                    instancedMesh.castShadow = castShadow;
+                                    instancedMesh.receiveShadow = receiveShadow;
+                                    instancedMesh.name = `${meshKey}_part${index}`;
+
+                                    matrices.forEach((matrix, index) => {
+                                        instancedMesh.setMatrixAt(index, matrix);
+                                    });
+                                    instancedMesh.instanceMatrix.needsUpdate = true;
+
+                                    this.parentGroup.add(instancedMesh);
+                                    this.instancedMeshes[`${meshKey}_part${index}`] = instancedMesh;
+                                    totalMeshesCreated++;
+                                    totalInstancesCreated += count;
+                                });
+                                continue;
+                            }
+
+                            // Si l'asset n'a pas de parts, on le traite comme avant
+                            if (!assetData.geometry || !assetData.material) {
+                                console.warn(`[IMM] Asset data invalid for ${type} ID: ${assetId}`);
                                 continue;
                             }
                             geometry = assetData.geometry;
