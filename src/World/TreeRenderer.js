@@ -79,6 +79,49 @@ export default class TreeRenderer {
     }
 
     /**
+     * Crée des nœuds (protuberances) sur le tronc de l'arbre
+     * @param {number} trunkHeight - Hauteur du tronc
+     * @param {number} trunkRadius - Rayon du tronc
+     * @param {THREE.Material} material - Matériau à utiliser pour les nœuds
+     * @returns {Array<THREE.Mesh>} Liste des nœuds créés
+     */
+    createTrunkKnots(trunkHeight, trunkRadius, material) {
+        const knots = [];
+        const numKnots = THREE.MathUtils.randInt(2, 5); // Nombre aléatoire de nœuds
+        
+        for (let i = 0; i < numKnots; i++) {
+            // Position verticale aléatoire sur le tronc
+            const heightPosition = Math.random() * trunkHeight;
+            
+            // Angle aléatoire autour du tronc
+            const angle = Math.random() * Math.PI * 2;
+            
+            // Taille aléatoire du nœud
+            const knotSize = trunkRadius * THREE.MathUtils.randFloat(0.4, 0.6);
+            
+            // Créer une géométrie de sphère pour le nœud
+            const knotGeometry = new THREE.SphereGeometry(knotSize, 4, 4);
+            
+            // Créer le mesh du nœud
+            const knot = new THREE.Mesh(knotGeometry, material);
+            
+            // Positionner le nœud sur le tronc
+            knot.position.y = heightPosition;
+            knot.position.x = Math.cos(angle) * (trunkRadius - 0.3);
+            knot.position.z = Math.sin(angle) * (trunkRadius - 0.3);
+            
+            // Rotation aléatoire pour plus de variété
+            knot.rotation.x = Math.random() * Math.PI * 0.2;
+            knot.rotation.y = Math.random() * Math.PI * 0.2;
+            knot.rotation.z = Math.random() * Math.PI * 0.2;
+            
+            knots.push(knot);
+        }
+        
+        return knots;
+    }
+
+    /**
      * Génère un arbre procédural
      * @returns {object} Asset data contenant les parties de l'arbre
      */
@@ -108,6 +151,13 @@ export default class TreeRenderer {
         trunk.position.y = trunkHeight / 2;
         treeGroup.add(trunk);
         console.log("[Tree Proc] Tronc créé et ajouté au groupe.");
+        
+        // Ajouter des nœuds au tronc
+        const trunkKnots = this.createTrunkKnots(trunkHeight, trunkRadiusBottom, trunkMaterial);
+        trunkKnots.forEach(knot => {
+            treeGroup.add(knot);
+        });
+        console.log("[Tree Proc] Nœuds ajoutés au tronc.");
 
         // Feuillage
         const foliageBaseY = trunkHeight;
