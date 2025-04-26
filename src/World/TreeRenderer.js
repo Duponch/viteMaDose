@@ -405,7 +405,7 @@ export default class TreeRenderer {
             metalness: 0.0,
             roughness: 0.8,
             map: this.sharedFoliageTextures.get(foliageColor),
-            emissive: new THREE.Color(foliageColor).multiplyScalar(0.05)
+            //emissive: new THREE.Color(foliageColor).multiplyScalar(0.01)
         });
 
         // Tronc courbé
