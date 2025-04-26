@@ -113,6 +113,8 @@ export default class Car {
                         // Nous sommes arrivés à destination
                         console.log(`Car ${this.instanceId}: Arrivée à destination`);
                         this.isActive = false;
+						this.path = null; // Effacer le chemin une fois arrivé
+						this.currentPathIndex = 0; // Réinitialiser l'index
                         return;
                     }
                 }
@@ -155,6 +157,8 @@ export default class Car {
                 // Nous sommes arrivés à destination
                 console.log(`Car ${this.instanceId}: Arrivée à destination (mode direct)`);
                 this.isActive = false;
+				this.path = null; // Effacer le chemin une fois arrivé
+				this.currentPathIndex = 0; // Réinitialiser l'index
                 return;
             }
             

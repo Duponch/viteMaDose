@@ -456,8 +456,8 @@ export default class World {
 	   if(this.cityManager?.lampPostManager) {
 		   this.cityManager.lampPostManager.updateLampPostLights(currentHour); // Appel via CityManager
 	   }
+	   this.carManager?.update(deltaTime); // Mettre à jour les voitures
 	   this.agentManager?.update(deltaTime);
-       this.carManager?.update(deltaTime); // Mettre à jour les voitures
    }
 
     // --- AJOUT: Méthodes pour afficher les sphères de débogage ---
