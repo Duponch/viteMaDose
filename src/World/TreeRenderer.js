@@ -183,6 +183,79 @@ export default class TreeRenderer {
     }
 
     /**
+     * Crée une texture procédurale pour les troncs d'arbres
+     * @returns {THREE.CanvasTexture} Texture générée pour les troncs
+     */
+    createTrunkTexture() {
+        // Créer un canvas pour dessiner la texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        
+        // Couleur de base du tronc
+        const baseColor = new THREE.Color(0x8B4513);
+        ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Ajouter des variations de couleur pour simuler l'écorce
+        for (let i = 0; i < 100; i++) {
+            // Position aléatoire
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            
+            // Taille aléatoire
+            const size = Math.random() * 20 + 5;
+            
+            // Variation de couleur (plus claire ou plus foncée)
+            const variation = Math.random() * 40 - 20;
+            const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
+            const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
+            const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
+            
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            
+            // Dessiner une forme irrégulière pour simuler l'écorce
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            for (let j = 0; j < 8; j++) {
+                const angle = (j / 8) * Math.PI * 2;
+                const radius = size * (0.7 + Math.random() * 0.6);
+                const px = x + Math.cos(angle) * radius;
+                const py = y + Math.sin(angle) * radius;
+                ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        // Ajouter des lignes verticales pour simuler les fissures de l'écorce
+        for (let i = 0; i < 20; i++) {
+            const x = Math.random() * canvas.width;
+            const width = Math.random() * 2 + 1;
+            const height = Math.random() * 100 + 50;
+            const y = Math.random() * (canvas.height - height);
+            
+            // Couleur plus foncée pour les fissures
+            const darkVariation = -30;
+            const r = Math.max(0, Math.min(255, baseColor.r * 255 + darkVariation));
+            const g = Math.max(0, Math.min(255, baseColor.g * 255 + darkVariation));
+            const b = Math.max(0, Math.min(255, baseColor.b * 255 + darkVariation));
+            
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            ctx.fillRect(x, y, width, height);
+        }
+        
+        // Créer la texture à partir du canvas
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 2); // Répéter verticalement pour couvrir toute la hauteur du tronc
+        
+        return texture;
+    }
+
+    /**
      * Génère un arbre procédural
      * @returns {object} Asset data contenant les parties de l'arbre
      */
@@ -190,8 +263,15 @@ export default class TreeRenderer {
         console.log("[Tree Proc] Début de la génération de l'arbre procédural.");
         const treeGroup = new THREE.Group();
 
+        // Créer la texture procédurale pour le tronc
+        const trunkTexture = this.createTrunkTexture();
+        
         // Matériaux
-        const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513, name: "TreeTrunkMat" });
+        const trunkMaterial = new THREE.MeshLambertMaterial({ 
+            color: 0x8B4513, 
+            name: "TreeTrunkMat",
+            map: trunkTexture
+        });
         
         // Sélection aléatoire d'une couleur de feuillage
         const foliageColor = this.foliageColors[Math.floor(Math.random() * this.foliageColors.length)];
