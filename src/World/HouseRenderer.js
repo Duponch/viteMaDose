@@ -110,41 +110,171 @@ export default class HouseRenderer {
         const roofHeight = roofPitchHeight;
         const halfRoofWidth = roofWidth / 2;
         const halfRoofDepth = roofDepth / 2;
-        const roofThickness = 0.05;
+        const roofThickness = 0.1;
         const roofGeometry = new THREE.BufferGeometry();
         
+        // Ajout d'un décalage aux extrémités pour éviter le z-fighting
+        const edgeOffset = 0.02;
+        
+        // Approche simplifiée : créer des faces distinctes pour le haut et le bas du toit
+        // sans essayer de les connecter directement
+        
+        // Sommets pour le haut du toit
         const topVertices = [
-            -halfRoofWidth, 0, -halfRoofDepth,
-            halfRoofWidth, 0, -halfRoofDepth,
-            halfRoofWidth, 0, halfRoofDepth,
-            -halfRoofWidth, 0, halfRoofDepth,
-            0, roofHeight, -halfRoofDepth,
-            0, roofHeight, halfRoofDepth
+            // Face avant
+            -halfRoofWidth + edgeOffset, 0, -halfRoofDepth + edgeOffset,
+            halfRoofWidth - edgeOffset, 0, -halfRoofDepth + edgeOffset,
+            0, roofHeight, -halfRoofDepth + edgeOffset,
+            
+            // Face arrière
+            -halfRoofWidth + edgeOffset, 0, halfRoofDepth - edgeOffset,
+            halfRoofWidth - edgeOffset, 0, halfRoofDepth - edgeOffset,
+            0, roofHeight, halfRoofDepth - edgeOffset,
+            
+            // Face gauche
+            -halfRoofWidth + edgeOffset, 0, -halfRoofDepth + edgeOffset,
+            -halfRoofWidth + edgeOffset, 0, halfRoofDepth - edgeOffset,
+            0, roofHeight, -halfRoofDepth + edgeOffset,
+            0, roofHeight, halfRoofDepth - edgeOffset,
+            
+            // Face droite
+            halfRoofWidth - edgeOffset, 0, -halfRoofDepth + edgeOffset,
+            halfRoofWidth - edgeOffset, 0, halfRoofDepth - edgeOffset,
+            0, roofHeight, -halfRoofDepth + edgeOffset,
+            0, roofHeight, halfRoofDepth - edgeOffset,
+            
+            // Face inférieure avant
+            -halfRoofWidth + edgeOffset, -roofThickness, -halfRoofDepth + edgeOffset,
+            halfRoofWidth - edgeOffset, -roofThickness, -halfRoofDepth + edgeOffset,
+            0, roofHeight - roofThickness, -halfRoofDepth + edgeOffset,
+            
+            // Face inférieure arrière
+            -halfRoofWidth + edgeOffset, -roofThickness, halfRoofDepth - edgeOffset,
+            halfRoofWidth - edgeOffset, -roofThickness, halfRoofDepth - edgeOffset,
+            0, roofHeight - roofThickness, halfRoofDepth - edgeOffset,
+            
+            // Face inférieure gauche
+            -halfRoofWidth + edgeOffset, -roofThickness, -halfRoofDepth + edgeOffset,
+            -halfRoofWidth + edgeOffset, -roofThickness, halfRoofDepth - edgeOffset,
+            0, roofHeight - roofThickness, -halfRoofDepth + edgeOffset,
+            0, roofHeight - roofThickness, halfRoofDepth - edgeOffset,
+            
+            // Face inférieure droite
+            halfRoofWidth - edgeOffset, -roofThickness, -halfRoofDepth + edgeOffset,
+            halfRoofWidth - edgeOffset, -roofThickness, halfRoofDepth - edgeOffset,
+            0, roofHeight - roofThickness, -halfRoofDepth + edgeOffset,
+            0, roofHeight - roofThickness, halfRoofDepth - edgeOffset,
+            
+            // Faces latérales pour l'épaisseur
+            // Face latérale avant gauche
+            -halfRoofWidth + edgeOffset, 0, -halfRoofDepth + edgeOffset,
+            -halfRoofWidth + edgeOffset, -roofThickness, -halfRoofDepth + edgeOffset,
+            0, roofHeight, -halfRoofDepth + edgeOffset,
+            0, roofHeight - roofThickness, -halfRoofDepth + edgeOffset,
+            
+            // Face latérale avant droite
+            halfRoofWidth - edgeOffset, 0, -halfRoofDepth + edgeOffset,
+            halfRoofWidth - edgeOffset, -roofThickness, -halfRoofDepth + edgeOffset,
+            0, roofHeight, -halfRoofDepth + edgeOffset,
+            0, roofHeight - roofThickness, -halfRoofDepth + edgeOffset,
+            
+            // Face latérale arrière gauche
+            -halfRoofWidth + edgeOffset, 0, halfRoofDepth - edgeOffset,
+            -halfRoofWidth + edgeOffset, -roofThickness, halfRoofDepth - edgeOffset,
+            0, roofHeight, halfRoofDepth - edgeOffset,
+            0, roofHeight - roofThickness, halfRoofDepth - edgeOffset,
+            
+            // Face latérale arrière droite
+            halfRoofWidth - edgeOffset, 0, halfRoofDepth - edgeOffset,
+            halfRoofWidth - edgeOffset, -roofThickness, halfRoofDepth - edgeOffset,
+            0, roofHeight, halfRoofDepth - edgeOffset,
+            0, roofHeight - roofThickness, halfRoofDepth - edgeOffset,
+            
+            // Face latérale gauche avant
+            -halfRoofWidth + edgeOffset, 0, -halfRoofDepth + edgeOffset,
+            -halfRoofWidth + edgeOffset, -roofThickness, -halfRoofDepth + edgeOffset,
+            -halfRoofWidth + edgeOffset, 0, halfRoofDepth - edgeOffset,
+            -halfRoofWidth + edgeOffset, -roofThickness, halfRoofDepth - edgeOffset,
+            
+            // Face latérale droite avant
+            halfRoofWidth - edgeOffset, 0, -halfRoofDepth + edgeOffset,
+            halfRoofWidth - edgeOffset, -roofThickness, -halfRoofDepth + edgeOffset,
+            halfRoofWidth - edgeOffset, 0, halfRoofDepth - edgeOffset,
+            halfRoofWidth - edgeOffset, -roofThickness, halfRoofDepth - edgeOffset
         ];
         
-        const bottomVertices = topVertices.map((v, i) => (i % 3 === 1) ? v - roofThickness : v);
-        const allVertices = new Float32Array([...topVertices, ...bottomVertices]);
+        // Indices pour les triangles
+        const indices = [];
         
-        const topIndices = [0, 3, 5, 0, 5, 4, 1, 2, 5, 1, 5, 4, 0, 1, 4, 2, 3, 5];
-        const sideIndices = [
-            0, 1, 7, 0, 7, 6, 1, 2, 8, 1, 8, 7, 2, 3, 9, 2, 9, 8,
-            3, 0, 6, 3, 6, 9, 0, 4, 10, 0, 10, 6, 1, 4, 10, 1, 10, 7,
-            2, 5, 11, 2, 11, 8, 3, 5, 11, 3, 11, 9, 4, 5, 11, 4, 11, 10
-        ];
-        const bottomIndices = [6, 11, 9, 6, 10, 11, 7, 11, 8, 7, 10, 11, 6, 10, 7, 8, 11, 9];
-        const allIndices = new Uint16Array([...topIndices, ...sideIndices, ...bottomIndices]);
+        // Fonction pour ajouter un triangle à partir de trois indices
+        const addTriangle = (a, b, c) => {
+            indices.push(a, b, c);
+        };
+        
+        // Fonction pour ajouter un quad (deux triangles) à partir de quatre indices
+        const addQuad = (a, b, c, d) => {
+            addTriangle(a, b, c);
+            addTriangle(a, c, d);
+        };
+        
+        // Face avant (triangle)
+        addTriangle(0, 1, 2);
+        
+        // Face arrière (triangle)
+        addTriangle(3, 4, 5);
+        
+        // Face gauche (quad)
+        addQuad(6, 7, 9, 8);
+        
+        // Face droite (quad)
+        addQuad(10, 11, 13, 12);
+        
+        // Face inférieure avant (triangle)
+        addTriangle(14, 15, 16);
+        
+        // Face inférieure arrière (triangle)
+        addTriangle(17, 18, 19);
+        
+        // Face inférieure gauche (quad)
+        addQuad(20, 21, 23, 22);
+        
+        // Face inférieure droite (quad)
+        addQuad(24, 25, 27, 26);
+        
+        // Faces latérales pour l'épaisseur
+        // Face latérale avant gauche
+        addQuad(28, 29, 31, 30);
+        
+        // Face latérale avant droite
+        addQuad(32, 33, 35, 34);
+        
+        // Face latérale arrière gauche
+        addQuad(36, 37, 39, 38);
+        
+        // Face latérale arrière droite
+        addQuad(40, 41, 43, 42);
+        
+        // Face latérale gauche avant
+        addQuad(44, 45, 47, 46);
+        
+        // Face latérale droite avant
+        addQuad(48, 49, 51, 50);
+        
+        const allVertices = new Float32Array(topVertices);
+        const allIndices = new Uint16Array(indices);
         
         roofGeometry.setAttribute('position', new THREE.BufferAttribute(allVertices, 3));
         roofGeometry.setIndex(new THREE.BufferAttribute(allIndices, 1));
         roofGeometry.computeVertexNormals();
         
-        const uvCount = 12;
-        const uvs = new Float32Array(uvCount * 2);
-        for (let i = 0; i < uvCount; i++) {
-            uvs[i * 2] = (allVertices[i * 3] / roofWidth) + 0.5;
-            uvs[i * 2 + 1] = (allVertices[i * 3 + 2] / roofDepth) + 0.5;
+        // Calcul des coordonnées UV
+        const uvs = [];
+        for (let i = 0; i < allVertices.length / 3; i++) {
+            const x = allVertices[i * 3];
+            const z = allVertices[i * 3 + 2];
+            uvs.push((x / roofWidth) + 0.5, (z / roofDepth) + 0.5);
         }
-        roofGeometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+        roofGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2));
         
         this.baseHouseGeometries.roof = roofGeometry;
     
@@ -377,6 +507,45 @@ export default class HouseRenderer {
         const allGeoms = [];
         materialMap.forEach((groupData, key) => {
             if (groupData.geoms.length === 0) return;
+            
+            // Vérifier si toutes les géométries ont des attributs compatibles
+            const hasIndex = groupData.geoms.some(g => g.index !== null);
+            const allHaveIndex = groupData.geoms.every(g => g.index !== null);
+            
+            // Si certaines géométries ont un index et d'autres non, ajouter un index à toutes
+            if (hasIndex && !allHaveIndex) {
+                groupData.geoms.forEach(geom => {
+                    if (geom.index === null) {
+                        // Créer un index séquentiel pour les géométries qui n'en ont pas
+                        const position = geom.attributes.position;
+                        if (position) {
+                            const count = position.count;
+                            const indices = new Uint16Array(count);
+                            for (let i = 0; i < count; i++) {
+                                indices[i] = i;
+                            }
+                            geom.setIndex(new THREE.BufferAttribute(indices, 1));
+                        }
+                    }
+                });
+            }
+            
+            // Si aucune géométrie n'a d'index, en ajouter un à toutes
+            if (!hasIndex) {
+                groupData.geoms.forEach(geom => {
+                    const position = geom.attributes.position;
+                    if (position) {
+                        const count = position.count;
+                        const indices = new Uint16Array(count);
+                        for (let i = 0; i < count; i++) {
+                            indices[i] = i;
+                        }
+                        geom.setIndex(new THREE.BufferAttribute(indices, 1));
+                    }
+                });
+            }
+            
+            // Maintenant, toutes les géométries devraient avoir des attributs compatibles
             const mergedGeom = mergeGeometries(groupData.geoms, false);
             if (!mergedGeom) {
                 console.error(`Échec de fusion des géométries pour le groupe "${key}".`);
@@ -396,7 +565,50 @@ export default class HouseRenderer {
             console.error("Aucune géométrie valide pour générer la maison procédurale.");
             return null;
         }
+        
+        // Vérifier si toutes les géométries ont des attributs compatibles
+        const hasIndex = allGeoms.some(g => g.index !== null);
+        const allHaveIndex = allGeoms.every(g => g.index !== null);
+        
+        // Si certaines géométries ont un index et d'autres non, ajouter un index à toutes
+        if (hasIndex && !allHaveIndex) {
+            allGeoms.forEach(geom => {
+                if (geom.index === null) {
+                    // Créer un index séquentiel pour les géométries qui n'en ont pas
+                    const position = geom.attributes.position;
+                    if (position) {
+                        const count = position.count;
+                        const indices = new Uint16Array(count);
+                        for (let i = 0; i < count; i++) {
+                            indices[i] = i;
+                        }
+                        geom.setIndex(new THREE.BufferAttribute(indices, 1));
+                    }
+                }
+            });
+        }
+        
+        // Si aucune géométrie n'a d'index, en ajouter un à toutes
+        if (!hasIndex) {
+            allGeoms.forEach(geom => {
+                const position = geom.attributes.position;
+                if (position) {
+                    const count = position.count;
+                    const indices = new Uint16Array(count);
+                    for (let i = 0; i < count; i++) {
+                        indices[i] = i;
+                    }
+                    geom.setIndex(new THREE.BufferAttribute(indices, 1));
+                }
+            });
+        }
+        
         const globalMerged = mergeGeometries(allGeoms, false);
+        if (!globalMerged) {
+            console.error("Échec de fusion globale des géométries.");
+            return null;
+        }
+        
         globalMerged.computeBoundingBox();
         const globalBBox = globalMerged.boundingBox;
         const globalMin = globalBBox.min.clone();
