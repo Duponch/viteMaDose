@@ -23,7 +23,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
         console.log("RoadNavigationGraph: Marquage des zones de routes...");
         let markedCells = 0;
         const cellSizeWorld = 1.0 / this.gridScale;
-        const roadWidth = this.config.roadWidth || 4.0; // Largeur de la route
+        const roadWidth = 6.0; // Largeur fixe de 6 cellules pour la route
         const sidewalkWidth = this.config.sidewalkWidth || 2.0; // Largeur du trottoir
 
         // Pour chaque parcelle, marquer la route qui la borde
@@ -105,14 +105,26 @@ export default class RoadNavigationGraph extends NavigationGraph {
             const crosswalkGrid = this.worldToGrid(snappedPosX, snappedPosZ);
             
             // Marquer une zone carrée autour du passage piéton pour l'intersection
+            // Utiliser la même largeur que la route (6 cellules)
             const intersectionSize = Math.ceil(roadWidth * this.gridScale);
             for (let dy = -intersectionSize; dy <= intersectionSize; dy++) {
                 for (let dx = -intersectionSize; dx <= intersectionSize; dx++) {
                     const gx = crosswalkGrid.x + dx;
                     const gy = crosswalkGrid.y + dy;
-                    if (!this.isWalkableAt(gx, gy)) {
-                        if (this.markCell(gx, gy)) {
-                            markedCells++;
+                    
+                    // Vérifier si la cellule est dans la zone de l'intersection
+                    const cellCenter = this.gridToWorld(gx, gy);
+                    const distanceToCenter = Math.sqrt(
+                        Math.pow(cellCenter.x - snappedPosX, 2) + 
+                        Math.pow(cellCenter.z - snappedPosZ, 2)
+                    );
+                    
+                    // Ne marquer que les cellules dans un rayon de 6 cellules
+                    if (distanceToCenter <= roadWidth) {
+                        if (!this.isWalkableAt(gx, gy)) {
+                            if (this.markCell(gx, gy)) {
+                                markedCells++;
+                            }
                         }
                     }
                 }
