@@ -1,6 +1,7 @@
 // src/World/HouseRenderer.js
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 export default class HouseRenderer {
     constructor(config, materials) {
@@ -17,7 +18,7 @@ export default class HouseRenderer {
     }
 
     /**
-     * Initialise les tableaux de matrices d’instances pour chaque partie de la maison.
+     * Initialise les tableaux de matrices d'instances pour chaque partie de la maison.
      */
     initializeHouseMatrixArrays() {
         this.houseInstanceMatrices = {
@@ -35,7 +36,7 @@ export default class HouseRenderer {
      * Définit les matériaux de base utilisés pour les différentes parties de la maison.
      */
     defineHouseBaseMaterials() {
-        const facadeColor = 0xF5F5DC;
+        const facadeColor = 0xd7ceae;
         const roofColor = 0x8B4513;
         const doorColor = 0x4a2c2a;
         const garageDoorColor = 0xd3d3d3;
@@ -51,17 +52,19 @@ export default class HouseRenderer {
         });
         this.baseHouseMaterials.roof = new THREE.MeshStandardMaterial({
             color: roofColor, roughness: 0.7, name: "HouseRoofMat",
-            side: THREE.DoubleSide // Pour assurer un rendu des deux côtés
+            side: THREE.DoubleSide
         });
         this.baseHouseMaterials.door = new THREE.MeshStandardMaterial({
             color: doorColor, roughness: 0.7, name: "HouseDoorMat"
         });
         this.baseHouseMaterials.garageDoor = new THREE.MeshStandardMaterial({
-            color: garageDoorColor, roughness: 0.6, name: "HouseGarageDoorMat"
+            color: garageDoorColor, roughness: 0.1, metalness: 0.6, name: "HouseGarageDoorMat"
         });
         this.baseHouseMaterials.window = new THREE.MeshStandardMaterial({
-            color: windowColor, roughness: 0.1, metalness: 0.1,
-            transparent: true, opacity: 0.7, name: "HouseWindowMat"
+            color: windowColor, roughness: 0.1, metalness: 0.3,
+            transparent: true, opacity: 0.7, name: "HouseWindowMat",
+            emissive: new THREE.Color(0xFFFF99),
+            emissiveIntensity: 0.2
         });
     }
 
@@ -70,81 +73,87 @@ export default class HouseRenderer {
      * Notez que l'épaisseur (doorDepth / windowDepth) a été réduite.
      */
     defineHouseBaseGeometries() {
-		this.baseHouseGeometries = {};
-	
-		// --- Dimensions de base ---
-		const armLength = 2;
-		const armWidth = 1;
-		const armDepth = 0.5;
-		const roofPitchHeight = 0.3;
-		const roofOverhang = 0.08;
-		const doorHeight = 0.7 * armDepth;
-		const doorWidth = 0.3;
-		const doorDepth = 0.02; // Épaisseur réduite pour portes/fenêtres
-		const garageDoorHeight = 0.8 * armDepth;
-		const garageDoorWidth = 0.55;
-		const windowHeight = 0.4 * armDepth;
-		const windowWidth = 0.2;
-		const windowDepth = doorDepth;
-	
-		// --- Géométries de base (BoxGeometry possède par défaut un attribut uv) ---
-		this.baseHouseGeometries.base_part1 = new THREE.BoxGeometry(armLength, armDepth, armWidth);
-		this.baseHouseGeometries.base_part1.translate(armLength / 2, armDepth / 2, armWidth / 2);
-		this.baseHouseGeometries.base_part2 = new THREE.BoxGeometry(armWidth, armDepth, armLength);
-		this.baseHouseGeometries.base_part2.translate(armWidth / 2, armDepth / 2, armLength / 2);
-		this.baseHouseGeometries.base_part1.userData = { height: armDepth, minY: 0 };
-		this.baseHouseGeometries.base_part2.userData = { height: armDepth, minY: 0 };
-	
-		// --- Géométrie du toit créée manuellement ---
-		const roofWidth = armWidth + 2 * roofOverhang;
-		const roofDepth = armLength + 2 * roofOverhang;
-		const roofHeight = roofPitchHeight;
-		const halfRoofWidth = roofWidth / 2;
-		const halfRoofDepth = roofDepth / 2;
-		const roofGeometry = new THREE.BufferGeometry();
-		const vertices = new Float32Array([
-			-halfRoofWidth, 0, -halfRoofDepth,
-			 halfRoofWidth, 0, -halfRoofDepth,
-			 halfRoofWidth, 0,  halfRoofDepth,
-			-halfRoofWidth, 0,  halfRoofDepth,
-			 0, roofHeight, -halfRoofDepth,
-			 0, roofHeight,  halfRoofDepth
-		]);
-		const indices = new Uint16Array([
-			0, 1, 4,
-			2, 3, 5,
-			0, 3, 5,
-			0, 5, 4,
-			1, 2, 5,
-			1, 5, 4
-		]);
-		roofGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-		roofGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
-		roofGeometry.computeVertexNormals();
-	
-		// ** Correction : ajouter un attribut 'uv' pour homogénéiser la géométrie **
-		if (!roofGeometry.attributes.uv) {
-			const count = roofGeometry.attributes.position.count; // nombre de sommets (dans ce cas 6)
-			const uvs = new Float32Array(count * 2); // 2 coordonnées par sommet
-			for (let i = 0; i < count; i++) {
-				// Vous pouvez définir ici de vraies coordonnées uv.
-				// Pour la simplicité, on attribue (0, 0) à chaque sommet.
-				uvs[i * 2] = 0;
-				uvs[i * 2 + 1] = 0;
-			}
-			roofGeometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-		}
-	
-		this.baseHouseGeometries.roof = roofGeometry;
-	
-		// --- Géométries pour les portes ---
-		this.baseHouseGeometries.door = new THREE.BoxGeometry(doorDepth, doorHeight, doorWidth);
-		this.baseHouseGeometries.garageDoor = new THREE.BoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth);
-	
-		// --- Géométries pour les fenêtres ---
-		this.baseHouseGeometries.windowYZ = new THREE.BoxGeometry(windowDepth, windowHeight, windowWidth);
-		this.baseHouseGeometries.windowXY = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth);
-	}	
+        this.baseHouseGeometries = {};
+    
+        // --- Dimensions de base ---
+        const armLength = 2;
+        const armWidth = 1;
+        const armDepth = 0.5 * 1.1;
+        const roofPitchHeight = 0.3 * 1.1;
+        const roofOverhang = 0.08;
+        const doorHeight = 0.7 * armDepth;
+        const doorWidth = 0.3;
+        const doorDepth = 0.02;
+        const garageDoorHeight = 0.8 * armDepth;
+        const garageDoorWidth = 0.55;
+        const windowHeight = 0.4 * armDepth;
+        const windowWidth = 0.2;
+        const windowDepth = 0.01; // Épaisseur réduite pour les fenêtres
+
+        // Paramètres pour l'arrondi des coins
+        const baseCornerRadius = 0.05;
+        const baseCornerSegments = 1;
+        const detailCornerRadius = 0.01;
+        const detailCornerSegments = 1;
+    
+        // --- Géométries de base (arrondies) ---
+        this.baseHouseGeometries.base_part1 = new RoundedBoxGeometry(armLength, armDepth, armWidth, baseCornerSegments, baseCornerRadius);
+        this.baseHouseGeometries.base_part1.translate(armLength / 2, armDepth / 2, armWidth / 2);
+        this.baseHouseGeometries.base_part2 = new RoundedBoxGeometry(armWidth, armDepth, armLength, baseCornerSegments, baseCornerRadius);
+        this.baseHouseGeometries.base_part2.translate(armWidth / 2, armDepth / 2, armLength / 2);
+        this.baseHouseGeometries.base_part1.userData = { height: armDepth, minY: 0 };
+        this.baseHouseGeometries.base_part2.userData = { height: armDepth, minY: 0 };
+    
+        // --- Géométrie du toit épaissi ---
+        const roofWidth = armWidth + 2 * roofOverhang;
+        const roofDepth = armLength + 2 * roofOverhang;
+        const roofHeight = roofPitchHeight;
+        const halfRoofWidth = roofWidth / 2;
+        const halfRoofDepth = roofDepth / 2;
+        const roofThickness = 0.05;
+        const roofGeometry = new THREE.BufferGeometry();
+        
+        const topVertices = [
+            -halfRoofWidth, 0, -halfRoofDepth,
+            halfRoofWidth, 0, -halfRoofDepth,
+            halfRoofWidth, 0, halfRoofDepth,
+            -halfRoofWidth, 0, halfRoofDepth,
+            0, roofHeight, -halfRoofDepth,
+            0, roofHeight, halfRoofDepth
+        ];
+        
+        const bottomVertices = topVertices.map((v, i) => (i % 3 === 1) ? v - roofThickness : v);
+        const allVertices = new Float32Array([...topVertices, ...bottomVertices]);
+        
+        const topIndices = [0, 3, 5, 0, 5, 4, 1, 2, 5, 1, 5, 4, 0, 1, 4, 2, 3, 5];
+        const sideIndices = [
+            0, 1, 7, 0, 7, 6, 1, 2, 8, 1, 8, 7, 2, 3, 9, 2, 9, 8,
+            3, 0, 6, 3, 6, 9, 0, 4, 10, 0, 10, 6, 1, 4, 10, 1, 10, 7,
+            2, 5, 11, 2, 11, 8, 3, 5, 11, 3, 11, 9, 4, 5, 11, 4, 11, 10
+        ];
+        const bottomIndices = [6, 11, 9, 6, 10, 11, 7, 11, 8, 7, 10, 11, 6, 10, 7, 8, 11, 9];
+        const allIndices = new Uint16Array([...topIndices, ...sideIndices, ...bottomIndices]);
+        
+        roofGeometry.setAttribute('position', new THREE.BufferAttribute(allVertices, 3));
+        roofGeometry.setIndex(new THREE.BufferAttribute(allIndices, 1));
+        roofGeometry.computeVertexNormals();
+        
+        const uvCount = 12;
+        const uvs = new Float32Array(uvCount * 2);
+        for (let i = 0; i < uvCount; i++) {
+            uvs[i * 2] = (allVertices[i * 3] / roofWidth) + 0.5;
+            uvs[i * 2 + 1] = (allVertices[i * 3 + 2] / roofDepth) + 0.5;
+        }
+        roofGeometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+        
+        this.baseHouseGeometries.roof = roofGeometry;
+    
+        // --- Géométries arrondies pour les portes et fenêtres ---
+        this.baseHouseGeometries.door = new RoundedBoxGeometry(doorDepth, doorHeight, doorWidth, detailCornerSegments, detailCornerRadius);
+        this.baseHouseGeometries.garageDoor = new RoundedBoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth, detailCornerSegments, detailCornerRadius);
+        this.baseHouseGeometries.windowYZ = new RoundedBoxGeometry(windowDepth, windowHeight, windowWidth, detailCornerSegments, detailCornerRadius);
+        this.baseHouseGeometries.windowXY = new RoundedBoxGeometry(windowWidth, windowHeight, windowDepth, detailCornerSegments, detailCornerRadius);
+    }	
 
     /**
      * Génère les matrices d'instances pour une maison et retourne un objet
@@ -159,7 +168,7 @@ export default class HouseRenderer {
     generateHouseInstance(worldCellCenterPos, groundLevel, targetRotationY, baseScaleFactor) {
         const armLength = 2;
         const armWidth = 1;
-        const armDepth = 0.5;
+        const armDepth = 0.5 * 1.1;
         const doorHeight = 0.7 * armDepth;
         const doorDepth = 0.02;
         const doorWidth = 0.3;
@@ -170,7 +179,7 @@ export default class HouseRenderer {
         const window_Y_pos_Base = armDepth * 0.3;
 
         const finalScaleVector = new THREE.Vector3(baseScaleFactor, baseScaleFactor, baseScaleFactor);
-        const finalPosY = groundLevel;
+        const finalPosY = groundLevel - 0.35;
         const modelCenterLocal = new THREE.Vector3(armLength / 2, armDepth / 2, armLength / 2);
         const centerOffsetRotated = modelCenterLocal.clone().applyQuaternion(
             new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotationY)
