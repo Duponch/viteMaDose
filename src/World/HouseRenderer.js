@@ -33,6 +33,155 @@ export default class HouseRenderer {
     }
 
     /**
+     * Crée une texture de toit procédurale dans un style cartoon
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.Texture} - Texture générée
+     */
+    createRoofTexture(width, height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Fond de base
+        ctx.fillStyle = '#8B4513';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Dessin des tuiles dans un style cartoon
+        const tileWidth = width / 8;
+        const tileHeight = height / 8;
+        
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                // Décalage alterné pour l'effet de tuiles
+                const offsetX = (y % 2 === 0) ? 0 : tileWidth / 2;
+                
+                // Dessin d'une tuile
+                ctx.fillStyle = '#A0522D'; // Couleur plus claire pour la tuile
+                ctx.beginPath();
+                ctx.moveTo(x * tileWidth + offsetX, y * tileHeight);
+                ctx.lineTo(x * tileWidth + tileWidth + offsetX, y * tileHeight);
+                ctx.lineTo(x * tileWidth + tileWidth + offsetX, y * tileHeight + tileHeight);
+                ctx.lineTo(x * tileWidth + offsetX, y * tileHeight + tileHeight);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Contour de la tuile
+                ctx.strokeStyle = '#5D2906'; // Couleur plus foncée pour le contour
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+        
+        // Création de la texture Three.js
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 2);
+        
+        return texture;
+    }
+
+    /**
+     * Crée une normal map procédurale pour le toit dans un style cartoon
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.Texture} - Texture générée
+     */
+    createRoofNormalMap(width, height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Fond de base (bleu = plat)
+        ctx.fillStyle = '#8080FF';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Dessin des tuiles dans un style cartoon
+        const tileWidth = width / 8;
+        const tileHeight = height / 8;
+        
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                // Décalage alterné pour l'effet de tuiles
+                const offsetX = (y % 2 === 0) ? 0 : tileWidth / 2;
+                
+                // Dessin d'une tuile avec effet de relief
+                // Rouge = déviation vers la droite, Vert = déviation vers le haut
+                ctx.fillStyle = '#8080FF'; // Bleu = plat
+                ctx.beginPath();
+                ctx.moveTo(x * tileWidth + offsetX, y * tileHeight);
+                ctx.lineTo(x * tileWidth + tileWidth + offsetX, y * tileHeight);
+                ctx.lineTo(x * tileWidth + tileWidth + offsetX, y * tileHeight + tileHeight);
+                ctx.lineTo(x * tileWidth + offsetX, y * tileHeight + tileHeight);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Contour de la tuile avec effet de relief
+                ctx.strokeStyle = '#6060FF'; // Bleu plus foncé = légère élévation
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+        }
+        
+        // Création de la texture Three.js
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 2);
+        
+        return texture;
+    }
+
+    /**
+     * Crée une roughness map procédurale pour le toit dans un style cartoon
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.Texture} - Texture générée
+     */
+    createRoofRoughnessMap(width, height) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Fond de base (gris moyen = rugosité moyenne)
+        ctx.fillStyle = '#808080';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Dessin des tuiles dans un style cartoon
+        const tileWidth = width / 8;
+        const tileHeight = height / 8;
+        
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                // Décalage alterné pour l'effet de tuiles
+                const offsetX = (y % 2 === 0) ? 0 : tileWidth / 2;
+                
+                // Contour de la tuile avec rugosité différente
+                ctx.strokeStyle = '#606060'; // Gris plus foncé = plus rugueux
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                    x * tileWidth + offsetX, 
+                    y * tileHeight, 
+                    tileWidth, 
+                    tileHeight
+                );
+            }
+        }
+        
+        // Création de la texture Three.js
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 2);
+        
+        return texture;
+    }
+
+    /**
      * Définit les matériaux de base utilisés pour les différentes parties de la maison.
      */
     defineHouseBaseMaterials() {
@@ -50,18 +199,31 @@ export default class HouseRenderer {
         this.baseHouseMaterials.base_part2 = new THREE.MeshStandardMaterial({
             color: facadeColor, roughness: 0.8, name: "HouseBase2Mat"
         });
+        
+        // Création des textures procédurales pour le toit
+        const roofTexture = this.createRoofTexture(256, 256);
+        const roofNormalMap = this.createRoofNormalMap(256, 256);
+        const roofRoughnessMap = this.createRoofRoughnessMap(256, 256);
+        
         this.baseHouseMaterials.roof = new THREE.MeshStandardMaterial({
-            color: roofColor, roughness: 0.7, name: "HouseRoofMat",
-            side: THREE.DoubleSide
+            color: roofColor, 
+            roughness: 0.7, 
+            name: "HouseRoofMat",
+            side: THREE.DoubleSide,
+            map: roofTexture,
+            normalMap: roofNormalMap,
+            normalScale: new THREE.Vector2(0.5, 0.5),
+            roughnessMap: roofRoughnessMap
         });
+        
         this.baseHouseMaterials.door = new THREE.MeshStandardMaterial({
             color: doorColor, roughness: 0.7, name: "HouseDoorMat"
         });
         this.baseHouseMaterials.garageDoor = new THREE.MeshStandardMaterial({
-            color: garageDoorColor, roughness: 0.1, metalness: 0.6, name: "HouseGarageDoorMat"
+            color: garageDoorColor, roughness: 0.2, metalness: 0.6, name: "HouseGarageDoorMat"
         });
         this.baseHouseMaterials.window = new THREE.MeshStandardMaterial({
-            color: windowColor, roughness: 0.1, metalness: 0.3,
+            color: windowColor, roughness: 0, metalness: 0.4,
             transparent: true, opacity: 0.7, name: "HouseWindowMat",
             emissive: new THREE.Color(0xFFFF99),
             emissiveIntensity: 0.2
@@ -110,7 +272,7 @@ export default class HouseRenderer {
         const roofHeight = roofPitchHeight;
         const halfRoofWidth = roofWidth / 2;
         const halfRoofDepth = roofDepth / 2;
-        const roofThickness = 0.1;
+        const roofThickness = 0.05;
         const roofGeometry = new THREE.BufferGeometry();
         
         // Ajout d'un décalage aux extrémités pour éviter le z-fighting
