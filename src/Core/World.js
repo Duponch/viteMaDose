@@ -174,8 +174,9 @@ export default class World {
                     // Grille de navigation des voitures
                     this.cityManager.navigationManager.getNavigationGraph(true).createDebugVisualization(this.debugGroups.navGridVehicle);
                 }
-                this.debugGroups.navGridPedestrian.position.y = this.debugHeights.navGrid;
-                this.debugGroups.navGridVehicle.position.y = this.debugHeights.navGrid;
+                // Séparer visuellement les deux grilles
+                this.debugGroups.navGridPedestrian.position.y = this.debugHeights.navGrid - 0.01; // Légèrement plus bas
+                this.debugGroups.navGridVehicle.position.y = this.debugHeights.navGrid + 0.01; // Légèrement plus haut
 
                 // 5. Chemins Agents (reste dynamique)
                 this.debugGroups.agentPath.position.y = this.debugHeights.agentPath;

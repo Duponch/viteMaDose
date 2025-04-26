@@ -1,5 +1,6 @@
 import NavigationGraph from './NavigationGraph.js';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const WALKABLE = 0;
 const NON_WALKABLE = 1;
@@ -7,6 +8,9 @@ const NON_WALKABLE = 1;
 export default class RoadNavigationGraph extends NavigationGraph {
     constructor(config) {
         super(config);
+        // Définir explicitement la largeur de la route à 6 cellules
+        this.config.roadWidth = 6.0;
+        this.config.sidewalkWidth = 2.0;
         this.debugMaterialWalkable = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true }); // Rouge pour les routes
     }
 
@@ -14,16 +18,26 @@ export default class RoadNavigationGraph extends NavigationGraph {
         // Appeler la méthode parent pour initialiser la grille
         super.buildGraph(plots, crosswalkInfos);
 
+        // Réinitialiser complètement la grille pour les routes
+        this.rebuildRoadGrid(plots, crosswalkInfos);
+        this.updatePFGrid();
+    }
+
+    rebuildRoadGrid(plots, crosswalkInfos) {
+        console.log("RoadNavigationGraph: Reconstruction complète de la grille routière...");
+        
+        // Réinitialiser la grille à non marchable
+        this.gridWalkableMap.fill(NON_WALKABLE);
+        
         // Marquer les routes comme zones de navigation pour les voitures
         this.markRoadsArea(plots, crosswalkInfos);
-        this.updatePFGrid();
     }
 
     markRoadsArea(plots, crosswalkInfos) {
         console.log("RoadNavigationGraph: Marquage des zones de routes...");
         let markedCells = 0;
         const cellSizeWorld = 1.0 / this.gridScale;
-        const roadWidth = 6.0; // Largeur fixe de 6 cellules pour la route
+        const roadWidth = this.config.roadWidth; // Utiliser la largeur définie dans la configuration
         const sidewalkWidth = this.config.sidewalkWidth || 2.0; // Largeur du trottoir
 
         // Pour chaque parcelle, marquer la route qui la borde
@@ -40,7 +54,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
             const pD = Math.round(plotDepth / cellSizeWorld) * cellSizeWorld;
 
             // Définir les limites de la route en coordonnées MONDE
-            // La route est entre le trottoir et la parcelle
+            // La route est entre le trottoir et la parcelle, avec une largeur exacte de 6 cellules
             const roadMinX = pX - roadWidth;
             const roadMaxX = pX + pW + roadWidth;
             const roadMinZ = pZ - roadWidth;
@@ -60,14 +74,14 @@ export default class RoadNavigationGraph extends NavigationGraph {
 
                     // Vérifier si la cellule est sur la route (et non sur le trottoir)
                     const isOnRoad = 
-                        // Route à gauche de la parcelle
-                        (cx >= pX - roadWidth && cx < pX - sidewalkWidth) ||
-                        // Route à droite de la parcelle
-                        (cx > pX + pW + sidewalkWidth && cx <= pX + pW + roadWidth) ||
-                        // Route en bas de la parcelle
-                        (cz >= pZ - roadWidth && cz < pZ - sidewalkWidth) ||
-                        // Route en haut de la parcelle
-                        (cz > pZ + pD + sidewalkWidth && cz <= pZ + pD + roadWidth);
+                        // Route à gauche de la parcelle (exactement 6 cellules)
+                        (cx >= pX - roadWidth && cx < pX) ||
+                        // Route à droite de la parcelle (exactement 6 cellules)
+                        (cx > pX + pW && cx <= pX + pW + roadWidth) ||
+                        // Route en bas de la parcelle (exactement 6 cellules)
+                        (cz >= pZ - roadWidth && cz < pZ) ||
+                        // Route en haut de la parcelle (exactement 6 cellules)
+                        (cz > pZ + pD && cz <= pZ + pD + roadWidth);
 
                     if (isOnRoad) {
                         // Vérifier si la cellule est déjà marchable
@@ -121,6 +135,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
                     
                     // Ne marquer que les cellules dans un rayon de 6 cellules
                     if (distanceToCenter <= roadWidth) {
+                        // Vérifier si la cellule est déjà marchable
                         if (!this.isWalkableAt(gx, gy)) {
                             if (this.markCell(gx, gy)) {
                                 markedCells++;
@@ -140,5 +155,79 @@ export default class RoadNavigationGraph extends NavigationGraph {
         const worldPos = super.gridToWorld(gridX, gridY);
         worldPos.y = 0.1; // Légèrement au-dessus de la route
         return worldPos;
+    }
+
+    updatePFGrid() {
+        super.updatePFGrid();
+        this.debugGridInfo();
+    }
+
+    debugGridInfo() {
+        if (!this.gridWalkableMap) return;
+        
+        let walkableCount = 0;
+        for (let y = 0; y < this.gridHeight; y++) {
+            for (let x = 0; x < this.gridWidth; x++) {
+                const index = y * this.gridWidth + x;
+                if (this.gridWalkableMap[index] === WALKABLE) {
+                    walkableCount++;
+                }
+            }
+        }
+        
+        console.log(`RoadNavigationGraph: Grille de ${this.gridWidth}x${this.gridHeight} cellules, ${walkableCount} cellules marchables (${(walkableCount / (this.gridWidth * this.gridHeight) * 100).toFixed(2)}%)`);
+    }
+
+    createDebugVisualization(targetGroup) {
+        if (!this.gridWalkableMap || !targetGroup) return;
+        console.log("RoadNavigationGraph: Création de la visualisation de la grille routière...");
+        
+        // Nettoyer le groupe cible
+        while(targetGroup.children.length > 0) {
+            const child = targetGroup.children[0];
+            targetGroup.remove(child);
+            if (child.geometry) child.geometry.dispose();
+        }
+        
+        const cellSizeInWorld = 1.0 / this.gridScale;
+        const visualCellSize = cellSizeInWorld * 0.95; // Ajuster la taille visuelle si besoin
+        const planeGeom = new THREE.PlaneGeometry(visualCellSize, visualCellSize);
+        const geometries = [];
+        let walkableCount = 0;
+        
+        for (let y = 0; y < this.gridHeight; y++) {
+            for (let x = 0; x < this.gridWidth; x++) {
+                if (this.isWalkableAt(x, y)) {
+                    walkableCount++;
+                    // Utiliser gridToWorld pour obtenir le centre exact de la cellule
+                    const cellCenter = this.gridToWorld(x, y);
+                    const planeCenterX = cellCenter.x;
+                    const planeCenterZ = cellCenter.z;
+
+                    const cellGeom = planeGeom.clone();
+                    const matrix = new THREE.Matrix4();
+                    matrix.makeRotationX(-Math.PI / 2);
+                    // Utiliser la position calculée du centre du plan
+                    matrix.setPosition(planeCenterX, 0.1, planeCenterZ); // Positionner au niveau de la route
+                    cellGeom.applyMatrix4(matrix);
+                    geometries.push(cellGeom);
+                }
+            }
+        }
+        planeGeom.dispose();
+
+        if (geometries.length > 0) {
+            const mergedGeometry = mergeGeometries(geometries);
+            if (mergedGeometry) {
+                const mesh = new THREE.Mesh(mergedGeometry, this.debugMaterialWalkable);
+                mesh.name = "Debug_RoadNavGrid_Walkable";
+                targetGroup.add(mesh);
+                console.log(`RoadNavigationGraph: Visualisation grille routière ajoutée (${walkableCount} cellules marchables).`);
+            } else {
+                console.warn("RoadNavigationGraph: Échec fusion géométries debug grille routière.");
+            }
+        } else {
+            console.log("RoadNavigationGraph: Aucune cellule marchable à visualiser dans la grille routière.");
+        }
     }
 } 

@@ -40,16 +40,19 @@ export default class NavigationGraph {
             const plotWidth = plot.width;
             const plotDepth = plot.depth;
 
-            minX = Math.min(minX, plotX - this.config.roadWidth);
-            maxX = Math.max(maxX, plotX + plotWidth + this.config.roadWidth);
-            minZ = Math.min(minZ, plotZ - this.config.roadWidth);
-            maxZ = Math.max(maxZ, plotZ + plotDepth + this.config.roadWidth);
+            // Utiliser la largeur de route définie dans la configuration
+            const roadWidth = this.config.roadWidth || 6.0; // Valeur par défaut de 6 cellules
+
+            minX = Math.min(minX, plotX - roadWidth);
+            maxX = Math.max(maxX, plotX + plotWidth + roadWidth);
+            minZ = Math.min(minZ, plotZ - roadWidth);
+            maxZ = Math.max(maxZ, plotZ + plotDepth + roadWidth);
         });
 
         console.log(`NavigationGraph: Limites de la grille - X: [${minX}, ${maxX}], Z: [${minZ}, ${maxZ}]`);
 
         // Ajouter une marge de sécurité
-        const margin = Math.max(this.config.roadWidth, this.config.sidewalkWidth) * 2;
+        const margin = Math.max(this.config.roadWidth || 6.0, this.config.sidewalkWidth || 2.0) * 2;
         minX -= margin;
         maxX += margin;
         minZ -= margin;
@@ -458,14 +461,16 @@ export default class NavigationGraph {
         while(targetGroup.children.length > 0) {
              const child = targetGroup.children[0]; targetGroup.remove(child);
              if (child.geometry) child.geometry.dispose();
-         }
+        }
         const cellSizeInWorld = 1.0 / this.gridScale;
         const visualCellSize = cellSizeInWorld * 0.95; // Ajuster la taille visuelle si besoin
         const planeGeom = new THREE.PlaneGeometry(visualCellSize, visualCellSize);
         const geometries = [];
+        let walkableCount = 0;
         for (let y = 0; y < this.gridHeight; y++) {
             for (let x = 0; x < this.gridWidth; x++) {
                 if (this.isWalkableAt(x, y)) {
+                    walkableCount++;
                     // Utiliser gridToWorld pour obtenir le centre exact de la cellule
                     const cellCenter = this.gridToWorld(x, y);
                     const planeCenterX = cellCenter.x;
@@ -489,7 +494,7 @@ export default class NavigationGraph {
                  const mesh = new THREE.Mesh(mergedGeometry, this.debugMaterialWalkable);
                  mesh.name = "Debug_NavGrid_Walkable";
                  targetGroup.add(mesh);
-                 console.log(`NavigationGraph: Visualisation grille ajoutée (${geometries.length} cellules).`);
+                 console.log(`NavigationGraph: Visualisation grille ajoutée (${walkableCount} cellules marchables).`);
              } else { console.warn("NavigationGraph: Échec fusion géométries debug grille."); }
         } else { console.log("NavigationGraph: Aucune cellule marchable à visualiser."); }
     }
