@@ -16,12 +16,12 @@ export default class TreeRenderer {
         
         // Palette de couleurs de feuillage
         this.foliageColors = [
-            0x556B2F, // Vert forêt
-            0x556B2F, // Vert lime
-            0x556B2F, // Vert foncé
-            0x556B2F, // Vert clair
-            0x556B2F, // Vert olive
-            0x556B2F  // Vert mer
+            0x8fa46d, // Vert forêt
+            0x8fa46d, // Vert lime
+            0x8fa46d, // Vert foncé
+            0x8fa46d, // Vert clair
+            0x8fa46d, // Vert olive
+            0x8fa46d  // Vert mer
         ];
     }
 
@@ -36,7 +36,7 @@ export default class TreeRenderer {
 
         // Paramètres de randomisation
         const numParts = THREE.MathUtils.randInt(4, 7); // Nombre de parties du feuillage
-        const maxOffset = baseSize * 0.8; // Déplacement maximum des parties
+        const maxOffset = baseSize * 0.6; // Déplacement maximum des parties
         const minPartScale = 0.4;
         const maxPartScale = 0.8;
 
@@ -208,7 +208,7 @@ export default class TreeRenderer {
             const size = Math.random() * 20 + 5;
             
             // Variation de couleur (plus claire ou plus foncée)
-            const variation = Math.random() * 40 - 20;
+            const variation = Math.random() * 60 - 20;
             const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
             const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
             const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
@@ -282,7 +282,7 @@ export default class TreeRenderer {
             const size = Math.random() * 15 + 5;
             
             // Variation de couleur (plus claire ou plus foncée)
-            const variation = Math.random() * 40 - 10;
+            const variation = Math.random() * 60 - 20;
             const r = Math.max(0, Math.min(255, color.r * 255 + variation));
             const g = Math.max(0, Math.min(255, color.g * 255 + variation));
             const b = Math.max(0, Math.min(255, color.b * 255 + variation));
