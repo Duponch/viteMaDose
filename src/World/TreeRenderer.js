@@ -122,6 +122,67 @@ export default class TreeRenderer {
     }
 
     /**
+     * Crée un tronc courbé en utilisant une déformation de géométrie
+     * @param {number} trunkHeight - Hauteur totale du tronc
+     * @param {number} trunkRadiusBottom - Rayon à la base du tronc
+     * @param {number} trunkRadiusTop - Rayon au sommet du tronc
+     * @param {THREE.Material} material - Matériau du tronc
+     * @returns {THREE.Mesh} Mesh du tronc courbé
+     */
+    createCurvedTrunk(trunkHeight, trunkRadiusBottom, trunkRadiusTop, material) {
+        // Créer une géométrie de cylindre avec plus de segments pour une meilleure déformation
+        const trunkGeometry = new THREE.CylinderGeometry(
+            trunkRadiusTop, 
+            trunkRadiusBottom, 
+            trunkHeight, 
+            8, // Plus de segments horizontaux
+            16, // Plus de segments verticaux
+            false
+        );
+        
+        // Obtenir les positions des vertices
+        const positions = trunkGeometry.attributes.position.array;
+        
+        // Paramètres de courbure
+        const curveAmount = trunkHeight * 0.15; // Intensité de la courbure (15% de la hauteur)
+        const curveDirection = new THREE.Vector3(
+            THREE.MathUtils.randFloatSpread(1),
+            0,
+            THREE.MathUtils.randFloatSpread(1)
+        ).normalize();
+        
+        // Appliquer une déformation sinusoïdale pour créer une courbure naturelle
+        for (let i = 0; i < positions.length; i += 3) {
+            const y = positions[i + 1]; // Coordonnée Y du vertex
+            const heightFactor = y / trunkHeight; // Facteur de hauteur (0 à 1)
+            
+            // Calculer le déplacement en fonction de la hauteur (courbe sinusoïdale)
+            const displacement = Math.sin(heightFactor * Math.PI) * curveAmount;
+            
+            // Appliquer le déplacement dans la direction de courbure
+            positions[i] += curveDirection.x * displacement; // X
+            positions[i + 2] += curveDirection.z * displacement; // Z
+            
+            // Ajouter une légère variation aléatoire pour plus de naturel
+            const randomFactor = THREE.MathUtils.randFloat(0.95, 1.05);
+            positions[i] *= randomFactor;
+            positions[i + 2] *= randomFactor;
+        }
+        
+        // Mettre à jour les normales pour un éclairage correct
+        trunkGeometry.computeVertexNormals();
+        
+        // Créer le mesh du tronc
+        const trunk = new THREE.Mesh(trunkGeometry, material);
+        
+        // Ajouter une légère rotation aléatoire pour plus de variété
+        trunk.rotation.y = THREE.MathUtils.randFloatSpread(Math.PI / 12);
+        trunk.rotation.z = THREE.MathUtils.randFloatSpread(Math.PI / 24);
+        
+        return trunk;
+    }
+
+    /**
      * Génère un arbre procédural
      * @returns {object} Asset data contenant les parties de l'arbre
      */
@@ -142,15 +203,16 @@ export default class TreeRenderer {
             emissive: new THREE.Color(foliageColor).multiplyScalar(0.05) // Réduit l'émission pour moins de luminosité nocturne
         });
 
-        // Tronc
+        // Tronc courbé
         const trunkHeight = baseHeight * 0.5;
         const trunkRadiusBottom = baseWidth * 0.15;
         const trunkRadiusTop = baseWidth * 0.1;
-        const trunkGeometry = new THREE.CylinderGeometry(trunkRadiusTop, trunkRadiusBottom, trunkHeight, 6);
-        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        
+        // Remplacer le tronc droit par un tronc courbé
+        const trunk = this.createCurvedTrunk(trunkHeight, trunkRadiusBottom, trunkRadiusTop, trunkMaterial);
         trunk.position.y = trunkHeight / 2;
         treeGroup.add(trunk);
-        console.log("[Tree Proc] Tronc créé et ajouté au groupe.");
+        console.log("[Tree Proc] Tronc courbé créé et ajouté au groupe.");
         
         // Ajouter des nœuds au tronc
         const trunkKnots = this.createTrunkKnots(trunkHeight, trunkRadiusBottom, trunkMaterial);
@@ -227,10 +289,6 @@ export default class TreeRenderer {
 
         if (allGeoms.length === 0) {
             console.error("[Tree Proc] Aucune géométrie valide trouvée après le parcours du groupe.");
-            trunkGeometry.dispose();
-            foliage1.geometry.dispose();
-            foliage2.geometry.dispose();
-            foliage3.geometry.dispose();
             trunkMaterial.dispose();
             foliageMaterial.dispose();
             return null;
