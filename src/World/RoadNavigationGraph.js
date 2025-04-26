@@ -23,6 +23,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
         let markedCells = 0;
         const cellSizeWorld = 1.0 / this.gridScale;
         const roadWidth = this.config.roadWidth || 4.0; // Largeur de la route
+        const sidewalkWidth = this.config.sidewalkWidth || 2.0; // Largeur du trottoir
 
         // Pour chaque parcelle, marquer la route qui la borde
         plots.forEach(plot => {
@@ -32,6 +33,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
             const plotDepth = plot.depth;
 
             // Définir les limites de la route en coordonnées MONDE
+            // La route est entre le trottoir et la parcelle
             const roadMinX = plotX - roadWidth;
             const roadMaxX = plotX + plotWidth + roadWidth;
             const roadMinZ = plotZ - roadWidth;
@@ -44,12 +46,22 @@ export default class RoadNavigationGraph extends NavigationGraph {
             // Marquer les cellules de la route
             for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
                 for (let gx = startGrid.x; gx <= endGrid.x; gx++) {
-                    // Vérifier si la cellule est sur le bord de la parcelle (route)
+                    // Obtenir la position mondiale du centre de la cellule
+                    const cellCenterWorld = this.gridToWorld(gx, gy);
+                    const cx = cellCenterWorld.x;
+                    const cz = cellCenterWorld.z;
+
+                    // Vérifier si la cellule est sur la route (et non sur le trottoir)
+                    // La route est entre le trottoir et la parcelle
                     const isOnRoad = 
-                        (gx >= startGrid.x && gx <= startGrid.x + 1) || // Route gauche
-                        (gx >= endGrid.x - 1 && gx <= endGrid.x) || // Route droite
-                        (gy >= startGrid.y && gy <= startGrid.y + 1) || // Route bas
-                        (gy >= endGrid.y - 1 && gy <= endGrid.y); // Route haut
+                        // Route à gauche de la parcelle
+                        (cx >= plotX - roadWidth && cx < plotX - sidewalkWidth) ||
+                        // Route à droite de la parcelle
+                        (cx > plotX + plotWidth + sidewalkWidth && cx <= plotX + plotWidth + roadWidth) ||
+                        // Route en bas de la parcelle
+                        (cz >= plotZ - roadWidth && cz < plotZ - sidewalkWidth) ||
+                        // Route en haut de la parcelle
+                        (cz > plotZ + plotDepth + sidewalkWidth && cz <= plotZ + plotDepth + roadWidth);
 
                     if (isOnRoad) {
                         if (this.markCell(gx, gy)) {
