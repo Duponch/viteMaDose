@@ -23,6 +23,12 @@ export default class GrassInstancer {
         // Facteur de visibilité pour les parcelles (pour une transition plus douce)
         this.visibilityFactor = config.visibilityFactor || 1.2;
         
+        // Angle de champ de vision de la caméra (en degrés)
+        this.fovAngle = config.fovAngle || 90;
+        
+        // Facteur de marge pour le champ de vision (pour éviter les coupures nettes)
+        this.fovMargin = config.fovMargin || 1.5;
+        
         // Carrés des distances pour éviter les calculs de racine carrée
         this.lodDistancesSquared = {
             high: this.lodDistances.high * this.lodDistances.high,
@@ -57,6 +63,9 @@ export default class GrassInstancer {
         
         // Optimisation: Vecteur temporaire pour les calculs de distance
         this._tempVector = new THREE.Vector3();
+        
+        // Optimisation: Vecteur temporaire pour les calculs de direction
+        this._directionVector = new THREE.Vector3();
         
         // Optimisation: Intervalle de mise à jour en millisecondes
         this.updateInterval = 1000; // Mettre à jour toutes les secondes
@@ -102,7 +111,8 @@ export default class GrassInstancer {
             lastUpdate: 0,
             id: plot.id || Math.random().toString(36).substr(2, 9), // ID unique pour le débogage
             isVisible: true, // Flag pour indiquer si la parcelle est visible
-            isFullyVisible: true // Flag pour indiquer si la parcelle est complètement visible
+            isFullyVisible: true, // Flag pour indiquer si la parcelle est complètement visible
+            angleToCamera: 0
         };
         this.plotData.push(plotInfo);
 
@@ -193,22 +203,52 @@ export default class GrassInstancer {
     _updatePlotDistances(cameraPosition) {
         // Utiliser un vecteur temporaire pour éviter de créer de nouveaux objets
         const tempVector = this._tempVector;
+        const directionVector = this._directionVector;
+        
+        // Obtenir la direction de la caméra
+        directionVector.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+        
+        // Calculer le cosinus de la moitié de l'angle de champ de vision
+        const halfFovRadians = (this.fovAngle * Math.PI / 180) / 2;
+        const cosHalfFov = Math.cos(halfFovRadians);
         
         this.plotData.forEach(plotInfo => {
-            // Calculer la distance au carré entre le centre de la parcelle et la caméra
-            tempVector.copy(plotInfo.center);
-            tempVector.sub(cameraPosition);
+            // Calculer le vecteur de la caméra vers le centre de la parcelle
+            tempVector.copy(plotInfo.center).sub(cameraPosition);
+            
+            // Calculer la distance au carré
             plotInfo.distanceSquared = tempVector.lengthSq();
             
-            // Mettre à jour le flag de visibilité
-            const wasVisible = plotInfo.isVisible;
-            plotInfo.isVisible = plotInfo.distanceSquared < this.maxVisibilityDistanceSquared * this.visibilityFactor;
-            
-            // Mettre à jour le flag de visibilité complète
-            plotInfo.isFullyVisible = plotInfo.distanceSquared < this.lodDistancesSquared.high;
-            
-            // Si la visibilité a changé, mettre à jour le flag de changement
-            plotInfo.visibilityChanged = wasVisible !== plotInfo.isVisible;
+            // Calculer le cosinus de l'angle entre la direction de la caméra et le vecteur vers la parcelle
+            const distance = Math.sqrt(plotInfo.distanceSquared);
+            if (distance > 0) {
+                // Normaliser le vecteur pour obtenir la direction
+                tempVector.normalize();
+                
+                // Calculer le produit scalaire (cosinus de l'angle)
+                const dotProduct = tempVector.dot(directionVector);
+                
+                // Vérifier si la parcelle est dans le champ de vision
+                const isInFov = dotProduct > cosHalfFov * this.fovMargin;
+                
+                // Mettre à jour le flag de visibilité en fonction de la distance ET du champ de vision
+                const wasVisible = plotInfo.isVisible;
+                plotInfo.isVisible = plotInfo.distanceSquared < this.maxVisibilityDistanceSquared * this.visibilityFactor && isInFov;
+                
+                // Mettre à jour le flag de visibilité complète
+                plotInfo.isFullyVisible = plotInfo.distanceSquared < this.lodDistancesSquared.high && isInFov;
+                
+                // Si la visibilité a changé, mettre à jour le flag de changement
+                plotInfo.visibilityChanged = wasVisible !== plotInfo.isVisible;
+                
+                // Stocker l'angle pour le débogage
+                plotInfo.angleToCamera = Math.acos(dotProduct) * 180 / Math.PI;
+            } else {
+                // Si la distance est nulle, la parcelle est à la position de la caméra
+                plotInfo.isVisible = true;
+                plotInfo.isFullyVisible = true;
+                plotInfo.angleToCamera = 0;
+            }
         });
     }
     
@@ -352,11 +392,14 @@ export default class GrassInstancer {
         console.log(`Nombre d'instances par parcelle: ${this.instanceNumber}`);
         console.log(`Distance maximale de visibilité: ${this.maxVisibilityDistance} unités`);
         console.log(`Facteur de visibilité: ${this.visibilityFactor}`);
+        console.log(`Angle de champ de vision: ${this.fovAngle} degrés`);
+        console.log(`Marge de champ de vision: ${this.fovMargin}`);
         
         this.plotData.forEach((plot, index) => {
             console.log(`Parcelle ${index} (ID: ${plot.id}):`);
             console.log(`  Distance au carré: ${plot.distanceSquared.toFixed(2)}`);
             console.log(`  Distance: ${Math.sqrt(plot.distanceSquared).toFixed(2)}`);
+            console.log(`  Angle par rapport à la caméra: ${plot.angleToCamera?.toFixed(2) || 0} degrés`);
             console.log(`  Visible: ${plot.isVisible}`);
             console.log(`  Complètement visible: ${plot.isFullyVisible}`);
             console.log(`  Instances allouées: ${plot.allocatedInstances} (${(plot.allocatedInstances / this.instanceNumber * 100).toFixed(1)}%)`);
