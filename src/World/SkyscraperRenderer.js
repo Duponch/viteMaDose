@@ -11,18 +11,117 @@ export default class SkyscraperRenderer {
         this.baseSkyscraperMaterials = {};
         this.skyscraperInstanceMatrices = {};
         this.assetIdCounter = 0; // compteur pour générer des IDs uniques
+        
+        // Création de la texture de façade partagée
+        this.sharedFacadeTexture = this.createFacadeTexture();
+        
         this.defineSkyscraperBaseMaterials();
         this.defineSkyscraperBaseGeometries();
         this.initializeSkyscraperMatrixArrays();
     }
 
     /**
-     * Initialise les tableaux de matrices d’instances pour les gratte-ciels.
+     * Initialise les tableaux de matrices d'instances pour les gratte-ciels.
      */
     initializeSkyscraperMatrixArrays() {
         this.skyscraperInstanceMatrices = {
             default: []
         };
+    }
+
+    /**
+     * Crée une texture procédurale pour les façades des gratte-ciels
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.CanvasTexture} La texture générée
+     */
+    createFacadeTexture(width = 512, height = 512) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base plus claire pour un meilleur contraste
+        ctx.fillStyle = '#e0e6ed';
+        ctx.fillRect(0, 0, width, height);
+
+        // Ajout de variations de couleur pour simuler des panneaux de verre
+        // Réduction encore plus importante du nombre de panneaux
+        const panelWidth = width / 3;  // Réduit à 3 divisions (panneaux encore plus larges)
+        const panelHeight = height / 6; // Réduit à 6 divisions (panneaux encore plus hauts)
+        
+        // Couleurs de base pour les panneaux
+        const baseColors = [
+            { r: 206, g: 212, b: 218 }, // Gris clair
+            { r: 196, g: 202, b: 208 }, // Gris légèrement plus foncé
+            { r: 216, g: 222, b: 228 }  // Gris légèrement plus clair
+        ];
+        
+        for (let y = 0; y < height; y += panelHeight) {
+            for (let x = 0; x < width; x += panelWidth) {
+                // Sélection aléatoire d'une couleur de base
+                const baseColor = baseColors[Math.floor(Math.random() * baseColors.length)];
+                
+                // Variation plus importante de la couleur
+                const variation = Math.random() * 30 - 15;
+                const r = Math.min(255, Math.max(0, baseColor.r + variation));
+                const g = Math.min(255, Math.max(0, baseColor.g + variation));
+                const b = Math.min(255, Math.max(0, baseColor.b + variation));
+                
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(x, y, panelWidth - 1, panelHeight - 1);
+                
+                // Ajout d'un effet de réflexion sur certains panneaux
+                if (Math.random() > 0.7) {
+                    const reflectionWidth = panelWidth * 0.3;
+                    const reflectionHeight = panelHeight * 0.3;
+                    const reflectionX = x + Math.random() * (panelWidth - reflectionWidth);
+                    const reflectionY = y + Math.random() * (panelHeight - reflectionHeight);
+                    
+                    ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.3 + 0.1})`;
+                    ctx.fillRect(reflectionX, reflectionY, reflectionWidth, reflectionHeight);
+                }
+            }
+        }
+
+        // Ajout de lignes horizontales pour simuler des joints
+        ctx.strokeStyle = '#8a929a'; // Couleur plus foncée pour les joints
+        ctx.lineWidth = 4; // Lignes encore plus épaisses
+        for (let y = panelHeight; y < height; y += panelHeight) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+
+        // Ajout de lignes verticales décalées
+        for (let y = 0; y < height; y += panelHeight * 2) {
+            for (let x = panelWidth; x < width; x += panelWidth * 2) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + panelHeight);
+                ctx.stroke();
+            }
+        }
+        
+        // Ajout de lignes verticales supplémentaires pour plus de détails
+        for (let y = 0; y < height; y += panelHeight) {
+            for (let x = panelWidth; x < width; x += panelWidth) {
+                if (Math.random() > 0.5) { // 50% de chance d'avoir une ligne verticale
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x, y + panelHeight);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // Création de la texture Three.js
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 1.5); // Ajustement de la répétition pour les panneaux plus grands
+        return texture;
     }
 
     /**
@@ -34,7 +133,8 @@ export default class SkyscraperRenderer {
             color: 0xaaaaaa,
             roughness: 0.5,
             metalness: 0.8,
-            name: "DefaultSkyscraperMat"
+            name: "DefaultSkyscraperMat",
+            map: this.sharedFacadeTexture
         });
     }
 
@@ -108,12 +208,14 @@ export default class SkyscraperRenderer {
         const structureMaterial = new THREE.MeshStandardMaterial({
             color: 0xced4da,
             flatShading: true,
-            name: "SkyscraperStructureMat"
+            name: "SkyscraperStructureMat",
+            map: this.sharedFacadeTexture
         });
         const baseMaterial = new THREE.MeshStandardMaterial({
             color: 0x6e7883,
             flatShading: true,
-            name: "SkyscraperBaseMat"
+            name: "SkyscraperBaseMat",
+            map: this.sharedFacadeTexture
         });
         const metallicMaterial = new THREE.MeshStandardMaterial({
             color: 0xadb5bd,
@@ -121,12 +223,14 @@ export default class SkyscraperRenderer {
             roughness: 0.4,
             flatShading: true,
             side: THREE.DoubleSide,
-            name: "SkyscraperMetallicMat"
+            name: "SkyscraperMetallicMat",
+            map: this.sharedFacadeTexture
         });
         const floorMaterial = new THREE.MeshStandardMaterial({
             color: 0xaaaaaa,
             flatShading: true,
-            name: "SkyscraperFloorMat"
+            name: "SkyscraperFloorMat",
+            map: this.sharedFacadeTexture
         });
         const skyscraperWindowMaterial = new THREE.MeshStandardMaterial({
             color: 0x60a3bc,
@@ -501,7 +605,7 @@ export default class SkyscraperRenderer {
     }
 
     /**
-     * Réinitialise le SkyscraperRenderer en libérant les ressources de géométrie et en réinitialisant les tableaux d’instances.
+     * Réinitialise le SkyscraperRenderer en libérant les ressources de géométrie et en réinitialisant les tableaux d'instances.
      */
     reset() {
         if (this.baseSkyscraperGeometries && this.baseSkyscraperGeometries.default) {
