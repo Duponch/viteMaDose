@@ -1344,4 +1344,9 @@ export default class Experience extends EventTarget {
         instance = null;
         console.log("Experience détruite.");
     }
+
+    // Propriété pour accéder facilement au gestionnaire de voitures
+    get carManager() {
+        return this.world?.carManager;
+    }
 }

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import Environment from '../World/Environment.js';
 import CityManager from '../World/CityManager.js';
 import AgentManager from '../World/AgentManager.js';
+import CarManager from '../World/CarManager.js';
 // ... autres imports ...
 import DebugVisualManager from '../World/DebugVisualManager.js'; // Assurez-vous qu'il est importé
 
@@ -15,6 +16,7 @@ export default class World {
         this.cityManager = new CityManager(this.experience);
         this.environment = new Environment(this.experience, this);
         this.agentManager = null;
+        this.carManager = null; // Gestionnaire de voitures
 
         // --- Daily Update Tracker ---
         this.lastUpdatedDay = -1; // Initialize with a value indicating no update has occurred
@@ -312,6 +314,10 @@ export default class World {
         console.log("Destroying World...");
         this.agentManager?.destroy();
         this.agentManager = null;
+        
+        // Détruire le gestionnaire de voitures
+        this.carManager?.destroy();
+        this.carManager = null;
 
         // Nettoyer tous les groupes de debug et leurs enfants
         Object.values(this.debugGroups).forEach(group => {
@@ -351,6 +357,13 @@ export default class World {
                 maxAgents
             );
             console.log("World: AgentManager instancié.");
+            
+            // Initialisation du gestionnaire de voitures
+            this.carManager = new CarManager(
+                this.scene,
+                this.experience
+            );
+            console.log("World: CarManager instancié.");
 
             const navGraph = this.cityManager.getNavigationGraph();
             if (this.agentManager && navGraph) {
@@ -427,5 +440,6 @@ export default class World {
 		   this.cityManager.lampPostManager.updateLampPostLights(currentHour); // Appel via CityManager
 	   }
 	   this.agentManager?.update(deltaTime);
+       this.carManager?.update(deltaTime); // Mettre à jour les voitures
    }
 }
