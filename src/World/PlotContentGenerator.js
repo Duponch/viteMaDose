@@ -5,6 +5,7 @@ import InstancedMeshManager from './InstancedMeshManager.js';
 import SidewalkGenerator from './SidewalkGenerator.js'; // Placeholder import
 import PlotGroundGenerator from './PlotGroundGenerator.js'; // Placeholder import
 import CrosswalkInstancer from './CrosswalkInstancer.js'; // Placeholder import
+import GrassInstancer from './GrassInstancer.js';
 
 // Stratégies de placement
 import HousePlacementStrategy from './Strategies/HousePlacementStrategy.js';
@@ -49,6 +50,7 @@ export default class PlotContentGenerator {
         this.sidewalkGenerator = new SidewalkGenerator(config, materials);
         this.plotGroundGenerator = new PlotGroundGenerator(config, materials);
         this.crosswalkInstancer = new CrosswalkInstancer(config, materials);
+        this.grassInstancer = new GrassInstancer(config);
 
         // --- Stratégies (seront créées dans generateContent) ---
         this.zoneStrategies = {};
@@ -61,6 +63,8 @@ export default class PlotContentGenerator {
         this.buildingGroup.name = "PlotContents";
         this.groundGroup = new THREE.Group();
         this.groundGroup.name = "PlotGrounds";
+        this.grassGroup = new THREE.Group();
+        this.grassGroup.name = "GrassInstances";
 
         console.log("PlotContentGenerator initialized (refactored).");
     }
@@ -145,12 +149,23 @@ export default class PlotContentGenerator {
              console.error(`Error executing CrosswalkInstancer:`, error);
         }
 
+        // --- Placement de l'herbe instanciée ---
+        leafPlots.forEach((plot) => {
+            if (plot.zoneType === 'park' || plot.zoneType === 'house') {
+                const grassInstances = this.grassInstancer.createGrassInstances(plot);
+                this.grassGroup.add(grassInstances);
+            }
+        });
+
         // --- Création Finale des InstancedMesh ---
         try {
             this.instancedMeshManager.createMeshes(this.instanceDataManager.getData());
         } catch (error) {
              console.error(`Error during InstancedMesh creation:`, error);
         }
+
+        // Ajouter le groupe d'herbe à la scène
+        this.experience.scene.add(this.grassGroup);
 
         console.log("PlotContentGenerator: Content generation finished.");
         return this.getGroups();
@@ -178,6 +193,7 @@ export default class PlotContentGenerator {
         this.sidewalkGenerator?.reset();
         this.plotGroundGenerator?.reset();
         this.crosswalkInstancer?.reset();
+        this.grassInstancer?.reset();
         // Les stratégies elles-mêmes sont généralement sans état, mais on réinitialise la map
         this.zoneStrategies = {};
         this.treePlacementStrategy = null;
@@ -207,6 +223,8 @@ export default class PlotContentGenerator {
     update(currentHour) {
         // La logique de mise à jour est maintenant dans InstancedMeshManager
         this.instancedMeshManager?.updateWindows(currentHour);
+        // Mettre à jour l'animation de l'herbe
+        this.grassInstancer.update();
     }
 
     // --- Les anciennes méthodes spécifiques (generatePlotPrimaryContent, placeTreesForPlot, etc.) sont supprimées ---
