@@ -18,7 +18,7 @@ export default class GrassInstancer {
         };
         
         // Distance maximale de visibilité (en unités)
-        this.maxVisibilityDistance = config.maxVisibilityDistance || 300;
+        this.maxVisibilityDistance = 300;
         
         // Facteur de visibilité pour les parcelles (pour une transition plus douce)
         this.visibilityFactor = config.visibilityFactor || 1.2;
@@ -29,6 +29,9 @@ export default class GrassInstancer {
         // Facteur de marge pour le champ de vision (pour éviter les coupures nettes)
         this.fovMargin = config.fovMargin || 1.5;
         
+        // Distance minimale pour le champ de vision (pour éviter les parcelles trop éloignées)
+        this.minFovDistance = config.minFovDistance || 50;
+        
         // Carrés des distances pour éviter les calculs de racine carrée
         this.lodDistancesSquared = {
             high: this.lodDistances.high * this.lodDistances.high,
@@ -38,6 +41,9 @@ export default class GrassInstancer {
         
         // Carré de la distance maximale de visibilité
         this.maxVisibilityDistanceSquared = this.maxVisibilityDistance * this.maxVisibilityDistance;
+        
+        // Carré de la distance minimale pour le champ de vision
+        this.minFovDistanceSquared = this.minFovDistance * this.minFovDistance;
         
         // Création de la géométrie de base pour une brin d'herbe
         this.geometry = new THREE.PlaneGeometry(0.1, 1, 1, 4);
@@ -73,6 +79,9 @@ export default class GrassInstancer {
         
         // Optimisation: Seuil de mouvement de la caméra
         this.cameraMovementThreshold = 5; // Seuil de mouvement de la caméra (au carré)
+        
+        // Désactiver temporairement la vérification du champ de vision pour le débogage
+        this.disableFovCheck = true;
     }
 
     setCamera(camera) {
@@ -112,7 +121,8 @@ export default class GrassInstancer {
             id: plot.id || Math.random().toString(36).substr(2, 9), // ID unique pour le débogage
             isVisible: true, // Flag pour indiquer si la parcelle est visible
             isFullyVisible: true, // Flag pour indiquer si la parcelle est complètement visible
-            angleToCamera: 0
+            angleToCamera: 0,
+            visibilityFactor: 1
         };
         this.plotData.push(plotInfo);
 
@@ -219,6 +229,45 @@ export default class GrassInstancer {
             // Calculer la distance au carré
             plotInfo.distanceSquared = tempVector.lengthSq();
             
+            // Vérifier d'abord si la parcelle est à une distance supérieure à la distance maximale de visibilité
+            const isBeyondMaxDistance = plotInfo.distanceSquared > this.maxVisibilityDistanceSquared;
+            
+            // Si la parcelle est au-delà de la distance maximale, elle n'est jamais visible
+            if (isBeyondMaxDistance) {
+                plotInfo.isVisible = false;
+                plotInfo.isFullyVisible = false;
+                plotInfo.visibilityFactor = 0;
+                
+                // Calculer l'angle pour le débogage
+                if (plotInfo.distanceSquared > 0) {
+                    tempVector.normalize();
+                    const dotProduct = tempVector.dot(directionVector);
+                    plotInfo.angleToCamera = Math.acos(dotProduct) * 180 / Math.PI;
+                } else {
+                    plotInfo.angleToCamera = 0;
+                }
+                
+                return; // Passer à la parcelle suivante
+            }
+            
+            // Si la vérification du champ de vision est désactivée, toutes les parcelles sont visibles
+            if (this.disableFovCheck) {
+                plotInfo.isVisible = true;
+                plotInfo.isFullyVisible = plotInfo.distanceSquared < this.lodDistancesSquared.high;
+                plotInfo.visibilityFactor = 1;
+                
+                // Calculer l'angle pour le débogage
+                if (plotInfo.distanceSquared > 0) {
+                    tempVector.normalize();
+                    const dotProduct = tempVector.dot(directionVector);
+                    plotInfo.angleToCamera = Math.acos(dotProduct) * 180 / Math.PI;
+                } else {
+                    plotInfo.angleToCamera = 0;
+                }
+                
+                return;
+            }
+            
             // Calculer le cosinus de l'angle entre la direction de la caméra et le vecteur vers la parcelle
             const distance = Math.sqrt(plotInfo.distanceSquared);
             if (distance > 0) {
@@ -231,23 +280,23 @@ export default class GrassInstancer {
                 // Vérifier si la parcelle est dans le champ de vision
                 const isInFov = dotProduct > cosHalfFov * this.fovMargin;
                 
-                // Mettre à jour le flag de visibilité en fonction de la distance ET du champ de vision
-                const wasVisible = plotInfo.isVisible;
-                plotInfo.isVisible = plotInfo.distanceSquared < this.maxVisibilityDistanceSquared * this.visibilityFactor && isInFov;
+                // Mettre à jour le flag de visibilité en fonction du champ de vision
+                plotInfo.isVisible = isInFov;
                 
                 // Mettre à jour le flag de visibilité complète
                 plotInfo.isFullyVisible = plotInfo.distanceSquared < this.lodDistancesSquared.high && isInFov;
                 
-                // Si la visibilité a changé, mettre à jour le flag de changement
-                plotInfo.visibilityChanged = wasVisible !== plotInfo.isVisible;
-                
                 // Stocker l'angle pour le débogage
                 plotInfo.angleToCamera = Math.acos(dotProduct) * 180 / Math.PI;
+                
+                // Stocker le facteur de visibilité pour le débogage
+                plotInfo.visibilityFactor = isInFov ? 1 : 0;
             } else {
                 // Si la distance est nulle, la parcelle est à la position de la caméra
                 plotInfo.isVisible = true;
                 plotInfo.isFullyVisible = true;
                 plotInfo.angleToCamera = 0;
+                plotInfo.visibilityFactor = 1;
             }
         });
     }
@@ -257,7 +306,12 @@ export default class GrassInstancer {
         
         // Si une seule parcelle, lui donner toutes les instances
         if (this.plotData.length === 1) {
-            this.plotData[0].allocatedInstances = this.instanceNumber;
+            // Vérifier si la parcelle est visible
+            if (this.plotData[0].isVisible) {
+                this.plotData[0].allocatedInstances = this.instanceNumber;
+            } else {
+                this.plotData[0].allocatedInstances = 0;
+            }
             return;
         }
         
@@ -265,20 +319,30 @@ export default class GrassInstancer {
         if (this.debugMode && this.plotData.length > 0) {
             // Donner 90% des instances à la parcelle la plus proche
             const closestPlot = this.plotData[0];
-            closestPlot.allocatedInstances = Math.floor(totalInstances * 0.9);
+            if (closestPlot.isVisible) {
+                closestPlot.allocatedInstances = Math.floor(totalInstances * 0.9);
+            } else {
+                closestPlot.allocatedInstances = 0;
+            }
             
             // Distribuer le reste entre les autres parcelles
             const remainingInstances = totalInstances - closestPlot.allocatedInstances;
             const remainingPlots = this.plotData.length - 1;
             
             for (let i = 1; i < this.plotData.length; i++) {
-                this.plotData[i].allocatedInstances = Math.floor(remainingInstances / remainingPlots);
+                if (this.plotData[i].isVisible) {
+                    this.plotData[i].allocatedInstances = Math.floor(remainingInstances / remainingPlots);
+                } else {
+                    this.plotData[i].allocatedInstances = 0;
+                }
             }
             
             // Ajuster pour éviter les arrondis
             const lastPlot = this.plotData[this.plotData.length - 1];
-            lastPlot.allocatedInstances += remainingInstances - 
-                (this.plotData.slice(1).reduce((sum, plot) => sum + plot.allocatedInstances, 0));
+            if (lastPlot.isVisible) {
+                lastPlot.allocatedInstances += remainingInstances - 
+                    (this.plotData.slice(1).reduce((sum, plot) => sum + plot.allocatedInstances, 0));
+            }
                 
             return;
         }
@@ -287,11 +351,24 @@ export default class GrassInstancer {
         const visiblePlots = this.plotData.filter(plot => plot.isVisible);
         
         // Si aucune parcelle n'est visible, ne rien faire
-        if (visiblePlots.length === 0) return;
+        if (visiblePlots.length === 0) {
+            // Mettre à zéro les instances pour toutes les parcelles
+            this.plotData.forEach(plot => {
+                plot.allocatedInstances = 0;
+            });
+            return;
+        }
         
         // Si une seule parcelle est visible, lui donner toutes les instances
         if (visiblePlots.length === 1) {
             visiblePlots[0].allocatedInstances = this.instanceNumber;
+            
+            // Mettre à zéro les instances pour les autres parcelles
+            this.plotData.forEach(plot => {
+                if (plot !== visiblePlots[0]) {
+                    plot.allocatedInstances = 0;
+                }
+            });
             return;
         }
         
@@ -394,12 +471,14 @@ export default class GrassInstancer {
         console.log(`Facteur de visibilité: ${this.visibilityFactor}`);
         console.log(`Angle de champ de vision: ${this.fovAngle} degrés`);
         console.log(`Marge de champ de vision: ${this.fovMargin}`);
+        console.log(`Distance minimale pour le champ de vision: ${this.minFovDistance} unités`);
         
         this.plotData.forEach((plot, index) => {
             console.log(`Parcelle ${index} (ID: ${plot.id}):`);
             console.log(`  Distance au carré: ${plot.distanceSquared.toFixed(2)}`);
             console.log(`  Distance: ${Math.sqrt(plot.distanceSquared).toFixed(2)}`);
             console.log(`  Angle par rapport à la caméra: ${plot.angleToCamera?.toFixed(2) || 0} degrés`);
+            console.log(`  Facteur de visibilité: ${plot.visibilityFactor?.toFixed(2) || 1}`);
             console.log(`  Visible: ${plot.isVisible}`);
             console.log(`  Complètement visible: ${plot.isFullyVisible}`);
             console.log(`  Instances allouées: ${plot.allocatedInstances} (${(plot.allocatedInstances / this.instanceNumber * 100).toFixed(1)}%)`);
