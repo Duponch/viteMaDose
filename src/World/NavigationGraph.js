@@ -247,20 +247,20 @@ export default class NavigationGraph {
                     const cz = cellCenter.z;
 
                     // Vérifier si le centre de la cellule est sur le trottoir
-                    // Exclure les coins pour éviter le dépassement
+                    // Inclure les coins pour éviter les trous
                     const isOnSidewalk = 
-                        // Trottoir gauche (exclure les coins)
+                        // Trottoir gauche (inclure les coins)
                         (cx >= outerMinWorldX && cx < innerMinWorldX && 
-                         cz >= innerMinWorldZ && cz <= innerMaxWorldZ) ||
-                        // Trottoir droit (exclure les coins)
+                         cz >= outerMinWorldZ && cz <= outerMaxWorldZ) ||
+                        // Trottoir droit (inclure les coins)
                         (cx > innerMaxWorldX && cx <= outerMaxWorldX && 
-                         cz >= innerMinWorldZ && cz <= innerMaxWorldZ) ||
-                        // Trottoir bas (exclure les coins)
+                         cz >= outerMinWorldZ && cz <= outerMaxWorldZ) ||
+                        // Trottoir bas (inclure les coins)
                         (cz >= outerMinWorldZ && cz < innerMinWorldZ && 
-                         cx >= innerMinWorldX && cx <= innerMaxWorldX) ||
-                        // Trottoir haut (exclure les coins)
+                         cx >= outerMinWorldX && cx <= outerMaxWorldX) ||
+                        // Trottoir haut (inclure les coins)
                         (cz > innerMaxWorldZ && cz <= outerMaxWorldZ && 
-                         cx >= innerMinWorldX && cx <= innerMaxWorldX);
+                         cx >= outerMinWorldX && cx <= outerMaxWorldX);
 
                     if (isOnSidewalk) {
                         if (this.markCell(gx, gy)) {
