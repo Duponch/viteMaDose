@@ -133,6 +133,7 @@ export default class CityManager {
             agentYOffset: 0.35,
             agentRotationSpeed: 20,
             agentWalkSpeed: 8,
+			carSpeed: 20.0,
             agentBobAmplitude: 0.25,
             agentStepLength: 1.5,
             agentStepHeight: 0.9,
