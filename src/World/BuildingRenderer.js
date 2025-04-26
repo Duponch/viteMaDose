@@ -14,6 +14,8 @@ export default class BuildingRenderer {
         this.defineBuildingBaseMaterials();
         this.defineBuildingBaseGeometries();
         this.initializeBuildingMatrixArrays();
+        // Création de la texture de façade partagée
+        this.sharedFacadeTexture = this.createFacadeTexture();
     }
 
     /**
@@ -190,20 +192,17 @@ export default class BuildingRenderer {
         const doorColor = 0x8a7967;
         const equipmentColor = 0xaaaaaa;
 
-        // Création de la texture de façade
-        const facadeTexture = this.createFacadeTexture();
-
         const mainMaterial = new THREE.MeshStandardMaterial({ 
             color: mainColor, 
             name: "BuildingMainMat",
-            map: facadeTexture,
+            map: this.sharedFacadeTexture,
             roughness: 0.8,
             metalness: 0.1
         });
         const sideMaterial = new THREE.MeshStandardMaterial({ 
             color: sideColor, 
             name: "BuildingSideMat",
-            map: facadeTexture,
+            map: this.sharedFacadeTexture,
             roughness: 0.8,
             metalness: 0.1
         });
