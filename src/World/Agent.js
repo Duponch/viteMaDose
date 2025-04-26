@@ -525,98 +525,96 @@ export default class Agent {
         const DEBUG_RANDOM_PATH = true; // Mettez à true pour activer le debug
 
         if (DEBUG_RANDOM_PATH && this.hasVehicle && this.currentState === AgentState.AT_HOME) {
-            console.log(`[Debug Agent ${this.id}] Tentative de path aléatoire (Véhicule)...`);
+            // On tente ce debug seulement une fois toutes les N millisecondes pour éviter le spam si ça échoue
+            // (Ajouter une propriété this.lastDebugPathAttemptTime = 0; dans le constructeur)
+            if(!this.lastDebugPathAttemptTime) this.lastDebugPathAttemptTime = 0; // Init si besoin
+            if(currentGameTime - this.lastDebugPathAttemptTime < 15000) { // Attendre 15 sec entre les tentatives debug
+                return; // Ne rien faire pour l'instant
+            }
+             this.lastDebugPathAttemptTime = currentGameTime; // Enregistrer le temps de cette tentative
 
-		   // ***** AJOUTER CETTE VÉRIFICATION *****
-          const agentManagerForDebugCheck = this.experience.world?.agentManager;
-		  const carManager = this.experience.world?.carManager; // Récupérer la référence au CarManager
-          if (!agentManagerForDebugCheck || !agentManagerForDebugCheck.isWorkerInitialized) {
-               // Log différent pour indiquer que c'est le debug qui attend
-               console.log(`[Debug Agent ${this.id}] Worker non prêt pour path aléatoire (attente init...).`);
-               // NE PAS appeler requestPath si le worker n'est pas prêt.
-               // Sortir de cette section de debug pour cette frame.
-               // La logique normale de l'agent (si elle existe en dehors du debug) continuera.
-               // Si seule la logique debug existe dans AT_HOME, l'agent attendra simplement.
-          } else {
+            console.log(`[Debug Agent ${this.id}] Tentative de path véhicule Domicile -> Travail...`);
 
-				const navigationManager = this.experience.world?.cityManager?.navigationManager;
-				const roadNavGraph = navigationManager?.getNavigationGraph(true); // true pour véhicule
+            const agentManagerForDebugCheck = this.experience.world?.agentManager;
+            const carManager = this.experience.world?.carManager; // Get carManager reference
+            const navigationManager = this.experience.world?.cityManager?.navigationManager;
 
-				if (roadNavGraph && typeof roadNavGraph.getRandomWalkableNode === 'function') { // Vérifier si la fonction existe
-					const randomStartNode = roadNavGraph.getRandomWalkableNode();
-					const randomEndNode = roadNavGraph.getRandomWalkableNode();
+            if (!agentManagerForDebugCheck || !agentManagerForDebugCheck.isWorkerInitialized) {
+                 console.log(`[Debug Agent ${this.id}] Worker non prêt pour path debug (attente init...).`);
+            } else if (!navigationManager) {
+                 console.log(`[Debug Agent ${this.id}] NavigationManager non prêt pour path debug.`);
+            } else if (!this.homePosition || !this.workPosition) {
+                console.warn(`[Debug Agent ${this.id}] Domicile ou travail non défini, impossible de générer path debug.`);
+            }
+            else {
+                // Le worker et le nav manager sont prêts, et domicile/travail existent
+                const roadNavGraph = navigationManager.getNavigationGraph(true); // true pour véhicule
 
-					if (randomStartNode && randomEndNode &&
-						(randomStartNode.x !== randomEndNode.x || randomStartNode.y !== randomEndNode.y))
-					{
-						const startPosWorld = roadNavGraph.gridToWorld(randomStartNode.x, randomStartNode.y);
-						const endPosWorld = roadNavGraph.gridToWorld(randomEndNode.x, randomEndNode.y);
+                if (roadNavGraph) {
+                    // ***** TROUVER LES NOEUDS ROUTE PROCHES DU DOMICILE ET DU TRAVAIL *****
+                    const startNode = roadNavGraph.getClosestWalkableNode(this.homePosition); // Utiliser la position domicile
+                    const endNode = roadNavGraph.getClosestWalkableNode(this.workPosition);   // Utiliser la position travail
 
-						console.log(`[Debug Agent ${this.id}] Points routiers aléatoires trouvés: Start(${randomStartNode.x},${randomStartNode.y}) -> End(${randomEndNode.x},${randomEndNode.y})`);
+                    if (startNode && endNode &&
+                        (startNode.x !== endNode.x || startNode.y !== endNode.y))
+                    {
+                        // Conversion en position monde juste pour les logs/sphères
+                        const startPosWorld = roadNavGraph.gridToWorld(startNode.x, startNode.y);
+                        const endPosWorld = roadNavGraph.gridToWorld(endNode.x, endNode.y);
 
-						// --- Visualisation Debug ---
-						if (this.experience.world) {
-							this.experience.world.showStartNodeDebugSphere(startPosWorld); // Sphère bleue
-							this.experience.world.showEndNodeDebugSphere(endPosWorld);     // Sphère verte
-						}
-						// -------------------------
+                        console.log(`[Debug Agent ${this.id}] Points routiers trouvés (Domicile->Travail): Start(${startNode.x},${startNode.y}) -> End(${endNode.x},${endNode.y})`);
 
-						// ***** VÉRIFIER/CRÉER LA VOITURE AVANT LA REQUÊTE DE CHEMIN *****
-                      let canProceedWithVehicle = false;
-                      if (carManager) {
-                          if (!carManager.hasCarForAgent(this.id)) {
-                              // Déterminer une position de départ sensée pour la voiture en mode debug
-                              // Utiliser vehicleHomePosition si défini, sinon homePosition, sinon la position de départ aléatoire
-                              const carStartPosition = this.vehicleHomePosition || this.homePosition || startPosWorld;
-                              const carTargetPosition = endPosWorld; // Viser la destination aléatoire
-                              const car = carManager.createCarForAgent(this, carStartPosition, carTargetPosition);
-                              if (car) {
-                                  console.log(`[Debug Agent ${this.id}] Voiture créée pour path aléatoire.`);
-                                  canProceedWithVehicle = true;
-                              } else {
-                                  console.warn(`[Debug Agent ${this.id}] Échec création voiture pour path aléatoire.`);
-                                  // Optionnel : forcer en mode piéton ici? Ou simplement annuler.
-                              }
-                          } else {
-                              console.log(`[Debug Agent ${this.id}] Voiture déjà existante pour path aléatoire.`);
-                              canProceedWithVehicle = true; // L'agent a déjà une voiture
-                          }
-                      } else {
-                           console.warn(`[Debug Agent ${this.id}] CarManager non trouvé, impossible de créer/vérifier voiture.`);
-                      }
-                      // *****-----------------------------------------------*****
+                        if (this.experience.world) {
+                            this.experience.world.showStartNodeDebugSphere(startPosWorld);
+                            this.experience.world.showEndNodeDebugSphere(endPosWorld);
+                        }
 
-                      // Continuer SEULEMENT si la voiture existe ou a été créée
-                      if (canProceedWithVehicle) {
-						// Forcer l'état pour demander le chemin pour véhicule
-						const nextStateIfSuccess = AgentState.DRIVING_TO_WORK; // Ou un état dédié au debug
-						this.isInVehicle = true; // Important: Indiquer qu'on demande un chemin véhicule
-						this.currentState = AgentState.REQUESTING_PATH_FOR_WORK; // Ou un état dédié
-						this.requestPath(
-							null,                  // startPosWorld (non nécessaire si nœud fourni)
-							null,                  // endPosWorld (non nécessaire si nœud fourni)
-							randomStartNode,       // Nœud de départ
-							randomEndNode,         // Nœud d'arrivée
-							nextStateIfSuccess,
-							currentGameTime
-						);
-						console.log(`[Debug Agent ${this.id}] Requête de chemin aléatoire véhicule envoyée.`);
-						// Empêcher l'exécution de la logique de départ normale pour cette frame
-						return;
+                        // ***** ENSURE CAR EXISTS BEFORE REQUESTING PATH (même logique qu'avant) *****
+                        let canProceedWithVehicle = false;
+                        if (carManager) {
+                            if (!carManager.hasCarForAgent(this.id)) {
+                                const carStartPosition = this.vehicleHomePosition || this.homePosition || startPosWorld;
+                                const carTargetPosition = this.workPosition || endPosWorld; // Cibler la position travail réelle
+                                const car = carManager.createCarForAgent(this, carStartPosition, carTargetPosition);
+                                if (car) {
+                                    console.log(`[Debug Agent ${this.id}] Voiture créée pour path debug.`);
+                                    canProceedWithVehicle = true;
+                                } else {
+                                    console.warn(`[Debug Agent ${this.id}] Échec création voiture pour path debug.`);
+                                }
+                            } else {
+                                console.log(`[Debug Agent ${this.id}] Voiture déjà existante pour path debug.`);
+                                canProceedWithVehicle = true;
+                            }
+                        } else {
+                             console.warn(`[Debug Agent ${this.id}] CarManager non trouvé, impossible de créer/vérifier voiture.`);
+                        }
+                        // *****----------------------------------------------------------*****
 
-					} else {
-					     // Si la voiture n'a pas pu être créée/vérifiée, annuler la tentative de path aléatoire
-					     console.warn(`[Debug Agent ${this.id}] Impossible de procéder avec le véhicule, annulation requête path aléatoire.`);
-					     // L'agent restera dans AT_HOME pour cette frame
-					}
-
-					} else {
-						console.warn(`[Debug Agent ${this.id}] Impossible de trouver des points routiers aléatoires valides ou identiques.`);
-					}
-				} else {
-					console.warn(`[Debug Agent ${this.id}] RoadNavigationGraph non trouvé ou getRandomWalkableNode n'existe pas.`);
-				}
-			}
+                        if (canProceedWithVehicle) {
+                            const nextStateIfSuccess = AgentState.DRIVING_TO_WORK; // Ou un état debug dédié
+                            this.isInVehicle = true;
+                            this.currentState = AgentState.REQUESTING_PATH_FOR_WORK;
+                            this.requestPath(
+                                null,
+                                null,
+                                startNode,       // Utiliser le nœud proche du domicile
+                                endNode,         // Utiliser le nœud proche du travail
+                                nextStateIfSuccess,
+                                currentGameTime
+                            );
+                             console.log(`[Debug Agent ${this.id}] Requête de path véhicule debug (Domicile->Travail) envoyée.`);
+                            return; // Sortir pour cette frame
+                        } else {
+                            console.warn(`[Debug Agent ${this.id}] Impossible de procéder avec le véhicule, annulation requête path debug.`);
+                        }
+                    } else {
+                        console.warn(`[Debug Agent ${this.id}] Impossible de trouver des nœuds routiers valides proches du domicile/travail ou identiques. Start: ${JSON.stringify(startNode)}, End: ${JSON.stringify(endNode)}`);
+                    }
+                } else {
+                    console.warn(`[Debug Agent ${this.id}] RoadNavigationGraph non trouvé.`);
+                }
+            } // Fin des vérifications worker/nav/positions
         }
         // --- Fin Section Debug ---
 
