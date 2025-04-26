@@ -16,12 +16,12 @@ export default class TreeRenderer {
         
         // Palette de couleurs de feuillage
         this.foliageColors = [
-            0x228B22, // Vert forêt
-            0x32CD32, // Vert lime
-            0x006400, // Vert foncé
-            0x90EE90, // Vert clair
+            0x556B2F, // Vert forêt
+            0x556B2F, // Vert lime
+            0x556B2F, // Vert foncé
+            0x556B2F, // Vert clair
             0x556B2F, // Vert olive
-            0x2E8B57  // Vert mer
+            0x556B2F  // Vert mer
         ];
     }
 
