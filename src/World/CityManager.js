@@ -66,7 +66,7 @@ export default class CityManager {
             sidewalkHeight: 0.2,
             centerlineWidth: 0.15,
             centerlineHeight: 0.02,
-            plotGroundY: 0.005, // Ajout pour uniformiser
+            plotGroundY: 0.2, // Ajout pour uniformiser
             // Espacements Minimum
             minHouseSpacing: 5.0,
             minBuildingSpacing: 3.0,
