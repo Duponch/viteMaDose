@@ -596,12 +596,12 @@ export default class AgentManager {
 		let needsAgentMarkerUpdate = false;
 		let needsHomeMarkerUpdate = false;
 
-        // --- Ajout des déclarations des matrices temporaires ---
-        const tempLocalOffsetMatrix = new THREE.Matrix4();
-        const tempAnimationMatrix = new THREE.Matrix4();
-        const tempPartWorldMatrix = new THREE.Matrix4(); // Matrice mondiale finale pour une partie
-        const tempHairLocalOffset = this._getPartLocalOffsetMatrix('hair'); // Offset des cheveux relatif à la tête (calculé une fois)
-        const tempHeadWorldMatrix = new THREE.Matrix4(); // Pour stocker la matrice mondiale de la tête
+		// --- Ajout des déclarations des matrices temporaires ---
+		const tempLocalOffsetMatrix = new THREE.Matrix4();
+		const tempAnimationMatrix = new THREE.Matrix4();
+		const tempPartWorldMatrix = new THREE.Matrix4(); // Matrice mondiale finale pour une partie
+		const tempHairLocalOffset = this._getPartLocalOffsetMatrix('hair'); // Offset des cheveux relatif à la tête (calculé une fois)
+		const tempHeadWorldMatrix = new THREE.Matrix4();
 
 		for (const agent of this.agents) {
 			const instanceId = this.agentToInstanceId.get(agent.id);
@@ -614,95 +614,61 @@ export default class AgentManager {
 			this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
 
 			// --- Mise à jour des parties du corps instanciées ---
-            // Fonction utilitaire pour calculer et appliquer la matrice à une instance
+			// Fonction utilitaire pour calculer et appliquer la matrice à une instance
 			const updatePartInstance = (partName, meshName, instanceIndex) => {
 				const mesh = this.instanceMeshes[meshName];
-				if (!mesh || instanceIndex >= mesh.count) return false; // Vérifier si le mesh existe et l'index est valide
+				if (!mesh || instanceIndex >= mesh.count) return false;
 
 				if (agent.isVisible) {
-                    // --- Calcul commun pour toutes les parties ---
+					// --- Calcul commun pour toutes les parties ---
 					// 1. Obtenir le décalage local de la partie (position/rotation de base)
-                    // Note: Pour les cheveux, ceci récupère leur décalage relatif à la tête.
-                    tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix(partName));
+					tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix(partName));
 
 					// 2. Obtenir la matrice d'animation de la partie (calculée dans agent.updateVisuals)
-                    // Note: L'animation pour les cheveux devrait être l'identité.
-                    tempAnimationMatrix.copy(agent.currentAnimationMatrix[partName] || this.tempMatrix.identity());
+					tempAnimationMatrix.copy(agent.currentAnimationMatrix[partName] || this.tempMatrix.identity());
 
-                    // 3. Combiner : Matrice locale de la partie = Offset * Animation
-                    tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
+					// 3. Combiner : Matrice locale de la partie = Offset * Animation
+					tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
 
-                    // 4. Combiner avec la matrice de l'agent : Matrice mondiale de la partie = Agent * LocalePartie
-                    tempPartWorldMatrix.premultiply(this.agentMatrix); // agentMatrix * (offsetMatrix * animationMatrix)
+					// 4. Combiner avec la matrice de l'agent : Matrice mondiale de la partie = Agent * LocalePartie
+					tempPartWorldMatrix.premultiply(this.agentMatrix);
 
-                    // --- Application et cas spécifiques ---
-                    if (partName === 'hair') {
-                        // Pour les cheveux, la matrice calculée ci-dessus (tempPartWorldMatrix) est incorrecte.
-                        // On la recalcule en utilisant la matrice mondiale de la tête et l'offset local des cheveux.
-                        
-                        // --- TEST: Appliquer directement la matrice de la tête (ANNULÉ) --- 
-                        tempPartWorldMatrix.multiplyMatrices(tempHeadWorldMatrix, tempHairLocalOffset); // <--- RESTAURATION
-                        // tempPartWorldMatrix.copy(tempHeadWorldMatrix); 
-                        // --- FIN TEST ---
-
-                        // --- DEBUG LOGGING ---
-                        if (instanceIndex === 0 && agent.isVisible) { // Log only for the first visible agent to avoid spam
-                            console.log(`Agent 0 Hair Update (Visible):`);
-                            // Décomposer la matrice finale pour vérifier scale, position, rotation
-                            const pos = new THREE.Vector3();
-                            const quat = new THREE.Quaternion();
-                            const scale = new THREE.Vector3();
-                            tempPartWorldMatrix.decompose(pos, quat, scale);
-                            console.log(`  Final Hair Matrix Decomposed -> Pos: ${pos.x.toFixed(2)},${pos.y.toFixed(2)},${pos.z.toFixed(2)} | Scale: ${scale.x.toFixed(2)},${scale.y.toFixed(2)},${scale.z.toFixed(2)}`);
-                            // Optionnel: log matrices complètes si besoin
-                            // console.log(`  Head World Matrix:`, tempHeadWorldMatrix.elements);
-                            // console.log(`  Hair Local Offset:`, tempHairLocalOffset.elements);
-                            // console.log(`  Final Hair Matrix:`, tempPartWorldMatrix.elements);
-                        }
-                        // --- END DEBUG LOGGING ---
-
-                        mesh.setMatrixAt(instanceIndex, tempPartWorldMatrix); // Appliquer la matrice spécifique des cheveux
-
-                    } else {
-                         // Pour toutes les autres parties (tête, torse, mains, pieds)
-                         mesh.setMatrixAt(instanceIndex, tempPartWorldMatrix); // Appliquer la matrice calculée
-
-                         // Si c'est la tête, stocker sa matrice mondiale pour les cheveux
-                         if (partName === 'head') {
-                            tempHeadWorldMatrix.copy(tempPartWorldMatrix);
-                         }
-                    }
-
+					// --- Application et cas spécifiques ---
+					if (partName === 'hair') {
+						tempPartWorldMatrix.multiplyMatrices(tempHeadWorldMatrix, tempHairLocalOffset);
+						mesh.setMatrixAt(instanceIndex, tempPartWorldMatrix);
+					} else {
+						mesh.setMatrixAt(instanceIndex, tempPartWorldMatrix);
+						if (partName === 'head') {
+							tempHeadWorldMatrix.copy(tempPartWorldMatrix);
+						}
+					}
 				} else {
 					// Masquer l'instance si l'agent n'est pas visible
-					this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0)); // Matrice d'échelle nulle
+					this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0));
 					mesh.setMatrixAt(instanceIndex, this.tempMatrix);
 				}
-                return true; // Indique qu'une mise à jour a été tentée
+				return true;
 			};
 
-            // Appliquer la mise à jour pour chaque partie (L'ORDRE EST IMPORTANT : head AVANT hair)
-            let updated = false;
-            updated = updatePartInstance('head',      'head', instanceId) || updated;
-            updated = updatePartInstance('torso',     'torso', instanceId) || updated;
-            // Assurer que tempHairLocalOffset est défini avant d'appeler pour 'hair'
-            // tempHairLocalOffset a déjà été calculé et stocké en dehors de la boucle agent
-            updated = updatePartInstance('leftHand',  'hand', instanceId * 2 + 0) || updated; // Index 0 pour gauche
-            updated = updatePartInstance('rightHand', 'hand', instanceId * 2 + 1) || updated; // Index 1 pour droite
-            updated = updatePartInstance('leftFoot',  'shoe', instanceId * 2 + 0) || updated; // Index 0 pour gauche
-            updated = updatePartInstance('rightFoot', 'shoe', instanceId * 2 + 1) || updated; // Index 1 pour droite
+			// Appliquer la mise à jour pour chaque partie
+			let updated = false;
+			updated = updatePartInstance('head', 'head', instanceId) || updated;
+			updated = updatePartInstance('torso', 'torso', instanceId) || updated;
+			updated = updatePartInstance('leftHand', 'hand', instanceId * 2 + 0) || updated;
+			updated = updatePartInstance('rightHand', 'hand', instanceId * 2 + 1) || updated;
+			updated = updatePartInstance('leftFoot', 'shoe', instanceId * 2 + 0) || updated;
+			updated = updatePartInstance('rightFoot', 'shoe', instanceId * 2 + 1) || updated;
 
-            if (updated) needsBodyMatrixUpdate = true;
+			if (updated) needsBodyMatrixUpdate = true;
 
 			// --- Mise à jour Debug marker (agentMarker) ---
 			const markerMesh = this.instanceMeshes.agentMarker;
 			if (markerMesh) {
 				if (isDebug) {
-					// Ne pas afficher le losange si l'agent est dans un bâtiment
 					const shouldShowMarker = agent.currentState !== 'AT_HOME' && agent.currentState !== 'AT_WORK';
 					
 					if (shouldShowMarker) {
-						// Composer la matrice du losange au-dessus de l'agent
 						this.tempMatrix.identity();
 						this.tempMatrix.makeTranslation(
 							agent.position.x,
@@ -712,11 +678,9 @@ export default class AgentManager {
 						this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
 						this.tempMatrix.scale(this.tempScale);
 					} else {
-						// Masquer le losange (échelle 0)
 						this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
 					}
 				} else {
-					// Masquer le losange (échelle 0)
 					this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
 				}
 				markerMesh.setMatrixAt(instanceId, this.tempMatrix);
@@ -734,8 +698,8 @@ export default class AgentManager {
 				}
 			});
 		}
-		if (needsAgentMarkerUpdate)  this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
-		if (needsHomeMarkerUpdate)   this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
+		if (needsAgentMarkerUpdate) this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
+		if (needsHomeMarkerUpdate) this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
 	}
 
 	removeAgent(agentId) {
