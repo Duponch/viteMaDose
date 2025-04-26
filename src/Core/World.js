@@ -27,13 +27,15 @@ export default class World {
             district: new THREE.Group(),
             plot: new THREE.Group(),
             buildingOutline: new THREE.Group(),
-            navGrid: new THREE.Group(),
+            navGridPedestrian: new THREE.Group(),
+            navGridVehicle: new THREE.Group(),
             agentPath: new THREE.Group()
         };
         this.debugGroups.district.name = "DebugDistrictGrounds";
         this.debugGroups.plot.name = "DebugPlotGrounds";
         this.debugGroups.buildingOutline.name = "DebugBuildingOutlines";
-        this.debugGroups.navGrid.name = "DebugNavGrid";
+        this.debugGroups.navGridPedestrian.name = "DebugNavGridPedestrian";
+        this.debugGroups.navGridVehicle.name = "DebugNavGridVehicle";
         this.debugGroups.agentPath.name = "DebugAgentPaths";
 
         // Ajouter tous les groupes à la scène
@@ -128,7 +130,8 @@ export default class World {
             this.clearGroupChildren(this.debugGroups.district);
             this.clearGroupChildren(this.debugGroups.plot);
             this.clearGroupChildren(this.debugGroups.buildingOutline);
-            this.clearGroupChildren(this.debugGroups.navGrid);
+            this.clearGroupChildren(this.debugGroups.navGridPedestrian);
+            this.clearGroupChildren(this.debugGroups.navGridVehicle);
             this.clearGroupChildren(this.debugGroups.agentPath);
             // ---------------------------------------------
 
@@ -164,11 +167,15 @@ export default class World {
                 }
                 this.debugGroups.buildingOutline.position.y = this.debugHeights.buildingOutline;
 
-                // 4. NavGrid (reste simple, pas de sous-types)
-                if (this.cityManager.navigationGraph) {
-                    this.cityManager.navigationGraph.createDebugVisualization(this.debugGroups.navGrid);
+                // 4. NavGrid (piétons et voitures)
+                if (this.cityManager.navigationManager) {
+                    // Grille de navigation des piétons
+                    this.cityManager.navigationManager.getNavigationGraph(false).createDebugVisualization(this.debugGroups.navGridPedestrian);
+                    // Grille de navigation des voitures
+                    this.cityManager.navigationManager.getNavigationGraph(true).createDebugVisualization(this.debugGroups.navGridVehicle);
                 }
-                this.debugGroups.navGrid.position.y = this.debugHeights.navGrid;
+                this.debugGroups.navGridPedestrian.position.y = this.debugHeights.navGrid;
+                this.debugGroups.navGridVehicle.position.y = this.debugHeights.navGrid;
 
                 // 5. Chemins Agents (reste dynamique)
                 this.debugGroups.agentPath.position.y = this.debugHeights.agentPath;
@@ -179,7 +186,8 @@ export default class World {
             this.setGroupVisibility('district', this.experience.debugLayerVisibility.district._visible);
             this.setGroupVisibility('plot', this.experience.debugLayerVisibility.plot._visible);
             this.setGroupVisibility('buildingOutline', this.experience.debugLayerVisibility.buildingOutline._visible);
-            this.setGroupVisibility('navGrid', this.experience.debugLayerVisibility.navGrid._visible);
+            this.setGroupVisibility('navGridPedestrian', this.experience.debugLayerVisibility.navGridPedestrian._visible);
+            this.setGroupVisibility('navGridVehicle', this.experience.debugLayerVisibility.navGridVehicle._visible);
             this.setGroupVisibility('agentPath', this.experience.debugLayerVisibility.agentPath._visible);
             // La visibilité des sous-types a été appliquée lors de l'ajout des meshes.
 
@@ -189,6 +197,7 @@ export default class World {
             this.clearGroupChildren(this.debugGroups.district);
             this.clearGroupChildren(this.debugGroups.plot);
             this.clearGroupChildren(this.debugGroups.buildingOutline);
+            this.clearGroupChildren(this.debugGroups.navGridPedestrian);
             this.clearGroupChildren(this.debugGroups.navGrid);
             this.clearGroupChildren(this.debugGroups.agentPath, true); // Dispose AgentPath specifics
 

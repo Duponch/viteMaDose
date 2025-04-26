@@ -76,8 +76,9 @@ export default class TimeControlUI {
                     skyscraper: 'Gratte-ciels'
                 }
             },
-            navGrid: { text: 'NavGrid', subLayers: null }, // Pas de sous-menu
-            agentPath: { text: 'Paths', subLayers: null }   // Pas de sous-menu
+            navGridPedestrian: { text: 'NavGrid Piétons', subLayers: null },
+            navGridVehicle: { text: 'NavGrid Véhicules', subLayers: null },
+            agentPath: { text: 'Paths', subLayers: null }
         };
 
         // --- Création dynamique des boutons et sous-menus ---

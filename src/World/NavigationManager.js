@@ -1,11 +1,11 @@
 // src/World/NavigationManager.js
 import NavigationGraph from './NavigationGraph.js';
+import RoadNavigationGraph from './RoadNavigationGraph.js';
 import Pathfinder from './Pathfinder.js';
 
 /**
- * NavigationManager centralise la gestion du graphe de navigation et du service de pathfinding.
- * Il expose notamment la construction et la mise à jour de la grille de navigation à partir des plots générés
- * et la distribution d’un service de pathfinding aux modules nécessitant des calculs de chemin (ex. les agents).
+ * NavigationManager centralise la gestion des graphes de navigation et des services de pathfinding.
+ * Il gère à la fois la navigation des piétons sur les trottoirs et celle des voitures sur les routes.
  */
 export default class NavigationManager {
     /**
@@ -14,8 +14,10 @@ export default class NavigationManager {
      */
     constructor(config) {
         this.config = config;
-        this.navigationGraph = null;
-        this.pathfinder = null;
+        this.pedestrianNavigationGraph = null;
+        this.roadNavigationGraph = null;
+        this.pedestrianPathfinder = null;
+        this.roadPathfinder = null;
     }
 
     /**
@@ -25,10 +27,15 @@ export default class NavigationManager {
      */
     buildGraph(plots, crosswalkInfos) {
         console.time("NavigationGraphBuilding");
-        // Crée une nouvelle instance de NavigationGraph avec la configuration
-        this.navigationGraph = new NavigationGraph(this.config);
-        // Construit la grille de navigation à partir des plots et des informations sur les passages piétons
-        this.navigationGraph.buildGraph(plots, crosswalkInfos);
+        
+        // Créer les deux grilles de navigation
+        this.pedestrianNavigationGraph = new NavigationGraph(this.config);
+        this.roadNavigationGraph = new RoadNavigationGraph(this.config);
+        
+        // Construire les grilles
+        this.pedestrianNavigationGraph.buildGraph(plots, crosswalkInfos);
+        this.roadNavigationGraph.buildGraph(plots, crosswalkInfos);
+        
         console.timeEnd("NavigationGraphBuilding");
     }
 
@@ -36,29 +43,27 @@ export default class NavigationManager {
      * Initialise le service de pathfinding en créant une instance de Pathfinder basée sur le graphe de navigation actuel.
      */
     initializePathfinder() {
-        if (!this.navigationGraph) {
-            console.error("NavigationManager: Graphe de navigation non construit. Impossible d'initialiser le pathfinder.");
-            return;
-        }
-        console.time("PathfinderInitialization");
-        this.pathfinder = new Pathfinder(this.navigationGraph);
-        console.timeEnd("PathfinderInitialization");
+        // Initialiser les pathfinders pour les piétons et les voitures
+        this.pedestrianPathfinder = new Pathfinder(this.pedestrianNavigationGraph);
+        this.roadPathfinder = new Pathfinder(this.roadNavigationGraph);
     }
 
     /**
      * Retourne l'instance actuelle du graphe de navigation.
+     * @param {boolean} isVehicle - Indique si la navigation est pour une voiture (true) ou pour un piéton (false).
      * @returns {NavigationGraph} Le graphe de navigation.
      */
-    getNavigationGraph() {
-        return this.navigationGraph;
+    getNavigationGraph(isVehicle = false) {
+        return isVehicle ? this.roadNavigationGraph : this.pedestrianNavigationGraph;
     }
 
     /**
      * Retourne le service de pathfinding.
+     * @param {boolean} isVehicle - Indique si le pathfinding est pour une voiture (true) ou pour un piéton (false).
      * @returns {Pathfinder} L'instance de Pathfinder.
      */
-    getPathfinder() {
-        return this.pathfinder;
+    getPathfinder(isVehicle = false) {
+        return isVehicle ? this.roadPathfinder : this.pedestrianPathfinder;
     }
 
     /**
@@ -74,10 +79,15 @@ export default class NavigationManager {
      * Détruit le NavigationManager et libère les ressources utilisées par le graphe de navigation.
      */
     destroy() {
-        if (this.navigationGraph) {
-            this.navigationGraph.destroy();
-            this.navigationGraph = null;
+        if (this.pedestrianNavigationGraph) {
+            this.pedestrianNavigationGraph.destroy();
         }
-        this.pathfinder = null;
+        if (this.roadNavigationGraph) {
+            this.roadNavigationGraph.destroy();
+        }
+        this.pedestrianNavigationGraph = null;
+        this.roadNavigationGraph = null;
+        this.pedestrianPathfinder = null;
+        this.roadPathfinder = null;
     }
 }

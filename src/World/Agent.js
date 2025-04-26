@@ -128,6 +128,8 @@ export default class Agent {
         // --- OPTIMISATION ---
         this._nextStateCheckTime = -1; // Heure du prochain contrôle d'état nécessaire (optimisation)
         // --- FIN OPTIMISATION ---
+
+        this.isInVehicle = false; // Nouvelle propriété pour suivre si l'agent est en voiture
     }
 
 	_calculateScheduledTimes() {
@@ -275,15 +277,22 @@ export default class Agent {
         }
         if (!navGraph) {
             console.error(`Agent ${this.id}: NavigationGraph non trouvé pour requête path.`);
-             this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE; // Retour état stable
-             this.isVisible = false;
+            this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE; // Retour état stable
+            this.isVisible = false;
             return; // Échec
         }
 
+        // Déterminer si l'agent est en voiture
+        const isVehicle = this.isInVehicle || false; // Ajouter cette propriété à la classe Agent si ce n'est pas déjà fait
+
+        // Obtenir le bon graphe de navigation et pathfinder en fonction du mode de transport
+        const navigationGraph = this.experience.cityManager.navigationManager.getNavigationGraph(isVehicle);
+        const pathfinder = this.experience.cityManager.navigationManager.getPathfinder(isVehicle);
+
         // Déterminer les noeuds de grille de départ et d'arrivée
         // Utilise l'override (pré-calculé) si disponible, sinon calcule le plus proche
-        const startNode = startNodeOverride !== null ? startNodeOverride : navGraph.getClosestWalkableNode(startPosWorld);
-        const endNode = endNodeOverride !== null ? endNodeOverride : navGraph.getClosestWalkableNode(endPosWorld);
+        const startNode = startNodeOverride !== null ? startNodeOverride : navigationGraph.getClosestWalkableNode(startPosWorld);
+        const endNode = endNodeOverride !== null ? endNodeOverride : navigationGraph.getClosestWalkableNode(endPosWorld);
 
         // Vérifier si les noeuds ont été trouvés
         if (startNode && endNode) {
@@ -1581,6 +1590,22 @@ export default class Agent {
         this._nextStateCheckTime = nextCheckTime;
         if (recalculate) {
             this._nextStateCheckTime = currentGameTime + 10000; // 10 secondes à partir de maintenant
+        }
+    }
+
+    // Nouvelle méthode pour entrer dans une voiture
+    enterVehicle() {
+        if (!this.isInVehicle) {
+            this.isInVehicle = true;
+            console.log(`Agent ${this.id}: Est entré dans une voiture`);
+        }
+    }
+
+    // Nouvelle méthode pour sortir d'une voiture
+    exitVehicle() {
+        if (this.isInVehicle) {
+            this.isInVehicle = false;
+            console.log(`Agent ${this.id}: Est sorti de la voiture`);
         }
     }
 }

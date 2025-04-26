@@ -98,6 +98,12 @@ export default class Experience extends EventTarget {
             navGrid: {
                 _visible: false
             },
+            navGridPedestrian: {
+                _visible: false
+            },
+            navGridVehicle: {
+                _visible: false
+            },
             agentPath: {
                 _visible: false
             }
