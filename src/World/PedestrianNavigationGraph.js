@@ -1,7 +1,18 @@
-class PedestrianNavigationGraph {
+import NavigationGraph from './NavigationGraph.js';
+
+export default class PedestrianNavigationGraph extends NavigationGraph {
     constructor(config) {
-        this.config = config;
+        super(config);
         this.gridScale = config.gridScale || 1.0;
+    }
+
+    buildGraph(plots, crosswalkInfos) {
+        // Appeler la méthode parent pour initialiser la grille
+        super.buildGraph(plots, crosswalkInfos);
+
+        // Marquer les trottoirs et passages piétons
+        this.markSidewalksAndCrosswalks(plots, crosswalkInfos);
+        this.updatePFGrid();
     }
 
     markSidewalksAndCrosswalks(plots, crosswalkInfos) {
@@ -48,8 +59,23 @@ class PedestrianNavigationGraph {
 
         // Marquer les passages piétons
         crosswalkInfos.forEach(crosswalk => {
-            const startGrid = this.worldToGrid(crosswalk.startX, crosswalk.startZ);
-            const endGrid = this.worldToGrid(crosswalk.endX, crosswalk.endZ);
+            // Vérifier que les coordonnées du passage piéton sont valides
+            // Si position est un objet Vector3, on doit accéder à ses propriétés x, y, z
+            if (!crosswalk.position || 
+                (typeof crosswalk.position.x === 'undefined' && typeof crosswalk.position.getX === 'undefined') || 
+                (typeof crosswalk.position.z === 'undefined' && typeof crosswalk.position.getZ === 'undefined')) {
+                console.error("PedestrianNavigationGraph: Coordonnées invalides pour un passage piéton:", crosswalk);
+                return; // Ignorer ce passage piéton
+            }
+            
+            // Extraire les coordonnées x et z de l'objet position (qu'il s'agisse d'un objet simple ou d'un Vector3)
+            const startX = typeof crosswalk.position.x !== 'undefined' ? crosswalk.position.x : crosswalk.position.getX();
+            const startZ = typeof crosswalk.position.z !== 'undefined' ? crosswalk.position.z : crosswalk.position.getZ();
+            const endX = typeof crosswalk.endX !== 'undefined' ? crosswalk.endX : startX;
+            const endZ = typeof crosswalk.endZ !== 'undefined' ? crosswalk.endZ : startZ;
+            
+            const startGrid = this.worldToGrid(startX, startZ);
+            const endGrid = this.worldToGrid(endX, endZ);
 
             // Marquer les cellules du passage piéton
             for (let gy = startGrid.y; gy <= endGrid.y; gy++) {
@@ -62,5 +88,5 @@ class PedestrianNavigationGraph {
         });
 
         console.log(`PedestrianNavigationGraph: ${markedCells} cellules de trottoirs et passages piétons marquées.`);
-    };
+    }
 } 

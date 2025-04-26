@@ -212,6 +212,36 @@ export default class Agent {
 		this._calculateScheduledTimes();
     }
 
+    checkNavigationManager() {
+        // Vérifier d'abord si le NavigationManager est déjà initialisé
+        if (!this.navigationManager) {
+            // Essayer d'obtenir le NavigationManager via le CityManager
+            const cityManager = this.experience?.world?.cityManager;
+            if (!cityManager) {
+                console.error(`Agent ${this.id}: CityManager non disponible. Vérifiez que l'expérience et le monde sont correctement initialisés.`);
+                return false;
+            }
+            
+            this.navigationManager = cityManager.navigationManager;
+            if (!this.navigationManager) {
+                console.error(`Agent ${this.id}: NavigationManager non disponible dans le CityManager. La ville n'est peut-être pas encore générée.`);
+                return false;
+            }
+            
+            // Vérifier que les graphes de navigation sont initialisés
+            const isVehicle = this.isInVehicle || this.hasVehicle;
+            const graph = this.navigationManager.getNavigationGraph(isVehicle);
+            if (!graph) {
+                console.error(`Agent ${this.id}: Graphe de navigation ${isVehicle ? 'véhicule' : 'piéton'} non disponible.`);
+                return false;
+            }
+            
+            console.log(`Agent ${this.id}: NavigationManager initialisé avec succès. Mode: ${isVehicle ? 'véhicule' : 'piéton'}`);
+        }
+        
+        return true;
+    }
+
     requestPath(startPosWorld, endPosWorld, startNodeOverride = null, endNodeOverride = null, nextStateIfSuccess, currentGameTimeForStats) {
         // nextStateIfSuccess sera par exemple READY_TO_LEAVE_FOR_WORK ou READY_TO_LEAVE_FOR_HOME
 
@@ -238,28 +268,37 @@ export default class Agent {
             console.log(`Agent ${this.id}: Requête de chemin pour PROMENADE WEEKEND.`);
         }
         else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
-            // CORRECTION : Ajouter la gestion explicite de l'état WEEKEND_WALK_RETURNING_TO_SIDEWALK
             this.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
             console.log(`Agent ${this.id}: Requête de chemin pour RETOUR AU TROTTOIR depuis le parc.`);
         }
         else {
-            // Cas par défaut (ne devrait pas arriver)
             this.currentState = AgentState.REQUESTING_PATH_FOR_HOME;
             console.warn(`Agent ${this.id}: État nextStateIfSuccess inconnu: ${nextStateIfSuccess}, fallback sur REQUESTING_PATH_FOR_HOME`);
         }
-        this.isVisible = false; // Reste caché pendant la demande initiale
+        this.isVisible = false;
 
         const agentManager = this.experience.world?.agentManager;
-        const navGraph = this.experience.world?.cityManager?.getNavigationGraph(); // Accéder via cityManager
+        const cityManager = this.experience.world?.cityManager;
+
+        // Vérifier si le NavigationManager est disponible
+        if (!this.checkNavigationManager()) {
+            console.warn(`Agent ${this.id}: NavigationManager non disponible. La ville n'est peut-être pas encore générée. Mise en attente...`);
+            this.currentState = AgentState.WAITING_FOR_PATH;
+            setTimeout(() => {
+                if (this.checkNavigationManager()) {
+                    this.requestPath(startPosWorld, endPosWorld, startNodeOverride, endNodeOverride, nextStateIfSuccess, currentGameTimeForStats);
+                } else {
+                    this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+                    console.warn(`Agent ${this.id}: NavigationManager toujours non disponible après attente. Retour à l'état ${this.currentState}`);
+                }
+            }, 1000);
+            return;
+        }
 
         // Mettre à jour les statistiques pour les agents en attente de chemin
         if (agentManager?.stats) {
             const dayDurationMs = this.experience.world?.environment?.dayDurationMs || (24 * 60 * 60 * 1000);
             const currentHour = Math.floor((currentGameTimeForStats % dayDurationMs) / (dayDurationMs / 24));
-
-            // --- DEBUG LOG (using parameter now) ---
-            console.log(`Agent ${this.id} requesting path. State: ${this.currentState}. TimeForStats: ${currentGameTimeForStats.toFixed(0)}, DayDur: ${dayDurationMs}, Calculated Hour: ${currentHour}`);
-            // --- FIN DEBUG LOG ---
             
             if (this.currentState === AgentState.REQUESTING_PATH_FOR_WORK) {
                 agentManager.stats.requestingPathForWorkByHour[currentHour] = (agentManager.stats.requestingPathForWorkByHour[currentHour] || 0) + 1;
@@ -271,54 +310,52 @@ export default class Agent {
         // Vérifier si les managers nécessaires sont prêts
         if (!agentManager || !agentManager.isWorkerInitialized) {
             console.error(`Agent ${this.id}: AgentManager ou Worker non prêt pour requête path.`);
-            this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE; // Retour état stable
+            this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
             this.isVisible = false;
-            return; // Échec
-        }
-        if (!navGraph) {
-            console.error(`Agent ${this.id}: NavigationGraph non trouvé pour requête path.`);
-            this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE; // Retour état stable
-            this.isVisible = false;
-            return; // Échec
+            return;
         }
 
         // Déterminer si l'agent est en voiture
-        const isVehicle = this.isInVehicle || false; // Ajouter cette propriété à la classe Agent si ce n'est pas déjà fait
+        const isVehicle = this.isInVehicle || this.hasVehicle || false;
+        console.log(`Agent ${this.id}: Mode de transport: ${isVehicle ? 'véhicule' : 'piéton'}`);
 
         // Obtenir le bon graphe de navigation et pathfinder en fonction du mode de transport
-        const navigationGraph = this.experience.cityManager.navigationManager.getNavigationGraph(isVehicle);
-        const pathfinder = this.experience.cityManager.navigationManager.getPathfinder(isVehicle);
+        const navigationGraph = cityManager.navigationManager.getNavigationGraph(isVehicle);
+        const pathfinder = cityManager.navigationManager.getPathfinder(isVehicle);
+
+        if (!navigationGraph || !pathfinder) {
+            console.error(`Agent ${this.id}: NavigationGraph ou Pathfinder non disponible pour le mode ${isVehicle ? 'véhicule' : 'piéton'}.`);
+            this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+            this.isVisible = false;
+            return;
+        }
 
         // Déterminer les noeuds de grille de départ et d'arrivée
-        // Utilise l'override (pré-calculé) si disponible, sinon calcule le plus proche
         const startNode = startNodeOverride !== null ? startNodeOverride : navigationGraph.getClosestWalkableNode(startPosWorld);
         const endNode = endNodeOverride !== null ? endNodeOverride : navigationGraph.getClosestWalkableNode(endPosWorld);
 
         // Vérifier si les noeuds ont été trouvés
         if (startNode && endNode) {
-            // --- AJOUT DU CONSOLE LOG CRUCIAL ---
             console.log(`Agent ${this.id}: Préparation envoi Worker. StartNode:`, JSON.stringify(startNode), `EndNode:`, JSON.stringify(endNode));
-            // Vérification supplémentaire du format (devrait être {x: int, y: int})
+            
+            // Vérification supplémentaire du format
             if (typeof startNode.x !== 'number' || !Number.isInteger(startNode.x) || startNode.x < 0 ||
                 typeof startNode.y !== 'number' || !Number.isInteger(startNode.y) || startNode.y < 0 ||
                 typeof endNode.x !== 'number' || !Number.isInteger(endNode.x) || endNode.x < 0 ||
                 typeof endNode.y !== 'number' || !Number.isInteger(endNode.y) || endNode.y < 0)
             {
-                 console.error(`Agent ${this.id}: ERREUR FORMAT NOEUDS AVANT ENVOI! Start:`, startNode, "End:", endNode);
-                  this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
-                  this.isVisible = false;
-                 return; // Ne pas envoyer si le format est incorrect
+                console.error(`Agent ${this.id}: ERREUR FORMAT NOEUDS AVANT ENVOI! Start:`, startNode, "End:", endNode);
+                this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+                this.isVisible = false;
+                return;
             }
-            // --- FIN AJOUT CONSOLE LOG ---
 
             // Envoyer la requête au worker via AgentManager
             agentManager.requestPathFromWorker(this.id, startNode, endNode);
-
         } else {
-            // Échec de la détermination des noeuds
             console.error(`Agent ${this.id}: Noeuds de départ/arrivée non trouvés ou invalides pour requête path. StartNode:`, startNode, "EndNode:", endNode);
-             this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE; // Retour état stable
-             this.isVisible = false;
+            this.currentState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
+            this.isVisible = false;
         }
     }
 

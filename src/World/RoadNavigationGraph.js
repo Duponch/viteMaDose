@@ -16,6 +16,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
 
         // Marquer les routes comme zones de navigation pour les voitures
         this.markRoadsArea(plots, crosswalkInfos);
+        this.updatePFGrid();
     }
 
     markRoadsArea(plots, crosswalkInfos) {
@@ -52,7 +53,6 @@ export default class RoadNavigationGraph extends NavigationGraph {
                     const cz = cellCenterWorld.z;
 
                     // Vérifier si la cellule est sur la route (et non sur le trottoir)
-                    // La route est entre le trottoir et la parcelle
                     const isOnRoad = 
                         // Route à gauche de la parcelle
                         (cx >= plotX - roadWidth && cx < plotX - sidewalkWidth) ||
@@ -64,6 +64,32 @@ export default class RoadNavigationGraph extends NavigationGraph {
                         (cz > plotZ + plotDepth + sidewalkWidth && cz <= plotZ + plotDepth + roadWidth);
 
                     if (isOnRoad) {
+                        // Vérifier si la cellule est déjà marchable
+                        if (!this.isWalkableAt(gx, gy)) {
+                            if (this.markCell(gx, gy)) {
+                                markedCells++;
+                                if (markedCells % 100 === 0) {
+                                    console.log(`RoadNavigationGraph: ${markedCells} cellules de route marquées...`);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Marquer les intersections (zones où les routes se croisent)
+        crosswalkInfos.forEach(crosswalk => {
+            const crosswalkPos = crosswalk.position;
+            const crosswalkGrid = this.worldToGrid(crosswalkPos.x, crosswalkPos.z);
+            
+            // Marquer une zone carrée autour du passage piéton pour l'intersection
+            const intersectionSize = Math.ceil(roadWidth * this.gridScale);
+            for (let dy = -intersectionSize; dy <= intersectionSize; dy++) {
+                for (let dx = -intersectionSize; dx <= intersectionSize; dx++) {
+                    const gx = crosswalkGrid.x + dx;
+                    const gy = crosswalkGrid.y + dy;
+                    if (!this.isWalkableAt(gx, gy)) {
                         if (this.markCell(gx, gy)) {
                             markedCells++;
                         }
@@ -72,7 +98,8 @@ export default class RoadNavigationGraph extends NavigationGraph {
             }
         });
 
-        console.log(`RoadNavigationGraph: ${markedCells} cellules de route marquées.`);
+        console.log(`RoadNavigationGraph: ${markedCells} cellules de route marquées au total.`);
+        this.updatePFGrid();
     }
 
     // Surcharger gridToWorld pour retourner une position au niveau de la route

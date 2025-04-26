@@ -24,36 +24,72 @@ export default class NavigationGraph {
 
     buildGraph(plots, crosswalkInfos) {
         console.log("NavigationGraph: Construction de la grille avec SharedArrayBuffer...");
-        const mapSize = this.config.mapSize;
-        const sidewalkWidth = this.config.sidewalkWidth;
-        const worldMinX = -mapSize / 2 - sidewalkWidth;
-        const worldMaxX = mapSize / 2 + sidewalkWidth;
-        const worldMinZ = -mapSize / 2 - sidewalkWidth;
-        const worldMaxZ = mapSize / 2 + sidewalkWidth;
-
-        this.gridWidth = Math.ceil((worldMaxX - worldMinX) * this.gridScale);
-        this.gridHeight = Math.ceil((worldMaxZ - worldMinZ) * this.gridScale);
-        this.offsetX = -worldMinX * this.gridScale;
-        this.offsetZ = -worldMinZ * this.gridScale;
-
-        const bufferSize = this.gridWidth * this.gridHeight;
-        if (bufferSize <= 0) {
-             console.error(`NavigationGraph: Dimensions de grille invalides (${this.gridWidth}x${this.gridHeight}). Impossible de créer le buffer.`);
-             return;
+        
+        if (!plots || plots.length === 0) {
+            console.error("NavigationGraph: Aucune parcelle fournie pour la construction du graphe");
+            return;
         }
+
+        // Calculer les dimensions de la grille
+        let minX = Infinity, maxX = -Infinity;
+        let minZ = Infinity, maxZ = -Infinity;
+
+        plots.forEach(plot => {
+            const plotX = plot.x;
+            const plotZ = plot.z;
+            const plotWidth = plot.width;
+            const plotDepth = plot.depth;
+
+            minX = Math.min(minX, plotX - this.config.roadWidth);
+            maxX = Math.max(maxX, plotX + plotWidth + this.config.roadWidth);
+            minZ = Math.min(minZ, plotZ - this.config.roadWidth);
+            maxZ = Math.max(maxZ, plotZ + plotDepth + this.config.roadWidth);
+        });
+
+        console.log(`NavigationGraph: Limites de la grille - X: [${minX}, ${maxX}], Z: [${minZ}, ${maxZ}]`);
+
+        // Ajouter une marge de sécurité
+        const margin = Math.max(this.config.roadWidth, this.config.sidewalkWidth) * 2;
+        minX -= margin;
+        maxX += margin;
+        minZ -= margin;
+        maxZ += margin;
+
+        // Calculer les dimensions de la grille en cellules
+        const worldWidth = maxX - minX;
+        const worldHeight = maxZ - minZ;
+        this.gridWidth = Math.ceil(worldWidth * this.gridScale);
+        this.gridHeight = Math.ceil(worldHeight * this.gridScale);
+        
+        // Modifier le calcul des offsets pour prendre en compte les coordonnées négatives
+        this.offsetX = Math.floor(-minX * this.gridScale);
+        this.offsetZ = Math.floor(-minZ * this.gridScale);
+
+        console.log(`NavigationGraph: Dimensions de la grille - ${this.gridWidth}x${this.gridHeight} cellules`);
+        console.log(`NavigationGraph: Offset - X: ${this.offsetX}, Z: ${this.offsetZ}`);
+        console.log(`NavigationGraph: Échelle de la grille - ${this.gridScale}`);
+
+        // Créer le SharedArrayBuffer pour la grille
+        const bufferSize = this.gridWidth * this.gridHeight;
         try {
             this.gridBuffer = new SharedArrayBuffer(bufferSize);
             this.gridWalkableMap = new Uint8Array(this.gridBuffer);
-            console.log(`NavigationGraph: SharedArrayBuffer créé (taille: ${bufferSize} octets).`);
-        } catch (e) {
-            console.error("NavigationGraph: Erreur lors de la création du SharedArrayBuffer. Vérifiez que le contexte est sécurisé (crossOriginIsolated).", e);
-            // Tenter de continuer sans SharedArrayBuffer? Ou lever une erreur?
-            // Pour l'instant, on arrête ici.
-            this.gridBuffer = null;
-            this.gridWalkableMap = null;
-             alert("SharedArrayBuffer n'est pas disponible. L'application nécessite un contexte sécurisé (HTTPS avec en-têtes COOP/COEP). Voir la console pour les détails.");
-             throw new Error("SharedArrayBuffer creation failed. Ensure secure context.");
-
+            
+            // Créer la grille PF.Grid à partir du SharedArrayBuffer
+            const matrix = [];
+            for (let y = 0; y < this.gridHeight; y++) {
+                const row = [];
+                for (let x = 0; x < this.gridWidth; x++) {
+                    const index = y * this.gridWidth + x;
+                    row.push(this.gridWalkableMap[index] === WALKABLE ? 0 : 1);
+                }
+                matrix.push(row);
+            }
+            this.grid = new PF.Grid(this.gridWidth, this.gridHeight, matrix);
+            console.log("NavigationGraph: Grille PF.Grid créée avec succès");
+        } catch (error) {
+            console.error("NavigationGraph: Erreur lors de la création du SharedArrayBuffer:", error);
+            return;
         }
 
         console.log(`NavigationGraph: Grille logique créée (${this.gridWidth}x${this.gridHeight})`);
@@ -61,8 +97,8 @@ export default class NavigationGraph {
         this.gridWalkableMap.fill(NON_WALKABLE); // Initialise tout à non marchable
 
         console.log("NavigationGraph: Initialisation non marchable terminée.");
-        this.markSidewalksArea(plots, sidewalkWidth);
-        this.markCrosswalksCorrected(crosswalkInfos); // Utiliser la version corrigée
+        this.markSidewalksArea(plots, this.config.sidewalkWidth);
+        this.markCrosswalksCorrected(crosswalkInfos);
         console.log("NavigationGraph: Grille construite (avec zones marchables définies).");
     }
 
@@ -72,7 +108,22 @@ export default class NavigationGraph {
         const cellSizeWorld = 1.0 / this.gridScale;
 
         crosswalkInfos.forEach(info => {
-            const originalPos = info.position; // Centre de la ligne du passage piéton
+            // Vérifier que les coordonnées du passage piéton sont valides
+            // Si position est un objet Vector3, on doit accéder à ses propriétés x, y, z
+            if (!info.position || 
+                (typeof info.position.x === 'undefined' && typeof info.position.getX === 'undefined') || 
+                (typeof info.position.z === 'undefined' && typeof info.position.getZ === 'undefined') || 
+                info.angle === undefined || isNaN(info.angle) ||
+                info.length === undefined || isNaN(info.length)) {
+                console.error("NavigationGraph: Coordonnées invalides pour un passage piéton:", info);
+                return; // Ignorer ce passage piéton
+            }
+            
+            // Extraire les coordonnées x et z de l'objet position (qu'il s'agisse d'un objet simple ou d'un Vector3)
+            const posX = typeof info.position.x !== 'undefined' ? info.position.x : info.position.getX();
+            const posZ = typeof info.position.z !== 'undefined' ? info.position.z : info.position.getZ();
+            
+            const originalPos = { x: posX, z: posZ }; // Centre de la ligne du passage piéton
             const angle = info.angle;
             const originalLength = info.length; // Longueur le long de la direction de la route
             const stripeCount = this.config.crosswalkStripeCount || 5;
@@ -151,6 +202,15 @@ export default class NavigationGraph {
         }
 
         plots.forEach(plot => {
+            // Vérifier que les coordonnées de la parcelle sont valides
+            if (plot.x === undefined || plot.z === undefined || 
+                plot.width === undefined || plot.depth === undefined ||
+                isNaN(plot.x) || isNaN(plot.z) || 
+                isNaN(plot.width) || isNaN(plot.depth)) {
+                console.error("NavigationGraph: Coordonnées invalides pour une parcelle:", plot);
+                return; // Ignorer cette parcelle
+            }
+            
             const originalPX = plot.x; const originalPZ = plot.z;
             const originalPW = plot.width; const originalPD = plot.depth;
 
@@ -213,13 +273,36 @@ export default class NavigationGraph {
     }
 
 	worldToGrid(worldX, worldZ) {
-        // Utiliser Math.floor au lieu de Math.round pour un alignement précis avec les bords des éléments
-        const gridX = Math.floor(worldX * this.gridScale + this.offsetX);
-        const gridY = Math.floor(worldZ * this.gridScale + this.offsetZ); // world Z -> grid Y
+        // Vérifier si les paramètres sont valides
+        if (worldX === undefined || worldZ === undefined || isNaN(worldX) || isNaN(worldZ)) {
+            console.error(`NavigationGraph: Coordonnées invalides dans worldToGrid - X: ${worldX}, Z: ${worldZ}`);
+            // Retourner des coordonnées valides par défaut (coin supérieur gauche)
+            return { x: 0, y: 0 };
+        }
+        
+        // Ajouter des logs pour déboguer la conversion
+        console.log(`NavigationGraph: Conversion monde->grille pour (${worldX}, ${worldZ})`);
+        console.log(`NavigationGraph: Paramètres - gridScale: ${this.gridScale}, offsetX: ${this.offsetX}, offsetZ: ${this.offsetZ}`);
 
-        // Il faut s'assurer que le résultat est DANS les limites de la grille après l'arrondi
-        const clampedX = Math.max(0, Math.min(this.gridWidth - 1, gridX));
-        const clampedY = Math.max(0, Math.min(this.gridHeight - 1, gridY));
+        // Calculer les coordonnées grille sans clamping d'abord
+        const rawGridX = Math.floor(worldX * this.gridScale + this.offsetX);
+        const rawGridY = Math.floor(worldZ * this.gridScale + this.offsetZ);
+
+        console.log(`NavigationGraph: Coordonnées grille brutes - (${rawGridX}, ${rawGridY})`);
+
+        // Vérifier si les coordonnées sont dans les limites avant le clamping
+        if (rawGridX < 0 || rawGridX >= this.gridWidth || rawGridY < 0 || rawGridY >= this.gridHeight) {
+            console.warn(`NavigationGraph: Coordonnées hors limites avant clamping - X: ${rawGridX} (max: ${this.gridWidth-1}), Y: ${rawGridY} (max: ${this.gridHeight-1})`);
+        }
+
+        // Appliquer le clamping
+        const clampedX = Math.max(0, Math.min(this.gridWidth - 1, rawGridX));
+        const clampedY = Math.max(0, Math.min(this.gridHeight - 1, rawGridY));
+
+        // Si les coordonnées ont été modifiées par le clamping, logger l'information
+        if (clampedX !== rawGridX || clampedY !== rawGridY) {
+            console.warn(`NavigationGraph: Coordonnées ajustées par clamping - de (${rawGridX}, ${rawGridY}) à (${clampedX}, ${clampedY})`);
+        }
 
         return { x: clampedX, y: clampedY };
     }
@@ -268,15 +351,16 @@ export default class NavigationGraph {
     markCell(x, y) {
         if (this.isValidGridCoord(x, y)) {
             const index = y * this.gridWidth + x;
-            // Marquer comme marchable (0) seulement s'il est non marchable (1)
-             //if (!this.grid.isWalkableAt(x,y)){
-             if (this.gridWalkableMap[index] === NON_WALKABLE) {
-                 //this.grid.setWalkableAt(x, y, true);
-                 this.gridWalkableMap[index] = WALKABLE;
-                 return true; // Indique qu'une cellule a été marquée
-             }
+            if (this.gridWalkableMap[index] === NON_WALKABLE) {
+                this.gridWalkableMap[index] = WALKABLE;
+                // Mettre à jour la grille PF.Grid
+                if (this.grid) {
+                    this.grid.setWalkableAt(x, y, true);
+                }
+                return true;
+            }
         }
-        return false; // Indique qu'aucune cellule n'a été marquée (hors limites ou déjà marchable)
+        return false;
     }
 
 	isValidGridCoord(x, y) {
@@ -437,5 +521,18 @@ export default class NavigationGraph {
         this.gridWalkableMap = null;
         if (this.debugMaterialWalkable) this.debugMaterialWalkable.dispose();
         if (this.debugMaterialPath) this.debugMaterialPath.dispose();
+    }
+
+    updatePFGrid() {
+        if (!this.grid || !this.gridWalkableMap) return;
+        
+        for (let y = 0; y < this.gridHeight; y++) {
+            for (let x = 0; x < this.gridWidth; x++) {
+                const index = y * this.gridWidth + x;
+                const isWalkable = this.gridWalkableMap[index] === WALKABLE;
+                this.grid.setWalkableAt(x, y, isWalkable);
+            }
+        }
+        console.log("NavigationGraph: Grille PF.Grid mise à jour");
     }
 }

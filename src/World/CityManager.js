@@ -144,7 +144,7 @@ export default class CityManager {
             agentHeadTiltAmplitude: 0.12,
             agentHeadBobAmplitude: 0.1,
             agentAnimationSpeedFactor: 6,
-            maxAgents: 1000,
+            maxAgents: 10,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
@@ -357,8 +357,20 @@ export default class CityManager {
             this.navigationManager.initializePathfinder(); // Initialise le service de pathfinding
             console.timeEnd("PathfinderInitialization");
 
-            this.navigationGraph = this.navigationManager.getNavigationGraph(); // Récupère le graphe
-            this.pathfinder = this.navigationManager.getPathfinder(); // Récupère le pathfinder
+            // Vérifier que les deux types de navigation sont disponibles
+            const pedestrianGraph = this.navigationManager.getNavigationGraph(false);
+            const vehicleGraph = this.navigationManager.getNavigationGraph(true);
+            const pedestrianPathfinder = this.navigationManager.getPathfinder(false);
+            const vehiclePathfinder = this.navigationManager.getPathfinder(true);
+
+            if (!pedestrianGraph || !vehicleGraph || !pedestrianPathfinder || !vehiclePathfinder) {
+                console.error("CityManager: Échec de l'initialisation des graphes de navigation ou des pathfinders.");
+                return;
+            }
+
+            console.log("CityManager: NavigationManager initialisé avec succès (piéton et véhicule)");
+            this.navigationGraph = pedestrianGraph; // Pour compatibilité avec le code existant
+            this.pathfinder = pedestrianPathfinder; // Pour compatibilité avec le code existant
 
             console.time("ContentGeneration");
             // Appel à PlotContentGenerator refactoré

@@ -1,6 +1,7 @@
 // src/World/NavigationManager.js
 import NavigationGraph from './NavigationGraph.js';
 import RoadNavigationGraph from './RoadNavigationGraph.js';
+import PedestrianNavigationGraph from './PedestrianNavigationGraph.js';
 import Pathfinder from './Pathfinder.js';
 
 /**
@@ -28,14 +29,28 @@ export default class NavigationManager {
     buildGraph(plots, crosswalkInfos) {
         console.time("NavigationGraphBuilding");
         
+        console.log("NavigationManager: Début de la construction des graphes de navigation");
+        console.log(`NavigationManager: Nombre de parcelles: ${plots.length}`);
+        console.log(`NavigationManager: Nombre de passages piétons: ${crosswalkInfos.length}`);
+        
         // Créer les deux grilles de navigation
-        this.pedestrianNavigationGraph = new NavigationGraph(this.config);
+        this.pedestrianNavigationGraph = new PedestrianNavigationGraph(this.config);
         this.roadNavigationGraph = new RoadNavigationGraph(this.config);
         
         // Construire les grilles
+        console.log("NavigationManager: Construction du graphe piéton...");
         this.pedestrianNavigationGraph.buildGraph(plots, crosswalkInfos);
+        
+        console.log("NavigationManager: Construction du graphe routier...");
         this.roadNavigationGraph.buildGraph(plots, crosswalkInfos);
         
+        // Vérifier que les graphes ont été correctement construits
+        if (!this.pedestrianNavigationGraph || !this.roadNavigationGraph) {
+            console.error("NavigationManager: Erreur - Un ou plusieurs graphes n'ont pas été créés");
+            return;
+        }
+        
+        console.log("NavigationManager: Construction des graphes terminée");
         console.timeEnd("NavigationGraphBuilding");
     }
 
@@ -46,6 +61,14 @@ export default class NavigationManager {
         // Initialiser les pathfinders pour les piétons et les voitures
         this.pedestrianPathfinder = new Pathfinder(this.pedestrianNavigationGraph);
         this.roadPathfinder = new Pathfinder(this.roadNavigationGraph);
+        
+        // Vérifier que les pathfinders ont été correctement initialisés
+        if (!this.pedestrianPathfinder || !this.roadPathfinder) {
+            console.error("NavigationManager: Erreur - Un ou plusieurs pathfinders n'ont pas été créés");
+            return;
+        }
+        
+        console.log("NavigationManager: Pathfinders initialisés avec succès");
     }
 
     /**
@@ -54,7 +77,12 @@ export default class NavigationManager {
      * @returns {NavigationGraph} Le graphe de navigation.
      */
     getNavigationGraph(isVehicle = false) {
-        return isVehicle ? this.roadNavigationGraph : this.pedestrianNavigationGraph;
+        const graph = isVehicle ? this.roadNavigationGraph : this.pedestrianNavigationGraph;
+        if (!graph) {
+            console.error(`NavigationManager: Le graphe ${isVehicle ? 'routier' : 'piéton'} n'est pas disponible`);
+            return null;
+        }
+        return graph;
     }
 
     /**
@@ -63,7 +91,12 @@ export default class NavigationManager {
      * @returns {Pathfinder} L'instance de Pathfinder.
      */
     getPathfinder(isVehicle = false) {
-        return isVehicle ? this.roadPathfinder : this.pedestrianPathfinder;
+        const pathfinder = isVehicle ? this.roadPathfinder : this.pedestrianPathfinder;
+        if (!pathfinder) {
+            console.error(`NavigationManager: Le pathfinder ${isVehicle ? 'routier' : 'piéton'} n'est pas disponible`);
+            return null;
+        }
+        return pathfinder;
     }
 
     /**
