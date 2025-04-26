@@ -40,6 +40,8 @@ export default class Agent {
         this.debugPathColor = config.debugPathColor ?? this.torsoColor.getHex();
         this.reachTolerance = 0.5;
         this.reachToleranceSq = this.reachTolerance * this.reachTolerance;
+        this.lodDistance = 50; // Distance en unités pour le LOD
+        this.isLodActive = false; // État du LOD
 
         // --- Position & Orientation (Visuel) ---
         this.position = new THREE.Vector3(0, this.yOffset, 0);
@@ -1390,20 +1392,25 @@ export default class Agent {
                                  this.currentState === AgentState.WEEKEND_WALKING;
                                  
         if (!isVisuallyMoving) {
-        // --- FIN MODIFICATION ---
-             if(this.currentState === AgentState.AT_HOME && this.homePosition) {
-                 this.position.copy(this.homePosition).setY(this.yOffset);
-             } else if (this.currentState === AgentState.AT_WORK && this.workPosition) {
-                  this.position.copy(this.workPosition).setY(this.yOffset);
-             }
+            if(this.currentState === AgentState.AT_HOME && this.homePosition) {
+                this.position.copy(this.homePosition).setY(this.yOffset);
+            } else if (this.currentState === AgentState.AT_WORK && this.workPosition) {
+                this.position.copy(this.workPosition).setY(this.yOffset);
+            }
             return;
         }
 
-        if (!this.currentPathPoints || this.currentPathPoints.length === 0 || this.calculatedTravelDurationGame <= 0 || this.departureTimeGame < 0 || this.currentPathLengthWorld <= 0) { // Vérifier aussi la longueur stockée
-            // console.warn(`Agent ${this.id}: Tentative d'update visuel en transit sans données valides (length: ${this.currentPathLengthWorld}).`);
+        if (!this.currentPathPoints || this.currentPathPoints.length === 0 || this.calculatedTravelDurationGame <= 0 || this.departureTimeGame < 0 || this.currentPathLengthWorld <= 0) {
             this.isVisible = false;
             return;
         }
+
+        // Calculer la distance à la caméra
+        const cameraPosition = this.experience.camera.instance.position;
+        const distanceToCamera = this.position.distanceTo(cameraPosition);
+        
+        // Mettre à jour l'état du LOD
+        this.isLodActive = distanceToCamera > this.lodDistance;
 
         const elapsedTimeSinceDeparture = currentGameTime - this.departureTimeGame;
         let progress = Math.max(0, Math.min(1, elapsedTimeSinceDeparture / this.calculatedTravelDurationGame));
@@ -1467,10 +1474,15 @@ export default class Agent {
             this.orientation.slerp(this._tempQuat, slerpAlpha);
         }
 
-        // Calculer animation de marche (inchangé)
-        const effectiveAnimationSpeed = this.visualSpeed * (this.experience.world.cityManager.config.agentAnimationSpeedFactor ?? 1.0);
-        const walkTime = currentGameTime / 1000 * effectiveAnimationSpeed;
-        this._updateWalkAnimation(walkTime);
+        // Calculer animation de marche (modifié pour le LOD)
+        if (!this.isLodActive) {
+            const effectiveAnimationSpeed = this.visualSpeed * (this.experience.world.cityManager.config.agentAnimationSpeedFactor ?? 1.0);
+            const walkTime = currentGameTime / 1000 * effectiveAnimationSpeed;
+            this._updateWalkAnimation(walkTime);
+        } else {
+            // Si LOD actif, pas d'animation de marche
+            this._resetAnimationMatrices();
+        }
     }
 
 	_updateWalkAnimation(walkTime) {
@@ -2090,5 +2102,13 @@ export default class Agent {
         // Enregistrer l'heure d'arrivée
         this.lastArrivalTimeHome = currentGameTime;
         this.requestedPathForDepartureTime = -1;
+    }
+
+    // Nouvelle méthode pour réinitialiser les matrices d'animation
+    _resetAnimationMatrices() {
+        // Réinitialiser toutes les matrices d'animation à l'identité
+        Object.keys(this.currentAnimationMatrix).forEach(key => {
+            this.currentAnimationMatrix[key].identity();
+        });
     }
 }
