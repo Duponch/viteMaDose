@@ -6,129 +6,147 @@ export default class CarManager {
     constructor(scene, experience) {
         this.scene = scene;
         this.experience = experience;
-        this.cars = [];
-        
-        // Nombre maximal de voitures dans le jeu (à ajuster selon les performances)
-        this.maxCars = 50;
-        
-        // Matériau et géométrie pour les voitures (simples cubes rouges pour l'instant)
+        // --- MODIFIÉ : Initialiser le pool de voitures ---
+        this.maxCars = 50; // Ou récupérer depuis config si besoin
+        this.cars = new Array(this.maxCars); // Tableau de taille fixe
+        this.agentToCar = new Map(); // Agent ID -> Car instance
+        this.carPoolIndices = new Map(); // Agent ID -> Index dans this.cars (et InstancedMesh)
+        // --- FIN MODIFIÉ ---
+
         this.carGeometry = new THREE.BoxGeometry(1.2, 0.6, 2.4);
-        // Ajuster la position de la géométrie pour qu'elle soit centrée
         this.carGeometry.translate(0, 0.3, 0);
-        this.carMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0xff0000,
-            roughness: 0.5,
-            metalness: 0.2,
-            side: THREE.FrontSide,  // Changé de DoubleSide à FrontSide
-            transparent: true,
-            opacity: 1.0,
-            depthWrite: true,
-            depthTest: true
-        });
-        
-        // InstancedMesh pour les voitures
+        this.carMaterial = new THREE.MeshStandardMaterial({ /* ... options existantes ... */ });
+
+        // --- MODIFIÉ : InstancedMesh avec taille fixe ---
         this.carInstancedMesh = new THREE.InstancedMesh(
             this.carGeometry,
             this.carMaterial,
-            this.maxCars
+            this.maxCars // Taille fixe
         );
+        // --- FIN MODIFIÉ ---
         this.carInstancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.carInstancedMesh.castShadow = true;
         this.carInstancedMesh.receiveShadow = true;
         this.carInstancedMesh.name = "Cars";
-        this.carInstancedMesh.frustumCulled = false; // Désactive le frustum culling
-        this.carInstancedMesh.renderOrder = 1; // Assure que les voitures sont rendues après les autres objets
-        
-        // Ajouter l'InstancedMesh à la scène
+        this.carInstancedMesh.frustumCulled = false;
+        this.carInstancedMesh.renderOrder = 1;
+
+        // --- MODIFIÉ : Initialiser toutes les matrices pour cacher les voitures ---
+        this.tempMatrix = new THREE.Matrix4(); // Garder pour usage général
+        const hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0); // Matrice pour cacher
+        for (let i = 0; i < this.maxCars; i++) {
+            // Créer l'objet Car logique mais le marquer inactif
+            this.cars[i] = new Car(i, this.experience, new THREE.Vector3(), new THREE.Vector3()); // Position initiale sans importance
+            this.cars[i].isActive = false;
+            this.carInstancedMesh.setMatrixAt(i, hiddenMatrix); // Cacher visuellement
+        }
+        this.carInstancedMesh.count = this.maxCars; // Rendre toutes les instances (même cachées)
+        this.carInstancedMesh.instanceMatrix.needsUpdate = true; // Appliquer les matrices cachées
+        // --- FIN MODIFIÉ ---
+
         this.scene.add(this.carInstancedMesh);
-        
-        // Variables temporaires pour éviter la création d'objets à chaque frame
-        this.tempMatrix = new THREE.Matrix4();
-        
-        // Map pour associer les agents à leurs voitures
-        this.agentToCar = new Map();
-        
-        // Hauteur de la route (légèrement au-dessus pour éviter le clipping)
         this.roadHeight = 0.05;
-        
-        console.log("CarManager initialisé");
+
+        console.log("CarManager initialisé avec Pooling");
     }
-    
+
     /**
-     * Crée une voiture pour un agent spécifique
+     * Trouve une voiture inactive dans le pool et l'assigne à un agent.
      * @param {Object} agent - L'agent qui utilisera la voiture
      * @param {THREE.Vector3} startPosition - Position de départ de la voiture
      * @param {THREE.Vector3} targetPosition - Position cible où la voiture doit se rendre
-     * @returns {Car} - La voiture créée ou null si impossible
+     * @returns {Car|null} - La voiture assignée ou null si aucune n'est disponible.
      */
     createCarForAgent(agent, startPosition, targetPosition) {
-        // Vérifier si l'agent a déjà une voiture
+        // Vérifier si l'agent a déjà une voiture (important!)
         if (this.agentToCar.has(agent.id)) {
+            console.warn(`Agent ${agent.id} a déjà une voiture. Tentative de réassignation.`);
             return this.agentToCar.get(agent.id);
         }
-        
-        // Vérifier si nous avons atteint le nombre maximal de voitures
-        if (this.cars.length >= this.maxCars) {
-            console.warn("Nombre maximal de voitures atteint");
+
+        // --- MODIFIÉ : Chercher une voiture inactive dans le pool ---
+        let availableCar = null;
+        let availableCarIndex = -1;
+
+        for (let i = 0; i < this.maxCars; i++) {
+            if (this.cars[i] && !this.cars[i].isActive) {
+                availableCar = this.cars[i];
+                availableCarIndex = i;
+                break; // Sortir dès qu'on en trouve une
+            }
+        }
+
+        if (!availableCar) {
+            // Ce log est maintenant correct : toutes les voitures du pool sont actives
+            console.warn("Nombre maximal de voitures *actives* atteint");
             return null;
         }
-        
-        // Créer une nouvelle voiture
-        const carIndex = this.cars.length;
-		const car = new Car(carIndex, this.experience, startPosition, targetPosition);
-		console.log(`[CarManager DEBUG] Voiture créée (instanceId: ${carIndex}) pour Agent ${agent.id}`); // LOG
+        // --- FIN MODIFIÉ ---
 
-		this.agentToCar.set(agent.id, car);
-		this.cars.push(car);
-		console.log(`[CarManager DEBUG] Voiture pour Agent ${agent.id} ajoutée. agentToCar size: ${this.agentToCar.size}, cars array length: ${this.cars.length}`); // LOG
+        // Réactiver et configurer la voiture trouvée
+        availableCar.isActive = true;
+        availableCar.position.copy(startPosition);
+        availableCar.targetPosition.copy(targetPosition); // Stocker la cible finale
+        availableCar.quaternion.identity(); // Réinitialiser l'orientation
+        availableCar.path = null; // Nettoyer l'ancien chemin
+        availableCar.currentPathIndex = 0;
+        availableCar.updateMatrix(); // Mettre à jour sa matrice initiale
 
-		this.carInstancedMesh.count = this.cars.length;
-        
-        return car;
+        // Mettre à jour l'InstancedMesh pour cette voiture spécifique
+        this.carInstancedMesh.setMatrixAt(availableCarIndex, availableCar.matrix);
+        this.carInstancedMesh.instanceMatrix.needsUpdate = true; // Signaler la mise à jour
+
+        // Enregistrer l'association
+        this.agentToCar.set(agent.id, availableCar);
+        this.carPoolIndices.set(agent.id, availableCarIndex); // Stocker l'index utilisé
+
+        console.log(`[CarManager POOLING] Voiture ${availableCarIndex} assignée à Agent ${agent.id}`);
+        return availableCar;
     }
-    
-    /**
-     * Récupère la voiture associée à un agent
-     * @param {string} agentId - ID de l'agent
-     * @returns {Car|null} - La voiture associée ou null
-     */
+
+    // getCarForAgent (inchangé)
     getCarForAgent(agentId) {
         return this.agentToCar.get(agentId) || null;
     }
-    
-    /**
-     * Indique si un agent possède une voiture
-     * @param {string} agentId - ID de l'agent
-     * @returns {boolean} - true si l'agent a une voiture
-     */
+
+    // hasCarForAgent (inchangé)
     hasCarForAgent(agentId) {
 		const hasCar = this.agentToCar.has(agentId);
-		console.log(`[CarManager DEBUG] hasCarForAgent(${agentId}) -> ${hasCar}`); // LOG
+		// console.log(`[CarManager DEBUG] hasCarForAgent(${agentId}) -> ${hasCar}`); // LOG
 		return hasCar;
 	}
-    
+
     /**
-     * Libère une voiture associée à un agent
+     * Marque la voiture d'un agent comme inactive et disponible pour le pool.
      * @param {string} agentId - ID de l'agent
      */
     releaseCarForAgent(agentId) {
         const car = this.agentToCar.get(agentId);
-        if (car) {
-            // Marquer la voiture comme inactive
+        const carIndex = this.carPoolIndices.get(agentId); // Récupérer l'index
+
+        if (car && carIndex !== undefined) {
+            // Marquer la voiture logique comme inactive
             car.isActive = false;
-            
+            car.path = null; // Nettoyer le chemin
+            car.currentPathIndex = 0;
+
+            // --- MODIFIÉ : Cacher la voiture visuellement ---
+            // Créer une matrice qui met à l'échelle 0 pour la cacher
+            const hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+            this.carInstancedMesh.setMatrixAt(carIndex, hiddenMatrix);
+            this.carInstancedMesh.instanceMatrix.needsUpdate = true;
+            // --- FIN MODIFIÉ ---
+
             // Supprimer l'association agent-voiture
             this.agentToCar.delete(agentId);
-            
-            // Réinitialiser la matrice pour cette instance
-            this.tempMatrix.identity();
-            this.carInstancedMesh.setMatrixAt(car.instanceId, this.tempMatrix);
-            this.carInstancedMesh.instanceMatrix.needsUpdate = true;
-            
-            console.log(`Voiture libérée pour l'agent ${agentId}`);
+            this.carPoolIndices.delete(agentId); // Nettoyer l'index aussi
+
+            console.log(`[CarManager POOLING] Voiture ${carIndex} libérée par Agent ${agentId} et cachée.`);
+        } else {
+            console.warn(`Tentative de libérer une voiture pour Agent ${agentId} qui n'en a pas ou index manquant.`);
         }
     }
-    
+
     /**
      * Met à jour toutes les voitures actives
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame
@@ -136,49 +154,42 @@ export default class CarManager {
     update(deltaTime) {
         let needsMatrixUpdate = false;
         let activeCarCount = 0;
-        
-        // Mettre à jour chaque voiture
-        for (const car of this.cars) {
-            // Mettre à jour la position et l'orientation si la voiture est active
-            if (car.isActive) {
+
+        // --- MODIFIÉ : Itérer sur le pool fixe ---
+        for (let i = 0; i < this.maxCars; i++) {
+            const car = this.cars[i];
+            if (car && car.isActive) { // Mettre à jour seulement les voitures actives
                 activeCarCount++;
-                car.update(deltaTime);
+                car.update(deltaTime); // Logique interne de la voiture
+                // La matrice de la voiture est mise à jour dans car.update() via car.updateMatrix()
+                this.carInstancedMesh.setMatrixAt(i, car.matrix); // Mettre à jour la matrice dans l'InstancedMesh
+                needsMatrixUpdate = true;
             }
-            
-            // Toujours mettre à jour la matrice de l'instance, même si la voiture est inactive
-            car.updateMatrix();
-            this.carInstancedMesh.setMatrixAt(car.instanceId, car.matrix);
-            needsMatrixUpdate = true;
+            // Les voitures inactives ont déjà leur matrice pour être cachées (faite dans releaseCar)
+            // ou n'ont pas encore été activées.
         }
-        
-        // Mettre à jour les matrices des instances si nécessaire
+        // --- FIN MODIFIÉ ---
+
         if (needsMatrixUpdate) {
             this.carInstancedMesh.instanceMatrix.needsUpdate = true;
         }
-        
-        // Log périodique du nombre de voitures actives
-        if (Math.random() < 0.005) { // ~0.5% de chance par frame
-            console.log(`CarManager: ${activeCarCount} voitures actives sur ${this.cars.length} total`);
-        }
+
+        // Log périodique (inchangé mais reflète maintenant les voitures actives)
+        // if (Math.random() < 0.005) { // ~0.5% de chance par frame
+        //     console.log(`CarManager: ${activeCarCount} voitures actives sur ${this.maxCars} pool size`);
+        // }
     }
-    
-    /**
-     * Nettoie les ressources lors de la destruction
-     */
+
+    // destroy (inchangé)
     destroy() {
-        // Supprimer l'InstancedMesh de la scène
         if (this.carInstancedMesh.parent) {
             this.carInstancedMesh.parent.remove(this.carInstancedMesh);
         }
-        
-        // Disposer de la géométrie et du matériau
         this.carGeometry.dispose();
         this.carMaterial.dispose();
-        
-        // Vider les listes et maps
         this.cars = [];
         this.agentToCar.clear();
-        
+        this.carPoolIndices.clear(); // Nettoyer la nouvelle map
         console.log("CarManager détruit");
     }
-} 
+}
