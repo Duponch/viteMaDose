@@ -173,24 +173,28 @@ export default class AgentManager {
 				const agent = this.getAgentById(agentId);
 
 				if (agent) {
-					console.log(`[AgentManager DEBUG] Agent ${agentId} trouvé. Tentative reconstruction chemin...`); // LOG 3
+					console.log(`[AgentManager DEBUG] Agent ${agentId} trouvé. Vérification chemin reçu...`); // LOG 3 Modifié
 					let finalWorldPath = null;
+
+					// --- MODIFICATION : Gestion explicite de worldPathData null/vide ---
 					if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) {
 						try {
 							finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
-							console.log(`[AgentManager DEBUG] Chemin reconstruit pour Agent <span class="math-inline">\{agentId\} \(</span>{finalWorldPath.length} points).`); // LOG 4
+							console.log(`[AgentManager DEBUG] Chemin valide reçu et reconstruit pour Agent ${agentId} (${finalWorldPath.length} points).`); // LOG 4 Modifié
 						} catch (vecError) {
 							console.error(`[AgentManager ERREUR] Agent ${agentId}: Erreur reconstruction Vector3:`, vecError); // LOG ERREUR
-							finalWorldPath = null;
+							finalWorldPath = null; // Assurer que le chemin est null en cas d'erreur de reconstruction
 						}
 					} else {
-						console.log(`[AgentManager DEBUG] worldPathData invalide ou vide pour Agent ${agentId}.`); // LOG 5
+						// Cas où le worker a renvoyé path: null (ou un chemin vide)
+						console.warn(`[AgentManager WARN] Chemin non trouvé ou invalide reçu du worker pour Agent ${agentId} (path: ${worldPathData === null ? 'null' : 'vide'}).`); // LOG 5 Modifié
 						finalWorldPath = null;
 					}
+					// --- FIN MODIFICATION ---
 
-					// Appel setPath
+					// Appel setPath (maintenant gère aussi finalWorldPath = null)
 					console.log(`[AgentManager DEBUG] Appel de agent.setPath pour Agent ${agentId}...`); // LOG 6
-					agent.setPath(finalWorldPath, pathLengthWorld);
+					agent.setPath(finalWorldPath, finalWorldPath ? pathLengthWorld : 0); // Passer 0 si chemin nul
 					console.log(`[AgentManager DEBUG] Appel de agent.setPath TERMINÉ pour Agent ${agentId}.`); // LOG 7
 
 				} else {

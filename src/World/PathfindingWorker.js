@@ -115,8 +115,8 @@ self.onmessage = function(event) {
             if (!startWalkable || !endWalkable) {
                  console.error(`[Worker Error] Start or End node not walkable on the selected grid map for Agent ${agentId}.`);
                  // Optionnel : renvoyer échec immédiatement si non marchable
-                 // self.postMessage({ type: 'pathResult', data: { agentId: agentId, path: null, pathLengthWorld: 0 } });
-                 // return;
+                 self.postMessage({ type: 'pathResult', data: { agentId: agentId, path: null, pathLengthWorld: 0 } });
+                 return;
             }
             // ---- FIN LOG ----
 
