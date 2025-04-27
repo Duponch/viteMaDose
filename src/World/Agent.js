@@ -289,7 +289,16 @@ export default class Agent {
         const navigationManager = cityManager?.navigationManager;
 
         // Déterminer le mode de transport basé sur l'état interne de l'agent
-        const isVehicle = this.isInVehicle;
+        let isVehicle = this.isInVehicle;
+
+        // *** AJOUT : Forcer le mode piéton pour les requêtes de promenade weekend ***
+        if (requestingState === AgentState.WEEKEND_WALK_REQUESTING_PATH) {
+            if (isVehicle) {
+                console.warn(`Agent ${this.id}: Forçage mode PIÉTON pour requête WEEKEND_WALK (était ${isVehicle}).`);
+            }
+            isVehicle = false;
+        }
+        // *** FIN AJOUT ***
 
         // --- Statistiques (si agentManager existe) ---
         if (agentManager?.stats) {
@@ -414,6 +423,12 @@ export default class Agent {
 		const wasRequestingWeekendWalk = currentStateAtCall === AgentState.WEEKEND_WALK_REQUESTING_PATH;
 		const targetStateFromWeekendWalk = this.targetStateFromWeekendWalk; // Récupérer l'état cible mémorisé
 
+		// *** AJOUT : Récupérer les informations du calendrier pour vérifier si c'est toujours le weekend ***
+		const environment = this.experience.world?.environment;
+		const calendarInfo = environment?.getCurrentCalendarDate ? environment.getCurrentCalendarDate() : null;
+		const isCurrentlyWeekend = calendarInfo ? ["Samedi", "Dimanche"].includes(calendarInfo.jourSemaine) : false;
+		// *** FIN AJOUT ***
+
 		// --- Cas 1: Chemin Valide Reçu ---
 		// Condition modifiée pour accepter longueur 0 si le chemin a 1 seul point (départ=arrivée)
 		if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 0 && (pathPoints.length === 1 || pathLengthWorld > 0.1)) {
@@ -457,12 +472,26 @@ export default class Agent {
 				// Si on était en requête pour la maison, on est prêt à partir (en voiture ou à pied)
 				nextState = this.isInVehicle ? AgentState.READY_TO_LEAVE_FOR_HOME : AgentState.READY_TO_LEAVE_FOR_HOME; // Dans les 2 cas, on est prêt
 			} else if (wasRequestingWeekendWalk) {
-				// Gérer le cas spécifique du retour du parc
-				if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
-					nextState = AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK;
+				// *** MODIFICATION : Vérifier si c'est TOUJOURS le weekend ***
+				if (isCurrentlyWeekend) {
+					// C'est toujours le weekend, procéder normalement
+					if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+						nextState = AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK;
+					} else {
+						nextState = AgentState.WEEKEND_WALK_READY;
+					}
 				} else {
-					nextState = AgentState.WEEKEND_WALK_READY;
+					// Le weekend est terminé pendant l'attente du chemin ! Annuler la promenade.
+					console.warn(`[Agent ${this.id} WARN] setPath: Chemin promenade reçu mais weekend terminé. Annulation promenade, retour AT_HOME.`);
+					this.currentPathPoints = null; // Invalider le chemin reçu
+					this.currentPathLengthWorld = 0;
+					this.calculatedTravelDurationGame = 0;
+					nextState = AgentState.AT_HOME; // Passer à un état stable de semaine
+					this.weekendWalkDestination = null; // Nettoyer les infos de weekend
+					this.weekendWalkGridNode = null;
+					this.weekendWalkEndTime = -1;
 				}
+				// *** FIN MODIFICATION ***
 			} else {
 				console.warn(`[Agent ${this.id} WARN] setPath: Chemin valide reçu mais état initial (${currentStateAtCall}) n'était pas REQUESTING_... Pas de changement d'état forcé.`);
 				nextState = this.currentState; // Garder l'état actuel
@@ -500,31 +529,44 @@ export default class Agent {
 				fallbackState = this.workPosition ? AgentState.AT_WORK : AgentState.IDLE;
 				console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding HOME échoué, retour à ${fallbackState}.`);
 			} else if (wasRequestingWeekendWalk) {
-				if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
-					console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding RETOUR TROTTOIR échoué. Tentative téléportation...`);
-					if (this.parkSidewalkPosition) {
-						this.position.copy(this.parkSidewalkPosition).setY(this.yOffset);
-						this.isInsidePark = false;
-						console.log(`[Agent ${this.id}] Téléporté au trottoir. Redemande chemin maison.`);
-						// Redemander chemin maison immédiatement
-						fallbackState = AgentState.REQUESTING_PATH_FOR_HOME; // Nouvel état
-						this._pathRequestTimeout = this.experience.time.elapsed; // Relancer timeout
-						const currentGridNode = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(false)?.getClosestWalkableNode(this.position);
-						this.requestPath(this.position, this.homePosition, currentGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME, this.experience.time.elapsed);
-						// IMPORTANT: On sort de setPath ici car une nouvelle requête est lancée
-						console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après requête retour maison depuis trottoir.`);
-						return;
+				// *** MODIFICATION : Vérifier si c'est TOUJOURS le weekend ***
+				if (isCurrentlyWeekend) {
+					// C'est toujours le weekend, gérer l'échec comme avant
+					if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+						console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding RETOUR TROTTOIR échoué (weekend). Tentative téléportation...`);
+						if (this.parkSidewalkPosition) {
+							this.position.copy(this.parkSidewalkPosition).setY(this.yOffset);
+							this.isInsidePark = false;
+							console.log(`[Agent ${this.id}] Téléporté au trottoir. Redemande chemin maison.`);
+							// Redemander chemin maison immédiatement
+							fallbackState = AgentState.REQUESTING_PATH_FOR_HOME; // Nouvel état
+							this._pathRequestTimeout = this.experience.time.elapsed; // Relancer timeout
+							const currentGridNode = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(false)?.getClosestWalkableNode(this.position);
+							this.requestPath(this.position, this.homePosition, currentGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME, this.experience.time.elapsed);
+							// IMPORTANT: On sort de setPath ici car une nouvelle requête est lancée
+							console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après requête retour maison depuis trottoir.`);
+							return;
+						} else {
+							console.warn(`[Agent ${this.id} WARN] setPath: Position trottoir inconnue pour fallback retour (weekend). Forçage maison.`);
+							this.forceReturnHome(this.experience.time.elapsed); // Forcer retour direct
+							fallbackState = AgentState.AT_HOME; // État final après forceReturnHome
+						}
 					} else {
-						console.warn(`[Agent ${this.id} WARN] setPath: Position trottoir inconnue pour fallback retour. Forçage maison.`);
-						this.forceReturnHome(this.experience.time.elapsed); // Forcer retour direct
-						fallbackState = AgentState.AT_HOME; // État final après forceReturnHome
+						console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding PROMENADE échoué (weekend). Tentative nouvelle destination...`);
+						// Tenter de trouver une autre destination UNIQUEMENT si on est toujours le weekend
+						this._findRandomWalkDestination(this.experience.time.elapsed); // Cherche une autre destination
+						// L'état sera changé par _findRandomWalkDestination si elle réussit (ou restera le même temporairement)
+						fallbackState = this.currentState; // Garder l'état actuel en attendant la nouvelle tentative
 					}
 				} else {
-					console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding PROMENADE échoué. Tentative nouvelle destination...`);
-					this._findRandomWalkDestination(this.experience.time.elapsed); // Cherche une autre destination
-					// L'état sera changé par _findRandomWalkDestination si elle réussit
-					fallbackState = this.currentState; // Garder l'état actuel en attendant
+					// Le weekend est terminé au moment où l'échec est reçu ! Annuler la tentative.
+					console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding promenade échoué ET weekend terminé. Annulation, retour AT_HOME.`);
+					fallbackState = AgentState.AT_HOME; // Passer à un état stable de semaine
+					this.weekendWalkDestination = null; // Nettoyer les infos de weekend
+					this.weekendWalkGridNode = null;
+					this.weekendWalkEndTime = -1;
 				}
+				// *** FIN MODIFICATION ***
 			} else {
 				console.warn(`[Agent ${this.id} WARN] setPath: Chemin invalide reçu mais état initial (${currentStateAtCall}) n'était pas REQUESTING_... Pas de changement d'état forcé.`);
 				fallbackState = this.currentState;
