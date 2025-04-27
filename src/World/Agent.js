@@ -509,7 +509,7 @@ export default class Agent {
 		// --- Cas 2: Chemin Invalide ou Échec Pathfinding ---
 		else {
 			// LOG E: Log chemin invalide
-			console.warn(`[Agent ${this.id} DEBUG] setPath: Chemin INVALIDE reçu (path: ${pathPoints ? 'Array['+pathPoints.length+']' : 'null'}, length: ${pathLengthWorld}).`);
+			console.warn(`[Agent ${this.id} DEBUG] setPath: Chemin INVALIDE reçu (path: ${pathPoints ? 'Array['+pathPoints.length+']' : 'null'}, length: ${pathLengthWorld}). État au moment de l'appel: ${currentStateAtCall}`);
 
 			// --- Réinitialisation des données de chemin ---
 			this.currentPathPoints = null;
@@ -520,62 +520,96 @@ export default class Agent {
 			this.currentPathIndexVisual = 0;
 			this.visualInterpolationProgress = 0;
 
-			// --- Détermination de l'état de repli ---
-			let fallbackState = this.currentState; // Pour logger l'état final
+			// --- *** NOUVELLE LOGIQUE DE FALLBACK : SYNCHRONISATION VERS L'ÉTAT CIBLE *** ---
+			let fallbackState = this.currentState; // Par défaut, on garde l'état si aucun cas ne correspond
+			let teleportPosition = null;
+			let forceVisibilityFalse = true; // Par défaut, cacher l'agent après téléportation
+
 			if (wasRequestingWork) {
-				fallbackState = this.homePosition ? AgentState.AT_HOME : AgentState.IDLE;
-				console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding WORK échoué, retour à ${fallbackState}.`);
+				console.warn(`[Agent ${this.id} SYNC] Pathfinding WORK échoué. Forçage état AT_WORK et téléportation.`);
+				fallbackState = AgentState.AT_WORK;
+				teleportPosition = this.workPosition;
+				// Mettre à jour l'heure d'arrivée pour cohérence (même si instantané)
+				this.lastArrivalTimeWork = this.experience.time.elapsed; 
+				this.requestedPathForDepartureTime = -1; // Prêt pour le retour
 			} else if (wasRequestingHome) {
-				fallbackState = this.workPosition ? AgentState.AT_WORK : AgentState.IDLE;
-				console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding HOME échoué, retour à ${fallbackState}.`);
+				console.warn(`[Agent ${this.id} SYNC] Pathfinding HOME échoué. Forçage état AT_HOME et téléportation.`);
+				fallbackState = AgentState.AT_HOME;
+				teleportPosition = this.homePosition;
+				// Mettre à jour l'heure d'arrivée
+				this.lastArrivalTimeHome = this.experience.time.elapsed; 
+				this.requestedPathForDepartureTime = -1; // Prêt pour le départ travail
 			} else if (wasRequestingWeekendWalk) {
-				// *** MODIFICATION : Vérifier si c'est TOUJOURS le weekend ***
+				// Pour le weekend, la logique précédente de fallback (annuler ou réessayer) est conservée car une téléportation n'a pas de sens logique fort.
+				console.warn(`[Agent ${this.id} WARN] Pathfinding WEEKEND WALK échoué (état ${targetStateFromWeekendWalk}).`);
 				if (isCurrentlyWeekend) {
-					// C'est toujours le weekend, gérer l'échec comme avant
 					if (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
-						console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding RETOUR TROTTOIR échoué (weekend). Tentative téléportation...`);
+						console.warn(`[Agent ${this.id}] Échec retour trottoir. Tentative téléportation trottoir puis requête retour maison.`);
 						if (this.parkSidewalkPosition) {
 							this.position.copy(this.parkSidewalkPosition).setY(this.yOffset);
 							this.isInsidePark = false;
+							forceVisibilityFalse = false; // Peut rester visible sur trottoir
 							console.log(`[Agent ${this.id}] Téléporté au trottoir. Redemande chemin maison.`);
 							// Redemander chemin maison immédiatement
-							fallbackState = AgentState.REQUESTING_PATH_FOR_HOME; // Nouvel état
+							fallbackState = AgentState.REQUESTING_PATH_FOR_HOME; // Nouvel état d'attente
 							this._pathRequestTimeout = this.experience.time.elapsed; // Relancer timeout
 							const currentGridNode = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(false)?.getClosestWalkableNode(this.position);
 							this.requestPath(this.position, this.homePosition, currentGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME, this.experience.time.elapsed);
 							// IMPORTANT: On sort de setPath ici car une nouvelle requête est lancée
 							console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après requête retour maison depuis trottoir.`);
-							return;
+							return; 
 						} else {
-							console.warn(`[Agent ${this.id} WARN] setPath: Position trottoir inconnue pour fallback retour (weekend). Forçage maison.`);
-							this.forceReturnHome(this.experience.time.elapsed); // Forcer retour direct
-							fallbackState = AgentState.AT_HOME; // État final après forceReturnHome
+							console.warn(`[Agent ${this.id}] Position trottoir inconnue. Forçage maison.`);
+							this.forceReturnHome(this.experience.time.elapsed); 
+							fallbackState = AgentState.AT_HOME; // État après forceReturnHome
+							teleportPosition = this.homePosition; // Assurer téléportation visuelle aussi
 						}
-					} else {
-						console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding PROMENADE échoué (weekend). Tentative nouvelle destination...`);
+					} else { // Échec requête initiale promenade
+						console.warn(`[Agent ${this.id}] Échec pathfinding promenade initiale. Tentative nouvelle destination.`);
 						// Tenter de trouver une autre destination UNIQUEMENT si on est toujours le weekend
-						this._findRandomWalkDestination(this.experience.time.elapsed); // Cherche une autre destination
-						// L'état sera changé par _findRandomWalkDestination si elle réussit (ou restera le même temporairement)
-						fallbackState = this.currentState; // Garder l'état actuel en attendant la nouvelle tentative
+						const foundNew = this._findRandomWalkDestination(this.experience.time.elapsed); // Cherche une autre destination
+						if (!foundNew) {
+						    console.warn(`[Agent ${this.id}] Impossible de trouver une autre destination de promenade. Retour AT_HOME.`);
+						    fallbackState = AgentState.AT_HOME;
+						    teleportPosition = this.homePosition;
+						} else {
+						    // Si une nouvelle destination est trouvée, requestPath a été appelée. On sort.
+						     console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après nouvelle requête promenade.`);
+						    return; 
+						}
 					}
-				} else {
-					// Le weekend est terminé au moment où l'échec est reçu ! Annuler la tentative.
-					console.warn(`[Agent ${this.id} WARN] setPath: Pathfinding promenade échoué ET weekend terminé. Annulation, retour AT_HOME.`);
-					fallbackState = AgentState.AT_HOME; // Passer à un état stable de semaine
-					this.weekendWalkDestination = null; // Nettoyer les infos de weekend
+				} else { // Le weekend est terminé pendant l'attente/échec
+					console.warn(`[Agent ${this.id} SYNC] Pathfinding promenade échoué ET weekend terminé. Forçage état AT_HOME.`);
+					fallbackState = AgentState.AT_HOME; 
+					teleportPosition = this.homePosition;
+					this.weekendWalkDestination = null; // Nettoyer
 					this.weekendWalkGridNode = null;
 					this.weekendWalkEndTime = -1;
 				}
-				// *** FIN MODIFICATION ***
-			} else {
-				console.warn(`[Agent ${this.id} WARN] setPath: Chemin invalide reçu mais état initial (${currentStateAtCall}) n'était pas REQUESTING_... Pas de changement d'état forcé.`);
-				fallbackState = this.currentState;
+			} else { // Cas inattendu: état n'était pas un état de requête ?
+				console.warn(`[Agent ${this.id} WARN] setPath: Chemin invalide reçu mais état initial (${currentStateAtCall}) n'était pas REQUESTING_... Tentative de retour état stable.`);
+				// Essayer de deviner où l'agent devrait être logiquement
+				if (this.workPosition && Math.abs(this.experience.time.elapsed - this.lastArrivalTimeWork) < Math.abs(this.experience.time.elapsed - this.lastArrivalTimeHome)) {
+				    fallbackState = AgentState.AT_WORK;
+				    teleportPosition = this.workPosition;
+				} else {
+				    fallbackState = AgentState.AT_HOME;
+				    teleportPosition = this.homePosition;
+				}
 			}
+
+			// --- Appliquer l'état et la téléportation ---
+			console.log(`[Agent ${this.id} DEBUG] setPath (échec): Changement d'état vers ${fallbackState}.`);
 			this.currentState = fallbackState;
-			this.isVisible = false; // Cacher l'agent en cas d'échec pour éviter qu'il reste bloqué visiblement
+			if (teleportPosition) {
+				console.log(`[Agent ${this.id} DEBUG] Téléportation vers ${fallbackState} à (${teleportPosition.x.toFixed(1)}, ${teleportPosition.y.toFixed(1)}, ${teleportPosition.z.toFixed(1)})`);
+				this.position.copy(teleportPosition).setY(this.yOffset); // Appliquer la position + offset Y
+			}
+			if (forceVisibilityFalse) {
+				this.isVisible = false; // Cacher l'agent par défaut après téléportation
+			}
 
 			// --- Annulation du Timeout ---
-			// LOG F: Log annulation sur échec
 			console.log(`[Agent ${this.id} DEBUG] setPath (échec): Annulation du _pathRequestTimeout (était ${this._pathRequestTimeout}).`);
 			this._pathRequestTimeout = null; // Annuler le timer même en cas d'échec
 		}
