@@ -323,7 +323,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
      * @param {number} laneWidth - Largeur de voie (par défaut: 1.5 unités)
      * @returns {THREE.Vector3} - Position sur la voie de droite
      */
-    findRightLanePosition(position, direction, laneWidth = 1.5) {
+    findRightLanePosition(position, direction, laneWidth = 4) {
         if (!position || !direction || direction.lengthSq() < 0.001) {
             return position.clone();
         }
