@@ -7,7 +7,7 @@ export default class CarManager {
         this.scene = scene;
         this.experience = experience;
         // --- MODIFIÉ : Initialiser le pool de voitures ---
-        this.maxCars = 250; // Ou récupérer depuis config si besoin
+        this.maxCars = 500; // Ou récupérer depuis config si besoin
         this.cars = new Array(this.maxCars); // Tableau de taille fixe
         this.agentToCar = new Map(); // Agent ID -> Car instance
         this.carPoolIndices = new Map(); // Agent ID -> Index dans this.cars (et InstancedMesh)
