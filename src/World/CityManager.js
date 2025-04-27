@@ -14,6 +14,7 @@ import DebugVisualManager from './DebugVisualManager.js';
 import HouseRenderer from './HouseRenderer.js';
 import BuildingRenderer from './BuildingRenderer.js';
 import SkyscraperRenderer from './SkyscraperRenderer.js';
+import CityMapVisualizer from './CityMapVisualizer.js';
 
 
 export default class CityManager {
@@ -263,6 +264,8 @@ export default class CityManager {
         // Ajout du conteneur principal à la scène
         this.scene.add(this.cityContainer);
 
+        this.cityMapVisualizer = null;
+
         console.log("CityManager initialized.");
     }
 
@@ -337,6 +340,11 @@ export default class CityManager {
             // assignDefaultTypeToUnassigned est maintenant appelé DANS generateAndValidateDistricts
             // this.assignDefaultTypeToUnassigned(); // S'assure que toutes les parcelles ont un type
             // this.logAdjustedZoneTypes(); // Déjà loggué par DistrictManager
+            
+            // Initialiser le visualiseur de carte APRÈS la génération des districts
+            this.cityMapVisualizer = new CityMapVisualizer(this.config, this.leafPlots);
+            this.cityMapVisualizer.setContainer(document.body);
+            this.cityMapVisualizer.setExperience(this.experience);
 
             console.time("RoadAndCrosswalkInfoGeneration");
             // Génère le réseau routier et les infos pour les passages piétons
@@ -477,6 +485,11 @@ export default class CityManager {
         this.districts = [];
         this.roadGroup = null;
         // Les autres groupes sont réinitialisés via contentGenerator.resetManagers()
+        
+        if (this.cityMapVisualizer) {
+            this.cityMapVisualizer.hide();
+            this.cityMapVisualizer = null;
+        }
 
         console.log("City cleared.");
     }
@@ -582,5 +595,10 @@ export default class CityManager {
     update() {
         // L'appel à contentGenerator.update est maintenant dans World.js
         // L'appel à lampPostManager.update est aussi dans World.js
+    }
+    toggleCityMap() {
+        if (this.cityMapVisualizer) {
+            this.cityMapVisualizer.toggle();
+        }
     }
 }
