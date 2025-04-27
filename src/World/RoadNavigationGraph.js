@@ -95,10 +95,10 @@ export default class RoadNavigationGraph extends NavigationGraph {
                     // On utilise un système de coordonnées où l'axe Z est aligné avec la route
                     // Pour les routes horizontales (le long de l'axe X)
                     if (gx % this.config.roadWidth < this.config.roadWidth / 2) {
-                        this.roadLanes[index] = LANE_RIGHT; // Côté droit (Z positif)
+                        this.roadLanes[index] = LANE_RIGHT; // Première moitié voie droite
                         markedRightLane++;
                     } else {
-                        this.roadLanes[index] = LANE_LEFT; // Côté gauche (Z négatif)
+                        this.roadLanes[index] = LANE_LEFT; // Seconde moitié voie gauche
                         markedLeftLane++;
                     }
                 }
@@ -311,9 +311,9 @@ export default class RoadNavigationGraph extends NavigationGraph {
      * @returns {THREE.Vector3} - Vecteur perpendiculaire orienté vers la droite par rapport à la direction
      */
     getRightSideVector(directionVector) {
-        // Créer un vecteur perpendiculaire pointant vers la droite
-        // Pour une direction (dx, 0, dz), le vecteur perpendiculaire à droite est (dz, 0, -dx)
-        return new THREE.Vector3(directionVector.z, 0, -directionVector.x).normalize();
+        // Créer un vecteur perpendiculaire pointant vers la droite (inversé)
+        // Pour une direction (dx, 0, dz), le vecteur perpendiculaire à droite est (-dz, 0, dx)
+        return new THREE.Vector3(-directionVector.z, 0, directionVector.x).normalize();
     }
     
     /**
@@ -331,11 +331,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
         // Obtenir le vecteur perpendiculaire pointant vers la droite
         const rightVector = this.getRightSideVector(direction);
         
-        // Créer un rayon partant de la position et allant vers la droite
-        const roadWidth = this.config.roadWidth / this.gridScale; // Largeur de route en unités monde
-        const maxOffset = roadWidth / 2;
-        
-        // Commencer par un déplacement modéré vers la droite
+        // Commencer par un déplacement modéré vers la voie de droite
         const targetPosition = position.clone().addScaledVector(rightVector, laneWidth);
         
         // Vérifier si la position cible est marchable (sur la route)
