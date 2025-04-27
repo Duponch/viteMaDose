@@ -234,6 +234,21 @@ export default class World {
 		if (targetGroup) {
 			targetGroup.visible = isVisible;
 			
+			// Cas spu00e9cial pour agentPath: rafrau00eechir les chemins des piu00e9tons actifs
+			if (categoryName === 'agentPath' && isVisible && this.agentManager) {
+				// Nettoyer d'abord les anciens chemins
+				this.clearDebugAgentPaths();
+				
+				// Pour chaque agent actif, afficher son chemin
+				for (let i = 0; i < this.agentManager.agents.length; i++) {
+					const agent = this.agentManager.agents[i];
+					if (agent && agent.currentPathPoints && agent.currentPathPoints.length > 1) {
+						this.setAgentPathForAgent(agent, agent.currentPathPoints, 0xff00ff);
+					}
+				}
+				console.log("[World Debug] Chemins des piétons rafraîchis");
+			}
+			
 			// Cas spu00e9cial pour vehiclePath: rafrau00eechir les chemins des vu00e9hicules actives
 			if (categoryName === 'vehiclePath' && isVisible && this.carManager) {
 				// Nettoyer d'abord les anciens chemins
@@ -246,7 +261,7 @@ export default class World {
 						this.setVehiclePathForCar(car, car.path, 0x00ffff);
 					}
 				}
-				console.log("[World Debug] Chemins des vu00e9hicules rafraîchis");
+				console.log("[World Debug] Chemins des véhicules rafraîchis");
 			}
 			
 			// console.log(`  [World Debug] Group '${categoryName}' visibility set to ${isVisible}`);
@@ -378,7 +393,7 @@ export default class World {
             const geometry = new THREE.BufferGeometry().setFromPoints(points);
             const material = new THREE.LineBasicMaterial({
                 color: color,
-                linewidth: 2.0, // Largeur ligne (ne fonctionne pas bien sur tous les navigateurs)
+                linewidth: 5.0, // Largeur ligne (ne fonctionne pas bien sur tous les navigateurs)
                 // Configurer pour rendre visible par dessus tout (pas d'occultation)
                 depthTest: false,
                 transparent: true,
