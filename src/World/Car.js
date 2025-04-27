@@ -58,8 +58,39 @@ export default class Car {
             return;
         }
 
-        // Copier les points du chemin
-        this.path = pathPoints.map(p => p.clone());
+        // Debug : afficher références pour débogage avant récupération du graphe
+        console.log(`[Car Debug] this.experience:`, this.experience);
+        console.log(`[Car Debug] this.experience.world:`, this.experience.world);
+        console.log(`[Car Debug] this.experience.world.navigationManager:`, this.experience.world.navigationManager);
+        console.log(`[Car Debug] getNavigationGraph(true):`, this.experience.world.navigationManager?.getNavigationGraph?.(true));
+        console.log(`[Car Debug] this.experience.world.roadNavigationGraph:`, this.experience.world.roadNavigationGraph);
+
+        // Récupérer le graphe de navigation des routes
+        let roadNavigationGraph = this.experience.world?.navigationManager?.getNavigationGraph?.(true);
+        if (!roadNavigationGraph && this.experience.world?.roadNavigationGraph) {
+            roadNavigationGraph = this.experience.world.roadNavigationGraph;
+        }
+        
+        // Debug : afficher les infos sur le graphe trouvé
+        if (!roadNavigationGraph) {
+            console.warn(`Car ${this.instanceId}: Aucun graphe routier trouvé (ni via navigationManager, ni via world.roadNavigationGraph)`);
+        } else if (typeof roadNavigationGraph.adjustPathToRightLane !== 'function') {
+            console.warn(`Car ${this.instanceId}: Le graphe routier ne possède pas adjustPathToRightLane. Propriétés:`, Object.keys(roadNavigationGraph));
+        }
+        
+        // Copier les points du chemin et les ajuster pour qu'ils suivent la voie de droite si possible
+        let adjustedPathPoints = pathPoints;
+        if (roadNavigationGraph && typeof roadNavigationGraph.adjustPathToRightLane === 'function') {
+            // Ajuster le chemin pour rester sur la voie de droite
+            adjustedPathPoints = roadNavigationGraph.adjustPathToRightLane(pathPoints);
+            console.log(`Car ${this.instanceId}: Chemin ajusté pour suivre la voie de droite.`);
+        } else {
+            console.warn(`Car ${this.instanceId}: Impossible d'ajuster le chemin pour la voie de droite. Utilisation du chemin standard.`);
+            adjustedPathPoints = pathPoints.map(p => p.clone());
+        }
+
+        // Définir le chemin ajusté
+        this.path = adjustedPathPoints;
 
         // Réinitialiser l'index du chemin
         this.currentPathIndex = 0;
@@ -91,7 +122,7 @@ export default class Car {
             
             // Afficher le chemin en mode debug si le calque vehiclePath est visible
             if (this.experience.isDebugMode && this.experience.debugLayerVisibility.vehiclePath._visible) {
-                this.experience.world.setVehiclePathForCar(this, this.path, 0x00ffff);
+                this.experience.world.setVehiclePathForCar(this, this.path, 0x00ff00); // Couleur verte pour indiquer que c'est un chemin sur la voie de droite
             }
         }
     }

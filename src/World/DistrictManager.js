@@ -79,7 +79,7 @@ export default class DistrictManager {
             console.error("mapRadius invalide.");
             return;
         }
-        console.log("Formation des districts - Phase 1 : Seed & Grow");
+        //console.log("Formation des districts - Phase 1 : Seed & Grow");
         while (availablePlotsForPhase1.length >= this.config.minDistrictSize) {
             const seedIndex = Math.floor(Math.random() * availablePlotsForPhase1.length);
             const seedPlot = availablePlotsForPhase1[seedIndex];
@@ -151,16 +151,16 @@ export default class DistrictManager {
             if (newDistrict.plots.length >= this.config.minDistrictSize) {
                 this.districts.push(newDistrict);
             } else {
-                console.warn(`District (type ${districtType}, seed ${seedPlot.id}) trop petit (${newDistrict.plots.length}/${this.config.minDistrictSize}). Libération des parcelles.`);
+                //console.warn(`District (type ${districtType}, seed ${seedPlot.id}) trop petit (${newDistrict.plots.length}/${this.config.minDistrictSize}). Libération des parcelles.`);
                 // On ne retire une parcelle de l'assignation globale QUE si elle appartient TOUJOURS
                 // à ce district au moment de la libération. Sinon, elle a été "volée" et on la laisse au voleur.
                 const plotsToRelease = [...newDistrict.plots]; // Copie pour itérer
                 newDistrict.plots = []; // Vider la liste du district échoué
-
+                
                 plotsToRelease.forEach(p => {
                     const currentPlotDistrictId = p.districtId;
                     const wasInGlobalSet = assignedPlotIds.has(p.id);
-                    console.log(`  -> Tentative Libération: Plot ${p.id}. Current districtId: ${currentPlotDistrictId}. ID district échoué: ${newDistrict.id}. Était dans assignedPlotIds? ${wasInGlobalSet}.`);
+                    //console.log(`  -> Tentative Libération: Plot ${p.id}. Current districtId: ${currentPlotDistrictId}. ID district échoué: ${newDistrict.id}. Était dans assignedPlotIds? ${wasInGlobalSet}.`);
 
                     if (currentPlotDistrictId === newDistrict.id) {
                         // La parcelle appartient toujours à ce district échoué, on la libère complètement.
@@ -170,7 +170,7 @@ export default class DistrictManager {
                              console.error(`  -> !! ATTENTION Libération !! Plot ${p.id} (districtId ${currentPlotDistrictId}) devrait être dans assignedPlotIds mais ne l'est pas !`);
                         }
                         p.districtId = null;
-                         console.log(`     -> Libérée (districtId=null, retirée de assignedPlotIds)`);
+                        //console.log(`     -> Libérée (districtId=null, retirée de assignedPlotIds)`);
                     } else {
                         // La parcelle a été volée par un autre district (districtId !== newDistrict.id)
                         // On ne touche PAS à son districtId ni à assignedPlotIds.
@@ -180,12 +180,12 @@ export default class DistrictManager {
                 });
             }
         }
-        console.log(`Phase 1 terminée : ${this.districts.length} districts créés.`);
-        console.log("Formation des districts - Phase 2 : Assignation des parcelles restantes");
+        //console.log(`Phase 1 terminée : ${this.districts.length} districts créés.`);
+        //console.log("Formation des districts - Phase 2 : Assignation des parcelles restantes");
         let remainingPlots = allPlots.filter(p => p.zoneType !== 'unbuildable' && !assignedPlotIds.has(p.id));
         let assignedInPhase2 = 0;
         if (remainingPlots.length > 0 && this.districts.length > 0) {
-            console.log(` -> Tentative d'assigner ${remainingPlots.length} parcelles restantes.`);
+            //console.log(` -> Tentative d'assigner ${remainingPlots.length} parcelles restantes.`);
             remainingPlots.forEach(plot => {
                 let bestDistrict = null;
                 let minDistanceSq = Infinity;
@@ -212,7 +212,7 @@ export default class DistrictManager {
                     if (canAssign) {
                         // --- DEBUG LOG Phase 2 --- 
                         const oldDistrictId = plot.districtId;
-                        console.log(`  -> Phase 2 Assignation: Plot ${plot.id} (districtId actuel: ${oldDistrictId}) assigné au district ${bestDistrict.id} (${bestDistrict.type}).`);
+                        //console.log(`  -> Phase 2 Assignation: Plot ${plot.id} (districtId actuel: ${oldDistrictId}) assigné au district ${bestDistrict.id} (${bestDistrict.type}).`);
                         if (oldDistrictId !== null) {
                             console.warn(`  -> !! ATTENTION Phase 2 !! Plot ${plot.id} avait déjà un districtId (${oldDistrictId}) avant d'être assigné au district ${bestDistrict.id}.`);
                         }
@@ -227,14 +227,15 @@ export default class DistrictManager {
                     console.warn(`(Phase 2) Parcelle ${plot.id} n'a trouvé aucun district proche.`);
                 }
             });
-            console.log(` -> ${assignedInPhase2} parcelles assignées en Phase 2.`);
+            //console.log(` -> ${assignedInPhase2} parcelles assignées en Phase 2.`);
         } else if (remainingPlots.length > 0) {
             console.warn(` -> ${remainingPlots.length} parcelles restent non assignées, aucun district n'a été créé en Phase 1.`);
         } else {
-            console.log(" -> Aucune parcelle restante à assigner en Phase 2.");
+            //
+            // console.log(" -> Aucune parcelle restante à assigner en Phase 2.");
         }
         const finalUnassignedCount = allPlots.filter(p => p.zoneType !== 'unbuildable' && !assignedPlotIds.has(p.id)).length;
-        console.log(`Formation des districts terminée : ${this.districts.length} districts formés, ${finalUnassignedCount} parcelles constructibles non assignées.`);
+        //console.log(`Formation des districts terminée : ${this.districts.length} districts formés, ${finalUnassignedCount} parcelles constructibles non assignées.`);
     }
 
     /**
@@ -242,7 +243,7 @@ export default class DistrictManager {
      * @returns {boolean} true si validation réussie, false sinon.
      */
     validateDistrictLayout() {
-        console.log("Validation de la disposition des districts...");
+        //console.log("Validation de la disposition des districts...");
         if (!this.districts || this.districts.length === 0) {
             console.warn("Validation échouée : aucun district à valider.");
             return false;
@@ -288,34 +289,34 @@ export default class DistrictManager {
         const meetsMaxTotalIndustrial = totalIndustrialCount <= this.config.maxTotalIndustrialDistricts;
         const meetsMinTotalBusiness = totalBusinessCount >= this.config.minTotalBusinessDistricts;
         const meetsMaxTotalBusiness = totalBusinessCount <= this.config.maxTotalBusinessDistricts;
-        console.log("RESULTATS VALIDATION:");
-        console.log(` - Placement strict Industriel (<${this.config.strictMinIndustrialDist}): ${strictlyMisplacedIndustrial} (OK si 0) -> ${strictlyMisplacedIndustrial === 0}`);
-        console.log(` - Placement strict Business (>${this.config.strictMaxBusinessDist}): ${strictlyMisplacedBusiness} (OK si 0) -> ${strictlyMisplacedBusiness === 0}`);
-        console.log(` - Minimum Zone Centre : Business (<${this.config.validationZoneCenterMaxDist}): ${businessInCoreCenterCount} (min requis ${this.config.minBusinessInCenter}) -> ${hasEnoughBusinessInCoreZone}`);
-        console.log(` - Minimum Zone Périphérie: Industriel (>${this.config.validationZoneEdgeMinDist}): ${industrialInCoreEdgeCount} (min requis ${this.config.minIndustrialInEdge}) -> ${hasEnoughIndustrialInEdgeZone}`);
-        console.log(` - Total Industriel: ${totalIndustrialCount} (min: ${this.config.minTotalIndustrialDistricts}, max: ${this.config.maxTotalIndustrialDistricts}) -> Min OK: ${meetsMinTotalIndustrial}, Max OK: ${meetsMaxTotalIndustrial}`);
-        console.log(` - Total Business: ${totalBusinessCount} (min: ${this.config.minTotalBusinessDistricts}, max: ${this.config.maxTotalBusinessDistricts}) -> Min OK: ${meetsMinTotalBusiness}, Max OK: ${meetsMaxTotalBusiness}`);
+        //console.log("RESULTATS VALIDATION:");
+        //console.log(` - Placement strict Industriel (<${this.config.strictMinIndustrialDist}): ${strictlyMisplacedIndustrial} (OK si 0) -> ${strictlyMisplacedIndustrial === 0}`);
+        //console.log(` - Placement strict Business (>${this.config.strictMaxBusinessDist}): ${strictlyMisplacedBusiness} (OK si 0) -> ${strictlyMisplacedBusiness === 0}`);
+        //console.log(` - Minimum Zone Centre : Business (<${this.config.validationZoneCenterMaxDist}): ${businessInCoreCenterCount} (min requis ${this.config.minBusinessInCenter}) -> ${hasEnoughBusinessInCoreZone}`);
+        //console.log(` - Minimum Zone Périphérie: Industriel (>${this.config.validationZoneEdgeMinDist}): ${industrialInCoreEdgeCount} (min requis ${this.config.minIndustrialInEdge}) -> ${hasEnoughIndustrialInEdgeZone}`);
+        //console.log(` - Total Industriel: ${totalIndustrialCount} (min: ${this.config.minTotalIndustrialDistricts}, max: ${this.config.maxTotalIndustrialDistricts}) -> Min OK: ${meetsMinTotalIndustrial}, Max OK: ${meetsMaxTotalIndustrial}`);
+        //console.log(` - Total Business: ${totalBusinessCount} (min: ${this.config.minTotalBusinessDistricts}, max: ${this.config.maxTotalBusinessDistricts}) -> Min OK: ${meetsMinTotalBusiness}, Max OK: ${meetsMaxTotalBusiness}`);
         if (!noStrictlyMisplaced) {
-            console.warn("Validation échouée : au moins un district est mal placé strictement.");
+            //console.warn("Validation échouée : au moins un district est mal placé strictement.");
             return false;
         }
         if (!meetsMinTotalIndustrial) {
-            console.warn(`Validation échouée : total industriel (${totalIndustrialCount}) inférieur au minimum requis (${this.config.minTotalIndustrialDistricts}).`);
+            //console.warn(`Validation échouée : total industriel (${totalIndustrialCount}) inférieur au minimum requis (${this.config.minTotalIndustrialDistricts}).`);
             return false;
         }
         if (!meetsMaxTotalIndustrial) {
-            console.warn(`Validation échouée : total industriel (${totalIndustrialCount}) supérieur au maximum autorisé (${this.config.maxTotalIndustrialDistricts}).`);
+            //console.warn(`Validation échouée : total industriel (${totalIndustrialCount}) supérieur au maximum autorisé (${this.config.maxTotalIndustrialDistricts}).`);
             return false;
         }
         if (!meetsMinTotalBusiness) {
-            console.warn(`Validation échouée : total business (${totalBusinessCount}) inférieur au minimum requis (${this.config.minTotalBusinessDistricts}).`);
+            //console.warn(`Validation échouée : total business (${totalBusinessCount}) inférieur au minimum requis (${this.config.minTotalBusinessDistricts}).`);
             return false;
         }
         if (!meetsMaxTotalBusiness) {
-            console.warn(`Validation échouée : total business (${totalBusinessCount}) supérieur au maximum autorisé (${this.config.maxTotalBusinessDistricts}).`);
+            //console.warn(`Validation échouée : total business (${totalBusinessCount}) supérieur au maximum autorisé (${this.config.maxTotalBusinessDistricts}).`);
             return false;
         }
-        console.log("Validation réussie : toutes les règles de placement et de comptage sont respectées.");
+        //console.log("Validation réussie : toutes les règles de placement et de comptage sont respectées.");
         return true;
     }
 
@@ -324,7 +325,7 @@ export default class DistrictManager {
      * (alternance résidentielle, 0/1 parc par district).
      */
     adjustPlotTypesWithinDistricts() {
-        console.log("Ajustement des types de parcelles (alternance résidentielle, 0/1 parc par district)...");
+        //console.log("Ajustement des types de parcelles (alternance résidentielle, 0/1 parc par district)...");
         const stats = {
             forcedToSkyscraper: 0,
             forcedToIndustrial: 0,
@@ -432,7 +433,7 @@ export default class DistrictManager {
                 }
             });
         });
-        console.log("Ajustement terminé :");
+        /* console.log("Ajustement terminé :");
         console.log(` - Forcés Gratte-ciel: ${stats.forcedToSkyscraper}`);
         console.log(` - Forcés Industriel: ${stats.forcedToIndustrial}`);
         console.log(` - Assignés Maison: ${stats.assignedHouse}`);
@@ -442,7 +443,7 @@ export default class DistrictManager {
         console.log(` - Changements résidentiels: ${stats.changedResidentialType}`);
         console.log(` - Déjà corrects (résidentiel): ${stats.alreadyCorrectResidential}`);
         console.log(` - Déjà corrects (autres): ${stats.alreadyCorrectOther}`);
-        console.log(` - Parcelles non constructibles ignorées: ${stats.unbuildableSkipped}`);
+        console.log(` - Parcelles non constructibles ignorées: ${stats.unbuildableSkipped}`); */
     }
 
     /**
@@ -450,7 +451,7 @@ export default class DistrictManager {
      * force le type par défaut 'building'.
      */
     assignDefaultTypeToUnassigned() {
-        console.log("Fallback : Attribution d'un type par défaut aux parcelles non assignées...");
+        //console.log("Fallback : Attribution d'un type par défaut aux parcelles non assignées...");
         let unassignedCorrected = 0;
         this.leafPlots.forEach(plot => {
             if (plot.districtId === null && plot.zoneType !== 'unbuildable' && plot.zoneType !== 'park') {
@@ -462,9 +463,9 @@ export default class DistrictManager {
             }
         });
         if (unassignedCorrected > 0) {
-            console.log(` -> ${unassignedCorrected} parcelles mises à jour en type par défaut.`);
+            //console.log(` -> ${unassignedCorrected} parcelles mises à jour en type par défaut.`);
         } else {
-            console.log(" -> Toutes les parcelles constructibles sont assignées à un district.");
+            //console.log(" -> Toutes les parcelles constructibles sont assignées à un district.");
         }
     }
 
@@ -598,7 +599,7 @@ export default class DistrictManager {
             }
         });
         const count = this.debugGroup ? this.debugGroup.children.filter(c => c.userData.visualType === visualType).length : 0;
-        console.log(`Visuels debug des districts mis à jour : ${count} districts visualisés.`);
+        //console.log(`Visuels debug des districts mis à jour : ${count} districts visualisés.`);
     }
 
     /**
@@ -612,7 +613,7 @@ export default class DistrictManager {
             if (stats[d.type] !== undefined) stats[d.type]++;
             totalPlotsInDistricts += d.plots.length;
         });
-        console.log(`Stats des districts -> Total: ${this.districts.length} (R: ${stats.residential}, I: ${stats.industrial}, B: ${stats.business}). Parcelles dans districts: ${totalPlotsInDistricts}/${this.leafPlots ? this.leafPlots.length : 0}`);
+        //console.log(`Stats des districts -> Total: ${this.districts.length} (R: ${stats.residential}, I: ${stats.industrial}, B: ${stats.business}). Parcelles dans districts: ${totalPlotsInDistricts}/${this.leafPlots ? this.leafPlots.length : 0}`);
         this.districts.forEach(d => {
             const plotCounts = {};
             d.plots.forEach(p => {
@@ -623,7 +624,7 @@ export default class DistrictManager {
                 .join(', ');
             const centerX = d.center ? d.center.x.toFixed(1) : 'N/A';
             const centerZ = d.center ? d.center.z.toFixed(1) : 'N/A';
-            console.log(` - District ${d.id} (${d.type}): ${d.plots.length} parcelles [${plotCountsString}]. Centre: (${centerX}, ${centerZ})`);
+            //console.log(` - District ${d.id} (${d.type}): ${d.plots.length} parcelles [${plotCountsString}]. Centre: (${centerX}, ${centerZ})`);
         });
     }
 
@@ -632,7 +633,7 @@ export default class DistrictManager {
      * avec un décompte global et par district.
      */
     logAdjustedZoneTypes() {
-        console.log("Types de zone finaux après ajustement et fallback:");
+        //console.log("Types de zone finaux après ajustement et fallback:");
         const finalCountsGlobal = {};
         this.leafPlots.forEach(plot => {
             finalCountsGlobal[plot.zoneType] = (finalCountsGlobal[plot.zoneType] || 0) + 1;
@@ -641,9 +642,9 @@ export default class DistrictManager {
             .map(([k, v]) => `${k}:${v}`)
             .sort() // Trier pour la lisibilité
             .join(', ');
-        console.log(` -> Répartition globale: { ${finalCountsStrGlobal} }`);
+        //console.log(` -> Répartition globale: { ${finalCountsStrGlobal} }`);
 
-        console.log(" -> Détail par district:");
+        //console.log(" -> Détail par district:");
         this.districts.forEach(district => {
             const finalCountsDistrict = {};
             let plotsInDistrict = 0;
@@ -667,7 +668,7 @@ export default class DistrictManager {
             const centerX = district.center ? district.center.x.toFixed(1) : 'N/A';
             const centerZ = district.center ? district.center.z.toFixed(1) : 'N/A';
 
-            console.log(`  - District ${district.id} (${district.type}): ${plotsInDistrict} parcelles${plotCountMatch} [${finalCountsStrDistrict || 'Aucune parcelle assignée'}]. Centre: (${centerX}, ${centerZ})`);
+            //console.log(`  - District ${district.id} (${district.type}): ${plotsInDistrict} parcelles${plotCountMatch} [${finalCountsStrDistrict || 'Aucune parcelle assignée'}]. Centre: (${centerX}, ${centerZ})`);
         });
 
         // Logguer les parcelles qui n'ont toujours pas de district (ne devrait pas arriver si fallback a fonctionné)

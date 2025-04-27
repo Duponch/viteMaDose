@@ -291,14 +291,14 @@ export default class NavigationGraph {
         }
         
         // Ajouter des logs pour déboguer la conversion
-        console.log(`NavigationGraph: Conversion monde->grille pour (${worldX}, ${worldZ})`);
-        console.log(`NavigationGraph: Paramètres - gridScale: ${this.gridScale}, offsetX: ${this.offsetX}, offsetZ: ${this.offsetZ}`);
+        //console.log(`NavigationGraph: Conversion monde->grille pour (${worldX}, ${worldZ})`);
+        //console.log(`NavigationGraph: Paramètres - gridScale: ${this.gridScale}, offsetX: ${this.offsetX}, offsetZ: ${this.offsetZ}`);
 
         // Calculer les coordonnées grille sans clamping d'abord
         const rawGridX = Math.floor(worldX * this.gridScale + this.offsetX);
         const rawGridY = Math.floor(worldZ * this.gridScale + this.offsetZ);
 
-        console.log(`NavigationGraph: Coordonnées grille brutes - (${rawGridX}, ${rawGridY})`);
+        //console.log(`NavigationGraph: Coordonnées grille brutes - (${rawGridX}, ${rawGridY})`);
 
         // Vérifier si les coordonnées sont dans les limites avant le clamping
         if (rawGridX < 0 || rawGridX >= this.gridWidth || rawGridY < 0 || rawGridY >= this.gridHeight) {

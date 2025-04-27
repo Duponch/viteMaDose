@@ -146,7 +146,7 @@ export default class CityManager {
             agentHeadTiltAmplitude: 0.12,
             agentHeadBobAmplitude: 0.1,
             agentAnimationSpeedFactor: 6,
-            maxAgents: 1000,
+            maxAgents: 1,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
@@ -380,6 +380,17 @@ export default class CityManager {
             console.log("CityManager: NavigationManager initialisé avec succès (piéton et véhicule)");
             this.navigationGraph = pedestrianGraph; // Pour compatibilité avec le code existant
             this.pathfinder = pedestrianPathfinder; // Pour compatibilité avec le code existant
+
+            // --- POINT D'EXTENSION VOITURES ---
+            // Toute activation/configuration de voitures DOIT se faire après cette étape !
+            if (!vehicleGraph) {
+                console.error("[CityManager] Le graphe routier n'est pas prêt : impossible d'activer/configurer les voitures.");
+            } else {
+                console.log("[CityManager] Placez ici la logique d'activation/configuration des voitures. Le graphe routier est prêt.");
+                // Exemple :
+                // if (this.carManager) this.carManager.activateAllCars();
+                // ou toute autre logique de spawn/configuration de voitures
+            }
 
             console.time("ContentGeneration");
             // Appel à PlotContentGenerator refactoré

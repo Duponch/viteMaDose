@@ -33,7 +33,7 @@ export default class CityLayoutGenerator {
      */
     generateLayout(mapSize) {
         this.reset();
-        console.log("Génération du layout par subdivision...");
+        //console.log("Génération du layout par subdivision...");
 
         // Snapper la taille de la carte à la grille
         const snappedMapSize = this.snapToGrid(mapSize);

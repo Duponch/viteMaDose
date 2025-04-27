@@ -582,4 +582,17 @@ export default class World {
         console.log(`[World Debug] Affichage Sphère End Node Verte à: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
     }
     // --- FIN AJOUT ---
+
+    /**
+     * Expose NavigationManager for Cars to adjust path
+     */
+    get navigationManager() {
+        return this.cityManager.navigationManager;
+    }
+    /**
+     * Expose roadNavigationGraph for Cars fallback
+     */
+    get roadNavigationGraph() {
+        return this.cityManager.navigationManager?.roadNavigationGraph;
+    }
 }
