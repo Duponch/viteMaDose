@@ -88,6 +88,11 @@ export default class Car {
             }
 
             this.updateMatrix();
+            
+            // Afficher le chemin en mode debug si le calque vehiclePath est visible
+            if (this.experience.isDebugMode && this.experience.debugLayerVisibility.vehiclePath._visible) {
+                this.experience.world.setVehiclePathForCar(this, this.path, 0x00ffff);
+            }
         }
     }
 

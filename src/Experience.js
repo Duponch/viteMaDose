@@ -106,6 +106,9 @@ export default class Experience extends EventTarget {
             },
             agentPath: {
                 _visible: false
+            },
+            vehiclePath: {
+                _visible: false
             }
         };
 

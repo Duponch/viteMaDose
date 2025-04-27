@@ -34,7 +34,8 @@ export default class World {
             buildingOutline: new THREE.Group(),
             navGridPedestrian: new THREE.Group(),
             navGridVehicle: new THREE.Group(),
-            agentPath: new THREE.Group()
+            agentPath: new THREE.Group(),
+            vehiclePath: new THREE.Group()
         };
         this.debugGroups.district.name = "DebugDistrictGrounds";
         this.debugGroups.plot.name = "DebugPlotGrounds";
@@ -42,6 +43,7 @@ export default class World {
         this.debugGroups.navGridPedestrian.name = "DebugNavGridPedestrian";
         this.debugGroups.navGridVehicle.name = "DebugNavGridVehicle";
         this.debugGroups.agentPath.name = "DebugAgentPaths";
+        this.debugGroups.vehiclePath.name = "DebugVehiclePaths";
 
         // Ajouter tous les groupes à la scène
         Object.values(this.debugGroups).forEach(group => this.scene.add(group));
@@ -61,7 +63,8 @@ export default class World {
             plotGround: 0.015,
             buildingOutline: 0.05,
             navGrid: 0.06,
-            agentPath: 0.07
+            agentPath: 0.07,
+            vehiclePath: 0.08
         };
         // Render Orders sont gérés dans DVM maintenant.
 
@@ -138,6 +141,7 @@ export default class World {
             this.clearGroupChildren(this.debugGroups.navGridPedestrian);
             this.clearGroupChildren(this.debugGroups.navGridVehicle);
             this.clearGroupChildren(this.debugGroups.agentPath);
+            this.clearGroupChildren(this.debugGroups.vehiclePath);
             // ---------------------------------------------
 
             if (this.cityManager) {
@@ -186,6 +190,9 @@ export default class World {
                 // 5. Chemins Agents (reste dynamique)
                 this.debugGroups.agentPath.position.y = this.debugHeights.agentPath;
 
+                // 6. Chemins Véhicules (reste dynamique)
+                this.debugGroups.vehiclePath.position.y = this.debugHeights.vehiclePath;
+
             } // fin if (this.cityManager)
 
             // --- Appliquer la Visibilité Initiale des Catégories (Groupes) ---
@@ -195,6 +202,7 @@ export default class World {
             this.setGroupVisibility('navGridPedestrian', this.experience.debugLayerVisibility.navGridPedestrian._visible);
             this.setGroupVisibility('navGridVehicle', this.experience.debugLayerVisibility.navGridVehicle._visible);
             this.setGroupVisibility('agentPath', this.experience.debugLayerVisibility.agentPath._visible);
+            this.setGroupVisibility('vehiclePath', this.experience.debugLayerVisibility.vehiclePath._visible);
             // La visibilité des sous-types a été appliquée lors de l'ajout des meshes.
 
         } else {
@@ -206,6 +214,7 @@ export default class World {
             this.clearGroupChildren(this.debugGroups.navGridPedestrian);
             this.clearGroupChildren(this.debugGroups.navGrid);
             this.clearGroupChildren(this.debugGroups.agentPath, true); // Dispose AgentPath specifics
+            this.clearGroupChildren(this.debugGroups.vehiclePath, true); // Dispose VehiclePath specifics
 
             // Cacher tous les groupes principaux
             this.setAllDebugGroupsVisibility(false);
@@ -224,6 +233,22 @@ export default class World {
 		const targetGroup = this.debugGroups[categoryName];
 		if (targetGroup) {
 			targetGroup.visible = isVisible;
+			
+			// Cas spu00e9cial pour vehiclePath: rafrau00eechir les chemins des vu00e9hicules actives
+			if (categoryName === 'vehiclePath' && isVisible && this.carManager) {
+				// Nettoyer d'abord les anciens chemins
+				this.clearDebugVehiclePaths();
+				
+				// Pour chaque voiture active, afficher son chemin
+				for (let i = 0; i < this.carManager.cars.length; i++) {
+					const car = this.carManager.cars[i];
+					if (car && car.isActive && car.path && car.path.length > 1) {
+						this.setVehiclePathForCar(car, car.path, 0x00ffff);
+					}
+				}
+				console.log("[World Debug] Chemins des vu00e9hicules rafraîchis");
+			}
+			
 			// console.log(`  [World Debug] Group '${categoryName}' visibility set to ${isVisible}`);
 		} else {
 			console.warn(`World.setGroupVisibility: Unknown category group '${categoryName}'`);
@@ -265,6 +290,7 @@ export default class World {
             case 'buildingOutline': targetGroup = this.debugBuildingOutlineGroup; break;
             case 'navGrid':         targetGroup = this.debugNavGridGroup; break;
             case 'agentPath':       targetGroup = this.debugAgentPathGroup; break;
+            case 'vehiclePath':     targetGroup = this.debugVehiclePathGroup; break;
             default:
                 console.warn(`World.setLayerVisibility: Unknown layer name '${layerName}'`);
                 return;
@@ -277,6 +303,10 @@ export default class World {
 
     clearDebugAgentPaths() {
         this.clearGroupChildren(this.debugGroups.agentPath);
+    }
+
+    clearDebugVehiclePaths() {
+        this.clearGroupChildren(this.debugGroups.vehiclePath);
     }
 
     clearDebugNavGrid() {
@@ -324,6 +354,54 @@ export default class World {
              }
         }
    }
+
+   setVehiclePathForCar(car, pathPoints, pathColor = 0x00ffff) {
+        if (!this.debugVisualManager || !pathPoints || !Array.isArray(pathPoints) || pathPoints.length < 2) {
+            console.warn("SetVehiclePath: Données invalides ou DebugVisualManager absent.", pathPoints);
+            return;
+        }
+
+        try {
+            // Préparer les points et couleurs pour la ligne
+            const points = [];
+            for (let i = 0; i < pathPoints.length; i++) {
+                const point = pathPoints[i].clone();
+                // Légèrement au-dessus du sol pour éviter le z-fighting, ajuster selon besoin
+                point.y = this.debugHeights.vehiclePath || 0.1;
+                points.push(point);
+            }
+
+            // Convertir la couleur hexadécimale en THREE.Color
+            let color = new THREE.Color(pathColor);
+
+            // Créer la ligne de debug
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({
+                color: color,
+                linewidth: 2.0, // Largeur ligne (ne fonctionne pas bien sur tous les navigateurs)
+                // Configurer pour rendre visible par dessus tout (pas d'occultation)
+                depthTest: false,
+                transparent: true,
+                opacity: 0.9 // Légère transparence pour moins gêner la vue
+            });
+
+            // Créer la ligne et l'ajouter au groupe vehiclePath
+            const line = new THREE.Line(geometry, material);
+            line.renderOrder = 10; // Assurer qu'elle est rendue après le reste
+
+            // Ajouter un identifiant unique à partir de l'ID du véhicule
+            if (car && car.instanceId) {
+                line.name = `VehiclePath_${car.instanceId}`;
+                // Enregistrer l'ID du véhicule sur la ligne
+                line.userData.carId = car.instanceId;
+            }
+
+            // Ajouter au groupe approprié
+            this.debugGroups.vehiclePath.add(line);
+        } catch (error) {
+            console.error("SetVehiclePath: Erreur lors de la création du chemin:", error);
+        }
+    }
 
    destroy() {
         console.log("Destroying World...");

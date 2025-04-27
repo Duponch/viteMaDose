@@ -81,7 +81,8 @@ export default class TimeControlUI {
             },
             navGridPedestrian: { text: 'NavGrid Piétons', subLayers: null },
             navGridVehicle: { text: 'NavGrid Véhicules', subLayers: null },
-            agentPath: { text: 'Paths', subLayers: null }
+            agentPath: { text: 'Paths pedestrian', subLayers: null },
+            vehiclePath: { text: 'Paths vehicle', subLayers: null }
         };
 
         // --- Création dynamique des boutons et sous-menus ---
