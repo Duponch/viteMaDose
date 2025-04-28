@@ -80,13 +80,13 @@ export function createLowPolyCarGeometry(options = {}) {
     // Gauche
     const sideWindowLeft = sideWindowGeom.clone();
     matrix.identity();
-    matrix.setPosition(-2/2 + 0.01, windowYPos, -0.12); // Plus reculée en Z
+    matrix.setPosition(-2/2 + 0.01, windowYPos, -0.4); // Plus reculée en Z
     sideWindowLeft.applyMatrix4(matrix);
     windowGeoms.push(sideWindowLeft);
     // Droite
     const sideWindowRight = sideWindowGeom.clone();
     matrix.identity();
-    matrix.setPosition(2/2 - 0.01, windowYPos, -0.12); // Plus reculée en Z
+    matrix.setPosition(2/2 - 0.01, windowYPos, -0.4); // Plus reculée en Z
     sideWindowRight.applyMatrix4(matrix);
     windowGeoms.push(sideWindowRight);
 
@@ -134,13 +134,13 @@ export function createLowPolyCarGeometry(options = {}) {
     // Gauche
     const headLightLeft = headLightGeometry.clone();
     matrix.identity();
-    matrix.setPosition(-2 * 0.35, lightYPos + 0.17, 4/2 + 0.05); // Réhaussé franchement en Y
+    matrix.setPosition(-2 * 0.35, lightYPos + 0.35, 4/2 + 0.05); // Réhaussé franchement en Y
     headLightLeft.applyMatrix4(matrix);
     lightGeoms.push(headLightLeft);
     // Droite
     const headLightRight = headLightGeometry.clone();
     matrix.identity();
-    matrix.setPosition(2 * 0.35, lightYPos + 0.17, 4/2 + 0.05); // Réhaussé franchement en Y
+    matrix.setPosition(2 * 0.35, lightYPos + 0.35, 4/2 + 0.05); // Réhaussé franchement en Y
     headLightRight.applyMatrix4(matrix);
     lightGeoms.push(headLightRight);
 
@@ -150,13 +150,13 @@ export function createLowPolyCarGeometry(options = {}) {
     // Gauche
     const rearLightLeft = rearLightGeometry.clone();
     matrix.identity();
-    matrix.setPosition(-2 * 0.35, lightYPos + 0.17, -4/2 - 0.13); // Réhaussé franchement en Y, et en arrière en Z
+    matrix.setPosition(-2 * 0.35, lightYPos + 0.35, -4/2 - 0.13); // Réhaussé franchement en Y, et en arrière en Z
     rearLightLeft.applyMatrix4(matrix);
     rearLightGeoms.push(rearLightLeft);
     // Droite
     const rearLightRight = rearLightGeometry.clone();
     matrix.identity();
-    matrix.setPosition(2 * 0.35, lightYPos + 0.17, -4/2 - 0.13); // Réhaussé franchement en Y, et en arrière en Z
+    matrix.setPosition(2 * 0.35, lightYPos + 0.35, -4/2 - 0.13); // Réhaussé franchement en Y, et en arrière en Z
     rearLightRight.applyMatrix4(matrix);
     rearLightGeoms.push(rearLightRight);
 
