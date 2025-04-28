@@ -361,48 +361,79 @@ export default class RoadNavigationGraph extends NavigationGraph {
      */
     adjustPathToRightLane(path) {
         if (!path || path.length < 2) return path;
-        
+
         const adjustedPath = [];
-        
-        // Traiter le premier point
-        adjustedPath.push(path[0].clone());
-        
+        const straightThreshold = 0.99; // Seuil pour considérer que l'on va "tout droit" (produit scalaire proche de 1)
+
+        // Traiter le premier point (pas de direction d'arrivée)
+        if (path.length > 0) {
+             // Pour le premier point, on ne peut utiliser que la direction vers le point suivant
+            if (path.length > 1) {
+                const firstPoint = path[0];
+                const secondPoint = path[1];
+                const initialDirection = new THREE.Vector3().subVectors(secondPoint, firstPoint).normalize();
+                const adjustedFirstPosition = this.findRightLanePosition(firstPoint, initialDirection);
+                adjustedPath.push(adjustedFirstPosition);
+            } else {
+                adjustedPath.push(path[0].clone()); // Chemin d'un seul point
+            }
+        }
+
         // Traiter tous les points intermédiaires
         for (let i = 1; i < path.length - 1; i++) {
             const prevPoint = path[i-1];
             const currentPoint = path[i];
             const nextPoint = path[i+1];
-            
+
             // Calculer la direction d'arrivée
             const inDirection = new THREE.Vector3().subVectors(currentPoint, prevPoint).normalize();
-            
+
             // Calculer la direction de sortie
             const outDirection = new THREE.Vector3().subVectors(nextPoint, currentPoint).normalize();
-            
-            // Utiliser la moyenne des deux directions pour les intersections où la direction change
-            const avgDirection = new THREE.Vector3().addVectors(inDirection, outDirection).normalize();
-            
-            // Trouver la position ajustée sur la voie de droite
-            const adjustedPosition = this.findRightLanePosition(currentPoint, avgDirection);
 
+            // Vérifier si on va (approximativement) tout droit
+            const dotProduct = inDirection.dot(outDirection);
+            let directionForAdjustment;
+
+            if (dotProduct > straightThreshold) {
+                // On va tout droit : utiliser la direction de sortie
+                directionForAdjustment = outDirection;
+            } else {
+                // On tourne : utiliser la moyenne pour lisser le virage
+                const avgDirection = new THREE.Vector3().addVectors(inDirection, outDirection).normalize();
+                 // Vérifier si avgDirection est valide (non nul)
+                if (avgDirection.lengthSq() < 0.001) {
+                     // Si la moyenne est nulle (directions opposées), utiliser outDirection par défaut
+                    directionForAdjustment = outDirection;
+                } else {
+                    directionForAdjustment = avgDirection;
+                }
+            }
+
+            // Trouver la position ajustée sur la voie de droite
+            const adjustedPosition = this.findRightLanePosition(currentPoint, directionForAdjustment);
             adjustedPath.push(adjustedPosition);
         }
-        
-        // Traiter le dernier point
+
+        // Traiter le dernier point (pas de direction de sortie)
         if (path.length > 1) {
             const lastIndex = path.length - 1;
             const secondLastIndex = lastIndex - 1;
-            
-            // Direction du dernier segment
+
+            // Direction du dernier segment (direction d'arrivée)
             const finalDirection = new THREE.Vector3().subVectors(
                 path[lastIndex], path[secondLastIndex]
             ).normalize();
-            
-            // Ajuster le dernier point
+
+            // Ajuster le dernier point en utilisant la direction d'arrivée
             const adjustedFinalPosition = this.findRightLanePosition(path[lastIndex], finalDirection);
             adjustedPath.push(adjustedFinalPosition);
+        } else if (path.length === 1 && adjustedPath.length === 0) {
+             // Cas spécial: chemin d'un seul point non traité au début
+             adjustedPath.push(path[0].clone());
         }
-        
+
+
         return adjustedPath;
     }
 

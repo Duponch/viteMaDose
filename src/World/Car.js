@@ -1,5 +1,66 @@
 import * as THREE from 'three';
 
+// --- Début Fonctions Ramer-Douglas-Peucker ---
+
+// Calcule la distance perpendiculaire d'un point à une ligne définie par start et end
+function perpendicularDistance(point, lineStart, lineEnd) {
+    const dx = lineEnd.x - lineStart.x;
+    const dz = lineEnd.z - lineStart.z; // Utiliser Z car on est en vue de dessus (XZ plane)
+    const lineLengthSq = dx * dx + dz * dz;
+
+    if (lineLengthSq === 0) { // Start et End sont le même point
+        const pointDx = point.x - lineStart.x;
+        const pointDz = point.z - lineStart.z;
+        return Math.sqrt(pointDx * pointDx + pointDz * pointDz);
+    }
+
+    const t = ((point.x - lineStart.x) * dx + (point.z - lineStart.z) * dz) / lineLengthSq;
+    const clampedT = Math.max(0, Math.min(1, t)); // Clamp t pour rester sur le segment
+
+    const closestPointX = lineStart.x + clampedT * dx;
+    const closestPointZ = lineStart.z + clampedT * dz;
+
+    const distanceDx = point.x - closestPointX;
+    const distanceDz = point.z - closestPointZ;
+    return Math.sqrt(distanceDx * distanceDx + distanceDz * distanceDz);
+}
+
+// Fonction récursive Ramer-Douglas-Peucker
+function ramerDouglasPeuckerRecursive(points, startIndex, endIndex, epsilon, result) {
+    let maxDistance = 0;
+    let index = startIndex;
+
+    for (let i = startIndex + 1; i < endIndex; i++) {
+        const distance = perpendicularDistance(points[i], points[startIndex], points[endIndex]);
+        if (distance > maxDistance) {
+            maxDistance = distance;
+            index = i;
+        }
+    }
+
+    if (maxDistance > epsilon) {
+        // Le point est significatif, on divise et on récursive
+        ramerDouglasPeuckerRecursive(points, startIndex, index, epsilon, result);
+        result.push(points[index]); // Ajouter le point pivot
+        ramerDouglasPeuckerRecursive(points, index, endIndex, epsilon, result);
+    }
+    // Sinon (maxDistance <= epsilon), les points intermédiaires ne sont pas ajoutés,
+    // seul le point de fin sera ajouté lors du retour de la récursion ou à la fin.
+}
+
+// Fonction principale pour lancer la simplification
+function simplifyPath(points, epsilon) {
+    if (points.length < 3) {
+        return points; // Pas besoin de simplifier
+    }
+    const result = [points[0]]; // Toujours garder le premier point
+    ramerDouglasPeuckerRecursive(points, 0, points.length - 1, epsilon, result);
+    result.push(points[points.length - 1]); // Toujours garder le dernier point
+    return result;
+}
+
+// --- Fin Fonctions Ramer-Douglas-Peucker ---
+
 export default class Car {
     constructor(instanceId, experience, startPosition, targetPosition) {
         this.instanceId = instanceId;
@@ -63,39 +124,42 @@ export default class Car {
             return;
         }
 
-        // Debug : afficher références pour débogage avant récupération du graphe
-        console.log(`[Car Debug] this.experience:`, this.experience);
-        console.log(`[Car Debug] this.experience.world:`, this.experience.world);
-        console.log(`[Car Debug] this.experience.world.navigationManager:`, this.experience.world.navigationManager);
-        console.log(`[Car Debug] getNavigationGraph(true):`, this.experience.world.navigationManager?.getNavigationGraph?.(true));
-        console.log(`[Car Debug] this.experience.world.roadNavigationGraph:`, this.experience.world.roadNavigationGraph);
+        // --- Étape 1: Simplifier le chemin A* brut ---
+        // L'epsilon détermine à quel point un point doit s'écarter pour être conservé.
+        // Une petite valeur conserve plus de points. À ajuster selon l'échelle de la grille/monde.
+        const epsilon = 0.5; // (Valeur à ajuster potentiellement)
+        const simplifiedPathPoints = simplifyPath(pathPoints, epsilon);
 
-        // Récupérer le graphe de navigation des routes
+        // --- Étape 2: Ajuster le chemin simplifié pour suivre la voie de droite ---
+        let adjustedPathPoints = simplifiedPathPoints; // Commence avec le chemin simplifié
+
+        // Récupérer le graphe de navigation routier
         let roadNavigationGraph = this.experience.world?.navigationManager?.getNavigationGraph?.(true);
         if (!roadNavigationGraph && this.experience.world?.roadNavigationGraph) {
             roadNavigationGraph = this.experience.world.roadNavigationGraph;
         }
-        
-        // Debug : afficher les infos sur le graphe trouvé
+
         if (!roadNavigationGraph) {
-            console.warn(`Car ${this.instanceId}: Aucun graphe routier trouvé (ni via navigationManager, ni via world.roadNavigationGraph)`);
+            console.error(`Car ${this.instanceId}: Impossible de récupérer le graphe routier pour ajuster le chemin.`);
+            // Conserver le chemin simplifié comme chemin final si le graphe est absent
         } else if (typeof roadNavigationGraph.adjustPathToRightLane !== 'function') {
-            console.warn(`Car ${this.instanceId}: Le graphe routier ne possède pas adjustPathToRightLane. Propriétés:`, Object.keys(roadNavigationGraph));
-        }
-        
-        // Copier les points du chemin et les ajuster pour qu'ils suivent la voie de droite si possible
-        let adjustedPathPoints = pathPoints;
-        if (roadNavigationGraph && typeof roadNavigationGraph.adjustPathToRightLane === 'function') {
-            // Ajuster le chemin pour rester sur la voie de droite
-            adjustedPathPoints = roadNavigationGraph.adjustPathToRightLane(pathPoints);
-            console.log(`Car ${this.instanceId}: Chemin ajusté pour suivre la voie de droite.`);
+            console.warn(`Car ${this.instanceId}: Le graphe routier ne possède pas adjustPathToRightLane. Utilisation du chemin simplifié.`);
+            // Conserver le chemin simplifié si la fonction manque
         } else {
-            console.warn(`Car ${this.instanceId}: Impossible d'ajuster le chemin pour la voie de droite. Utilisation du chemin standard.`);
-            adjustedPathPoints = pathPoints.map(p => p.clone());
+             // Ajuster le chemin simplifié pour suivre la voie de droite
+             // On passe maintenant simplifiedPathPoints au lieu de pathPoints
+            adjustedPathPoints = roadNavigationGraph.adjustPathToRightLane(simplifiedPathPoints);
         }
 
-        // Définir le chemin ajusté
+        // --- Étape 3: Utiliser le chemin final (simplifié ET ajusté) ---
         this.path = adjustedPathPoints;
+
+        // Vérifier si le chemin final est valide après toutes les opérations
+        if (!this.path || this.path.length === 0) {
+            console.warn(`Car ${this.instanceId}: Chemin final invalide après simplification/ajustement.`);
+            this.isActive = false;
+            return;
+        }
 
         // Réinitialiser l'index du chemin
         this.currentPathIndex = 0;

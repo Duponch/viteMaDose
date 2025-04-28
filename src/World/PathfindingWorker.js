@@ -329,7 +329,7 @@ function reconstructPath(cameFrom, current) {
     return path; // Le chemin est de start vers end
 }
 
-// --- findPathAStar (MODIFIÉ pour accepter la grille) ---
+// --- findPathAStar (MODIFIÉ pour accepter la grille et coût diagonal) ---
 function findPathAStar(start, end, gridMap) { // <-- Accepte gridMap
     const openSet = new MinHeap();
     const closedSet = new Set();
@@ -353,13 +353,19 @@ function findPathAStar(start, end, gridMap) { // <-- Accepte gridMap
 
         closedSet.add(currentKey);
 
-        // --- Passer gridMap --- 
+        // --- Passer gridMap ---
         const neighbors = getNeighbors(currentNode, gridMap);
         for (const neighbor of neighbors) {
             const neighborKey = `${neighbor.x},${neighbor.y}`;
             if (closedSet.has(neighborKey)) continue;
 
-            const moveCost = 1;
+            // --- MODIFICATION: Calculer le coût basé sur le type de mouvement ---
+            const dx = Math.abs(neighbor.x - currentNode.x);
+            const dy = Math.abs(neighbor.y - currentNode.y);
+            // Si dx=1 et dy=1, c'est diagonal. Sinon (dx=1,dy=0 ou dx=0,dy=1), c'est orthogonal.
+            const moveCost = (dx === 1 && dy === 1) ? Math.SQRT2 : 1;
+            // --- FIN MODIFICATION ---
+
             const tentativeGScore = (gScore.get(currentKey) ?? 0) + moveCost;
 
             if (tentativeGScore < (gScore.get(neighborKey) ?? Infinity)) {
