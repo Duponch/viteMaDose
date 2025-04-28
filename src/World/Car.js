@@ -20,6 +20,9 @@ export default class Car {
         // La matrice de transformation pour le rendu
         this.matrix = new THREE.Matrix4();
 
+        // Facteur d'échelle global pour la voiture (réduction de 10%)
+        this.globalScale = 0.9;
+
         // La hauteur de la voiture (inchangée)
         this.carHeight = 0.25; // Hauteur depuis le sol
 
@@ -127,11 +130,13 @@ export default class Car {
         }
     }
 
-    /**
-     * Met à jour la matrice de transformation
-     */
     updateMatrix() {
-        this.matrix.compose(this.position, this.quaternion, new THREE.Vector3(1, 1, 1));
+        // Met à jour la matrice de transformation de la voiture
+        this.matrix.identity();
+        this.matrix.makeRotationFromQuaternion(this.quaternion);
+        this.matrix.setPosition(this.position.x, this.position.y + this.carHeight, this.position.z);
+        // Appliquer l'échelle globale (réduction de 10%)
+        this.matrix.scale(new THREE.Vector3(this.globalScale, this.globalScale, this.globalScale));
     }
 
     /**
