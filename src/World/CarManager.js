@@ -1,6 +1,7 @@
 // src/World/CarManager.js
 import * as THREE from 'three';
 import Car from './Car.js';
+import { createLowPolyCarGeometry } from './LowPolyCarGeometry.js';
 
 export default class CarManager {
     constructor(scene, experience) {
@@ -13,23 +14,24 @@ export default class CarManager {
         this.carPoolIndices = new Map(); // Agent ID -> Index dans this.cars (et InstancedMesh)
         // --- FIN MODIFIÉ ---
 
-        this.carGeometry = new THREE.BoxGeometry(1.2, 0.6, 2.4);
-        this.carGeometry.translate(0, 0.3, 0);
-        this.carMaterial = new THREE.MeshStandardMaterial({ /* ... options existantes ... */ });
-
-        // --- MODIFIÉ : InstancedMesh avec taille fixe ---
-        this.carInstancedMesh = new THREE.InstancedMesh(
-            this.carGeometry,
-            this.carMaterial,
-            this.maxCars // Taille fixe
-        );
-        // --- FIN MODIFIÉ ---
-        this.carInstancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-        this.carInstancedMesh.castShadow = true;
-        this.carInstancedMesh.receiveShadow = true;
-        this.carInstancedMesh.name = "Cars";
-        this.carInstancedMesh.frustumCulled = false;
-        this.carInstancedMesh.renderOrder = 1;
+        // --- NOUVEAU : Utiliser la géométrie fusionnée low-poly PAR MATÉRIAU ---
+        const carGeoms = createLowPolyCarGeometry();
+        this.instancedMeshes = {};
+        this.carMeshOrder = [
+            'body', 'windows', 'wheels', 'hubcaps', 'lights', 'rearLights'
+        ];
+        for (const part of this.carMeshOrder) {
+            const { geometry, material } = carGeoms[part];
+            const mesh = new THREE.InstancedMesh(geometry, material, this.maxCars);
+            mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.name = `Cars_${part}`;
+            mesh.frustumCulled = false;
+            mesh.renderOrder = 1;
+            this.instancedMeshes[part] = mesh;
+            this.scene.add(mesh);
+        }
 
         // --- MODIFIÉ : Initialiser toutes les matrices pour cacher les voitures ---
         this.tempMatrix = new THREE.Matrix4(); // Garder pour usage général
@@ -38,16 +40,19 @@ export default class CarManager {
             // Créer l'objet Car logique mais le marquer inactif
             this.cars[i] = new Car(i, this.experience, new THREE.Vector3(), new THREE.Vector3()); // Position initiale sans importance
             this.cars[i].isActive = false;
-            this.carInstancedMesh.setMatrixAt(i, hiddenMatrix); // Cacher visuellement
+            for (const part of this.carMeshOrder) {
+                this.instancedMeshes[part].setMatrixAt(i, hiddenMatrix);
+            }
         }
-        this.carInstancedMesh.count = this.maxCars; // Rendre toutes les instances (même cachées)
-        this.carInstancedMesh.instanceMatrix.needsUpdate = true; // Appliquer les matrices cachées
+        for (const part of this.carMeshOrder) {
+            this.instancedMeshes[part].count = this.maxCars;
+            this.instancedMeshes[part].instanceMatrix.needsUpdate = true;
+        }
         // --- FIN MODIFIÉ ---
 
-        this.scene.add(this.carInstancedMesh);
         this.roadHeight = 0.05;
 
-        console.log("CarManager initialisé avec Pooling");
+        console.log("CarManager initialisé avec Pooling multi-matériaux");
     }
 
     /**
@@ -92,9 +97,11 @@ export default class CarManager {
         availableCar.currentPathIndex = 0;
         availableCar.updateMatrix(); // Mettre à jour sa matrice initiale
 
-        // Mettre à jour l'InstancedMesh pour cette voiture spécifique
-        this.carInstancedMesh.setMatrixAt(availableCarIndex, availableCar.matrix);
-        this.carInstancedMesh.instanceMatrix.needsUpdate = true; // Signaler la mise à jour
+        // Mettre à jour tous les InstancedMeshs pour cette voiture spécifique
+        for (const part of this.carMeshOrder) {
+            this.instancedMeshes[part].setMatrixAt(availableCarIndex, availableCar.matrix);
+            this.instancedMeshes[part].instanceMatrix.needsUpdate = true;
+        }
 
         // Enregistrer l'association
         this.agentToCar.set(agent.id, availableCar);
@@ -130,11 +137,12 @@ export default class CarManager {
             car.path = null; // Nettoyer le chemin
             car.currentPathIndex = 0;
 
-            // --- MODIFIÉ : Cacher la voiture visuellement ---
-            // Créer une matrice qui met à l'échelle 0 pour la cacher
+            // --- MODIFIÉ : Cacher la voiture visuellement sur tous les InstancedMeshs ---
             const hiddenMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-            this.carInstancedMesh.setMatrixAt(carIndex, hiddenMatrix);
-            this.carInstancedMesh.instanceMatrix.needsUpdate = true;
+            for (const part of this.carMeshOrder) {
+                this.instancedMeshes[part].setMatrixAt(carIndex, hiddenMatrix);
+                this.instancedMeshes[part].instanceMatrix.needsUpdate = true;
+            }
             // --- FIN MODIFIÉ ---
 
             // Supprimer l'association agent-voiture
@@ -162,7 +170,9 @@ export default class CarManager {
                 activeCarCount++;
                 car.update(deltaTime); // Logique interne de la voiture
                 // La matrice de la voiture est mise à jour dans car.update() via car.updateMatrix()
-                this.carInstancedMesh.setMatrixAt(i, car.matrix); // Mettre à jour la matrice dans l'InstancedMesh
+                for (const part of this.carMeshOrder) {
+                    this.instancedMeshes[part].setMatrixAt(i, car.matrix);
+                }
                 needsMatrixUpdate = true;
             }
             // Les voitures inactives ont déjà leur matrice pour être cachées (faite dans releaseCar)
@@ -171,7 +181,9 @@ export default class CarManager {
         // --- FIN MODIFIÉ ---
 
         if (needsMatrixUpdate) {
-            this.carInstancedMesh.instanceMatrix.needsUpdate = true;
+            for (const part of this.carMeshOrder) {
+                this.instancedMeshes[part].instanceMatrix.needsUpdate = true;
+            }
         }
 
         // Log périodique (inchangé mais reflète maintenant les voitures actives)
@@ -182,11 +194,13 @@ export default class CarManager {
 
     // destroy (inchangé)
     destroy() {
-        if (this.carInstancedMesh.parent) {
-            this.carInstancedMesh.parent.remove(this.carInstancedMesh);
+        for (const part of this.carMeshOrder) {
+            if (this.instancedMeshes[part].parent) {
+                this.instancedMeshes[part].parent.remove(this.instancedMeshes[part]);
+            }
+            this.instancedMeshes[part].geometry.dispose();
+            this.instancedMeshes[part].material.dispose();
         }
-        this.carGeometry.dispose();
-        this.carMaterial.dispose();
         this.cars = [];
         this.agentToCar.clear();
         this.carPoolIndices.clear(); // Nettoyer la nouvelle map
