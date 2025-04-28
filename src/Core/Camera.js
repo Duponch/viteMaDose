@@ -1,8 +1,6 @@
 // src/Core/Camera.js
 import * as THREE from 'three';
 
-// IMPORTANT: Pas de 'let instance = null;' ici, le singleton est géré dans Experience.js
-
 export default class Camera {
     constructor(experience) {
         this.experience = experience;
@@ -13,50 +11,49 @@ export default class Camera {
         // --- État et cibles de suivi (EXISTANT) ---
         this.isFollowing = false;
         this.targetAgent = null;
-        this.followSpeed = 4.0;
+        this.followSpeed = 4.0; // Vitesse de LERP pour le suivi
 
         // --- Contrôle Souris Pendant Suivi (EXISTANT) ---
         this.isMouseLookingActive = false;
         this.mouseYaw = 0;
-        this.mousePitch = 0.3;
+        this.mousePitch = 0.3; // Angle initial (un peu au-dessus)
         this.mouseSensitivityX = 0.005;
         this.mouseSensitivityY = 0.005;
         this.followDistance = 8;
-        this.minPitch = -Math.PI / 2 + 0.1;
-        this.maxPitch = Math.PI / 2 - 0.1;
+        this.minFollowDistance = 3;
+        this.maxFollowDistance = 50;
+        this.minPitch = -Math.PI / 2 + 0.1; // Limite basse (presque verticale vers le bas)
+        this.maxPitch = Math.PI / 2 - 0.1; // Limite haute (presque verticale vers le haut)
         this.isLeftMouseDown = false;
 
-        // --- NOUVEAU : Paramètres de zoom ---
-        this.minFollowDistance = 4;
-        this.maxFollowDistance = 150;
-        this.zoomSpeed = 0.1;
-        // --- FIN NOUVEAU ---
+        // --- Positions et cibles de travail (EXISTANT) ---
+        this.currentPosition = new THREE.Vector3(); // Position actuelle (interpolée)
+        this.desiredCameraPosition = new THREE.Vector3(); // Position cible idéale pour le suivi
+        this.worldAgentPosition = new THREE.Vector3(); // Copie de la position de l'agent
+        this.targetLookAtPosition = new THREE.Vector3(); // Point regardé (légèrement au-dessus de l'agent)
 
-        // --- Vecteurs temporaires (EXISTANT) ---
-        this.currentPosition = new THREE.Vector3();
-        this.targetLookAtPosition = new THREE.Vector3();
-        this.worldAgentPosition = new THREE.Vector3();
-        this.desiredCameraPosition = new THREE.Vector3();
-
-        // --- NOUVEAU : État et cibles pour l'animation "moveToTarget" ---
+        // --- Animation moveToTarget (EXISTANT) ---
         this.isMovingToTarget = false;
-        this.moveStartTime = 0;
+        this.moveStartTime = 0; // Reste utile pour référence, mais pas pour le calcul de progression
+        this.moveElapsedTimeUnscaled = 0; // NOUVEAU: Accumulateur de temps non-échelonné
         this.moveDuration = 1000; // Durée par défaut
-        this.moveStartPosition = new THREE.Vector3();
+        this.moveStartCamPos = new THREE.Vector3();
         this.moveStartLookAt = new THREE.Vector3();
         this.moveToTargetPosition = new THREE.Vector3();
         this.moveLookAtTargetPosition = new THREE.Vector3();
-        this.agentToFollowAfterMove = null; // <-- NOUVELLE PROPRIÉTÉ
-        // --- FIN NOUVEAU ---
+        this.agentToFollowAfterMove = null; // Agent à suivre APRÈS l'animation
+
+        // --- Vecteurs temporaires pour calculs (EXISTANT) ---
+        this._tempV3 = new THREE.Vector3();
+        this._tempV3_2 = new THREE.Vector3();
 
         this.setInstance();
 
+        // Lier les méthodes pour les listeners
         this._boundHandleMouseMove = this._handleMouseMove.bind(this);
         this._boundHandleMouseDown = this._handleMouseDown.bind(this);
         this._boundHandleMouseUp = this._handleMouseUp.bind(this);
-        // --- NOUVEAU : Lier la méthode de la molette ---
         this._boundHandleMouseWheel = this._handleMouseWheel.bind(this);
-        // --- FIN NOUVEAU ---
     }
 
     setInstance() {
@@ -70,11 +67,8 @@ export default class Camera {
         this.scene.add(this.instance);
 
         this.currentPosition.copy(this.instance.position);
-        // Calcul initial du point regardé basé sur la position initiale
-        // Regarde vers l'origine par défaut
         this.targetLookAtPosition.set(0, 0, 0);
         this.instance.lookAt(this.targetLookAtPosition);
-        // Stocker la cible initiale pour l'animation
         this.moveStartLookAt.copy(this.targetLookAtPosition);
     }
 
@@ -83,143 +77,217 @@ export default class Camera {
         this.instance.updateProjectionMatrix();
     }
 
-   /**
-     * Démarre une animation pour déplacer la caméra vers une cible.
-     * @param {THREE.Vector3} targetCamPos Position cible de la caméra.
-     * @param {THREE.Vector3} targetLookAt Point cible que la caméra doit regarder.
-     * @param {number} [duration=1000] Durée de l'animation en millisecondes.
-     * @param {object | null} [agentToFollow=null] L'agent à suivre après la fin de l'animation.
-     */
-   moveToTarget(targetCamPos, targetLookAt, duration = 1000, agentToFollow = null) {
-        console.log(`Camera: Starting move to target. Follow after: ${agentToFollow ? agentToFollow.id : 'None'}`);
+    moveToTarget(targetCamPos, targetLookAt, duration = 1000, agentToFollow = null) {
         this.isMovingToTarget = true;
+        this.moveStartTime = this.experience.time.current; // Temps de départ (pour référence)
+        this.moveElapsedTimeUnscaled = 0; // Réinitialiser l'accumulateur de temps
+        this.moveDuration = duration;
+        this.agentToFollowAfterMove = agentToFollow;
         this.isFollowing = false;
         this.targetAgent = null;
-        this.agentToFollowAfterMove = agentToFollow;
         this._removeEventListeners();
 
-        this.moveStartTime = this.experience.time.current;
-        this.moveDuration = duration > 0 ? duration : 1;
+        this.moveStartCamPos.copy(this.instance.position);
 
-        // Sauvegarder la position et orientation actuelles
-        this.moveStartPosition.copy(this.instance.position);
-        
-        // Calculer le point de départ du regard
-        if (this.experience.controls && this.experience.controls.enabled) {
-            this.moveStartLookAt.copy(this.experience.controls.target);
+        if (this.targetLookAtPosition && this.isFollowing) {
+            this.moveStartLookAt.copy(this.targetLookAtPosition);
         } else {
             const lookDirection = new THREE.Vector3(0, 0, -1).applyQuaternion(this.instance.quaternion);
-            if (this.targetLookAtPosition) {
-                this.moveStartLookAt.copy(this.targetLookAtPosition);
+            // S'assurer que moveStartLookAt est bien défini, sinon utiliser une projection
+            if (this.moveStartLookAt) {
+                 this.moveStartLookAt.copy(this.instance.position).add(lookDirection.multiplyScalar(10));
             } else {
-                this.moveStartLookAt.copy(this.instance.position).add(lookDirection.multiplyScalar(10));
+                 this.moveStartLookAt = this.instance.position.clone().add(lookDirection.multiplyScalar(10));
             }
         }
 
-        // Sauvegarder les positions cibles
         this.moveToTargetPosition.copy(targetCamPos);
         this.moveLookAtTargetPosition.copy(targetLookAt);
 
-        // Désactiver les contrôles pendant la transition
         if (this.experience.controls) {
             this.experience.controls.enabled = false;
+        }
+    }
+
+    _easeInOutCubic(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    update(deltaTime) {
+        // Priorité 1: Animation moveToTarget
+        if (this.isMovingToTarget) {
+            // --- MODIFIÉ : Utilisation du temps non-échelonné --- 
+            // Accumuler le temps réel écoulé depuis la dernière frame
+            this.moveElapsedTimeUnscaled += this.experience.time.unscaledDelta; // Utilise unscaledDelta
+            // Calculer la progression basée sur le temps accumulé et la durée
+            let progress = Math.min(1.0, this.moveElapsedTimeUnscaled / this.moveDuration);
+            // --- FIN MODIFICATION ---
+
+            // Utiliser une fonction d'easing pour une transition plus naturelle
+            progress = this._easeInOutCubic(progress);
+
+            // Interpoler la position et le point regardé
+            const newCamPos = this._tempV3.lerpVectors(this.moveStartCamPos, this.moveToTargetPosition, progress);
+            const newLookAt = this._tempV3_2.lerpVectors(this.moveStartLookAt, this.moveLookAtTargetPosition, progress);
+
+            this.instance.position.copy(newCamPos);
+            this.instance.lookAt(newLookAt);
+            this.currentPosition.copy(newCamPos); // Garder currentPosition synchronisé
+            this.targetLookAtPosition.copy(newLookAt); // Garder targetLookAtPosition synchronisé
+
+            // Si l'animation est terminée
+            if (progress >= 1.0) {
+                this.isMovingToTarget = false;
+                this.moveElapsedTimeUnscaled = 0; // Nettoyer l'accumulateur
+                console.log(`Camera: Move finished. ${this.agentToFollowAfterMove ? 'Starting follow for ' + this.agentToFollowAfterMove.id : 'Move complete, no follow.'}`);
+
+                // --- Transition directe vers le suivi (code précédent) --- 
+                if (this.agentToFollowAfterMove) {
+                    this.targetAgent = this.agentToFollowAfterMove;
+                    this.agentToFollowAfterMove = null;
+                    this.isFollowing = true;
+                    this.isMouseLookingActive = true;
+                    // --- AJOUT : Assurer que le clic souris est considéré comme relâché --- 
+                    this.isLeftMouseDown = false; 
+                    // --- FIN AJOUT ---
+                    this._addEventListeners();
+
+                    const agentPos = this.targetAgent.position;
+                    const camOffset = this._tempV3.copy(this.instance.position).sub(agentPos);
+                    
+                    this.followDistance = camOffset.length();
+                    camOffset.normalize();
+
+                    this.mousePitch = Math.asin(camOffset.y);
+                    this.mousePitch = Math.max(this.minPitch, Math.min(this.maxPitch, this.mousePitch));
+
+                    this.mouseYaw = Math.atan2(-camOffset.x, -camOffset.z);
+
+                    console.log(`Camera: Follow initialized from transition end. Yaw: ${this.mouseYaw.toFixed(2)}, Pitch: ${this.mousePitch.toFixed(2)}, Dist: ${this.followDistance.toFixed(2)}`);
+
+                } else {
+                    if (this.experience.controls) {
+                        this.experience.controls.enabled = true;
+                        this.experience.controls.target.copy(this.moveLookAtTargetPosition);
+                        console.log("Camera: OrbitControls re-enabled.");
+                    }
+                }
+            }
+        }
+        // Priorité 2: Suivi d'agent (si pas en animation moveToTarget)
+        else if (this.isFollowing && this.targetAgent) {
+            // --- MODIFIÉ : Utilisation du temps non-échelonné pour le LERP --- 
+            // Le LERP doit aussi être fluide même en pause/ralenti
+            const unscaledDeltaTimeSeconds = this.experience.time.unscaledDelta / 1000.0;
+            this.updateFollowLogic(unscaledDeltaTimeSeconds);
+            // --- FIN MODIFICATION ---
+        }
+    }
+
+    // --- Logique de suivi d'agent (utilise maintenant le delta non-échelonné) ---
+    updateFollowLogic(unscaledDeltaTimeSeconds) {
+        if (!this.targetAgent) return;
+
+        this.worldAgentPosition.copy(this.targetAgent.position);
+
+        const lookAtHeightOffset = this.targetAgent.isDriving ? 1.5 : 1.0;
+        this.targetLookAtPosition.copy(this.worldAgentPosition).add(new THREE.Vector3(0, lookAtHeightOffset, 0));
+
+        const desiredOffset = new THREE.Vector3();
+        desiredOffset.x = Math.sin(this.mouseYaw) * Math.cos(this.mousePitch);
+        desiredOffset.y = Math.sin(this.mousePitch);
+        desiredOffset.z = Math.cos(this.mouseYaw) * Math.cos(this.mousePitch);
+        desiredOffset.multiplyScalar(this.followDistance);
+
+        this.desiredCameraPosition.copy(this.worldAgentPosition).add(desiredOffset);
+
+        // Interpolation LISSE vers la position désirée en utilisant le temps non-échelonné
+        // Évite que le suivi ralentisse ou s'arrête avec la vitesse du jeu
+        if (unscaledDeltaTimeSeconds > 0) {
+            const lerpFactor = 1.0 - Math.exp(-this.followSpeed * unscaledDeltaTimeSeconds);
+            this.currentPosition.lerp(this.desiredCameraPosition, lerpFactor);
+        } else {
+            // Si le temps n'avance pas (cas extrême), on peut snapper ou ne rien faire
+            this.currentPosition.copy(this.desiredCameraPosition); // Snap pour éviter de rester bloqué
+        }
+
+        this.instance.position.copy(this.currentPosition);
+        this.instance.lookAt(this.targetLookAtPosition);
+
+        if (this.experience.controls) {
+            this.experience.controls.target.copy(this.targetLookAtPosition);
         }
     }
 
     followAgent(agent) {
         if (!agent) return;
 
-        console.log(`Camera: Initializing follow for agent ${agent.id}.`);
+        if (this.isFollowing && this.targetAgent === agent) {
+            console.log(`Camera: Already following agent ${agent.id}. No changes.`);
+            return;
+        }
+
+        console.log(`Camera: Initializing INSTANT follow for agent ${agent.id}.`);
         this.targetAgent = agent;
         this.isFollowing = true;
         this.isMovingToTarget = false;
+        this.moveElapsedTimeUnscaled = 0; // Nettoyer au cas où
         this.agentToFollowAfterMove = null;
         this.isMouseLookingActive = true;
         this.isLeftMouseDown = false;
 
-        // Désactiver OrbitControls explicitement
         if (this.experience.controls) {
             this.experience.controls.enabled = false;
         }
 
-        // Obtenir la position de l'agent
         this.worldAgentPosition.copy(this.targetAgent.position);
 
-        // Calculer la cible du regard (légèrement au-dessus de l'agent)
-        this.targetLookAtPosition.copy(this.worldAgentPosition).add(new THREE.Vector3(0, 1.0, 0));
+        const lookAtHeightOffset = this.targetAgent.isDriving ? 1.5 : 1.0;
+        this.targetLookAtPosition.copy(this.worldAgentPosition).add(new THREE.Vector3(0, lookAtHeightOffset, 0));
 
-        // Utiliser l'orientation de l'agent pour positionner la caméra derrière lui
-        const agentOrientation = this.targetAgent.orientation;
-        const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(agentOrientation);
-        
-        // Initialiser la distance de suivi à une valeur par défaut
-        this.followDistance = 8.0; // <--- Valeur par défaut au début du suivi
-        this.mousePitch = 0.3; // Angle de vue initial standard
-        this.mouseYaw = Math.atan2(backward.x, backward.z); // Aligné avec l'orientation de l'agent
+        const initialOffset = new THREE.Vector3();
+        initialOffset.x = Math.sin(this.mouseYaw) * Math.cos(this.mousePitch);
+        initialOffset.y = Math.sin(this.mousePitch);
+        initialOffset.z = Math.cos(this.mouseYaw) * Math.cos(this.mousePitch);
+        initialOffset.multiplyScalar(this.followDistance);
 
-        // Calculer la position initiale de la caméra
-        const offsetX = this.followDistance * Math.sin(this.mouseYaw) * Math.cos(this.mousePitch);
-        const offsetY = this.followDistance * Math.sin(this.mousePitch);
-        const offsetZ = this.followDistance * Math.cos(this.mouseYaw) * Math.cos(this.mousePitch);
-        
-        // Calculer la position désirée
-        this.desiredCameraPosition.copy(this.targetLookAtPosition).add(new THREE.Vector3(offsetX, offsetY, offsetZ));
-        
-        // Utiliser une interpolation douce pour la transition initiale
-        const currentToDesired = new THREE.Vector3().subVectors(this.desiredCameraPosition, this.instance.position);
-        const distanceToMove = currentToDesired.length();
-        
-        // Si la distance est significative, utiliser une interpolation
-        if (distanceToMove > 0.1) {
-            // Utiliser une interpolation rapide mais pas instantanée
-            const lerpFactor = 0.3; // Ajuster cette valeur pour contrôler la vitesse de transition
-            this.currentPosition.lerp(this.desiredCameraPosition, lerpFactor);
-        } else {
-            // Si très proche, copier directement
-            this.currentPosition.copy(this.desiredCameraPosition);
-        }
-        
-        // Appliquer la position et regarder la cible
+        this.desiredCameraPosition.copy(this.worldAgentPosition).add(initialOffset);
+
+        this.currentPosition.copy(this.desiredCameraPosition);
         this.instance.position.copy(this.currentPosition);
         this.instance.lookAt(this.targetLookAtPosition);
 
-        // Mettre à jour la cible des OrbitControls
         if (this.experience.controls) {
             this.experience.controls.target.copy(this.targetLookAtPosition);
         }
 
-        // Ajouter les listeners pour le contrôle souris
         this._addEventListeners();
-        console.log(`Camera: Now following agent ${agent.id} from standardized position.`);
+        console.log(`Camera: Now INSTANTLY following agent ${agent.id}.`);
     }
 
     stopFollowing() {
-        // Se déclenche si on désélectionne l'agent ou si l'on sélectionne autre chose
-        if (!this.isFollowing && !this.isMovingToTarget) {
-            // Si ni en suivi, ni en transition, vérifier quand même l'état des contrôles
+        const wasFollowing = this.isFollowing;
+        const wasMoving = this.isMovingToTarget;
+
+        if (!wasFollowing && !wasMoving) {
             if (this.experience.controls && !this.experience.controls.enabled) {
-                console.log("Camera.stopFollowing: Controls were disabled, re-enabling.");
-                 this.experience.controls.enabled = true;
+                this.experience.controls.enabled = true;
             }
-            return; // Rien à arrêter
+            return;
         }
 
-        console.log("Camera: Stopping follow/move sequence.");
         this.targetAgent = null;
         this.isFollowing = false;
+        this.isMovingToTarget = false;
+        this.moveElapsedTimeUnscaled = 0; // Nettoyer
         this.isMouseLookingActive = false;
-        this.isLeftMouseDown = false;
-        this.isMovingToTarget = false; // Assurer que l'animation moveToTarget est aussi arrêtée
-        this.agentToFollowAfterMove = null; // Nettoyer l'agent potentiel
-        this._removeEventListeners(); // Retirer les listeners souris
+        this.agentToFollowAfterMove = null;
+        this._removeEventListeners();
 
-        // Réactiver OrbitControls
-        if (this.experience.controls) {
-             this.experience.controls.enabled = true;
-             console.log("Camera.stopFollowing: OrbitControls enabled.");
-             // Peut-être recentrer la cible des contrôles ?
-             // this.experience.controls.target.copy(this.instance.position).add(this.instance.getWorldDirection(new THREE.Vector3()).multiplyScalar(10));
-             // this.experience.controls.update(); // Forcer MAJ si besoin
+        if (wasFollowing || (wasMoving && !this.agentToFollowAfterMove)) {
+            if (this.experience.controls) {
+                this.experience.controls.enabled = true;
+            }
         }
     }
 
@@ -227,175 +295,50 @@ export default class Camera {
         document.addEventListener('mousemove', this._boundHandleMouseMove, false);
         document.addEventListener('mousedown', this._boundHandleMouseDown, false);
         document.addEventListener('mouseup', this._boundHandleMouseUp, false);
-        // --- NOUVEAU : Ajouter l'écouteur de la molette ---
-        window.addEventListener('wheel', this._boundHandleMouseWheel);
-        // --- FIN NOUVEAU ---
+        window.addEventListener('wheel', this._boundHandleMouseWheel, { passive: false });
     }
 
     _removeEventListeners() {
         document.removeEventListener('mousemove', this._boundHandleMouseMove, false);
         document.removeEventListener('mousedown', this._boundHandleMouseDown, false);
         document.removeEventListener('mouseup', this._boundHandleMouseUp, false);
-        // --- NOUVEAU : Retirer l'écouteur de la molette ---
         window.removeEventListener('wheel', this._boundHandleMouseWheel);
-        // --- FIN NOUVEAU ---
     }
 
     _handleMouseDown(event) {
-        // Modifié : Ne s'active que si on suit activement (pas pendant moveToTarget)
-        if (this.isMouseLookingActive && this.isFollowing && event.button === 0) {
+        const targetElement = event.target;
+        const isUIInteraction = targetElement.closest('[data-ui-interactive="true"]');
+
+        if (this.isFollowing && event.button === 0 && !isUIInteraction) { // Bouton gauche
             this.isLeftMouseDown = true;
+            event.stopPropagation();
         }
     }
 
     _handleMouseUp(event) {
-       // Modifié : Ne s'active que si on suit activement
-        if (this.isMouseLookingActive && this.isFollowing && event.button === 0) {
+        if (event.button === 0) { // Bouton gauche
             this.isLeftMouseDown = false;
         }
     }
 
     _handleMouseMove(event) {
-        // Modifié : Ne s'active que si on suit activement ET clic enfoncé
-        if (!this.isMouseLookingActive || !this.isFollowing || !this.isLeftMouseDown) {
-            return;
+        if (this.isFollowing && this.isLeftMouseDown) {
+            this.mouseYaw -= event.movementX * this.mouseSensitivityX;
+            this.mousePitch -= event.movementY * this.mouseSensitivityY;
+            this.mousePitch = Math.max(this.minPitch, Math.min(this.maxPitch, this.mousePitch));
         }
-        // ... (calcul yaw/pitch existant) ...
-        const deltaX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
-        const deltaY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
-
-        this.mouseYaw -= deltaX * this.mouseSensitivityX;
-        this.mousePitch -= deltaY * this.mouseSensitivityY;
-        this.mousePitch = THREE.MathUtils.clamp(this.mousePitch, this.minPitch, this.maxPitch);
     }
 
     _handleMouseWheel(event) {
-        if (!this.isFollowing || !this.targetAgent) return;
-        
-        // Ajuster la distance de suivi en fonction de la molette
-        const delta = event.deltaY * this.zoomSpeed;
-        this.followDistance = THREE.MathUtils.clamp(
-            this.followDistance + delta,
-            this.minFollowDistance,
-            this.maxFollowDistance
-        );
-    }
+        const targetElement = event.target;
+        const isUIInteraction = targetElement.closest('[data-ui-interactive="true"]');
 
-    // --- MODIFIÉ : Logique de suivi d'agent ---
-    updateFollowLogic(deltaTimeSeconds) {
-        if (!this.targetAgent) return;
+        if (this.isFollowing && !isUIInteraction) {
+            event.preventDefault();
 
-        // Mettre à jour la position de l'agent (utiliser sa dernière position connue si en pause)
-        this.worldAgentPosition.copy(this.targetAgent.position);
-        
-        // La cible du regard est légèrement au-dessus de l'agent
-        this.targetLookAtPosition.copy(this.worldAgentPosition).add(new THREE.Vector3(0, 1.0, 0));
-
-        // Calcul de la position désirée basée sur yaw/pitch/distance (modifiés par la souris même en pause)
-        const offsetX = this.followDistance * Math.sin(this.mouseYaw) * Math.cos(this.mousePitch);
-        const offsetY = this.followDistance * Math.sin(this.mousePitch);
-        const offsetZ = this.followDistance * Math.cos(this.mouseYaw) * Math.cos(this.mousePitch);
-        
-        // Calculer la position désirée de la caméra
-        this.desiredCameraPosition.copy(this.targetLookAtPosition).add(new THREE.Vector3(offsetX, offsetY, offsetZ));
-
-        // --- Gestion de la pause --- 
-        // Utiliser TOUJOURS unscaledDelta pour l'interpolation pour un mouvement fluide même en pause
-        const realDeltaTime = this.experience.time.unscaledDelta / 1000.0;
-
-        // Vérifier realDeltaTime pour éviter division par zéro si time.unscaledDelta est 0 (ne devrait pas arriver)
-        if (realDeltaTime > 0) {
-            const lerpAlpha = 1.0 - Math.exp(-this.followSpeed * realDeltaTime);
-            this.currentPosition.lerp(this.desiredCameraPosition, lerpAlpha);
-        } else {
-            // Fallback si realDeltaTime est 0
-            this.currentPosition.copy(this.desiredCameraPosition);
+            const zoomFactor = 0.1;
+            this.followDistance += event.deltaY * zoomFactor;
+            this.followDistance = Math.max(this.minFollowDistance, Math.min(this.maxFollowDistance, this.followDistance));
         }
-        // --- Fin Gestion de la pause (simplifiée) ---
-
-        // Appliquer la position et regarder la cible
-        this.instance.position.copy(this.currentPosition);
-        this.instance.lookAt(this.targetLookAtPosition);
-
-        // Mettre à jour la cible des OrbitControls (utile si on arrête le suivi)
-        if (this.experience.controls) {
-            this.experience.controls.target.copy(this.targetLookAtPosition);
-        }
-    }
-    // --- FIN MODIFICATION ---
-
-    // --- MODIFIÉ : Boucle de mise à jour principale ---
-    update(deltaTime) {
-        // Priorité 1: Animation moveToTarget
-        if (this.isMovingToTarget) {
-            // Utiliser le temps non modifié pour la progression de l'animation
-            const currentTime = this.experience.time.current; // Garder le temps absolu
-            const elapsedTime = currentTime - this.moveStartTime;
-            let progress = Math.min(1.0, elapsedTime / this.moveDuration);
-
-            // Utiliser une fonction d'easing pour une transition plus naturelle
-            progress = this._easeInOutCubic(progress);
-
-            // Interpolation position et lookAt
-            this.instance.position.lerpVectors(this.moveStartPosition, this.moveToTargetPosition, progress);
-            const currentLookAt = new THREE.Vector3().lerpVectors(this.moveStartLookAt, this.moveLookAtTargetPosition, progress);
-            this.instance.lookAt(currentLookAt);
-
-            // Mettre à jour la cible des OrbitControls pendant l'animation
-            if (this.experience.controls) {
-                this.experience.controls.target.copy(currentLookAt);
-            }
-
-            // Fin de l'animation
-            if (progress >= 1.0) {
-                this.isMovingToTarget = false;
-                console.log("Camera: Move to target finished.");
-
-                // Assurer la position et la cible finales
-                this.instance.position.copy(this.moveToTargetPosition);
-                this.instance.lookAt(this.moveLookAtTargetPosition);
-                
-                // Mettre à jour la position actuelle pour une transition fluide
-                this.currentPosition.copy(this.moveToTargetPosition);
-                
-                if (this.experience.controls) {
-                    this.experience.controls.target.copy(this.moveLookAtTargetPosition);
-                }
-
-                // Démarrer le suivi si un agent est spécifié
-                if (this.agentToFollowAfterMove) {
-                    console.log(`Camera: Transition finished, starting follow for agent ${this.agentToFollowAfterMove.id}`);
-                    const agentToFollow = this.agentToFollowAfterMove;
-                    this.agentToFollowAfterMove = null;
-                    
-                    // Initialiser le suivi avec une transition douce
-                    this.followAgent(agentToFollow);
-                } else {
-                    // Si aucun agent n'est à suivre, réactiver OrbitControls
-                    console.log("Camera: Transition finished, no agent to follow, enabling OrbitControls.");
-                    if (this.experience.controls) {
-                        this.experience.controls.enabled = true;
-                        this.experience.controls.target.copy(this.moveLookAtTargetPosition);
-                    }
-                }
-            }
-        }
-        // Priorité 2: Suivi d'agent
-        else if (this.isFollowing && this.targetAgent) {
-            // On passe deltaTime ici, mais updateFollowLogic utilise maintenant unscaledDelta en interne
-            const deltaTimeSeconds = deltaTime / 1000.0;
-            this.updateFollowLogic(deltaTimeSeconds);
-        }
-    }
-
-    _easeInOutCubic(t) {
-        return t < 0.5
-            ? 4 * t * t * t
-            : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    }
-
-    destroy() {
-        this._removeEventListeners();
-        console.log("Camera listeners removed.");
     }
 }

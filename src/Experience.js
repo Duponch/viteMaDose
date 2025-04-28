@@ -550,85 +550,84 @@ export default class Experience extends EventTarget {
 
     // Sélectionne un agent et active le suivi caméra/tooltip
     selectAgent(agent) {
-        if (!agent) return;
-        if (this.selectedAgent === agent) return; // Déjà sélectionné
-
-        this.deselectBuilding(); // Désélectionner bâtiment avant
-
-        const agentIsInside = agent.currentState === 'AT_HOME' || agent.currentState === 'AT_WORK';
-        const citizenManager = this.world?.cityManager?.citizenManager;
-
-        if (agentIsInside && citizenManager) {
-            // --- CAS: AGENT À L'INTÉRIEUR ---
-            const buildingId = agent.currentState === 'AT_HOME' ? agent.homeBuildingId : agent.workBuildingId;
-            const buildingInfo = citizenManager.getBuildingInfo(buildingId);
-
-            if (buildingInfo) {
-                console.log(`Agent ${agent.id} is inside ${buildingInfo.type} ${buildingId}. Moving camera above building.`);
-                this.selectedAgent = agent;
-                this.isFollowingAgent = false;
-                this.controls.enabled = false; // Désactiver les contrôles pendant la transition
-
-                const buildingPos = buildingInfo.position;
-                const camTargetPos = new THREE.Vector3(buildingPos.x, buildingPos.y + 60, buildingPos.z + 40);
-                const camLookAt = buildingPos.clone();
-
-                // Utiliser moveToTarget pour une transition fluide
-                this.camera.moveToTarget(camTargetPos, camLookAt, 1200, null);
-
-                if (this.tooltipElement) {
-                    this.updateTooltipContent(agent);
-                }
+        if (!agent) {
+            console.log("Experience: Deselecting agent.");
+            this.selectedAgent = null;
+            this.camera.stopFollowing(); // Arrête le suivi et réactive OrbitControls
+            // Mettre à jour l'UI pour désélectionner
+            if (this.ui) {
+                this.ui.setSelectedAgentInfo(null);
             } else {
-                // Fallback: Bâtiment non trouvé, transition douce vers l'agent
-                console.warn(`Could not find building info for ${buildingId}. Falling back to agent follow.`);
-                this.selectedAgent = agent;
-                this.isFollowingAgent = false;
-                this.controls.enabled = false;
+                console.warn("Experience.selectAgent: this.ui is not defined when trying to deselect.");
+            }
+            return;
+        }
 
-                const agentPos = agent.position.clone();
-                const camTargetPos = agentPos.clone().add(new THREE.Vector3(0, 15, 10));
-                this.camera.moveToTarget(camTargetPos, agentPos, 1000, agent);
+        console.log(`Experience: Selecting agent ${agent.id}`);
+        this.selectedAgent = agent;
+        if (this.ui) {
+            this.ui.setSelectedAgentInfo(agent); // Mettre à jour l'UI
+        } else {
+            console.warn("Experience.selectAgent: this.ui is not defined when trying to select.");
+        }
 
-                if (this.tooltipElement) {
-                    this.updateTooltipContent(agent);
-                }
+        // --- MODIFIÉ: Handle Agent in Car ---
+        let agentPosition, agentOrientation;
+        let lookAtHeightOffset = 1.0; // Default for pedestrians
+        let followDistance = 8.0; // Default follow distance
+        let isDriving = agent.isDriving; // Check if agent is driving
+        let car = null; // Garder une référence à la voiture si trouvée
+
+        if (isDriving && this.world.carManager) {
+            car = this.world.carManager.getCarByAgentId(agent.id);
+            if (car) {
+                agentPosition = car.position.clone(); // Use car's position
+                agentOrientation = car.orientation.clone(); // Use car's orientation
+                lookAtHeightOffset = 1.2; // Légèrement plus bas qu'avant (1.5)
+                followDistance = 9.0;    // Légèrement plus proche qu'avant (10.0)
+                console.log(`Selecting agent in car ${car.id}. Using car position and orientation.`);
+            } else {
+                // Fallback if car not found
+                console.warn(`Agent ${agent.id} isDriving=true but no car found! Falling back to agent pos/ori.`);
+                isDriving = false; // Traiter comme piéton si la voiture est introuvable
+                agentPosition = agent.position.clone();
+                agentOrientation = agent.orientation ? agent.orientation.clone() : new THREE.Quaternion();
             }
         } else {
-            // --- CAS: AGENT À L'EXTÉRIEUR ---
-            console.log(`Agent ${agent.id} is outside. Starting smooth transition to follow.`);
-            this.selectedAgent = agent;
-            this.isFollowingAgent = false;
-            this.controls.enabled = false;
-
-            // Définir une distance de suivi initiale souhaitée
-            const initialFollowDistance = 8.0; // <--- Distance initiale fixe
-            const followHeight = 3.0;
-            const lookAtOffset = 1.0;
-
-            const agentPos = agent.position.clone();
-            const agentOrientation = agent.orientation.clone();
-
-            // Vecteur "arrière" relatif à l'orientation de l'agent
-            const backward = new THREE.Vector3(0, 0, 1).applyQuaternion(agentOrientation);
-            const up = new THREE.Vector3(0, 1, 0);
-
-            // Position finale souhaitée de la caméra calculée avec la distance initiale
-            const targetCamPos = agentPos.clone()
-                .addScaledVector(backward, initialFollowDistance) // Utilise la distance initiale
-                .addScaledVector(up, followHeight);
-
-            // Point que la caméra doit regarder
-            const targetLookAt = agentPos.clone().addScaledVector(up, lookAtOffset);
-
-            // Lancer l'animation de la caméra
-            const transitionDuration = 800;
-            this.camera.moveToTarget(targetCamPos, targetLookAt, transitionDuration, agent);
-
-            if (this.tooltipElement) {
-                this.updateTooltipContent(agent);
-            }
+            // Standard pedestrian selection
+            isDriving = false;
+            agentPosition = agent.position.clone();
+            agentOrientation = agent.orientation ? agent.orientation.clone() : new THREE.Quaternion();
         }
+        // --- FIN MODIFICATION ---
+
+        // Le point que la caméra regarde (centre de l'agent/voiture + offset vertical)
+        const lookAtPoint = agentPosition.clone().add(new THREE.Vector3(0, lookAtHeightOffset, 0));
+
+        // Calcul de la position cible de la caméra
+        const backward = new THREE.Vector3(0, 0, 1); // Z positif est "derrière" dans le repère local
+        backward.applyQuaternion(agentOrientation);
+        backward.normalize();
+
+        // Positionner la caméra derrière et légèrement en hauteur
+        const cameraOffsetDirection = backward.clone(); // Direction derrière l'agent/voiture
+        const verticalOffsetRatio = isDriving ? 0.20 : 0.2; // Ajuster ratio hauteur/distance si besoin (gardons 0.2 pour l'instant)
+        cameraOffsetDirection.add(new THREE.Vector3(0, verticalOffsetRatio, 0));
+        cameraOffsetDirection.normalize(); // Normaliser la direction finale de l'offset
+
+        const cameraOffset = cameraOffsetDirection.multiplyScalar(followDistance);
+
+        // --- MODIFICATION CLÉ : Calculer depuis agentPosition --- 
+        // Calculer la position par rapport à la position DE BASE de l'agent/voiture
+        const targetCamPos = agentPosition.clone().add(cameraOffset);
+        // --- FIN MODIFICATION CLÉ ---
+
+        // Démarrer l'animation de la caméra
+        // Elle visera lookAtPoint depuis targetCamPos
+        this.camera.moveToTarget(targetCamPos, lookAtPoint, 1000, agent);
+
+        console.log(`Camera target position: ${targetCamPos.x.toFixed(2)}, ${targetCamPos.y.toFixed(2)}, ${targetCamPos.z.toFixed(2)}`);
+        console.log(`Camera lookAt point: ${lookAtPoint.x.toFixed(2)}, ${lookAtPoint.y.toFixed(2)}, ${lookAtPoint.z.toFixed(2)}`);
     }
 
     // Désélectionne l'agent et désactive le suivi
@@ -656,6 +655,11 @@ export default class Experience extends EventTarget {
 
         // Les contrôles seront réactivés automatiquement à la fin de la transition
         // dans la méthode update de la caméra
+        if (this.ui) {
+            this.ui.setSelectedAgentInfo(null); // Met à jour l'UI
+        } else {
+             console.warn("Experience.deselectAgent: this.ui is not defined.");
+        }
     }
 
     // Sélectionne un bâtiment, active le highlight et le tooltip bâtiment
@@ -1151,11 +1155,6 @@ export default class Experience extends EventTarget {
         }));
     }
 
-    /**
-     * Bascule la visibilité d'un sous-type spécifique dans une catégorie. (Reste inchangé)
-     * @param {string} categoryName - Nom de la catégorie (ex: 'plot', 'district').
-     * @param {string} subTypeName - Nom du sous-type (ex: 'house', 'residential').
-     */
     toggleSubLayerVisibility(categoryName, subTypeName) {
         if (!this.debugLayerVisibility.hasOwnProperty(categoryName) ||
             !this.debugLayerVisibility[categoryName].hasOwnProperty(subTypeName) ||

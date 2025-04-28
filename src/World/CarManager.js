@@ -238,4 +238,13 @@ export default class CarManager {
         }
         return undefined;
     }
+
+    /**
+     * Récupère l'instance Car associée à un agentId.
+     * @param {string} agentId - L'ID de l'agent.
+     * @returns {Car | undefined} L'instance Car ou undefined si non trouvée.
+     */
+    getCarByAgentId(agentId) {
+        return this.agentToCar.get(agentId);
+    }
 }
