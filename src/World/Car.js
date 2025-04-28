@@ -189,8 +189,17 @@ export default class Car {
                 const forwardVector = new THREE.Vector3(0, 0, 1);
                 this._lookDirection.copy(direction);
                 this._tempQuaternion.setFromUnitVectors(forwardVector, this._lookDirection);
-                // Utiliser une interpolation plus rapide car les pas sont petits
-                this.quaternion.slerp(this._tempQuaternion, 0.3); // Facteur plus grand pour petits pas
+                
+                // Calculer un facteur de slerp basé sur le temps et la vitesse
+                const baseRotationSpeed = 20; // Vitesse de rotation de base
+                const speedFactor = Math.min(1.0, this.speed / 20.0); // Facteur basé sur la vitesse (normalisé)
+                const timeBasedFactor = 1.0 - Math.exp(-baseRotationSpeed * timeStep * (1.0 + speedFactor));
+                
+                // Appliquer une courbe d'accélération/décélération pour plus de fluidité
+                const smoothFactor = Math.pow(timeBasedFactor, 1.5); // Courbe quadratique pour plus de douceur
+                
+                // Appliquer la rotation avec le nouveau facteur
+                this.quaternion.slerp(this._tempQuaternion, smoothFactor);
             }
 
             // Vérifier si on a atteint la cible APRES ce petit mouvement
