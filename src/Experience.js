@@ -384,15 +384,18 @@ export default class Experience extends EventTarget {
                 // --- Vérifier si une Voiture a été cliquée --- // <<< NOUVEAU BLOC
                 else if (carManager && firstIntersect.instanceId !== undefined && clickedObject instanceof THREE.InstancedMesh) {
                     const instanceId = firstIntersect.instanceId;
-                    const agentInCar = carManager.getAgentByInstanceId(instanceId); // Récupérer l'agent via CarManager
+                    const agentId = carManager.getAgentIdByInstanceId(instanceId); // Récupérer l'agent via CarManager
 
-                    if (agentInCar) {
-                        this.deselectBuilding(); // Désélectionner bâtiment
-                        this.selectAgent(agentInCar); // Sélectionner l'agent DANS la voiture
-                        clickedOnSomething = true;
-                        console.log(`Clic sur voiture (instance ${instanceId}), agent sélectionné: ${agentInCar.id}`);
-                    } else {
-                        console.log(`Clic sur voiture (instance ${instanceId}), mais aucun agent associé trouvé.`);
+                    if (agentId !== undefined) {
+                        const clickedAgent = agentManager.getAgentById(agentId);
+                        if (clickedAgent) {
+                            this.deselectBuilding(); // Désélectionner bâtiment
+                            this.selectAgent(clickedAgent); // Sélectionner l'agent DANS la voiture
+                            clickedOnSomething = true;
+                            console.log(`Clic sur voiture (instance ${instanceId}), agent sélectionné: ${agentId}`);
+                        } else {
+                            console.log(`Clic sur voiture (instance ${instanceId}), mais aucun agent associé trouvé.`);
+                        }
                     }
                 }
                 // --- Fin Vérification Voiture ---

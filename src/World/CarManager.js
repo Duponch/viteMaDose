@@ -21,13 +21,8 @@ export default class CarManager {
         this.carMeshOrder = [
             'body', 'windows', 'wheels', 'hubcaps', 'lights', 'rearLights'
         ];
-        for (const part of this.carMeshOrder) {            
-            const { geometry, material: originalMaterial } = carGeoms[part];
-
-            // Cloner le matériau pour ne pas affecter d'autres usages potentiels
-            const material = originalMaterial.clone(); 
-            material.side = THREE.DoubleSide; // <<< AJOUT IMPORTANT
-
+        for (const part of this.carMeshOrder) {
+            const { geometry, material } = carGeoms[part];
             const mesh = new THREE.InstancedMesh(geometry, material, this.maxCars);
             mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
             mesh.castShadow = true;
@@ -37,8 +32,10 @@ export default class CarManager {
             mesh.renderOrder = 1;
             mesh.userData.isCarPart = true; // Marqueur pour identification
             this.scene.add(mesh);
-            mesh.computeBoundingSphere(); // Calculer la sphère englobante
-            mesh.computeBoundingBox(); // Calculer la boîte englobante
+            mesh.computeBoundingSphere(); // Calculer la sphère englobante (gardé pour info)
+            mesh.computeBoundingBox(); // Calculer la boîte englobante (gardé pour info)
+            // <<< NOUVEAU: Forcer une grande BoundingSphere pour le Raycaster >>>
+            mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 10000); // Centre à (0,0,0), rayon très grand
             this.instancedMeshes[part] = mesh;
         }
 
