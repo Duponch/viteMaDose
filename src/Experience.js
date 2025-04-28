@@ -1268,18 +1268,23 @@ export default class Experience extends EventTarget {
         const currentGameTime = this.time.elapsed; // Temps JEU total (scaled) en ms
         const currentHour = this.world?.environment?.getCurrentHour() ?? 12; // Heure JEU actuelle
 
-        // --- 1. Mettre à jour la logique de Contrôles/Caméra (si non suivie) ---
-        if (!this.isFollowingAgent && this.controls?.enabled) {
-            this.controls.update();
-        }
-        // La caméra gère son propre update pour le suivi ou moveToTarget
-        if (this.camera) this.camera.update(deltaTime);
+        // --- ORDRE MODIFIÉ ---
 
-        // --- 2. Mettre à jour le Monde ---
+        // --- 1. Mettre à jour le Monde (MAINTENANT EN PREMIER) ---
         if (this.world) {
-            // Appel unique à la méthode update du monde
+            // Appel unique à la méthode update du monde (met à jour les voitures, etc.)
             this.world.update();
         }
+
+        // --- 2. Mettre à jour la logique de Contrôles/Caméra (MAINTENANT APRES LE MONDE) ---
+        if (!this.isFollowingAgent && this.controls?.enabled) {
+            this.controls.update(); // Pour les contrôles Orbit standard
+        }
+        // La caméra gère son propre update pour le suivi ou moveToTarget.
+        // Elle lira maintenant la position mise à jour par world.update()
+        if (this.camera) this.camera.update(deltaTime);
+
+        // --- FIN ORDRE MODIFIÉ ---
 
         // --- 3. Mettre à jour les UI ---
         if (this.timeUI) this.timeUI.update(); // Utilise environment.cycleTime qui est MAJ par env.update()
