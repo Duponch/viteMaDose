@@ -38,7 +38,7 @@ export default class Experience extends EventTarget {
         this.isDebugMode = false;
         this.timeUI = new TimeUI(this);
         this.timeControlUI = new TimeControlUI(this);
-		this.agentStatsUI = new AgentStatsUI(this); // <--- INSTANCIER LA NOUVELLE UI
+        this.agentStatsUI = new AgentStatsUI(this); // <--- INSTANCIER LA NOUVELLE UI
         this.controls = new OrbitControls(this.camera.instance, this.canvas);
         this.controls.enableDamping = true;
         this.stats = new Stats();
@@ -52,9 +52,9 @@ export default class Experience extends EventTarget {
         this.isFollowingAgent = false;
         this.tooltipElement = document.getElementById('agent-tooltip'); // Assurez-vous que cet ID existe
         if (this.tooltipElement) {
-			this.tooltipElement.dataset.uiInteractive = 'true';
-		}	
-		this.tooltipTargetPosition = new THREE.Vector3();
+            this.tooltipElement.dataset.uiInteractive = 'true';
+        }
+        this.tooltipTargetPosition = new THREE.Vector3();
 
         // --- Sélection Bâtiment ---
         this.selectedBuildingInfo = null;
@@ -64,9 +64,9 @@ export default class Experience extends EventTarget {
         this.highlightMesh = null;
         this.buildingTooltipElement = document.getElementById('building-tooltip'); // Assurez-vous que cet ID existe
         if (this.buildingTooltipElement) {
-			this.buildingTooltipElement.dataset.uiInteractive = 'true'; // <-- AJOUTER
-		}
-		this.buildingTooltipTargetPosition = new THREE.Vector3();
+            this.buildingTooltipElement.dataset.uiInteractive = 'true'; // <-- AJOUTER
+        }
+        this.buildingTooltipTargetPosition = new THREE.Vector3();
 
         // --- NOUVELLE STRUCTURE : État de Visibilité des Calques et Sous-Calques Debug ---
         this.debugLayerVisibility = {
@@ -158,14 +158,14 @@ export default class Experience extends EventTarget {
         window.debugTools = DebugTools;
     }
 
-	/**
+    /**
      * Helper function to calculate and apply clamped tooltip position.
      * @param {HTMLElement} tooltipElement - The tooltip DOM element.
      * @param {THREE.Vector3} targetPosition3D - The 3D world position to track.
      */
     _updateTooltipPosition(tooltipElement, targetPosition3D) {
         if (!tooltipElement || !targetPosition3D) {
-             if (tooltipElement && tooltipElement.style.display !== 'none') tooltipElement.style.display = 'none';
+            if (tooltipElement && tooltipElement.style.display !== 'none') tooltipElement.style.display = 'none';
             return;
         }
 
@@ -186,7 +186,7 @@ export default class Experience extends EventTarget {
         // Sauvegarde de l'état actuel de display pour le restaurer si la mesure échoue
         const initialDisplay = tooltipElement.style.display;
         tooltipElement.style.visibility = 'hidden'; // Rendre invisible mais mesurable
-        tooltipElement.style.display = 'block';     // Forcer l'affichage pour la mesure
+        tooltipElement.style.display = 'block'; // Forcer l'affichage pour la mesure
 
         const tooltipWidth = tooltipElement.offsetWidth;
         const tooltipHeight = tooltipElement.offsetHeight;
@@ -204,15 +204,15 @@ export default class Experience extends EventTarget {
             tooltipElement.style.visibility = 'visible'; // Rendre visible si on quitte ici
             // NE PAS faire display = 'block' ici, car il faut vérifier les autres conditions
             // Si l'élément était caché initialement, il le restera (ce qui est peut-être le problème)
-             // --> Correction: On doit le rendre visible si la projection est bonne
-             if (projectedPosition.z < 1 && initialDisplay === 'none') {
+            // --> Correction: On doit le rendre visible si la projection est bonne
+            if (projectedPosition.z < 1 && initialDisplay === 'none') {
                 // On le rend visible uniquement s'il était caché ET que la projection est valide
                 // Mais on le laisse à la position de base car on n'a pas pu le clamper
-                 tooltipElement.style.display = 'block';
-             } else if (projectedPosition.z < 1) {
-                 // S'il n'était pas caché, on le laisse affiché
-                 tooltipElement.style.display = 'block';
-             }
+                tooltipElement.style.display = 'block';
+            } else if (projectedPosition.z < 1) {
+                // S'il n'était pas caché, on le laisse affiché
+                tooltipElement.style.display = 'block';
+            }
             return;
         }
 
@@ -241,9 +241,9 @@ export default class Experience extends EventTarget {
         if (finalScreenY + tooltipHeight > this.sizes.height - margin) {
             finalScreenY = this.sizes.height - tooltipHeight - margin; // Coller en bas
         }
-         // Re-vérifier le haut après avoir potentiellement collé en bas
+        // Re-vérifier le haut après avoir potentiellement collé en bas
         if (finalScreenY < margin) {
-             finalScreenY = margin; // Coller en haut
+            finalScreenY = margin; // Coller en haut
         }
 
         // 7. Appliquer la position finale
@@ -252,7 +252,7 @@ export default class Experience extends EventTarget {
 
         // 8. Assurer la visibilité et le bon 'display' FINALEMENT
         tooltipElement.style.visibility = 'visible'; // Rendre visible
-        tooltipElement.style.display = 'block';      // Assurer qu'il est affiché
+        tooltipElement.style.display = 'block'; // Assurer qu'il est affiché
     }
 
     // Crée le mesh utilisé pour surligner le bâtiment sélectionné
@@ -283,7 +283,7 @@ export default class Experience extends EventTarget {
 
     // Gère la fin du clic : détermine si c'est un clic simple et lance le raycasting
     _handleMouseUp(event) {
-        // --- Début Logique AgentStatsUI --- 
+        // --- Début Logique AgentStatsUI ---
         // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
         // SECTION ENTIÈRE À SUPPRIMER
         // La logique de fermeture du panneau AgentStatsUI est maintenant gérée DANS AgentStatsUI
@@ -297,20 +297,20 @@ export default class Experience extends EventTarget {
         // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
         // Réinitialiser isPointerDown de AgentStatsUI ici par sécurité, car Experience écoute aussi mouseup
-        if(this.agentStatsUI?.isVisible) { // Seulement si le panneau était potentiellement concerné
-             if(this.agentStatsUI) this.agentStatsUI.isPointerDown = false;
+        if (this.agentStatsUI?.isVisible) { // Seulement si le panneau était potentiellement concerné
+            if (this.agentStatsUI) this.agentStatsUI.isPointerDown = false;
         }
 
-        // --- Logique Originale Raycasting / Désélection 3D --- 
+        // --- Logique Originale Raycasting / Désélection 3D ---
         if (this.clickHandledByTooltip) {
-			this.clickHandledByTooltip = false; // Réinitialiser le drapeau immédiatement
-			// Réinitialiser aussi l'état du clic pour éviter des effets de bord
-			this.mouseDownTime = 0;
-			this.mouseDownPosition.x = null;
-			this.mouseDownPosition.y = null;
-			// Sortir de la fonction pour ne pas exécuter le raycast/désélection
-			return;
-		}
+            this.clickHandledByTooltip = false; // Réinitialiser le drapeau immédiatement
+            // Réinitialiser aussi l'état du clic pour éviter des effets de bord
+            this.mouseDownTime = 0;
+            this.mouseDownPosition.x = null;
+            this.mouseDownPosition.y = null;
+            // Sortir de la fonction pour ne pas exécuter le raycast/désélection
+            return;
+        }
 
         if (event.button !== 0) return; // Seulement clic gauche
 
@@ -331,10 +331,16 @@ export default class Experience extends EventTarget {
             const objectsToIntersect = [];
             const agentManager = this.world?.agentManager;
             const instancedMeshManager = this.world?.cityManager?.contentGenerator?.instancedMeshManager;
+            const carManager = this.world?.carManager; // <<< NOUVEAU
 
             // Ajouter les agents (torse et tête)
             if (agentManager?.instanceMeshes?.torso) objectsToIntersect.push(agentManager.instanceMeshes.torso);
             if (agentManager?.instanceMeshes?.head) objectsToIntersect.push(agentManager.instanceMeshes.head);
+
+            // Ajouter les voitures (body, wheel, etc.) // <<< NOUVEAU
+            if (carManager?.instancedMeshes) {
+                objectsToIntersect.push(...Object.values(carManager.instancedMeshes));
+            }
 
             // Ajouter les bâtiments (toutes les parties principales)
             if (instancedMeshManager?.instancedMeshes) {
@@ -359,6 +365,7 @@ export default class Experience extends EventTarget {
             let clickedOnSomething = false;
 
             if (intersects.length > 0) {
+                // alert("aaaaaaaaaa"); // <<< RETIRER
                 const firstIntersect = intersects[0];
                 const clickedObject = firstIntersect.object;
 
@@ -374,6 +381,21 @@ export default class Experience extends EventTarget {
                         clickedOnSomething = true;
                     }
                 }
+                // --- Vérifier si une Voiture a été cliquée --- // <<< NOUVEAU BLOC
+                else if (carManager && firstIntersect.instanceId !== undefined && clickedObject instanceof THREE.InstancedMesh) {
+                    const instanceId = firstIntersect.instanceId;
+                    const agentInCar = carManager.getAgentByInstanceId(instanceId); // Récupérer l'agent via CarManager
+
+                    if (agentInCar) {
+                        this.deselectBuilding(); // Désélectionner bâtiment
+                        this.selectAgent(agentInCar); // Sélectionner l'agent DANS la voiture
+                        clickedOnSomething = true;
+                        console.log(`Clic sur voiture (instance ${instanceId}), agent sélectionné: ${agentInCar.id}`);
+                    } else {
+                        console.log(`Clic sur voiture (instance ${instanceId}), mais aucun agent associé trouvé.`);
+                    }
+                }
+                // --- Fin Vérification Voiture ---
                 // --- Vérifier si un Bâtiment a été cliqué ---
                 else if (instancedMeshManager && firstIntersect.instanceId !== undefined && clickedObject instanceof THREE.InstancedMesh) {
                     const instanceId = firstIntersect.instanceId;
@@ -483,7 +505,7 @@ export default class Experience extends EventTarget {
                     this.deselectAgent();
                     // Sélectionner le bâtiment trouvé
                     this.selectBuilding(buildingInfo, foundMesh, foundInstanceId);
-					this.clickHandledByTooltip = true;
+                    this.clickHandledByTooltip = true;
                 } else {
                     console.warn(`Impossible de trouver le mesh/instance correspondant au bâtiment ${buildingId} près de la position ${targetPosition.x.toFixed(1)},${targetPosition.z.toFixed(1)}.`);
                     // Optionnel : Animer la caméra vers la position du bâtiment même si le mesh n'est pas trouvé ?
@@ -498,7 +520,7 @@ export default class Experience extends EventTarget {
 
     // Gère les clics à l'intérieur du tooltip du BÂTIMENT (délégation)
     _handleBuildingTooltipClick(event) {
-        // --- AJOUT : Ignorer si le clic vient d'un bouton toggle --- 
+        // --- AJOUT : Ignorer si le clic vient d'un bouton toggle ---
         if (event.target.closest('.toggle-building-occupant-list')) {
             return; // Ne rien faire si le clic était sur le bouton toggle
         }
@@ -515,7 +537,7 @@ export default class Experience extends EventTarget {
                     // console.log(`Agent ${agentId} trouvé, sélection en cours...`); // Décommenter pour debug
                     this.deselectBuilding(); // Quitter la sélection bâtiment
                     this.selectAgent(agentToSelect); // Sélectionner l'agent cliqué
-					this.clickHandledByTooltip = true;
+                    this.clickHandledByTooltip = true;
                 } else {
                     console.warn(`Agent avec ID ${agentId} non trouvé.`);
                 }
@@ -649,18 +671,18 @@ export default class Experience extends EventTarget {
         // Activer et positionner le highlight (code existant)
         if (this.highlightMesh && this.selectedBuildingMesh && this.selectedBuildingInstanceId !== -1) {
             // ... (logique de positionnement du highlight existante) ...
-             const instanceMatrix = new THREE.Matrix4();
-             this.selectedBuildingMesh.getMatrixAt(this.selectedBuildingInstanceId, instanceMatrix);
-             const position = new THREE.Vector3();
-             const quaternion = new THREE.Quaternion();
-             const scale = new THREE.Vector3();
-             instanceMatrix.decompose(position, quaternion, scale);
-             const highlightScaleFactor = 1.02;
-             this.highlightMesh.scale.set(scale.x * highlightScaleFactor, scale.y * highlightScaleFactor, scale.z * highlightScaleFactor);
-             this.highlightMesh.position.copy(position);
-             this.highlightMesh.quaternion.copy(quaternion);
-             this.highlightMesh.visible = true;
-             this.highlightMesh.updateMatrixWorld(true);
+            const instanceMatrix = new THREE.Matrix4();
+            this.selectedBuildingMesh.getMatrixAt(this.selectedBuildingInstanceId, instanceMatrix);
+            const position = new THREE.Vector3();
+            const quaternion = new THREE.Quaternion();
+            const scale = new THREE.Vector3();
+            instanceMatrix.decompose(position, quaternion, scale);
+            const highlightScaleFactor = 1.02;
+            this.highlightMesh.scale.set(scale.x * highlightScaleFactor, scale.y * highlightScaleFactor, scale.z * highlightScaleFactor);
+            this.highlightMesh.position.copy(position);
+            this.highlightMesh.quaternion.copy(quaternion);
+            this.highlightMesh.visible = true;
+            this.highlightMesh.updateMatrixWorld(true);
         }
 
         // --- NOUVEAU : Déplacer la caméra au-dessus du bâtiment ---
@@ -700,7 +722,7 @@ export default class Experience extends EventTarget {
         // Afficher et mettre à jour le tooltip bâtiment
         if (this.buildingTooltipElement) {
             this.updateBuildingTooltipContent(); // Met à jour immédiatement
-             // La position sera définie dans update()
+            // La position sera définie dans update()
         }
     }
 
@@ -717,12 +739,12 @@ export default class Experience extends EventTarget {
         if (this.buildingTooltipElement) {
             this.buildingTooltipElement.style.display = 'none';
         }
-         // S'assurer qu'OrbitControls est actif quand rien n'est sélectionné
-         // (sauf si un agent extérieur est sélectionné juste après)
-         // C'est géré dans selectAgent/deselectAgent maintenant.
-         // if (this.controls && !this.isFollowingAgent) { // Vérifier si on ne suit pas déjà un agent
-         //    this.controls.enabled = true;
-         // }
+        // S'assurer qu'OrbitControls est actif quand rien n'est sélectionné
+        // (sauf si un agent extérieur est sélectionné juste après)
+        // C'est géré dans selectAgent/deselectAgent maintenant.
+        // if (this.controls && !this.isFollowingAgent) { // Vérifier si on ne suit pas déjà un agent
+        //    this.controls.enabled = true;
+        // }
     }
 
     // --- MODIFIÉ : Met à jour le contenu HTML du tooltip agent AVEC liens ---
@@ -845,7 +867,7 @@ export default class Experience extends EventTarget {
                 occupantsListHTML += `<span class="building-occupant-list-hidden" style="${hiddenSpanStyle}"> | ${occupantsList.slice(initialDisplayCount).map(id => `<span class="resident-id-link" data-agent-id="${id}" title="Sélectionner l\'agent ${id}">${id}</span>`).join(' | ')}</span>`;
                 occupantsListHTML += ` <button class="toggle-building-occupant-list" data-target="#${listContainerId}" data-more-text="${buttonDataMore}" data-less-text="${buttonDataLess}" style="cursor: pointer; background: none; border: none; color: #a7c5eb; padding: 0; font-size: 0.9em; vertical-align: baseline; pointer-events: auto;" data-ui-interactive="true">${buttonText}</button>`;
             }
-             occupantsListHTML += `</span>`; // Fin building-occupant-list-container
+            occupantsListHTML += `</span>`; // Fin building-occupant-list-container
         }
 
         // Construit le contenu final du tooltip
@@ -869,7 +891,7 @@ export default class Experience extends EventTarget {
         if (!this.buildingTooltipElement) return;
 
         this.buildingTooltipElement.querySelectorAll('.toggle-building-occupant-list').forEach(button => {
-            // --- Utiliser une fonction nommée pour faciliter le removeEventListener --- 
+            // --- Utiliser une fonction nommée pour faciliter le removeEventListener ---
             const handler = (event) => {
                 console.log("Building Tooltip: Toggle button clicked!");
                 event.stopPropagation();
@@ -878,8 +900,8 @@ export default class Experience extends EventTarget {
                 console.log(`Building Tooltip: Set isBuildingOccupantListExpanded to ${this.isBuildingOccupantListExpanded}`);
                 // 2. Forcer la mise à jour du contenu (qui lira le nouvel état)
                 this.updateBuildingTooltipContent();
-                 // 3. Mettre à jour la position (important car la hauteur change)
-                 this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
+                // 3. Mettre à jour la position (important car la hauteur change)
+                this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
             };
 
             // Retirer l'ancien écouteur s'il existe (plus fiable avec fonction nommée)
@@ -1028,13 +1050,13 @@ export default class Experience extends EventTarget {
         this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: this.isDebugMode } }));
     }
 
-	/**
+    /**
      * NOUVELLE MÉTHODE: Bascule l'état de *tous* les sous-calques d'une catégorie donnée.
      * Si au moins un est actif, tous passent à inactif.
      * Si tous sont inactifs, tous passent à actif.
      * @param {string} categoryName - Nom de la catégorie (ex: 'plot', 'district').
      */
-	toggleAllSubLayersInCategory(categoryName) {
+    toggleAllSubLayersInCategory(categoryName) {
         console.log(`[Experience] Entrée dans toggleAllSubLayersInCategory pour ${categoryName}`);
         if (!this.debugLayerVisibility.hasOwnProperty(categoryName)) {
             console.warn(`Experience.toggleAllSubLayersInCategory: Unknown category name '${categoryName}'`);
@@ -1093,7 +1115,7 @@ export default class Experience extends EventTarget {
         }
     }
 
-	/**
+    /**
      * Bascule la visibilité globale d'une catégorie de debug. (Utilisé pour les catégories SANS enfants)
      * @param {string} categoryName - Nom de la catégorie ('district', 'plot', 'buildingOutline', 'navGrid', 'agentPath').
      */
@@ -1126,7 +1148,7 @@ export default class Experience extends EventTarget {
         }));
     }
 
-	/**
+    /**
      * Bascule la visibilité d'un sous-type spécifique dans une catégorie. (Reste inchangé)
      * @param {string} categoryName - Nom de la catégorie (ex: 'plot', 'district').
      * @param {string} subTypeName - Nom du sous-type (ex: 'house', 'residential').
@@ -1149,7 +1171,7 @@ export default class Experience extends EventTarget {
         let parentVisibilityChanged = false;
         let applyIndividualChildVisibility = true; // Flag pour savoir si on doit mettre à jour l'enfant seul
 
-        // --- 1. Faut-il activer le parent ? --- 
+        // --- 1. Faut-il activer le parent ? ---
         if (newVisibility && !category._visible) {
             console.log(`   Parent category '${categoryName}' was hidden, activating it.`);
             category._visible = true;
@@ -1164,7 +1186,7 @@ export default class Experience extends EventTarget {
                 });
             }
         }
-        // --- 2. Faut-il désactiver le parent ? --- 
+        // --- 2. Faut-il désactiver le parent ? ---
         else if (!newVisibility && category._visible) {
             const subLayerKeys = Object.keys(category).filter(key => !key.startsWith('_'));
             const allChildrenInactive = subLayerKeys.every(key => !category[key]);
@@ -1179,18 +1201,18 @@ export default class Experience extends EventTarget {
             }
         }
 
-        // --- 3. Mettre à jour la visibilité 3D de l'enfant si le parent n'a pas changé OU n'a pas été activé --- 
+        // --- 3. Mettre à jour la visibilité 3D de l'enfant si le parent n'a pas changé OU n'a pas été activé ---
         if (applyIndividualChildVisibility && this.isDebugMode && category._visible && this.world) {
-           console.log(`[Experience] Applying individual child visibility: ${categoryName}.${subTypeName} = ${newVisibility}`);
-           this.world.setSubLayerMeshVisibility(categoryName, subTypeName, newVisibility);
+            console.log(`[Experience] Applying individual child visibility: ${categoryName}.${subTypeName} = ${newVisibility}`);
+            this.world.setSubLayerMeshVisibility(categoryName, subTypeName, newVisibility);
         }
 
-        // --- 4. Dispatch des événements --- 
+        // --- 4. Dispatch des événements ---
         if (parentVisibilityChanged) {
             this.dispatchEvent(new CustomEvent('debugcategoryvisibilitychanged', {
                 detail: {
                     categoryName: categoryName,
-                    isVisible: category._visible, 
+                    isVisible: category._visible,
                     allStates: { ...this.debugLayerVisibility }
                 }
             }));
@@ -1205,7 +1227,7 @@ export default class Experience extends EventTarget {
         }));
     }
 
-	toggleDebugLayer(layerName) {
+    toggleDebugLayer(layerName) {
         if (!this.debugLayerVisibility.hasOwnProperty(layerName)) {
             console.warn(`Experience.toggleDebugLayer: Unknown layer name '${layerName}'`);
             return;
@@ -1262,29 +1284,29 @@ export default class Experience extends EventTarget {
 
         // --- 4. Tooltips : rafraîchir CONTENU + position tant que la bulle reste ouverte ---
         if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
-			// 4a. mettre à jour le HTML de la bulle
-			this.updateTooltipContent(this.selectedAgent);
-			// 4b. positionner la bulle
-			this.tooltipTargetPosition
-				.copy(this.selectedAgent.position)
-				.add(new THREE.Vector3(0, this.selectedAgent.scale * 8, 0));
-			this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
-		} else if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
-			// plus d'agent sélectionné → masquer la bulle
-			this.tooltipElement.style.display = 'none';
-		}
+            // 4a. mettre à jour le HTML de la bulle
+            this.updateTooltipContent(this.selectedAgent);
+            // 4b. positionner la bulle
+            this.tooltipTargetPosition
+                .copy(this.selectedAgent.position)
+                .add(new THREE.Vector3(0, this.selectedAgent.scale * 8, 0));
+            this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
+        } else if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
+            // plus d'agent sélectionné → masquer la bulle
+            this.tooltipElement.style.display = 'none';
+        }
 
-		if (this.selectedBuildingInfo && this.buildingTooltipElement && this.highlightMesh?.visible) {
-			// 4c. mettre à jour le HTML de la bulle bâtiment
-			this.updateBuildingTooltipContent();
-			// 4d. positionner la bulle bâtiment
-			this.buildingTooltipTargetPosition
-				.copy(this.highlightMesh.position)
-				.add(new THREE.Vector3(0, this.highlightMesh.scale.y / 2 + 2, 0));
-			this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
-		} else if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') {
-			this.buildingTooltipElement.style.display = 'none';
-		}
+        if (this.selectedBuildingInfo && this.buildingTooltipElement && this.highlightMesh?.visible) {
+            // 4c. mettre à jour le HTML de la bulle bâtiment
+            this.updateBuildingTooltipContent();
+            // 4d. positionner la bulle bâtiment
+            this.buildingTooltipTargetPosition
+                .copy(this.highlightMesh.position)
+                .add(new THREE.Vector3(0, this.highlightMesh.scale.y / 2 + 2, 0));
+            this._updateTooltipPosition(this.buildingTooltipElement, this.buildingTooltipTargetPosition);
+        } else if (this.buildingTooltipElement && this.buildingTooltipElement.style.display !== 'none') {
+            this.buildingTooltipElement.style.display = 'none';
+        }
 
         // --- 5. Rendu ---
         if (this.renderer) this.renderer.update();
@@ -1302,7 +1324,7 @@ export default class Experience extends EventTarget {
         this.canvas.removeEventListener('mouseup', this._boundHandleMouseUp);
         if (this.buildingTooltipElement) {
             this.buildingTooltipElement.removeEventListener('click', this._boundHandleBuildingTooltipClick);
-             // Retirer aussi l'écouteur du panneau stats SI attaché ici (ancienne méthode, sécurité)
+            // Retirer aussi l'écouteur du panneau stats SI attaché ici (ancienne méthode, sécurité)
             if (this._boundHandleStatsPanelClick) {
                 this.buildingTooltipElement.removeEventListener('click', this._boundHandleStatsPanelClick); // Correction: Doit être statsPanel, pas buildingTooltipElement
             }
@@ -1312,7 +1334,7 @@ export default class Experience extends EventTarget {
         }
         // L'écouteur du panneau de stats est retiré dans AgentStatsUI.hide() et AgentStatsUI.destroy()
         // Mais il faut s'assurer que la référence est bien nullifiée ici aussi pour être propre
-         this._boundHandleStatsPanelClick = null;
+        this._boundHandleStatsPanelClick = null;
 
         // --- NOUVEAU : Retirer l'écouteur du panneau de stats (sécurité si AgentStatsUI.destroy échoue avant) ---
         if (this.agentStatsUI?.elements?.statsPanel && this.experience?._boundHandleStatsPanelClick) {
@@ -1335,7 +1357,7 @@ export default class Experience extends EventTarget {
         this.tooltipTargetPosition = null;
         this.selectedAgent = null;
 
-		this.agentStatsUI?.destroy(); this.agentStatsUI = null;
+        this.agentStatsUI?.destroy(); this.agentStatsUI = null;
         this.timeUI?.destroy(); this.timeUI = null;
         this.timeControlUI?.destroy(); this.timeControlUI = null;
         this.camera?.destroy(); this.camera = null;

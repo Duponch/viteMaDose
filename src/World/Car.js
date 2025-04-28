@@ -42,10 +42,12 @@ export default class Car {
 
         // Initialisation de la matrice
         this.updateMatrix();
+
+        // NOUVEAU: Stockage de l'ID de l'agent conducteur
+        this.agentId = null;
     }
 
     // ... reste du fichier Car.js (setPath, updateMatrix, update) ...
-    // (Le reste des méthodes setPath, updateMatrix, update reste identique à votre code actuel)
 
     /**
      * Définit le chemin que la voiture doit suivre
@@ -226,5 +228,16 @@ export default class Car {
 
         // --- Mise à jour finale de la matrice (une seule fois après la boucle) ---
         this.updateMatrix();
+    }
+
+    // NOUVELLES METHODES
+    assignAgent(agentId) {
+        this.agentId = agentId;
+        // Autres initialisations si nécessaire quand un agent prend la voiture
+    }
+
+    releaseAgent() {
+        this.agentId = null;
+        // Nettoyage si nécessaire quand l'agent quitte la voiture
     }
 }

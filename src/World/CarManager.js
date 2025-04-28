@@ -12,6 +12,7 @@ export default class CarManager {
         this.cars = new Array(this.maxCars); // Tableau de taille fixe
         this.agentToCar = new Map(); // Agent ID -> Car instance
         this.carPoolIndices = new Map(); // Agent ID -> Index dans this.cars (et InstancedMesh)
+        this.instanceIdToAgentId = new Array(this.maxCars); // instanceId -> Agent ID
         // --- FIN MODIFIÉ ---
 
         // --- NOUVEAU : Utiliser la géométrie fusionnée low-poly PAR MATÉRIAU ---
@@ -20,8 +21,13 @@ export default class CarManager {
         this.carMeshOrder = [
             'body', 'windows', 'wheels', 'hubcaps', 'lights', 'rearLights'
         ];
-        for (const part of this.carMeshOrder) {
-            const { geometry, material } = carGeoms[part];
+        for (const part of this.carMeshOrder) {            
+            const { geometry, material: originalMaterial } = carGeoms[part];
+
+            // Cloner le matériau pour ne pas affecter d'autres usages potentiels
+            const material = originalMaterial.clone(); 
+            material.side = THREE.DoubleSide; // <<< AJOUT IMPORTANT
+
             const mesh = new THREE.InstancedMesh(geometry, material, this.maxCars);
             mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
             mesh.castShadow = true;
@@ -29,8 +35,11 @@ export default class CarManager {
             mesh.name = `Cars_${part}`;
             mesh.frustumCulled = false;
             mesh.renderOrder = 1;
-            this.instancedMeshes[part] = mesh;
+            mesh.userData.isCarPart = true; // Marqueur pour identification
             this.scene.add(mesh);
+            mesh.computeBoundingSphere(); // Calculer la sphère englobante
+            mesh.computeBoundingBox(); // Calculer la boîte englobante
+            this.instancedMeshes[part] = mesh;
         }
 
         // --- MODIFIÉ : Initialiser toutes les matrices pour cacher les voitures ---
@@ -106,6 +115,7 @@ export default class CarManager {
         // Enregistrer l'association
         this.agentToCar.set(agent.id, availableCar);
         this.carPoolIndices.set(agent.id, availableCarIndex); // Stocker l'index utilisé
+        this.instanceIdToAgentId[availableCarIndex] = agent.id; // instanceId -> Agent ID
 
         console.log(`[CarManager POOLING] Voiture ${availableCarIndex} assignée à Agent ${agent.id}`);
         return availableCar;
@@ -148,6 +158,7 @@ export default class CarManager {
             // Supprimer l'association agent-voiture
             this.agentToCar.delete(agentId);
             this.carPoolIndices.delete(agentId); // Nettoyer l'index aussi
+            this.instanceIdToAgentId[carIndex] = undefined; // instanceId -> Agent ID
 
             console.log(`[CarManager POOLING] Voiture ${carIndex} libérée par Agent ${agentId} et cachée.`);
         } else {
@@ -205,5 +216,29 @@ export default class CarManager {
         this.agentToCar.clear();
         this.carPoolIndices.clear(); // Nettoyer la nouvelle map
         console.log("CarManager détruit");
+    }
+
+    /**
+     * Vérifie si un mesh donné est une partie d'une voiture gérée par ce manager.
+     * @param {THREE.Mesh} mesh L'objet mesh à vérifier.
+     * @returns {boolean} True si c'est une partie de voiture instanciée.
+     */
+    isCarMesh(mesh) {
+        // Vérifie si le mesh est une instance de InstancedMesh et a le marqueur userData
+        return mesh instanceof THREE.InstancedMesh && mesh.userData.isCarPart === true;
+        // Alternative plus robuste si on veut vérifier l'appartenance exacte:
+        // return Object.values(this.instancedMeshes).includes(mesh);
+    }
+
+    /**
+     * Récupère l'ID de l'agent conduisant la voiture à un index d'instance donné.
+     * @param {number} instanceId L'index de l'instance (provenant de l'intersection Raycaster).
+     * @returns {string | undefined} L'ID de l'agent ou undefined s'il n'y a pas d'agent assigné.
+     */
+    getAgentIdByInstanceId(instanceId) {
+        if (instanceId >= 0 && instanceId < this.maxCars) {
+            return this.instanceIdToAgentId[instanceId];
+        }
+        return undefined;
     }
 }
