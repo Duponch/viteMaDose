@@ -320,7 +320,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
      * Trouve la position sur la voie de droite relative à une position et une direction
      * @param {THREE.Vector3} position - Position actuelle
      * @param {THREE.Vector3} direction - Direction de déplacement (normalisée)
-     * @param {number} laneWidth - Largeur de voie (par défaut: 1.5 unités)
+     * @param {number} laneWidth - Largeur de voie (par défaut: 4 unités)
      * @returns {THREE.Vector3} - Position sur la voie de droite
      */
     findRightLanePosition(position, direction, laneWidth = 4) {
@@ -344,8 +344,9 @@ export default class RoadNavigationGraph extends NavigationGraph {
         for (let offset = laneWidth * 0.75; offset > 0; offset *= 0.5) {
             const alternativePos = position.clone().addScaledVector(rightVector, offset);
             const altGridPos = this.worldToGrid(alternativePos.x, alternativePos.z);
+            const rightOffset = position.clone().addScaledVector(rightVector, offset - 1.5);
             if (this.isWalkableAt(altGridPos.x, altGridPos.y)) {
-                return alternativePos;
+                return rightOffset;
             }
         }
         
@@ -383,6 +384,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
             
             // Trouver la position ajustée sur la voie de droite
             const adjustedPosition = this.findRightLanePosition(currentPoint, avgDirection);
+
             adjustedPath.push(adjustedPosition);
         }
         
