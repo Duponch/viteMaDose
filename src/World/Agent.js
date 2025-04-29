@@ -403,8 +403,12 @@ export default class Agent {
         }
         // --- Fin Vérification Format ---
 
+        // --- LOG AVANT WORKER ---
+        console.log(`[AGENT ${this.id} PATH_REQ] Mode: ${isVehicle ? 'Veh' : 'Ped'}, StartW: (${startPosWorld?.x.toFixed(1)}, ${startPosWorld?.z.toFixed(1)}), EndW: (${endPosWorld?.x.toFixed(1)}, ${endPosWorld?.z.toFixed(1)}), StartN: (${startNode.x},${startNode.y}), EndN: (${endNode.x},${endNode.y}), NextState: ${nextStateIfSuccess}`);
+        // --- FIN LOG ---
+
         // --- Envoi de la Requête au Worker ---
-        console.log(`Agent ${this.id}: Envoi requête path au worker. Mode: ${isVehicle ? 'Véhicule' : 'Piéton'}. StartNode: (${startNode.x},${startNode.y}), EndNode: (${endNode.x},${endNode.y}). NextState: ${nextStateIfSuccess}`);
+        // console.log(`Agent ${this.id}: Envoi requête path au worker. Mode: ${isVehicle ? 'Véhicule' : 'Piéton'}. StartNode: (${startNode.x},${startNode.y}), EndNode: (${endNode.x},${endNode.y}). NextState: ${nextStateIfSuccess}`);
         agentManager.requestPathFromWorker(this.id, startNode, endNode, isVehicle); // <<< isVehicle est bien passé ici
     }
 
@@ -646,6 +650,25 @@ export default class Agent {
         // --- *** FIN CORRECTION PRINCIPALE *** ---
 
         const carManager = this.experience.world?.carManager;
+
+        // --- VÉRIFICATION SÉCURITÉ ÉTAT BLOQUÉ ---
+        const MAX_TRANSIT_DURATION_FACTOR = 2.0; // Facteur * durée du jour max autorisé en transit
+        const maxTransitTime = dayDurationMs * MAX_TRANSIT_DURATION_FACTOR;
+        // Utiliser une vérification plus robuste que _stateStartTime > 0
+        const isStuckCheckState = 
+            this.currentState === AgentState.IN_TRANSIT_TO_WORK || this.currentState === AgentState.DRIVING_TO_WORK ||
+            this.currentState === AgentState.IN_TRANSIT_TO_HOME || this.currentState === AgentState.DRIVING_HOME ||
+            this.currentState === AgentState.REQUESTING_PATH_FOR_WORK || this.currentState === AgentState.REQUESTING_PATH_FOR_HOME ||
+            this.currentState === AgentState.WEEKEND_WALK_REQUESTING_PATH || this.currentState === AgentState.WEEKEND_WALKING ||
+            this.currentState === AgentState.WAITING_FOR_PATH;
+
+        if (isStuckCheckState && this._stateStartTime && currentGameTime - this._stateStartTime > maxTransitTime) {
+            console.warn(`[AGENT ${this.id} SAFETY] Bloqué en état ${this.currentState} pendant plus de ${MAX_TRANSIT_DURATION_FACTOR} jours. Forçage retour maison.`);
+            this.forceReturnHome(currentGameTime);
+            // this._stateStartTime est réinitialisé dans forceReturnHome
+            return; // Sortir de l'update après le forçage
+        }
+        // --- FIN SÉCURITÉ ---
 
         // --- Vérification Timeout ---
         if (this._pathRequestTimeout && currentGameTime - this._pathRequestTimeout > 100000) { // Délai 100 sec jeu
@@ -1011,6 +1034,34 @@ export default class Agent {
                  }
                 break;
         } // Fin Switch
+
+        // *** NOUVELLE GESTION de _stateStartTime APRES le switch ***
+        const previousState = this._previousStateForStartTime; // Récupérer l'état d'avant le switch
+        const newState = this.currentState;
+
+        const justEnteredTransitOrRequestState = 
+            (newState === AgentState.IN_TRANSIT_TO_WORK || newState === AgentState.DRIVING_TO_WORK ||
+             newState === AgentState.IN_TRANSIT_TO_HOME || newState === AgentState.DRIVING_HOME ||
+             newState === AgentState.REQUESTING_PATH_FOR_WORK || newState === AgentState.REQUESTING_PATH_FOR_HOME ||
+             newState === AgentState.WEEKEND_WALK_REQUESTING_PATH || newState === AgentState.WEEKEND_WALKING ||
+             newState === AgentState.WAITING_FOR_PATH) && 
+            newState !== previousState;
+
+        const justEnteredStableState = 
+            (newState === AgentState.AT_HOME || newState === AgentState.AT_WORK || newState === AgentState.IDLE) &&
+            newState !== previousState;
+
+        if (justEnteredTransitOrRequestState) {
+            this._stateStartTime = currentGameTime;
+            // console.log(`[AGENT ${this.id} TIMER] Démarré pour état ${newState} à ${currentGameTime}`); // DEBUG
+        } else if (justEnteredStableState) {
+            this._stateStartTime = null; // Utiliser null pour indiquer l'absence de timer
+            // console.log(`[AGENT ${this.id} TIMER] Stoppé pour état ${newState}`); // DEBUG
+        }
+
+        // Stocker l'état actuel pour la prochaine comparaison
+        this._previousStateForStartTime = newState;
+        // *** FIN NOUVELLE GESTION ***
     } // Fin updateState
 
 	updateVisuals(deltaTime, currentGameTime) {
@@ -1770,6 +1821,9 @@ export default class Agent {
         this.arrivalTmeGame = -1;
         this.currentPathIndexVisual = 0;
         this.visualInterpolationProgress = 0;
+        this.hasReachedDestination = false; // Assurer que ce flag est aussi réinitialisé
+        this._stateStartTime = null; // Réinitialiser le timer de blocage
+        this._pathRequestTimeout = null; // Annuler un éventuel timeout de path request
         
         // Définir l'état à AT_HOME et cacher l'agent
         this.currentState = AgentState.AT_HOME;
@@ -1822,3 +1876,7 @@ export default class Agent {
 
 // Export de l'enum pour usage externe
 Agent.prototype.constructor.AgentState = AgentState;
+
+// --- AJOUT pour stocker l'état précédent pour le timer --- 
+Agent.prototype._previousStateForStartTime = null; 
+// --- FIN AJOUT --- 

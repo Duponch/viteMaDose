@@ -430,9 +430,9 @@ export default class NavigationGraph {
 			// on la remplace par le point d'origine en grille pour éviter le null
 			console.warn(
 			  `NavigationGraph: Aucun nœud marchable trouvé près de`, 
-			  worldPos, `(Grille: ${startGrid.x},${startGrid.y})`
+			  worldPos, `(Grille: ${startGrid.x},${startGrid.y}). Retournant null.`
 			);
-			return startGrid;
+			return null;
 		}
 	
 		return bestNode;
