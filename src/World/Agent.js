@@ -66,6 +66,8 @@ export default class Agent {
         this.workGridNode = null;
         this.weekendWalkDestination = null;
         this.weekendWalkGridNode = null;
+        this.weekendWalkEndTime = -1; // Temps de fin de promenade
+        this.hasReachedDestination = false; // Flag pour détecter l'arrivée
 
         // --- Trajet Actuel ---
         this.currentPathPoints = null;
@@ -88,7 +90,6 @@ export default class Agent {
 		this.lastArrivalTimeHome = 0; // Temps de jeu (ms) de la dernière arrivée AT_HOME (0 initialement)
 		this.lastArrivalTimeWork = -1; // Temps de jeu (ms) de la dernière arrivée AT_WORK
 		this.requestedPathForDepartureTime = -1; // Pour éviter requêtes multiples pour le même départ
-        this.weekendWalkEndTime = -1; // Temps de jeu (ms) de la fin de la promenade du weekend
 
         // --- Animation Visuelle ---
         this.currentAnimationMatrix = {
@@ -866,13 +867,16 @@ export default class Agent {
             // Les états de transit et d'arrivée utilisent toujours currentGameTime global
              case AgentState.IN_TRANSIT_TO_WORK:
                  this.isVisible = true;
-                 if(currentGameTime >= this.arrivalTmeGame) {
+                 // Remplacer la vérification basée sur le temps par le flag
+                 // if(currentGameTime >= this.arrivalTmeGame) {
+                 if (this.hasReachedDestination) {
                      this.currentState = AgentState.AT_WORK;
                      this.lastArrivalTimeWork = currentGameTime;
                      this.requestedPathForDepartureTime = -1; // Prêt pour la prochaine requête (retour maison)
                      this.isVisible = false;
                      this.currentPathPoints = null;
                      this.currentPathLengthWorld = 0;
+                     this.hasReachedDestination = false; // Réinitialiser le flag
                      console.log(`Agent ${this.id}: Arrivé au travail (à pied).`);
                  }
                  break;
@@ -903,13 +907,16 @@ export default class Agent {
 
             case AgentState.IN_TRANSIT_TO_HOME:
                  this.isVisible = true;
-                 if(currentGameTime >= this.arrivalTmeGame) {
+                 // Remplacer la vérification basée sur le temps par le flag
+                 // if(currentGameTime >= this.arrivalTmeGame) {
+                 if (this.hasReachedDestination) {
                      this.currentState = AgentState.AT_HOME;
                      this.lastArrivalTimeHome = currentGameTime;
                      this.requestedPathForDepartureTime = -1; // Prêt pour prochaine requête (travail lendemain)
                      this.isVisible = false;
                      this.currentPathPoints = null;
                      this.currentPathLengthWorld = 0;
+                     this.hasReachedDestination = false; // Réinitialiser le flag
                      console.log(`Agent ${this.id}: Arrivé à la maison (à pied).`);
                  }
                  break;
@@ -1078,10 +1085,20 @@ export default class Agent {
         }
 
         // Ajouter cette vérification pour forcer la fin du trajet quand on est très proche
+        if (progress >= 1.0 && !this.hasReachedDestination) {
+            this.hasReachedDestination = true;
+            // console.log(`Agent ${this.id}: hasReachedDestination set TRUE (progress=${progress})`); // Debug
+        }
+        /* ANCIENNE VERSION:
         if (progress > 0.98) {
             progress = 1.0;
             this.visualInterpolationProgress = 1.0;
         }
+        */
+        // --- Conserver la valeur de progress même si elle dépasse 1.0 pour l'interpolation
+        progress = Math.max(0, progress); // Assurer juste qu'il n'est pas négatif
+        this.visualInterpolationProgress = progress;
+        // --- Fin modif
 
         if (this.currentPathPoints.length === 1) {
             this.position.copy(this.currentPathPoints[0]);
