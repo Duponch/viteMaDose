@@ -784,6 +784,7 @@ export default class Agent {
                           const car = carManager?.getCarForAgent(this.id);
                           if (car && this.currentPathPoints) {
                               this.currentVehicle = car;
+                              this.enterVehicle();
                               car.setPath(this.currentPathPoints);
                               this.currentState = AgentState.DRIVING_TO_WORK;
                               this.isVisible = false;
@@ -894,6 +895,7 @@ export default class Agent {
                           const car = carManager?.getCarForAgent(this.id); // Récupérer la voiture potentiellement créée
                           if (car && this.currentPathPoints) {
                                this.currentVehicle = car;
+                               this.enterVehicle();
                                car.setPath(this.currentPathPoints);
                                this.currentState = AgentState.DRIVING_HOME;
                                this.isVisible = false;
@@ -1929,18 +1931,20 @@ export default class Agent {
     enterVehicle() {
         if (!this.isInVehicle) {
             this.isInVehicle = true;
-            console.log(`Agent ${this.id}: Est entré dans une voiture`);
         }
+        this.isUsingVehicle = true; // Assurer le suivi visuel
+        console.log(`Agent ${this.id}: Est entré dans une voiture`);
     }
 
     // Nouvelle méthode pour sortir d'une voiture
     exitVehicle() {
-		if (this.isInVehicle) {
-			this.isInVehicle = false;
-			this.currentVehicle = null; // <<< AJOUTER : Nettoyer la référence stockée
-			console.log(`Agent ${this.id}: Est sorti de la voiture (currentVehicle cleared).`);
-		}
-	}
+        if (this.isInVehicle) {
+            this.isInVehicle = false;
+        }
+        this.isUsingVehicle = false;
+        this.currentVehicle = null;
+        console.log(`Agent ${this.id}: Est sorti de la voiture (currentVehicle cleared).`);
+    }
 }
 
 // Export de l'enum pour usage externe
