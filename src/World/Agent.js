@@ -549,9 +549,9 @@ export default class Agent {
 			console.log(`[Agent ${this.id} DEBUG] setPath (succès): Annulation du _pathRequestTimeout (était ${this._pathRequestTimeout}).`);
 			this._pathRequestTimeout = null;
 
-		} 
-        // --- Cas 2: Chemin Invalide ou Échec Pathfinding --- 
-        else { 
+		}
+		// --- Cas 2: Chemin Invalide ou Échec Pathfinding ---
+		else {
             // ... (logique de fallback existante) ...
             console.warn(`[Agent ${this.id} DEBUG] setPath: Chemin INVALIDE reçu...`);
             // ... (réinitialisation variables chemin) ...
@@ -635,7 +635,7 @@ export default class Agent {
                     const effectiveAnimationSpeed = this.visualSpeed * (this.experience.world.cityManager.config.agentAnimationSpeedFactor ?? 1.0);
                     const walkTime = currentGameTime / 1000 * effectiveAnimationSpeed;
                     this._updateWalkAnimation(walkTime);
-                } else {
+						} else {
                     this._resetAnimationMatrices();
                 }
 
@@ -682,7 +682,7 @@ export default class Agent {
                     const effectiveAnimationSpeed = this.visualSpeed * (this.experience.world.cityManager.config.agentAnimationSpeedFactor ?? 1.0);
                     const walkTime = currentGameTime / 1000 * effectiveAnimationSpeed;
                     this._updateWalkAnimation(walkTime);
-                } else {
+						} else {
                     this._resetAnimationMatrices();
                 }
                 
@@ -693,8 +693,8 @@ export default class Agent {
         // Code existant pour les agents qui se déplacent à pied
         if (!this.currentPathPoints || this.currentPathPoints.length === 0 || this.calculatedTravelDurationGame <= 0 || this.departureTimeGame < 0 || this.currentPathLengthWorld <= 0) {
             this.isVisible = false;
-            return;
-        }
+						    return; 
+						}
 
         // Calculer la distance à la caméra
         const cameraPosition = this.experience.camera.instance.position;
@@ -732,7 +732,7 @@ export default class Agent {
 
         if (this.currentPathPoints.length === 1) {
             this.position.copy(this.currentPathPoints[0]);
-        } else {
+				} else {
             // Utiliser la longueur stockée
             const totalPathLength = this.currentPathLengthWorld; // <- UTILISER LA VALEUR STOCKÉE
             const targetDistance = progress * totalPathLength;
@@ -923,8 +923,8 @@ export default class Agent {
             console.warn(`Agent ${this.id}: Path request timed out (${(currentGameTime - this._pathRequestTimeout).toFixed(0)}ms), forcing return home`);
             this.forceReturnHome(currentGameTime); // Méthode de fallback
             this._pathRequestTimeout = null;
-             return;
-         }
+            return;
+        }
 
         // --- Vérification Horaire / Planification (Utilise les temps pré-calculés) ---
         const departWorkTime = this.exactWorkDepartureTimeGame;
@@ -947,7 +947,7 @@ export default class Agent {
         // --- Machine d'état ---
         switch (this.currentState) {
             case AgentState.AT_HOME:
-                 this.isVisible = false;
+                this.isVisible = false;
                 const shouldWorkToday = this.workScheduleStrategy ? this.workScheduleStrategy.shouldWorkToday(calendarDate) : false;
 
                 // --- Utiliser timeWithinCurrentDayCycle pour la comparaison horaire ---
@@ -1019,7 +1019,7 @@ export default class Agent {
                               console.warn(`Agent ${this.id} (Voiture): Échec départ travail (voiture/chemin manquant). Tentative fallback piéton.`);
                               if (this.currentPathPoints) {
                                   this.currentState = AgentState.IN_TRANSIT_TO_WORK;
-            this.isVisible = true;
+                                  this.isVisible = true;
                                   this.departureTimeGame = currentGameTime;
                                   // Garder durée calculée même si c'était pour voiture (approximation)
                                   this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
@@ -1125,7 +1125,7 @@ export default class Agent {
                                this.departureTimeGame = currentGameTime;
                                this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
                                console.log(`Agent ${this.id}: Départ maison à pied. Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
-            } else {
+                          } else {
                                console.error(`Agent ${this.id}: Mode piéton mais chemin manquant. Retour AT_WORK.`);
                                this.currentState = AgentState.AT_WORK;
                           }
@@ -1153,7 +1153,7 @@ export default class Agent {
                  break;
 
             case AgentState.DRIVING_TO_WORK:
-                    this.isVisible = false;
+                this.isVisible = false;
                 const carToWork = this.currentVehicle;
                 if (carToWork) {
                     if (!carToWork.isActive) {

@@ -13,6 +13,8 @@ import AgentStatsUI from './UI/AgentStatsUI.js';
 // Import nécessaire pour la recherche de mesh par position
 import { Matrix4, Vector3 } from 'three';
 import * as DebugTools from './World/DebugTools.js';
+// --- CORRECTION: Importer Agent, pas AgentState ---
+import Agent from './World/Agent.js'; 
 
 let instance = null;
 
@@ -1275,13 +1277,34 @@ export default class Experience extends EventTarget {
             this.world.update();
         }
 
-        // --- 2. Mettre à jour la logique de Contrôles/Caméra (MAINTENANT APRES LE MONDE) ---
-        if (!this.isFollowingAgent && this.controls?.enabled) {
-            this.controls.update(); // Pour les contrôles Orbit standard
+        // --- 2. Mettre à jour la logique de Contrôles/Caméra ---
+        let targetPosition = null; // Pour le suivi
+        if (this.selectedAgent) {
+            const agent = this.selectedAgent;
+            const isDriving = agent.currentState === Agent.AgentState.DRIVING_TO_WORK || agent.currentState === Agent.AgentState.DRIVING_HOME;
+            if (isDriving && agent.currentVehicle) {
+                targetPosition = agent.currentVehicle.position; // Cible = voiture
+            } else {
+                targetPosition = agent.position; // Cible = agent
+            }
         }
-        // La caméra gère son propre update pour le suivi ou moveToTarget.
-        // Elle lira maintenant la position mise à jour par world.update()
-        if (this.camera) this.camera.update(deltaTime);
+
+        if (this.isFollowingAgent && targetPosition) {
+            // Mettre à jour la CIBLE que les contrôles doivent viser
+            this.controls.target.lerp(targetPosition, 0.1); 
+            // --- NOUVEAU: Forcer la caméra à regarder la cible lissée ---
+            if(this.camera) this.camera.instance.lookAt(this.controls.target);
+            // --- FIN NOUVEAU ---
+            // Laisser le damping des contrôles gérer le déplacement de la caméra
+            if(this.controls) this.controls.update(); 
+        } else if (this.controls?.enabled && !this.isFollowingAgent) {
+            // Contrôles Orbit standard si pas de suivi
+            if(this.controls) this.controls.update();
+        }
+        
+        // La caméra met à jour ses matrices internes, etc.
+        // Elle n'a plus besoin de logique de suivi interne si on gère via controls.target + lookAt
+        if (this.camera) this.camera.update(deltaTime); 
 
         // --- FIN ORDRE MODIFIÉ ---
 
