@@ -18,8 +18,7 @@ export default class WorkScheduleStrategy {
      */
     shouldWorkToday(calendarDate) {
         if (!calendarDate || !calendarDate.jourSemaine) {
-            console.warn("WorkScheduleStrategy: calendarDate invalide");
-            return false; // Par défaut, ne pas travailler si date invalide
+            return false; // Si la date est invalide ou l'environnement pas prêt, considérer comme jour off
         }
         
         // Vérification explicite que ce n'est PAS un weekend

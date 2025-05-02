@@ -75,8 +75,13 @@ export default class Environment {
         // -----------------------------------------
 
         // --- Intégration du calendrier ---
+        // Permet de configurer aisément la date de départ depuis le fichier de configuration global.
+        // Si aucune date n'est fournie, on utilise un lundi par défaut (2025-04-21) afin
+        // d'éviter que le jeu ne démarre systématiquement un week-end et que tous les citoyens
+        // restent chez eux pendant la phase de test.
+        const calendarStartDate = this.config?.calendarStartDate ?? '2025-04-21'; // Lundi
         this.calendar = new Calendar({
-            startDate: '2025-04-24', // Peut être rendu configurable plus tard
+            startDate: calendarStartDate,
             dayDurationMs: this.dayDurationMs
         });
 

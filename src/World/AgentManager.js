@@ -598,7 +598,11 @@ export default class AgentManager {
 
 		// 1. Logique
 		this.agents.forEach(agent => {
-			agent.updateState(deltaTime, environment.getCurrentHour(), currentGameTime);
+			if (agent.stateMachine) {
+				agent.update(deltaTime);
+			} else {
+				agent.updateState(deltaTime, environment.getCurrentHour(), currentGameTime);
+			}
 		});
 
 		// 2. Visuels
