@@ -29,6 +29,11 @@ export default class MovementController {
         this.pathLengthWorld = lengthWorld;
         this.pathIndex = 0;
         this.progress = 0;
+        const agentId = this.ctx?.agent?.id;
+        const isDebugAgent = agentId === 'citizen_0';
+        if (isDebugAgent) {
+            console.log(`[MoveCtrl-${agentId}] Path START: ${this.path?.length} points. Target 0: ${this.path?.[0]?.x?.toFixed(1)}, ${this.path?.[0]?.z?.toFixed(1)}`);
+        }
     }
 
     /**
@@ -36,26 +41,66 @@ export default class MovementController {
      * @param {number} dt secondes
      */
     update(dt) {
-        if (!this.path || this.path.length === 0) return;
-        const currentPos = this.ctx.agent.position;
-        const target = this.path[this.pathIndex];
-        if (!target) return;
+        const agentId = this.ctx?.agent?.id;
+        const isDebugAgent = agentId === 'citizen_0';
 
-        // Distance² jusqu'à la cible
-        const distSq = currentPos.distanceToSquared(target);
-        if (distSq < this.reachToleranceSq) {
-            // Atteint le point
-            if (this.pathIndex < this.path.length - 1) {
-                this.pathIndex++;
-            } else {
-                // Chemin terminé
-                this.path = null;
-                return;
-            }
+        if (!this.path || this.path.length === 0) return; // Chemin déjà fini ou inexistant
+
+        const currentPos = this.ctx.agent.position;
+        
+        // Vérifier index (sécurité)
+        if (this.pathIndex >= this.path.length) {
+             if (isDebugAgent) console.warn(`[MoveCtrl-${agentId}] Invalid pathIndex ${this.pathIndex} >= ${this.path.length}`);
+            this.path = null;
+            return;
         }
-        // Avancer vers la cible
-        this._tmp.subVectors(target, currentPos).normalize().multiplyScalar(this.speed * dt);
-        currentPos.add(this._tmp);
+        
+        const target = this.path[this.pathIndex];
+        if (!target) {
+            if (isDebugAgent) console.warn(`[MoveCtrl-${agentId}] Target point at index ${this.pathIndex} is invalid.`);
+            this.path = null;
+            return;
+        }
+
+        const distSq = currentPos.distanceToSquared(target);
+        const isLastPoint = this.pathIndex >= this.path.length - 1;
+        
+        const moveVector = this._tmp.subVectors(target, currentPos);
+        const distanceToTarget = moveVector.length();
+        const moveAmount = this.speed * dt;
+
+        // Log pour le dernier point UNIQUEMENT
+        if (isDebugAgent && isLastPoint) {
+             console.log(`[MoveCtrl-${agentId}] LAST POINT CHECK: Dist=${distanceToTarget.toFixed(3)}, MoveAmt=${moveAmount.toFixed(3)}, DistSq=${distSq.toFixed(3)}, TolSq=${this.reachToleranceSq.toFixed(3)} -> Condition: ${moveAmount >= distanceToTarget} || ${distSq < this.reachToleranceSq}`);
+        }
+
+        // --- LOGIQUE DE FIN SIMPLIFIÉE --- 
+        if (moveAmount >= distanceToTarget || distSq < this.reachToleranceSq) {
+             if (isLastPoint) {
+                 if (isDebugAgent) {
+                     console.log(`[MoveCtrl-${agentId}] ✅ FINISH Condition Met! Dist=${distanceToTarget.toFixed(3)}, MoveAmt=${moveAmount.toFixed(3)}, DistSq=${distSq.toFixed(3)}, TolSq=${this.reachToleranceSq.toFixed(3)}`);
+                 }
+                 currentPos.copy(target); 
+                 this.path = null;
+                 return;
+             } else {
+                 // Ce n'était pas le dernier, on passe au suivant
+                 // Déplacer d'abord à la position exacte du point courant pour éviter overshoot
+                 currentPos.copy(target);
+                 this.pathIndex++;
+                 // Recalculer la cible pour le reste du mouvement (si dt le permet)
+                 const remainingDt = dt * (1 - (distanceToTarget / moveAmount)); // Estimation du temps restant
+                 const nextTarget = this.pathIndex < this.path.length ? this.path[this.pathIndex] : null;
+                 if (nextTarget && remainingDt > 0) {
+                     moveVector.subVectors(nextTarget, currentPos).normalize().multiplyScalar(this.speed * remainingDt);
+                     currentPos.add(moveVector);
+                 }
+             }
+        } else {
+            // On n'a pas atteint le point, on avance simplement
+            moveVector.normalize().multiplyScalar(moveAmount);
+            currentPos.add(moveVector);
+        }
     }
 
     /**

@@ -606,6 +606,44 @@ export default class Agent {
     updateState() { /* obsolete after FSM refactor */ }
 
 	updateVisuals(deltaTime, currentGameTime) {
+        // --- NOUVEAU : si l'agent utilise la FSM + MovementController, on laisse ce dernier gérer la position ---
+        if (this.stateMachine && this.aiContext?.movementController) {
+            const moveCtrl = this.aiContext.movementController;
+            // Si un chemin est en cours de suivi, ne pas sur-écrire la position
+            if (moveCtrl.path && moveCtrl.path.length > 0) {
+                // Mise à jour LOD (identique à la logique existante)
+                const cameraPosition = this.experience.camera.instance.position;
+                const distanceToCameraSq = this.position.distanceToSquared(cameraPosition);
+                const distanceToCamera = Math.sqrt(distanceToCameraSq);
+                this.isLodActive = distanceToCamera > this.lodDistance;
+
+                // Orienter l'agent vers le prochain point de chemin (ou le dernier si on est à la fin)
+                const targetIdx = Math.min(moveCtrl.pathIndex + 1, moveCtrl.path.length - 1);
+                const lookTarget = moveCtrl.path[targetIdx];
+                if (lookTarget) {
+                    this._tempMatrix.lookAt(this.position, lookTarget, THREE.Object3D.DEFAULT_UP);
+                    this._tempQuat.setFromRotationMatrix(this._tempMatrix);
+                    // Rotation 180° pour aligner le modèle (comme plus bas dans le fichier)
+                    this._tempQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+                    const deltaSeconds = deltaTime / 1000.0;
+                    const slerpAlpha = 1.0 - Math.exp(-this.rotationSpeed * deltaSeconds);
+                    this.orientation.slerp(this._tempQuat, slerpAlpha);
+                }
+
+                // Animation (reprend la logique standard)
+                if (!this.isLodActive) {
+                    const effectiveAnimationSpeed = this.visualSpeed * (this.experience.world.cityManager.config.agentAnimationSpeedFactor ?? 1.0);
+                    const walkTime = currentGameTime / 1000 * effectiveAnimationSpeed;
+                    this._updateWalkAnimation(walkTime);
+                } else {
+                    this._resetAnimationMatrices();
+                }
+
+                return; // Important : ne pas exécuter le reste de updateVisuals
+            }
+        }
+        // ... existing code ...
+
         // --- MODIFICATION : Inclure les états de conduite dans les états où l'agent se déplace --- 
         const isVisuallyMoving = this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
                                  this.currentState === AgentState.IN_TRANSIT_TO_HOME ||
