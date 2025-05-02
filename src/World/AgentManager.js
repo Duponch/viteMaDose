@@ -232,8 +232,23 @@ export default class AgentManager {
         }).forEach(state => agentsByState[state] = []);
 
         if (this.agents) {
+            const AgentState = Agent.prototype.constructor.AgentState;
             this.agents.forEach(agent => {
-                const state = agent.currentState || 'IDLE'; // Utiliser IDLE si currentState est null/undefined
+                let state = agent.currentState || AgentState.IDLE;
+
+                // --- Ajustement cohérence : si l'agent a déjà atteint sa destination mais que son état logique n'a pas encore changé ---
+                if (agent.hasReachedDestination) {
+                    if (state === AgentState.IN_TRANSIT_TO_WORK || state === AgentState.DRIVING_TO_WORK) {
+                        state = AgentState.AT_WORK;
+                    } else if (state === AgentState.IN_TRANSIT_TO_HOME || state === AgentState.DRIVING_HOME) {
+                        state = AgentState.AT_HOME;
+                    }
+                    // Cas promenade week-end : considérer comme AT_HOME quand terminé
+                    else if (state === AgentState.WEEKEND_WALKING) {
+                        state = AgentState.AT_HOME;
+                    }
+                }
+
                 if (!agentsByState[state]) {
                     agentsByState[state] = []; // Sécurité si un état inattendu apparaît
                 }

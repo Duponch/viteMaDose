@@ -437,6 +437,33 @@ export default class Agent {
 		// --- Cas 1: Chemin Valide Reçu ---
 		// Condition modifiée pour accepter longueur 0 si le chemin a 1 seul point (départ=arrivée)
 		if (pathPoints && Array.isArray(pathPoints) && pathPoints.length > 0 && (pathPoints.length === 1 || pathLengthWorld > 0.1)) {
+			// Si la longueur est négligeable, considérer l'arrivée immédiate et éviter l'état IN_TRANSIT_* bloqué
+			const isInstantArrival = pathLengthWorld < 0.01 || pathPoints.length === 1;
+			if (isInstantArrival) {
+				// Déterminer directement l'état cible sans passer par un état de transit
+				if (wasRequestingWork) {
+					this.currentState = AgentState.AT_WORK;
+					this.lastArrivalTimeWork = this.experience.time.elapsed;
+				} else if (wasRequestingHome) {
+					this.currentState = AgentState.AT_HOME;
+					this.lastArrivalTimeHome = this.experience.time.elapsed;
+				} else if (wasRequestingWeekendWalk) {
+					// Pour une promenade de week-end on considère qu'elle s'est terminée instantanément
+					this.currentState = AgentState.AT_HOME;
+					this.weekendWalkEndTime = -1;
+				}
+				// Nettoyage des données de chemin pour éviter tout traitement visuel inutile
+				this.currentPathPoints = null;
+				this.currentPathLengthWorld = 0;
+				this.calculatedTravelDurationGame = 0;
+				this.departureTimeGame = -1;
+				this.arrivalTmeGame = -1;
+				this.hasReachedDestination = false;
+				this.isVisible = false;
+				this._pathRequestTimeout = null;
+				console.log(`[Agent ${this.id} DEBUG] Arrivée instantanée détectée (pathLength=${pathLengthWorld}). État final : ${this.currentState}`);
+				return; // Sortir de setPath car tout est réglé
+			}
 			// LOG B: Chemin considéré comme valide
 			console.log(`[Agent ${this.id} DEBUG] setPath: Chemin VALIDE reçu (${pathPoints.length} points, longueur ${pathLengthWorld.toFixed(2)}).`);
 
@@ -760,7 +787,13 @@ export default class Agent {
                               car.setPath(this.currentPathPoints);
                               this.currentState = AgentState.DRIVING_TO_WORK;
                               this.isVisible = false;
-                              this.departureTimeGame = currentGameTime;
+                              // Calculer l'instant absolu de départ (8h00 du jour courant)
+                              {
+                                  const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
+                                  const timeWithinDay = currentGameTime % dayDurationMs;
+                                  const daysElapsed = currentGameTime - timeWithinDay;
+                                  this.departureTimeGame = daysElapsed + this.exactWorkDepartureTimeGame;
+                              }
                               const carSpeed = car.speed;
                               if (carSpeed > 0 && this.currentPathLengthWorld > 0) {
                                    this.calculatedTravelDurationGame = (this.currentPathLengthWorld / carSpeed) * 1000;
@@ -772,7 +805,13 @@ export default class Agent {
                               if (this.currentPathPoints) {
                                   this.currentState = AgentState.IN_TRANSIT_TO_WORK;
                                   this.isVisible = true;
-                                  this.departureTimeGame = currentGameTime;
+                                  // Calculer l'instant absolu de départ (8h00 du jour courant)
+                                  {
+                                      const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
+                                      const timeWithinDay = currentGameTime % dayDurationMs;
+                                      const daysElapsed = currentGameTime - timeWithinDay;
+                                      this.departureTimeGame = daysElapsed + this.exactWorkDepartureTimeGame;
+                                  }
                                   // Garder durée calculée même si c'était pour voiture (approximation)
                                   this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
                                   console.log(`Agent ${this.id}: Départ travail à pied (Fallback Voiture). Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
@@ -787,7 +826,13 @@ export default class Agent {
                           if (this.currentPathPoints) {
                               this.currentState = AgentState.IN_TRANSIT_TO_WORK;
                               this.isVisible = true;
-                              this.departureTimeGame = currentGameTime;
+                              // Calculer l'instant absolu de départ (8h00 du jour courant)
+                              {
+                                  const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
+                                  const timeWithinDay = currentGameTime % dayDurationMs;
+                                  const daysElapsed = currentGameTime - timeWithinDay;
+                                  this.departureTimeGame = daysElapsed + this.exactWorkDepartureTimeGame;
+                              }
                               this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
                               console.log(`Agent ${this.id}: Départ travail à pied. Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
                           } else {
@@ -852,7 +897,13 @@ export default class Agent {
                                car.setPath(this.currentPathPoints);
                                this.currentState = AgentState.DRIVING_HOME;
                                this.isVisible = false;
-                               this.departureTimeGame = currentGameTime;
+                               // Calculer l'instant absolu de départ (19h00 du jour courant)
+                               {
+                                   const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
+                                   const timeWithinDay = currentGameTime % dayDurationMs;
+                                   const daysElapsed = currentGameTime - timeWithinDay;
+                                   this.departureTimeGame = daysElapsed + this.exactHomeDepartureTimeGame;
+                               }
                                const carSpeed = car.speed;
                                if (carSpeed > 0 && this.currentPathLengthWorld > 0) {
                                     this.calculatedTravelDurationGame = (this.currentPathLengthWorld / carSpeed) * 1000;
@@ -865,7 +916,13 @@ export default class Agent {
                                    console.warn(`Agent ${this.id}: Voiture manquante, départ maison à pied (Fallback).`);
                                    this.currentState = AgentState.IN_TRANSIT_TO_HOME;
                                    this.isVisible = true;
-                                   this.departureTimeGame = currentGameTime;
+                                   // Calculer l'instant absolu de départ (19h00 du jour courant)
+                                   {
+                                       const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
+                                       const timeWithinDay = currentGameTime % dayDurationMs;
+                                       const daysElapsed = currentGameTime - timeWithinDay;
+                                       this.departureTimeGame = daysElapsed + this.exactHomeDepartureTimeGame;
+                                   }
                                    this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
                               } else { this.currentState = AgentState.AT_WORK; } // Rester au travail
                               this.isInVehicle = false; this.currentVehicle = null;
@@ -874,7 +931,13 @@ export default class Agent {
                           if (this.currentPathPoints) {
                                this.currentState = AgentState.IN_TRANSIT_TO_HOME;
                                this.isVisible = true;
-                               this.departureTimeGame = currentGameTime;
+                               // Calculer l'instant absolu de départ (19h00 du jour courant)
+                               {
+                                   const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
+                                   const timeWithinDay = currentGameTime % dayDurationMs;
+                                   const daysElapsed = currentGameTime - timeWithinDay;
+                                   this.departureTimeGame = daysElapsed + this.exactHomeDepartureTimeGame;
+                               }
                                this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
                                console.log(`Agent ${this.id}: Départ maison à pied. Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
                           } else {
@@ -890,19 +953,22 @@ export default class Agent {
             // Les états de transit et d'arrivée utilisent toujours currentGameTime global
              case AgentState.IN_TRANSIT_TO_WORK:
                  this.isVisible = true;
-                 // Remplacer la vérification basée sur le temps par le flag
-                 // if(currentGameTime >= this.arrivalTmeGame) {
-                 if (this.hasReachedDestination) {
-                     this.currentState = AgentState.AT_WORK;
-                     this.lastArrivalTimeWork = currentGameTime;
-                     this.requestedPathForDepartureTime = -1; // Prêt pour la prochaine requête (retour maison)
-                     this.isVisible = false;
-                     this.currentPathPoints = null;
-                     this.currentPathLengthWorld = 0;
-                     this.hasReachedDestination = false; // Réinitialiser le flag
-                     console.log(`Agent ${this.id}: Arrivé au travail (à pied).`);
-                 }
-                 break;
+                 // Détection d'arrivée renforcée :
+                 const arrivedToWork = this.hasReachedDestination ||
+                                      (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) ||
+                                      (!this.currentPathPoints || this.currentPathPoints.length === 0);
+
+                 if (arrivedToWork) {
+                      this.currentState = AgentState.AT_WORK;
+                      this.lastArrivalTimeWork = currentGameTime;
+                      this.requestedPathForDepartureTime = -1; // Prêt pour la prochaine requête (retour maison)
+                      this.isVisible = false;
+                      this.currentPathPoints = null;
+                      this.currentPathLengthWorld = 0;
+                      this.hasReachedDestination = false; // Réinitialiser le flag
+                      console.log(`Agent ${this.id}: Arrivé au travail (à pied).`);
+                  }
+                  break;
 
             case AgentState.DRIVING_TO_WORK:
                 this.isVisible = false;
@@ -930,19 +996,22 @@ export default class Agent {
 
             case AgentState.IN_TRANSIT_TO_HOME:
                  this.isVisible = true;
-                 // Remplacer la vérification basée sur le temps par le flag
-                 // if(currentGameTime >= this.arrivalTmeGame) {
-                 if (this.hasReachedDestination) {
-                     this.currentState = AgentState.AT_HOME;
-                     this.lastArrivalTimeHome = currentGameTime;
-                     this.requestedPathForDepartureTime = -1; // Prêt pour prochaine requête (travail lendemain)
-                     this.isVisible = false;
-                     this.currentPathPoints = null;
-                     this.currentPathLengthWorld = 0;
-                     this.hasReachedDestination = false; // Réinitialiser le flag
-                     console.log(`Agent ${this.id}: Arrivé à la maison (à pied).`);
-                 }
-                 break;
+                 // Détection d'arrivée renforcée :
+                 const arrivedHome = this.hasReachedDestination ||
+                                    (this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) ||
+                                    (!this.currentPathPoints || this.currentPathPoints.length === 0);
+
+                 if (arrivedHome) {
+                      this.currentState = AgentState.AT_HOME;
+                      this.lastArrivalTimeHome = currentGameTime;
+                      this.requestedPathForDepartureTime = -1; // Prêt pour prochaine requête (travail lendemain)
+                      this.isVisible = false;
+                      this.currentPathPoints = null;
+                      this.currentPathLengthWorld = 0;
+                      this.hasReachedDestination = false; // Réinitialiser le flag
+                      console.log(`Agent ${this.id}: Arrivé à la maison (à pied).`);
+                  }
+                  break;
 
             case AgentState.DRIVING_HOME:
                  this.isVisible = false;
