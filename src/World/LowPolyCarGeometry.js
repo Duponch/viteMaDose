@@ -18,7 +18,7 @@ export function createLowPolyCarGeometry(options = {}) {
     const rearLightColor = options.rearLightColor || 0xff0000;
 
     // Matériaux
-    const bodyMaterial = new THREE.MeshStandardMaterial({ color: bodyColor, metalness: 0.8, roughness: 0.4 });
+    const bodyMaterial = new THREE.MeshStandardMaterial({ color: bodyColor, metalness: 0.4, roughness: 0.7 });
     const windowMaterial = new THREE.MeshPhongMaterial({ color: windowColor, transparent: true, opacity: 0.7 });
     const wheelMaterial = new THREE.MeshStandardMaterial({ color: wheelColor, metalness: 0.1, roughness: 0.9 });
     const hubcapMaterial = new THREE.MeshStandardMaterial({ color: hubcapColor, metalness: 0.9, roughness: 0.2 });

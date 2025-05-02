@@ -19,180 +19,23 @@ export default class SidewalkGenerator {
         this.config = config;
         this.materials = materials;
         
-        // Création des textures procédurales
-        const sidewalkTexture = this.createSidewalkTexture();
-        const normalMap = this.createSidewalkNormalMap();
-        const roughnessMap = this.createSidewalkRoughnessMap();
-        
         if (!this.materials.sidewalkMaterial) {
             console.warn("SidewalkGenerator: sidewalkMaterial not found in provided materials. Using fallback.");
             this.materials.sidewalkMaterial = new THREE.MeshStandardMaterial({ 
                 color: 0x999999,
-                map: sidewalkTexture,
-                normalMap: normalMap,
-                normalScale: new THREE.Vector2(0.5, 0.5),
-                roughnessMap: roughnessMap,
                 roughness: 0.9,
                 metalness: 0.0,
                 envMapIntensity: 0.0
             });
         } else {
-            // Mise à jour du matériau existant avec les nouvelles textures
-            this.materials.sidewalkMaterial.map = sidewalkTexture;
-            this.materials.sidewalkMaterial.normalMap = normalMap;
-            this.materials.sidewalkMaterial.normalScale = new THREE.Vector2(0.5, 0.5);
-            this.materials.sidewalkMaterial.roughnessMap = roughnessMap;
+            // Mise à jour du matériau existant sans textures
+            this.materials.sidewalkMaterial.map = null;
+            this.materials.sidewalkMaterial.normalMap = null;
+            this.materials.sidewalkMaterial.roughnessMap = null;
             this.materials.sidewalkMaterial.roughness = 0.9;
             this.materials.sidewalkMaterial.metalness = 0.0;
             this.materials.sidewalkMaterial.envMapIntensity = 0.0;
         }
-    }
-
-    /**
-     * Crée une texture procédurale pour les trottoirs
-     * @returns {THREE.CanvasTexture} La texture générée
-     */
-    createSidewalkTexture() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        // Couleur de base légèrement plus claire
-        ctx.fillStyle = '#999999';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Taille des dalles
-        const tileSize = 256;
-        const numTiles = canvas.width / tileSize;
-
-        // Dessin des dalles
-        for (let y = 0; y < numTiles; y++) {
-            for (let x = 0; x < numTiles; x++) {
-                // Variation de couleur plus subtile
-                const variation = Math.random() * 15 - 7.5; // Réduit de 30 à 15
-                const r = Math.min(255, Math.max(0, 153 + variation));
-                const g = Math.min(255, Math.max(0, 153 + variation));
-                const b = Math.min(255, Math.max(0, 153 + variation));
-                
-                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-                ctx.fillRect(x * tileSize, y * tileSize, tileSize - 4, tileSize - 4);
-
-                // Ajout de fissures plus subtiles
-                if (Math.random() > 0.9) {
-                    ctx.strokeStyle = '#888888'; // Plus clair
-                    ctx.lineWidth = 2; // Plus fin
-                    ctx.beginPath();
-                    ctx.moveTo(x * tileSize + Math.random() * tileSize, y * tileSize + Math.random() * tileSize);
-                    ctx.lineTo(x * tileSize + Math.random() * tileSize, y * tileSize + Math.random() * tileSize);
-                    ctx.stroke();
-                }
-            }
-        }
-
-        // Création de la texture
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(1, 1);
-        return texture;
-    }
-
-    /**
-     * Crée une normal map procédurale pour les trottoirs
-     * @returns {THREE.CanvasTexture} La normal map générée
-     */
-    createSidewalkNormalMap() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        // Fond de base (bleu = plat)
-        ctx.fillStyle = '#8080FF';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Taille des dalles
-        const tileSize = 256;
-        const numTiles = canvas.width / tileSize;
-
-        // Dessin des dalles avec effet de relief plus subtil
-        for (let y = 0; y < numTiles; y++) {
-            for (let x = 0; x < numTiles; x++) {
-                // Élévation plus subtile
-                ctx.fillStyle = '#9595FF'; // Plus proche du bleu de base
-                ctx.fillRect(x * tileSize, y * tileSize, tileSize - 4, tileSize - 4);
-
-                // Bordures légèrement surélevées
-                ctx.strokeStyle = '#A5A5FF'; // Plus proche du bleu de base
-                ctx.lineWidth = 3; // Plus fin
-                ctx.strokeRect(x * tileSize, y * tileSize, tileSize - 4, tileSize - 4);
-
-                // Coins légèrement surélevés
-                ctx.fillStyle = '#B0B0FF'; // Plus proche du bleu de base
-                const cornerSize = 6; // Plus petit
-                ctx.fillRect(x * tileSize, y * tileSize, cornerSize, cornerSize);
-                ctx.fillRect(x * tileSize + tileSize - cornerSize, y * tileSize, cornerSize, cornerSize);
-                ctx.fillRect(x * tileSize, y * tileSize + tileSize - cornerSize, cornerSize, cornerSize);
-                ctx.fillRect(x * tileSize + tileSize - cornerSize, y * tileSize + tileSize - cornerSize, cornerSize, cornerSize);
-            }
-        }
-
-        // Création de la texture
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(1, 1);
-        return texture;
-    }
-
-    /**
-     * Crée une roughness map procédurale pour les trottoirs
-     * @returns {THREE.CanvasTexture} La roughness map générée
-     */
-    createSidewalkRoughnessMap() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
-        const ctx = canvas.getContext('2d');
-
-        // Fond de base (gris moyen = rugosité moyenne)
-        ctx.fillStyle = '#808080';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Taille des dalles
-        const tileSize = 256;
-        const numTiles = canvas.width / tileSize;
-
-        // Dessin des dalles avec variations de rugosité plus subtiles
-        for (let y = 0; y < numTiles; y++) {
-            for (let x = 0; x < numTiles; x++) {
-                // Variation de rugosité plus subtile
-                const roughness = Math.random() * 30 + 70; // Entre 70 et 100 (plus mat)
-                ctx.fillStyle = `rgb(${roughness}, ${roughness}, ${roughness})`;
-                ctx.fillRect(x * tileSize, y * tileSize, tileSize - 4, tileSize - 4);
-
-                // Bordures légèrement plus rugueuses
-                ctx.strokeStyle = '#707070';
-                ctx.lineWidth = 3;
-                ctx.strokeRect(x * tileSize, y * tileSize, tileSize - 4, tileSize - 4);
-
-                // Coins légèrement plus rugueux
-                ctx.fillStyle = '#656565';
-                const cornerSize = 6;
-                ctx.fillRect(x * tileSize, y * tileSize, cornerSize, cornerSize);
-                ctx.fillRect(x * tileSize + tileSize - cornerSize, y * tileSize, cornerSize, cornerSize);
-                ctx.fillRect(x * tileSize, y * tileSize + tileSize - cornerSize, cornerSize, cornerSize);
-                ctx.fillRect(x * tileSize + tileSize - cornerSize, y * tileSize + tileSize - cornerSize, cornerSize, cornerSize);
-            }
-        }
-
-        // Création de la texture
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(1, 1);
-        return texture;
     }
 
     /**

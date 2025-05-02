@@ -82,7 +82,7 @@ export default class Car {
         this.matrix = new THREE.Matrix4();
 
         // Facteur d'échelle global pour la voiture (réduction de 10%)
-        this.globalScale = 0.9;
+        this.globalScale = 0.8;
 
         // La hauteur de la voiture (inchangée)
         this.carHeight = 0.25; // Hauteur depuis le sol
