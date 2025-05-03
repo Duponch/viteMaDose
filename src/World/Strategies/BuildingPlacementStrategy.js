@@ -42,23 +42,17 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
         const plotGroundY = this.config.plotGroundY ?? 0.005;
         const sidewalkHeight = this.config.sidewalkHeight ?? 0.2;
 
-        // Récupérer les données de l'asset pour ce type.
-        // NOTE: Depuis la modification de CityAssetLoader, getRandomAssetData('building')
-        // retournera probablement l'asset procédural pré-généré s'il existe.
-        const assetInfo = this.assetLoader.getRandomAssetData('building');
-
-        if (!assetInfo) {
-            console.warn(`BuildingPlacementStrategy: Aucun asset 'building' trouvé pour Plot ${plot.id}.`);
+        // --- TEMPORARY: Use a representative size for grid calculation ---
+        // TODO: Ideally, get an average or representative size from assetLoader if possible,
+        // or use a config value. Using the first asset's size for now for layout.
+        const representativeAsset = this.assetLoader.getAssetDataById(this.assetLoader.assets.building[0]?.id);
+        if (!representativeAsset || !representativeAsset.sizeAfterFitting) {
+            console.warn(`BuildingPlacementStrategy: Could not get representative asset size for Plot ${plot.id}. Skipping placement.`);
             return;
         }
-        if (!assetInfo.sizeAfterFitting || !assetInfo.centerOffset || !assetInfo.fittingScaleFactor || !assetInfo.id) {
-             console.error(`BuildingPlacementStrategy: Données de l'asset 'building' (ID: ${assetInfo.id}) incomplètes ou invalides pour Plot ${plot.id}.`);
-             return;
-        }
-
-        // Dimensions cibles basées sur l'asset chargé/généré et l'échelle de la grille
-        const targetBuildingWidth = assetInfo.sizeAfterFitting.x * baseScaleFactor;
-        const targetBuildingDepth = assetInfo.sizeAfterFitting.z * baseScaleFactor;
+        const targetBuildingWidth = representativeAsset.sizeAfterFitting.x * baseScaleFactor;
+        const targetBuildingDepth = representativeAsset.sizeAfterFitting.z * baseScaleFactor;
+        // --- END TEMPORARY ---
 
         const gridPlacement = this.calculateGridPlacement(
             plot,
@@ -83,6 +77,16 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
                 const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + minSpacing)) + targetBuildingWidth / 2;
                 const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + minSpacing)) + targetBuildingDepth / 2;
                 const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
+
+                const assetInfo = this.assetLoader.getRandomAssetData('building');
+                if (!assetInfo) {
+                    console.warn(`BuildingPlacementStrategy: Aucun asset 'building' trouvé pour cellule (${colIndex},${rowIndex}) Plot ${plot.id}.`);
+                    continue; // Skip this cell
+                }
+                if (!assetInfo.sizeAfterFitting || !assetInfo.centerOffset || !assetInfo.fittingScaleFactor || !assetInfo.id) {
+                    console.error(`BuildingPlacementStrategy: Données de l'asset 'building' (ID: ${assetInfo.id}) incomplètes pour cellule (${colIndex},${rowIndex}) Plot ${plot.id}.`);
+                    continue; // Skip this cell
+                }
 
                 const targetRotationY = this.determineBuildingRotation(cellCenterX, cellCenterZ, plot);
 
