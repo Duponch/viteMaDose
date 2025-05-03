@@ -55,7 +55,7 @@ export default class InstancedMeshManager {
      * @param {Object.<string, Object.<string, Array<THREE.Matrix4>>>} instanceData - Données provenant de InstanceDataManager.
      */
     createMeshes(instanceData) {
-        console.log("InstancedMeshManager: Creating InstancedMeshes...");
+        console.log("InstancedMeshManager: Creating InstancedMeshes (Corrected)...");
         this.reset(); // Nettoyer les anciens meshes avant d'en créer de nouveaux
 
         let totalMeshesCreated = 0;
@@ -73,128 +73,138 @@ export default class InstancedMeshManager {
                 }
 
                 let geometry = null;
-                let material = null;
+                let material = null; // Sera déterminé dans le switch
+                let isHouseWindowPart = false; // Flag spécifique pour les fenêtres de maison (pour clonage/envmap)
                 let castShadow = true;
-                let receiveShadow = true;
-                let isWindow = false;
+                let receiveShadow = true; // Sera ajusté pour les fenêtres plus tard
                 const meshKey = `${type}_${idOrKey}`; // Clé unique pour stocker le mesh
 
                 try {
-                    // --- Déterminer Géométrie et Matériau ---
+                    // --- Déterminer Géométrie et Matériau (sans déterminer isWindow ici) ---
                     switch (type) {
                         case 'house': {
-							const partName = idOrKey; // Pour 'house', idOrKey est le partName
-							geometry = this.renderers.houseRenderer?.baseHouseGeometries[partName];
-							// const baseMaterial = this.renderers.houseRenderer?.baseHouseMaterials[partName]; // <-- On enlève ça d'ici
-	
-							// --- MODIFICATION ---
-							// Vérifier seulement la géométrie ici. Le matériau sera géré plus bas.
-							if (!geometry) {
-								console.warn(`[IMM] Missing geometry for house part: ${partName}`);
-								continue; // Passer à la clé suivante si la géométrie manque
-							}
-							// --- FIN MODIFICATION ---
-	
-							isWindow = (partName === 'windowXY' || partName === 'windowYZ');
-							if (isWindow) {
-								// Cloner et configurer le matériau fenêtre
-								// Vérifier que le matériau de base 'window' existe
-								const baseWindowMaterial = this.renderers.houseRenderer?.baseHouseMaterials?.window;
-								if (!baseWindowMaterial) {
-									console.warn(`[IMM] Base window material not found in HouseRenderer.`);
-									continue; // Impossible de créer le matériau fenêtre
-								}
-								material = baseWindowMaterial.clone(); // Cloner depuis le matériau 'window'
-								material.name = `Inst_HouseWindow_${partName}`; // Nom unique
-								material.emissive = new THREE.Color(0xFFFF99);
-								material.emissiveIntensity = 0.0;
-								if (this.experience?.scene?.environment) {
-									material.envMap = this.experience.scene.environment;
-									material.roughness = 0.05;
-									material.metalness = 0.9;
-									// Pas besoin de material.needsUpdate = true ici, sera fait si l'intensité change
-								}
-								receiveShadow = false;
-							} else {
-								// Pour les autres parties (murs, toit, porte...), récupérer leur matériau spécifique
-								material = this.renderers.houseRenderer?.baseHouseMaterials[partName];
-								if (!material) {
-									// Si le matériau spécifique manque pour une partie non-fenêtre, on logue et on saute.
-									console.warn(`[IMM] Missing material for non-window house part: ${partName}`);
-									continue;
-								}
-								// Pour les parties non-fenêtres, receiveShadow reste true (valeur par défaut)
-							}
-							// La création de l'InstancedMesh se fera après le 'break' avec le bon 'material'
-							break; // Important de sortir du switch ici
-						} // Fin case 'house'
+                            const partName = idOrKey; // Pour 'house', idOrKey est le partName
+                            geometry = this.renderers.houseRenderer?.baseHouseGeometries[partName];
+                            material = this.renderers.houseRenderer?.baseHouseMaterials[partName];
+
+                            if (!geometry) {
+                                console.warn(`[IMM] Missing geometry for house part: ${partName}`);
+                                continue;
+                            }
+                            if (!material) {
+                                // Tenter de récupérer le matériau 'window' si c'est une partie fenêtre nommée
+                                if (partName === 'windowXY' || partName === 'windowYZ') {
+                                    material = this.renderers.houseRenderer?.baseHouseMaterials?.window;
+                                    if (material) {
+                                        isHouseWindowPart = true; // Marquer comme fenêtre de maison
+                                        // Le clonage et la configuration se feront APRES la vérification isWindowFinal
+                                    } else {
+                                        console.warn(`[IMM] Missing specific material and base window material for house part: ${partName}`);
+                                        continue;
+                                    }
+                                } else {
+                                    console.warn(`[IMM] Missing material for non-window house part: ${partName}`);
+                                    continue;
+                                }
+                            } else if (material.name === "HouseWindowMat") { // Vérifier aussi le nom du matériau récupéré
+                                isHouseWindowPart = true;
+                                // Le clonage et la configuration se feront APRES la vérification isWindowFinal
+                            }
+                            break;
+                        } // Fin case 'house'
+
                         case 'building':
                         case 'skyscraper': {
-                             // Clé est assetId_partName (ex: 'building_proc_0_part0')
-                             const parts = idOrKey.split('_');
-                             const partName = parts.pop(); // 'part0'
-                             const assetId = parts.join('_'); // 'building_proc_0'
+                             // Clé est assetId_partName (ex: 'building_proc_0_part0') OU assetId si modèle standard
+                             let assetId = idOrKey;
+                             let partName = 'default'; // Pour assets standards
+
+                             // Gérer le cas des assets procéduraux avec parties
+                             if (idOrKey.includes('_part')) {
+                                 const parts = idOrKey.split('_');
+                                 partName = parts.pop(); // 'part0', 'part1', etc.
+                                 assetId = parts.join('_'); // 'building_proc_0', 'skyscraper_newModel_X', etc.
+                             }
 
                              const assetData = this.assetLoader.getAssetDataById(assetId);
-                             if (!assetData || !assetData.parts || assetData.parts.length === 0) {
-                                console.warn(`[IMM] Asset data or parts not found for ${type} ID: ${assetId}`);
+                             if (!assetData) {
+                                console.warn(`[IMM] Asset data not found for ${type} ID: ${assetId} (from key ${idOrKey})`);
                                 continue;
                              }
 
-                             // Trouver la partie correspondante (par nom ou index)
-                             let partIndex = -1;
-                             if (partName.startsWith('part')) {
-                                 partIndex = parseInt(partName.substring(4), 10);
-                             }
-                             // Alternative: rechercher par nom si les parties ont des noms spécifiques
+                             if (assetData.parts && assetData.parts.length > 0 && partName !== 'default') {
+                                 // Asset procédural avec parties
+                                 let partIndex = -1;
+                                 if (partName.startsWith('part')) {
+                                     partIndex = parseInt(partName.substring(4), 10);
+                                 }
+                                 const part = (partIndex !== -1 && assetData.parts[partIndex]) ? assetData.parts[partIndex] : null;
 
-                             const part = (partIndex !== -1 && assetData.parts[partIndex]) ? assetData.parts[partIndex] : null;
-
-                             if (!part || !part.geometry || !part.material) {
-                                 console.warn(`[IMM] Invalid part data for ${type} asset ${assetId}, part key: ${partName}`);
+                                 if (!part || !part.geometry || !part.material) {
+                                     console.warn(`[IMM] Invalid part data for ${type} asset ${assetId}, part key: ${partName}`);
+                                     continue;
+                                 }
+                                 geometry = part.geometry;
+                                 material = part.material; // Utiliser le matériau de la partie directement
+                             } else if (!assetData.parts && partName === 'default') {
+                                 // Asset standard (non procédural avec 'parts')
+                                 if (!assetData.geometry || !assetData.material) {
+                                    console.warn(`[IMM] Asset data invalid for standard ${type} ID: ${assetId}`);
+                                    continue;
+                                 }
+                                 geometry = assetData.geometry;
+                                 material = assetData.material;
+                             } else {
+                                 console.warn(`[IMM] Discrepancy in asset structure for ${type} ID: ${assetId}, key: ${idOrKey}. Expected parts? ${!!assetData.parts}`);
                                  continue;
                              }
-
-                             geometry = part.geometry;
-                             material = part.material; // Utiliser le matériau de la partie directement
-
-                             // Vérifier si c'est une fenêtre (basé sur le nom standardisé)
-                             isWindow = (material.name === "BuildingWindowMat" || material.name === "SkyscraperWindowMat_Standard");
-                             if (isWindow) {
-                                 receiveShadow = false;
-                                 // L'intensité émissive sera gérée dans updateWindows
-                                 // Assurer que le matériau est prêt pour l'émissivité
-                                 if (!material.emissive) material.emissive = new THREE.Color(0xfcffe0);
-                             }
                              break;
-                        }
+                        } // Fin case 'building'/'skyscraper'
+
                         case 'industrial':
                         case 'park':
                         case 'tree': {
-                            const assetId = idOrKey; // Pour standard, idOrKey est l'assetId
+                            // Logique existante pour ces types (avec gestion des parts si applicable)
+                            const assetId = idOrKey;
                             const assetData = this.assetLoader.getAssetDataById(assetId);
                             if (!assetData) {
                                 console.warn(`[IMM] Asset data not found for ${type} ID: ${assetId}`);
                                 continue;
                             }
 
-                            // Si l'asset a des parts, on doit gérer chaque partie séparément
                             if (assetData.parts && assetData.parts.length > 0) {
-                                // Pour chaque partie, créer un InstancedMesh
+                                // Gérer les parties séparément (chaque partie devient un InstancedMesh)
+                                // Note : Cette logique crée plusieurs InstancedMesh par asset à parts,
+                                // elle doit rester ici et ne pas passer par la création unique plus bas.
                                 assetData.parts.forEach((part, index) => {
                                     if (!part.geometry || !part.material) {
                                         console.warn(`[IMM] Invalid part data for ${type} asset ${assetId}, part index: ${index}`);
                                         return;
                                     }
 
+                                    // Déterminer si CETTE partie est une fenêtre
+                                    const isPartWindow = (
+                                        part.material.name === "BuildingWindowMat" || // Noms génériques
+                                        part.material.name === "SkyscraperWindowMat_Standard" ||
+                                        part.material.name === "NewBuildingWindow" ||
+                                        part.material.name === "NewBuildingBalconyWindow" ||
+                                        part.material.name?.startsWith("Inst_HouseWindow_") ||
+                                        part.material.name === "HouseWindowMat" ||
+                                        part.material.name === "IndustrialWindowPaneMat" // Ajouter noms spécifiques si besoin
+                                    );
+
                                     const count = matrices.length;
-                                    const instancedMesh = new THREE.InstancedMesh(part.geometry, part.material, count);
+                                    // Utiliser le matériau cloné pour éviter les modifications partagées
+                                    const partMaterialClone = part.material.clone();
+                                    partMaterialClone.name = `Inst_${meshKey}_part${index}`; // Donner un nom unique à l'instance clonée
+
+                                    const instancedMesh = new THREE.InstancedMesh(part.geometry, partMaterialClone, count);
                                     instancedMesh.castShadow = castShadow;
-                                    instancedMesh.receiveShadow = receiveShadow;
+                                    instancedMesh.receiveShadow = !isPartWindow; // Ombre si ce n'est pas une fenêtre
                                     instancedMesh.name = `${meshKey}_part${index}`;
 
-                                    matrices.forEach((matrix, index) => {
-                                        instancedMesh.setMatrixAt(index, matrix);
+                                    matrices.forEach((matrix, mIndex) => {
+                                        instancedMesh.setMatrixAt(mIndex, matrix);
                                     });
                                     instancedMesh.instanceMatrix.needsUpdate = true;
 
@@ -202,65 +212,124 @@ export default class InstancedMeshManager {
                                     this.instancedMeshes[`${meshKey}_part${index}`] = instancedMesh;
                                     totalMeshesCreated++;
                                     totalInstancesCreated += count;
+
+                                    // Ajouter aux fenêtres si applicable
+                                    if (isPartWindow) {
+                                        this.windowMeshes.push(instancedMesh);
+                                        // Appliquer envMap ici si nécessaire
+                                        if (this.experience?.scene?.environment) {
+                                            if (!partMaterialClone.envMap) partMaterialClone.envMap = this.experience.scene.environment;
+                                        }
+                                    }
                                 });
-                                continue;
+                                // Important : continuer à la prochaine clé car les meshes ont déjà été créés
+                                continue; // Passe à l'itération suivante de la boucle idOrKey
                             }
 
-                            // Si l'asset n'a pas de parts, on le traite comme avant
+                            // Si l'asset n'a pas de parts (cas standard pour ces types)
                             if (!assetData.geometry || !assetData.material) {
-                                console.warn(`[IMM] Asset data invalid for ${type} ID: ${assetId}`);
+                                console.warn(`[IMM] Asset data invalid for standard ${type} ID: ${assetId}`);
                                 continue;
                             }
                             geometry = assetData.geometry;
                             material = assetData.material; // Utiliser le matériau de l'asset directement
                             break;
-                        }
+                        } // Fin case industrial/park/tree
+
                         case 'crosswalk': {
-							// Pour les passages piétons, idOrKey est généralement 'default_crosswalk_stripe'
-							// Utiliser la géométrie et le matériau prédéfinis pour les bandes
-							if (!this.stripeBaseGeometry || !this.materials.crosswalkMaterial) {
-								console.warn(`[IMM] Crosswalk geometry or material not available.`);
-								continue; // Passer à la clé suivante si les prérequis manquent
-							}
-							geometry = this.stripeBaseGeometry;
-							material = this.materials.crosswalkMaterial;
-							castShadow = false; // Les passages piétons ne projettent pas d'ombre
-							receiveShadow = true; // Ils reçoivent les ombres
-							isWindow = false; // Ce ne sont pas des fenêtres
-							break; // Sortir du switch après avoir défini geom/mat/shadows
-					    }
+                            // Logique existante
+                            if (!this.stripeBaseGeometry || !this.materials.crosswalkMaterial) {
+                                console.warn(`[IMM] Crosswalk geometry or material not available.`);
+                                continue;
+                            }
+                            geometry = this.stripeBaseGeometry;
+                            material = this.materials.crosswalkMaterial;
+                            castShadow = false;
+                            receiveShadow = true;
+                            break;
+                        } // Fin case crosswalk
+
                         default:
                             console.warn(`[IMM] Unhandled asset type for instancing: ${type}`);
-                            continue;
+                            continue; // Passe à la clé suivante
                     } // Fin switch(type)
 
-                    // --- Création de l'InstancedMesh ---
+                    // --- Vérification centralisée isWindow et ajustement receiveShadow ---
+                    let isWindowFinal = false; // Utiliser une nouvelle variable
+                    if (material) {
+                        // Liste exhaustive des noms de matériaux de fenêtre
+                        const windowMaterialNames = [
+                            "BuildingWindowMat",
+                            "SkyscraperWindowMat_Standard",
+                            "NewBuildingWindow",
+                            "NewBuildingBalconyWindow",
+                            "HouseWindowMat",
+                            "IndustrialWindowPaneMat" // Ajouter si fenêtres industrielles doivent s'allumer
+                            // Ajouter d'autres noms si nécessaire
+                        ];
+                        isWindowFinal = windowMaterialNames.includes(material.name) || material.name?.startsWith("Inst_HouseWindow_");
+
+                        if (isWindowFinal) {
+                            receiveShadow = false; // Les fenêtres ne reçoivent pas d'ombre
+                        }
+                    }
+                     // --- FIN Vérification centralisée ---
+
+                    // --- Création de l'InstancedMesh unique (sauf pour assets à parts gérés plus haut) ---
                     if (geometry && material) {
-						// ... (le reste du code qui crée l'InstancedMesh reste identique)
-						const count = matrices.length;
-						const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
-						instancedMesh.castShadow = castShadow;
-						instancedMesh.receiveShadow = receiveShadow;
-						instancedMesh.name = meshKey; // Nom unique
-	
-						matrices.forEach((matrix, index) => {
-							instancedMesh.setMatrixAt(index, matrix);
-						});
-						instancedMesh.instanceMatrix.needsUpdate = true;
-	
-						this.parentGroup.add(instancedMesh);
-						this.instancedMeshes[meshKey] = instancedMesh;
-						totalMeshesCreated++;
-						totalInstancesCreated += count;
-	
-						// Ajouter aux fenêtres si applicable (ne s'appliquera pas aux crosswalks)
-						if (isWindow) {
-							this.windowMeshes.push(instancedMesh);
-						}
-					} else {
-						 // Log déjà existant si geom/mat sont manquants après le switch
-						 console.warn(`[IMM] Skipped mesh creation for ${meshKey} due to missing geometry or material after switch.`);
-					}
+                        // Gérer le clonage spécifique pour les fenêtres de maison avant de créer le mesh
+                        let finalMaterial = material;
+                        if (isHouseWindowPart && material.name === "HouseWindowMat") {
+                            finalMaterial = material.clone(); // Cloner seulement ici si c'est une fenêtre de maison
+                            finalMaterial.name = `Inst_HouseWindow_${idOrKey}`; // Donner le nom spécifique pour l'update
+                            // Configurer le matériau cloné (émissivité etc.)
+                            finalMaterial.emissive = new THREE.Color(0xFFFF99);
+                            finalMaterial.emissiveIntensity = 0.0;
+                            if (this.experience?.scene?.environment) {
+                                finalMaterial.envMap = this.experience.scene.environment;
+                                finalMaterial.roughness = 0.05; // Rendre les fenêtres maison plus réflectives
+                                finalMaterial.metalness = 0.9;
+                            }
+                        } else if (material.name === "NewBuildingWindow" || material.name === "NewBuildingBalconyWindow") {
+                             // Cloner aussi pour les nouvelles fenêtres pour être sûr que l'update ne modifie pas l'original
+                            finalMaterial = material.clone();
+                            // Le nom est déjà correct sur le clone
+                        }
+                        // Pour les autres matériaux (murs, toit, assets standards), on utilise l'original (ou celui de la part)
+
+
+                        const count = matrices.length;
+                        const instancedMesh = new THREE.InstancedMesh(geometry, finalMaterial, count); // Utiliser finalMaterial
+                        instancedMesh.castShadow = castShadow;
+                        instancedMesh.receiveShadow = receiveShadow; // Utilise la valeur potentiellement ajustée
+                        instancedMesh.name = meshKey;
+
+                        matrices.forEach((matrix, index) => {
+                            instancedMesh.setMatrixAt(index, matrix);
+                        });
+                        instancedMesh.instanceMatrix.needsUpdate = true;
+
+                        this.parentGroup.add(instancedMesh);
+                        this.instancedMeshes[meshKey] = instancedMesh;
+                        totalMeshesCreated++;
+                        totalInstancesCreated += count;
+
+                        // Ajouter aux fenêtres si applicable (utilise maintenant isWindowFinal)
+                        if (isWindowFinal) {
+                            this.windowMeshes.push(instancedMesh);
+                            // Optionnel : Appliquer envMap ici si besoin pour *toutes* les fenêtres identifiées
+                             if (this.experience?.scene?.environment && finalMaterial.name !== "IndustrialWindowPaneMat") { // Exemple : pas pour les industrielles
+                                 if (!finalMaterial.envMap) finalMaterial.envMap = this.experience.scene.environment;
+                                 // Ajuster roughness/metalness pour la réflectivité
+                                 // finalMaterial.roughness = 0.1;
+                                 // finalMaterial.metalness = 0.9;
+                             }
+                        }
+                    } else {
+                        // Ce log est atteint si geometry ou material sont null APRES le switch
+                        // (ne devrait pas arriver si la logique du switch est correcte)
+                        console.warn(`[IMM] Skipped mesh creation for ${meshKey} due to missing geometry or material after central window check.`);
+                    }
 
                 } catch (error) {
                      console.error(`[IMM] Error processing instance data for type '${type}', key '${idOrKey}':`, error);
@@ -298,11 +367,12 @@ export default class InstancedMeshManager {
             const isSkyscraperWindow = material.name === "SkyscraperWindowMat_Standard";
             const isHouseWindow = material.name.startsWith("Inst_HouseWindow_");
             const isBuildingWindow = material.name === "BuildingWindowMat";
+            const isNewBuildingWindow = material.name === "NewBuildingWindow" || material.name === "NewBuildingBalconyWindow";
 
-            let targetIntensity = 0.0; // Intensité émissive (0 = éteint)
+            let targetIntensity = 0.0;
 
             if (isSkyscraperWindow) {
-                targetIntensity = lightsOn ? 1.17 : 0.0; // Valeur spécifique gratte-ciel
+                targetIntensity = lightsOn ? 1 : 0.0; // Valeur spécifique gratte-ciel
                 // Logique additionnelle spécifique (ex: transmission, roughness)
                 const targetTransmission = lightsOn ? 0.0 : 0.0; // Exemple
                 const targetRoughness = lightsOn ? 0.8 : 0.1; // Exemple
@@ -317,7 +387,9 @@ export default class InstancedMeshManager {
             } else if (isHouseWindow) {
                 targetIntensity = lightsOn ? 1.23 : 0.0; // Valeur spécifique maison
             } else if (isBuildingWindow) {
-                targetIntensity = lightsOn ? 0.88 : 0.0; // Valeur spécifique immeuble
+                targetIntensity = lightsOn ? 0.8 : 0.0; // Valeur spécifique immeuble
+            } else if (isNewBuildingWindow) {
+                targetIntensity = lightsOn ? 0.9 : 0.0; // Même valeur que BuildingWindow
             } else {
                 // Fenêtre non reconnue ou type non géré
                 return;

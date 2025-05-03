@@ -20,28 +20,158 @@ export default class NewBuildingRenderer {
         this.materials = materials; // Matériaux du projet principal
         this.assetIdCounter = 0;
 
+        // Création de la texture de façade partagée
+        this.sharedFacadeTexture = this.createFacadeTexture();
+
         // Définition des matériaux LOCAUX pour cet immeuble.
         // Essayez de mapper aux matériaux existants, sinon utilisez un fallback simple.
         this.localMaterials = {
-            wall: (this.materials.buildingGroundMaterial || new THREE.MeshStandardMaterial({ color: 0x6B8E6B, name:"FallbackWall" })).clone(),
-            trim: (this.materials.sidewalkMaterial || new THREE.MeshStandardMaterial({ color: 0xb5aab8, name:"FallbackTrim" })).clone(),
-            roof: new THREE.MeshStandardMaterial({ color: 0xb8a8a0, name:"NewBuildingRoof" }), // Couleur spécifique du HTML
-            window: new THREE.MeshStandardMaterial({ color: 0xadd8e6, transparent: true, opacity: 0.7, name:"NewBuildingWindow" }),
-            balconyWindow: new THREE.MeshStandardMaterial({ color: 0x607B8B, transparent: true, opacity: 0.6, name:"NewBuildingBalconyWindow" }),
-            groundFloor: (this.materials.industrialGroundMaterial || new THREE.MeshStandardMaterial({ color: 0xaaaaaa, name:"FallbackGroundFloor" })).clone(), // Simpler fallback
-            frame: new THREE.MeshBasicMaterial({ color: 0x4d414f, name:"NewBuildingFrame" }), // Basic car pas d'ombre/lumière complexe
-            vent: new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.9, roughness: 0.4, name:"NewBuildingVent" }),
-            antenna: new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 1.0, roughness: 0.3, name:"NewBuildingAntenna" }),
-            balconyWall: (this.materials.sidewalkMaterial || new THREE.MeshStandardMaterial({ color: 0xb5aab8, name:"FallbackBalconyWall" })).clone(), // Réutilise trim
+            wall: (this.materials.buildingGroundMaterial || new THREE.MeshStandardMaterial({ 
+                color: 0x6B8E6B, 
+                name:"FallbackWall",
+                map: this.sharedFacadeTexture,
+                roughness: 0.8,
+                metalness: 0.1
+            })).clone(),
+            trim: (this.materials.sidewalkMaterial || new THREE.MeshStandardMaterial({ 
+                color: 0xb5aab8, 
+                name:"FallbackTrim",
+                map: this.sharedFacadeTexture,
+                roughness: 0.8,
+                metalness: 0.1
+            })).clone(),
+            roof: new THREE.MeshStandardMaterial({ 
+                color: 0xb8a8a0, 
+                name:"NewBuildingRoof",
+                map: this.sharedFacadeTexture,
+                roughness: 0.8,
+                metalness: 0.1
+            }),
+            window: new THREE.MeshStandardMaterial({ 
+                color: 0xadd8e6, 
+                transparent: true, 
+                opacity: 0.7, 
+                name:"NewBuildingWindow",
+                emissive: 0xfcffe0,
+                emissiveIntensity: 0.0,
+                metalness: 0.8,
+                roughness: 0.2
+            }),
+            balconyWindow: new THREE.MeshStandardMaterial({ 
+                color: 0x607B8B, 
+                transparent: true, 
+                opacity: 0.6, 
+                name:"NewBuildingBalconyWindow",
+                emissive: 0xfcffe0,
+                emissiveIntensity: 0.0,
+                metalness: 0.8,
+                roughness: 0.2
+            }),
+            groundFloor: (this.materials.industrialGroundMaterial || new THREE.MeshStandardMaterial({ 
+                color: 0xaaaaaa, 
+                name:"FallbackGroundFloor",
+                map: this.sharedFacadeTexture,
+                roughness: 0.8,
+                metalness: 0.1
+            })).clone(),
+            frame: new THREE.MeshBasicMaterial({ 
+                color: 0x4d414f, 
+                name:"NewBuildingFrame" 
+            }),
+            vent: new THREE.MeshStandardMaterial({ 
+                color: 0x555555, 
+                metalness: 0.9, 
+                roughness: 0.4, 
+                name:"NewBuildingVent" 
+            }),
+            antenna: new THREE.MeshStandardMaterial({ 
+                color: 0x444444, 
+                metalness: 1.0, 
+                roughness: 0.3, 
+                name:"NewBuildingAntenna" 
+            }),
+            balconyWall: (this.materials.sidewalkMaterial || new THREE.MeshStandardMaterial({ 
+                color: 0xb5aab8, 
+                name:"FallbackBalconyWall",
+                map: this.sharedFacadeTexture,
+                roughness: 0.8,
+                metalness: 0.1
+            })).clone(),
         };
 
         // Assigner des noms uniques aux matériaux clonés pour éviter conflits
         Object.keys(this.localMaterials).forEach(key => {
-            // S'assure que le nom est unique même si le matériau source était déjà nommé
-            this.localMaterials[key].name = `NewBuildingMat_${key}_${Math.random().toString(16).slice(2, 8)}`;
+            // Pour les fenêtres, utiliser un nom fixe
+            if (key === 'window' || key === 'balconyWindow') {
+                this.localMaterials[key].name = `NewBuilding${key.charAt(0).toUpperCase() + key.slice(1)}`;
+            } else {
+                // Pour les autres matériaux, générer un nom unique
+                this.localMaterials[key].name = `NewBuildingMat_${key}_${Math.random().toString(16).slice(2, 8)}`;
+            }
         });
 
         console.log("NewBuildingRenderer initialized with local materials.");
+    }
+
+    /**
+     * Crée une texture procédurale pour les façades des immeubles
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.CanvasTexture} La texture générée
+     */
+    createFacadeTexture(width = 512, height = 512) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base
+        ctx.fillStyle = '#f0e6d2';
+        ctx.fillRect(0, 0, width, height);
+
+        // Ajout de variations de couleur pour simuler des briques
+        const brickWidth = width / 8;
+        const brickHeight = height / 16;
+        
+        for (let y = 0; y < height; y += brickHeight) {
+            for (let x = 0; x < width; x += brickWidth) {
+                // Variation aléatoire de la couleur de base
+                const variation = Math.random() * 20 - 10;
+                const r = Math.min(255, Math.max(0, 240 + variation));
+                const g = Math.min(255, Math.max(0, 230 + variation));
+                const b = Math.min(255, Math.max(0, 210 + variation));
+                
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(x, y, brickWidth - 1, brickHeight - 1);
+            }
+        }
+
+        // Ajout de lignes horizontales pour simuler des joints
+        ctx.strokeStyle = '#d7c4a3';
+        ctx.lineWidth = 2;
+        for (let y = brickHeight; y < height; y += brickHeight) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+
+        // Ajout de lignes verticales décalées
+        for (let y = 0; y < height; y += brickHeight * 2) {
+            for (let x = brickWidth; x < width; x += brickWidth * 2) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + brickHeight);
+                ctx.stroke();
+            }
+        }
+
+        // Création de la texture Three.js
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 1);
+        return texture;
     }
 
     /**
