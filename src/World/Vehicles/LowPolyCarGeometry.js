@@ -185,7 +185,8 @@ export function createLowPolyCarGeometry(options = {}) {
         rearLights: {
             geometry: mergeGeometries(rearLightGeoms, false),
             material: rearLightMaterial
-        }
+        },
+        lightCones: { geometry: null, material: null }
     };
     return result;
 }

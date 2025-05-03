@@ -15,28 +15,79 @@ export default class CarManager {
         this.instanceIdToAgentId = new Array(this.maxCars); // instanceId -> Agent ID
         // --- FIN MODIFIÉ ---
 
+        // --- NOUVEAU : Initialisation des matériaux et géométries ---
+        this.materials = {
+            lightConeMaterial: new THREE.MeshBasicMaterial({
+                color: 0xFFFF99,
+                transparent: true,
+                opacity: 0.0015,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            })
+        };
+
+        // Création de la géométrie du cône de lumière
+        const coneHeight = 5.0; // Longueur du cône (maintenant dans l'axe Z)
+        const coneRadiusBottom = 1.0; // Rayon à la base réduit
+        const coneRadialSegments = 16;
+        this.lightConeGeometry = new THREE.ConeGeometry(
+            coneRadiusBottom,
+            coneHeight,
+            coneRadialSegments,
+            1,
+            true
+        );
+        // Rotation pour orienter le cône horizontalement (axe Y vers Z) et le tourner de 180°
+        this.lightConeGeometry.rotateX(Math.PI / 2);
+        this.lightConeGeometry.rotateY(Math.PI); // Rotation de 180° pour inverser le sens
+        // Centre le cône sur son axe
+        this.lightConeGeometry.translate(0, 0, -coneHeight / 2); // Négatif car on a tourné de 180°
+        this.lightConeGeometry.computeBoundingBox();
+
         // --- NOUVEAU : Utiliser la géométrie fusionnée low-poly PAR MATÉRIAU ---
         const carGeoms = createLowPolyCarGeometry();
         this.instancedMeshes = {};
         this.carMeshOrder = [
-            'body', 'windows', 'wheels', 'hubcaps', 'lights', 'rearLights'
+            'body', 'windows', 'wheels', 'hubcaps', 'lights', 'rearLights', 'lightCones'
         ];
+
+        this.roadHeight = 0.05;
+
+        // Initialisation des InstancedMesh
         for (const part of this.carMeshOrder) {
-            const { geometry, material } = carGeoms[part];
-            const mesh = new THREE.InstancedMesh(geometry, material, this.maxCars);
-            mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            mesh.name = `Cars_${part}`;
-            mesh.frustumCulled = false;
-            mesh.renderOrder = 1;
-            mesh.userData.isCarPart = true; // Marqueur pour identification
-            this.scene.add(mesh);
-            mesh.computeBoundingSphere(); // Calculer la sphère englobante (gardé pour info)
-            mesh.computeBoundingBox(); // Calculer la boîte englobante (gardé pour info)
-            // <<< NOUVEAU: Forcer une grande BoundingSphere pour le Raycaster >>>
-            mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 10000); // Centre à (0,0,0), rayon très grand
-            this.instancedMeshes[part] = mesh;
+            if (part === 'lightCones') {
+                // Pour les cônes de lumière, on utilise la géométrie et le matériau créés spécifiquement
+                const lightConeMesh = new THREE.InstancedMesh(
+                    this.lightConeGeometry,
+                    this.materials.lightConeMaterial,
+                    this.maxCars * 2 // Double car on a deux cônes par voiture
+                );
+                lightConeMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                lightConeMesh.castShadow = false;
+                lightConeMesh.receiveShadow = false;
+                lightConeMesh.name = "Cars_LightCones";
+                lightConeMesh.frustumCulled = false;
+                lightConeMesh.renderOrder = 1;
+                lightConeMesh.userData.isCarPart = true;
+                lightConeMesh.visible = false; // Initialement invisible
+                this.scene.add(lightConeMesh);
+                this.instancedMeshes[part] = lightConeMesh;
+            } else {
+                const { geometry, material } = carGeoms[part];
+                const mesh = new THREE.InstancedMesh(geometry, material, this.maxCars);
+                mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                mesh.name = `Cars_${part}`;
+                mesh.frustumCulled = false;
+                mesh.renderOrder = 1;
+                mesh.userData.isCarPart = true;
+                this.scene.add(mesh);
+                mesh.computeBoundingSphere();
+                mesh.computeBoundingBox();
+                mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 10000);
+                this.instancedMeshes[part] = mesh;
+            }
         }
 
         // --- MODIFIÉ : Initialiser toutes les matrices pour cacher les voitures ---
@@ -55,8 +106,6 @@ export default class CarManager {
             this.instancedMeshes[part].instanceMatrix.needsUpdate = true;
         }
         // --- FIN MODIFIÉ ---
-
-        this.roadHeight = 0.05;
 
         console.log("CarManager initialisé avec Pooling multi-matériaux");
     }
@@ -106,7 +155,6 @@ export default class CarManager {
         // Mettre à jour tous les InstancedMeshs pour cette voiture spécifique
         for (const part of this.carMeshOrder) {
             this.instancedMeshes[part].setMatrixAt(availableCarIndex, availableCar.matrix);
-            this.instancedMeshes[part].instanceMatrix.needsUpdate = true;
         }
 
         // Enregistrer l'association
@@ -179,7 +227,31 @@ export default class CarManager {
                 car.update(deltaTime); // Logique interne de la voiture
                 // La matrice de la voiture est mise à jour dans car.update() via car.updateMatrix()
                 for (const part of this.carMeshOrder) {
-                    this.instancedMeshes[part].setMatrixAt(i, car.matrix);
+                    if (part === 'lightCones') {
+                        // Pour les cônes de lumière, on utilise une matrice spéciale
+                        const coneMatrix1 = new THREE.Matrix4();
+                        const coneMatrix2 = new THREE.Matrix4();
+                        coneMatrix1.copy(car.matrix);
+                        coneMatrix2.copy(car.matrix);
+                        
+                        // Position des phares (à ajuster selon le modèle de voiture)
+                        const phareGauche = new THREE.Vector3(-0.7, 0.65, 6.5); // Décalage vers la gauche et l'avant
+                        const phareDroit = new THREE.Vector3(0.7, 0.65, 6.5);  // Décalage vers la droite et l'avant
+                        
+                        // Appliquer la transformation de la voiture aux positions des phares
+                        phareGauche.applyMatrix4(car.matrix);
+                        phareDroit.applyMatrix4(car.matrix);
+                        
+                        // Définir les matrices pour les deux cônes
+                        coneMatrix1.setPosition(phareGauche.x, phareGauche.y, phareGauche.z);
+                        coneMatrix2.setPosition(phareDroit.x, phareDroit.y, phareDroit.z);
+                        
+                        // Mettre à jour les deux instances (une pour chaque phare)
+                        this.instancedMeshes[part].setMatrixAt(i * 2, coneMatrix1);
+                        this.instancedMeshes[part].setMatrixAt(i * 2 + 1, coneMatrix2);
+                    } else {
+                        this.instancedMeshes[part].setMatrixAt(i, car.matrix);
+                    }
                 }
                 needsMatrixUpdate = true;
             }
@@ -225,6 +297,12 @@ export default class CarManager {
                 rearLightsMesh.material.needsUpdate = true;
             }
         }
+
+        // Mettre à jour la visibilité des cônes de lumière
+        const lightConesMesh = this.instancedMeshes.lightCones;
+        if (lightConesMesh) {
+            lightConesMesh.visible = lightsOn;
+        }
     }
 
     // destroy (inchangé)
@@ -235,6 +313,18 @@ export default class CarManager {
             }
             this.instancedMeshes[part].geometry.dispose();
             this.instancedMeshes[part].material.dispose();
+        }
+        // Nettoyer la géométrie du cône de lumière
+        if (this.lightConeGeometry) {
+            this.lightConeGeometry.dispose();
+        }
+        // Nettoyer les matériaux
+        if (this.materials) {
+            Object.values(this.materials).forEach(material => {
+                if (material && typeof material.dispose === 'function') {
+                    material.dispose();
+                }
+            });
         }
         this.cars = [];
         this.agentToCar.clear();
