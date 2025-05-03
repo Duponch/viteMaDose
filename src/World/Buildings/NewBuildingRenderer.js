@@ -53,6 +53,14 @@ export default class NewBuildingRenderer {
      * @returns {object|null} L'asset généré {id, parts, fittingScaleFactor, ...} ou null.
      */
     generateProceduralBuilding(baseWidth, baseHeight, baseDepth, userScale = 1) {
+        // Augmenter l'échelle par défaut
+        const defaultScaleMultiplier = 1.2; // Augmentation de 50%
+        
+        // Ajuster les dimensions de base
+        const adjustedBaseWidth = baseWidth * defaultScaleMultiplier;
+        const adjustedBaseHeight = baseHeight * defaultScaleMultiplier;
+        const adjustedBaseDepth = baseDepth * defaultScaleMultiplier;
+        
         const buildingGroup = new THREE.Group(); // Groupe temporaire pour l'assemblage
 
         // ----- Copier les Constantes de Dimensions du HTML -----
@@ -70,7 +78,7 @@ export default class NewBuildingRenderer {
         const balconyWindowWidth = recessWidth * 0.7; const balconyWindowHeight = windowHeight * 1.1;
         const balconyWindowDepth = windowDepth; const dividerWidth = frameThickness * 1.5;
         const balconyWallHeight = 0.6; const balconyWallThickness = 0.2; const balconyWallWidth = recessWidth;
-        const antennaHeight = 2.5; const antennaRadius = 0.05;
+        const antennaHeight = 2.5; const antennaRadius = 0.15;
 
         // ----- Matériaux locaux (références pratiques) -----
         const wallMaterial = this.localMaterials.wall;
@@ -383,7 +391,7 @@ export default class NewBuildingRenderer {
         globalSize.y = Math.max(globalSize.y, 0.001);
         globalSize.z = Math.max(globalSize.z, 0.001);
 
-        const fittingScaleFactor = Math.min(baseWidth / globalSize.x, baseHeight / globalSize.y, baseDepth / globalSize.z);
+        const fittingScaleFactor = Math.min(adjustedBaseWidth / globalSize.x, adjustedBaseHeight / globalSize.y, adjustedBaseDepth / globalSize.z);
         const sizeAfterFitting = globalSize.clone().multiplyScalar(fittingScaleFactor);
 
         // Fusionner les géométries par matériau et recentrer
@@ -419,7 +427,7 @@ export default class NewBuildingRenderer {
             id: `building_newModel_${this.assetIdCounter++}`,
             parts: parts,
             fittingScaleFactor: fittingScaleFactor,
-            userScale: userScale,
+            userScale: adjustedBaseWidth / globalSize.x, // Utiliser l'échelle ajustée
             centerOffset: new THREE.Vector3(0, globalSize.y / 2, 0), // Centre à la base
             sizeAfterFitting: sizeAfterFitting
         };
