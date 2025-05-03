@@ -549,6 +549,9 @@ export default class World {
 	   if(this.cityManager?.lampPostManager) {
 		   this.cityManager.lampPostManager.updateLampPostLights(currentHour); // Appel via CityManager
 	   }
+	   if(this.carManager) {
+		   this.carManager.updateCarLights(currentHour); // Mise à jour des phares des voitures
+	   }
 	   this.carManager?.update(deltaTime); // Mettre à jour les voitures
 	   this.agentManager?.update(deltaTime);
    }

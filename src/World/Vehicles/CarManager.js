@@ -200,6 +200,33 @@ export default class CarManager {
         // }
     }
 
+    /**
+     * Met à jour l'intensité émissive des phares en fonction de l'heure.
+     * @param {number} currentHour - L'heure actuelle (0-23).
+     */
+    updateCarLights(currentHour) {
+        const lightsOn = (currentHour >= 18 || currentHour < 6);
+        const targetIntensity = lightsOn ? 1 : 0.0;
+
+        // Mettre à jour les phares avant
+        const headlightsMesh = this.instancedMeshes.lights;
+        if (headlightsMesh && headlightsMesh.material) {
+            if (headlightsMesh.material.emissiveIntensity !== targetIntensity) {
+                headlightsMesh.material.emissiveIntensity = targetIntensity;
+                headlightsMesh.material.needsUpdate = true;
+            }
+        }
+
+        // Mettre à jour les feux arrière (toujours allumés)
+        const rearLightsMesh = this.instancedMeshes.rearLights;
+        if (rearLightsMesh && rearLightsMesh.material) {
+            if (rearLightsMesh.material.emissiveIntensity !== 0.6) {
+                rearLightsMesh.material.emissiveIntensity = 0.6;
+                rearLightsMesh.material.needsUpdate = true;
+            }
+        }
+    }
+
     // destroy (inchangé)
     destroy() {
         for (const part of this.carMeshOrder) {
