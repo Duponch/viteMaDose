@@ -6,6 +6,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import HouseRenderer from '../Buildings/HouseRenderer.js';
 import BuildingRenderer from '../Buildings/BuildingRenderer.js';
+import NewBuildingRenderer from '../Buildings/NewBuildingRenderer.js';
 import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
 import IndustrialRenderer, { generateProceduralIndustrial } from '../Buildings/IndustrialRenderer.js'; // Ajustez le chemin si nécessaire
 import TreeRenderer from '../Vegetation/TreeRenderer.js';
@@ -33,6 +34,7 @@ export default class CityAssetLoader {
         // Création des instances de HouseRenderer, BuildingRenderer et SkyscraperRenderer
         this.houseRenderer = new HouseRenderer(config, {});
         this.buildingRenderer = new BuildingRenderer(config, {});
+        this.newBuildingRenderer = new NewBuildingRenderer(config, {});
         this.skyscraperRenderer = new SkyscraperRenderer(config, {});
         this.treeRenderer = new TreeRenderer(config, materials);
         console.log("CityAssetLoader initialisé. Utilisation de HouseRenderer pour les maisons, BuildingRenderer pour les immeubles et SkyscraperRenderer pour les gratte-ciels.");
@@ -76,19 +78,35 @@ export default class CityAssetLoader {
 
         // Fonction interne createLoadPromises mise à jour pour gérer les types procéduraux.
         const createLoadPromises = (assetConfigs, dir, type, width, height, depth) => { //
-            if (type === 'house' || type === 'building' || type === 'skyscraper' || type === 'tree') { //
+            if (type === 'house' || type === 'skyscraper' || type === 'tree') { // Keep original logic for these
                 console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`); //
                 return [ //
-                    this.loadAssetModel(null, type, width, height, depth, 1.0) //
+                    this.loadAssetModel(null, type, width, height, depth, 1.0, null) // Pass null for renderer hint
                         .catch(error => { //
                             console.error(`Echec génération procédurale ${type}:`, error); //
                             return null; //
                         })
                 ];
+            } else if (type === 'building') { // *** NEW LOGIC FOR BUILDINGS ***
+                console.log(`-> Préparation de la génération procédurale pour ${this.config.proceduralBuildingVariants ?? 10} variants d'immeubles (50/50)...`);
+                const promises = [];
+                const numVariants = this.config.proceduralBuildingVariants ?? 10; // Make it configurable? Default 10.
+                for (let i = 0; i < numVariants; i++) {
+                    // Alternate between renderers, aiming for roughly 50/50
+                    const rendererTypeHint = (i % 2 === 0) ? 'new' : 'old';
+                    promises.push(
+                        this.loadAssetModel(null, type, width, height, depth, 1.0, rendererTypeHint) // Pass hint
+                            .catch(error => {
+                                console.error(`Echec génération procédurale ${type} (variant ${i}, renderer: ${rendererTypeHint}):`, error);
+                                return null;
+                            })
+                    );
+                }
+                return promises; // Return array of promises
             }
             if (type === 'industrial') { //
                 // Génération procédurale industrielle
-                console.log('-> Génération procédurale pour le type "industrial"...'); //
+                console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`);
                 const asset = generateProceduralIndustrial(width, height, depth, {}); //
                 this.assets['industrial'] = [asset]; //
                 return [Promise.resolve(asset)]; //
@@ -200,80 +218,165 @@ export default class CityAssetLoader {
     }
 
     // ----- loadAssetModel -----
-    async loadAssetModel(path, type, baseWidth, baseHeight, baseDepth, userScale = 1) {
-		
-        // Pour les maisons, utiliser HouseRenderer.
-        if (type === 'house') {
-            return new Promise((resolve) => {
-                try {
-                    const asset = this.houseRenderer.generateProceduralHouse(baseWidth, baseHeight, baseDepth, userScale);
-                    resolve(asset);
-                } catch (error) {
-                    console.error("Erreur lors de la génération de la maison procédurale:", error);
-                    resolve(null);
-                }
-            });
-        }
-        // Pour les immeubles, utiliser BuildingRenderer.
-        if (type === 'building') {
-            return new Promise((resolve) => {
-                try {
-                    const asset = this.buildingRenderer.generateProceduralBuilding(baseWidth, baseHeight, baseDepth, userScale);
-                    resolve(asset);
-                } catch (error) {
-                    console.error("Erreur lors de la génération de l'immeuble procédural:", error);
-                    resolve(null);
-                }
-            });
-        }
-        // Pour les gratte-ciels, utiliser SkyscraperRenderer.
-        if (type === 'skyscraper') {
-            return new Promise((resolve) => {
-                try {
-                    const asset = this.skyscraperRenderer.generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale);
-                    resolve(asset);
-                } catch (error) {
-                    console.error("Erreur lors de la génération du gratte-ciel procédural:", error);
-                    resolve(null);
-                }
-            });
-        }
-        // Ajouter la logique de génération pour le type 'tree'
-        if (type === 'tree') {
-            console.log('[Tree Proc] Génération d\'un arbre procédural');
-            const treeAsset = this.treeRenderer.generateProceduralTree();
-            if (!treeAsset) {
-                console.error('[Tree Proc] Échec de la génération de l\'arbre');
-                return null;
-            }
-            return treeAsset;
-        }
-        // --- Logique existante pour les autres types (industrial, park) ---
-        // Modifié la condition pour exclure 'tree' si path est null
-        if (!path && type !== 'tree') {
-            console.error(`[AssetLoader] Path manquant pour le type '${type}' (non procédural). Asset ignoré.`);
-            return Promise.resolve(null);
-        }
-        // Si c'est un arbre procédural, path est null, on saute le chargement de fichier
-        if (type === 'tree') {
-             // Le resolve(asset) dans le bloc 'if (type === 'tree')' ci-dessus a déjà traité ce cas.
-             // On ne devrait jamais arriver ici pour un arbre procédural.
-             // Mais par sécurité, on pourrait retourner null ici si jamais la logique changeait.
-             console.warn("[AssetLoader] Tentative de chargement de fichier pour un arbre procédural détectée, ignorée.");
-             return Promise.resolve(null);
-        }
+    loadAssetModel(path, type, baseWidth, baseHeight, baseDepth, userScale = 1, rendererTypeHint = null) {
+        // Garder une trace de l'ID unique pour cet asset, même si procédural
+        const internalCounterId = this.assetIdCounter++; // Increment counter immediately
+        const modelIdBase = path ? path.split('/').pop().split('.')[0] : `${type}_proc`;
 
-        // --- Logique de chargement de fichier pour industrial, park, etc. (inchangée) ---
-        const modelId = `${type}_${this.assetIdCounter++}_${path.split('/').pop()}`;
-        const extension = path.split('.').pop()?.toLowerCase();
-        return new Promise((resolve, reject) => {
-            let loader;
-            if (extension === 'fbx') { loader = this.fbxLoader; }
-            else if (extension === 'glb' || extension === 'gltf') { loader = this.gltfLoader; }
-            else {
-                console.error(`[${modelId}] Format de fichier non supporté: ${extension} pour ${path}. Asset ignoré.`);
-                return resolve(null);
+        return new Promise((resolve) => {
+            // Générer l'ID final plus tard si procédural, basé sur le type de renderer
+            let finalModelId = path ? modelIdBase : null;
+
+            // Check cache first (only for file paths)
+            if (path && this.loadedAssets.has(modelIdBase)) {
+                console.log(`  - Asset '${modelIdBase}' déjà chargé, récupération depuis le cache.`);
+                resolve(this.loadedAssets.get(modelIdBase));
+                return;
             }
+
+            // --- Procedural Generation ---
+            if (path === null) {
+                let assetData = null;
+                console.log(`Attempting procedural generation for type: ${type} ${rendererTypeHint ? `(Hint: ${rendererTypeHint})` : ''}`);
+
+                if (type === 'house') {
+                    if (!this.houseRenderer) {
+                        console.error("HouseRenderer not initialized.");
+                        resolve(null);
+                        return;
+                    }
+                    try {
+                        assetData = this.houseRenderer.generateProceduralHouse(baseWidth, baseHeight, baseDepth, userScale);
+                        if (assetData) {
+                            finalModelId = `house_proc_${internalCounterId}`;
+                            assetData.id = finalModelId;
+                            assetData.procedural = true;
+                            assetData.rendererType = 'HouseRenderer';
+                            this.loadedAssets.set(finalModelId, assetData);
+                            console.log(`  - Generated procedural house asset '${finalModelId}'`);
+                            resolve(assetData);
+                        } else {
+                            console.warn("Procedural generation for house returned null.");
+                            resolve(null);
+                        }
+                    } catch (error) {
+                        console.error("Error during procedural house generation:", error);
+                        resolve(null);
+                    }
+                } else if (type === 'building') {
+                    // *** MODIFICATION START ***
+                    const useNewRenderer = rendererTypeHint === 'new'; // Use the hint
+                    const renderer = useNewRenderer ? this.newBuildingRenderer : this.buildingRenderer;
+                    const rendererName = useNewRenderer ? 'NewBuildingRenderer' : 'BuildingRenderer';
+                    // console.log(`Generating procedural building using ${rendererName}...`); // Log less verbose
+
+                    if (!renderer) {
+                        console.error(`Renderer (${rendererName}) not initialized for type 'building'.`);
+                        resolve(null);
+                        return;
+                    }
+
+                    try {
+                        assetData = renderer.generateProceduralBuilding(baseWidth, baseHeight, baseDepth, userScale);
+                        if (assetData) {
+                            // Make ID unique including renderer type and counter
+                            finalModelId = `building_proc_${rendererName}_${internalCounterId}`;
+                            assetData.id = finalModelId;
+                            assetData.procedural = true;
+                            assetData.rendererType = rendererName; // Store which renderer was used
+                            this.loadedAssets.set(finalModelId, assetData); // Cache it
+                            console.log(`  - Generated procedural building asset '${finalModelId}'`);
+                            resolve(assetData); // Resolve with the generated asset
+                        } else {
+                            console.warn(`Procedural generation for building using ${rendererName} returned null.`);
+                            resolve(null);
+                        }
+                    } catch (error) {
+                        console.error(`Error during procedural building generation using ${rendererName}:`, error);
+                        resolve(null);
+                    }
+                    // *** MODIFICATION END ***
+                } else if (type === 'skyscraper') {
+                    if (!this.skyscraperRenderer) {
+                        console.error("SkyscraperRenderer not initialized.");
+                        resolve(null);
+                        return;
+                    }
+                    try {
+                        assetData = this.skyscraperRenderer.generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale);
+                        if (assetData) {
+                            finalModelId = `skyscraper_proc_${internalCounterId}`;
+                            assetData.id = finalModelId;
+                            assetData.procedural = true;
+                            assetData.rendererType = 'SkyscraperRenderer';
+                            this.loadedAssets.set(finalModelId, assetData);
+                            console.log(`  - Generated procedural skyscraper asset '${finalModelId}'`);
+                            resolve(assetData);
+                        } else {
+                            console.warn("Procedural generation for skyscraper returned null.");
+                            resolve(null);
+                        }
+                    } catch (error) {
+                        console.error("Error during procedural skyscraper generation:", error);
+                        resolve(null);
+                    }
+                } else if (type === 'tree') {
+                    if (!this.treeRenderer) {
+                        console.error("TreeRenderer not initialized.");
+                        resolve(null);
+                        return;
+                    }
+                    try {
+                        assetData = this.treeRenderer.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale);
+                        if (assetData) {
+                            finalModelId = `tree_proc_${internalCounterId}`;
+                            assetData.id = finalModelId;
+                            assetData.procedural = true;
+                            assetData.rendererType = 'TreeRenderer';
+                            this.loadedAssets.set(finalModelId, assetData);
+                            console.log(`  - Generated procedural tree asset '${finalModelId}'`);
+                            resolve(assetData);
+                        } else {
+                            console.warn("Procedural generation for tree returned null.");
+                            resolve(null);
+                        }
+                    } catch (error) {
+                        console.error("Error during procedural tree generation:", error);
+                        resolve(null);
+                    }
+                } else if (type === 'industrial') {
+                    try {
+                        // Industrial generation might be slightly different, ensure it returns expected format
+                        assetData = generateProceduralIndustrial(baseWidth, baseHeight, baseDepth, { userScale }, this.config, this.materials, this.experience?.renderer?.instance);
+                        if (assetData) {
+                            finalModelId = `industrial_proc_${internalCounterId}`;
+                            assetData.id = finalModelId;
+                            assetData.procedural = true;
+                            assetData.rendererType = 'IndustrialRenderer';
+                            this.loadedAssets.set(finalModelId, assetData);
+                            console.log(`  - Generated procedural industrial asset '${finalModelId}'`);
+                            resolve(assetData);
+                        } else {
+                            console.warn("Procedural generation for industrial returned null.");
+                            resolve(null);
+                        }
+                    } catch (error) {
+                        console.error("Error during procedural industrial generation:", error);
+                        resolve(null);
+                    }
+                }
+                else {
+                    console.warn(`Procedural generation not implemented for type: ${type}`);
+                    resolve(null);
+                }
+                return; // Exit promise execution path for procedural
+            }
+
+            // --- File Loading (FBX/GLTF) ---
+            finalModelId = modelIdBase; // Assign final ID for file-based assets
+            const extension = path.split('.').pop().toLowerCase();
+            const loader = extension === 'fbx' ? this.fbxLoader : this.gltfLoader;
+
             loader.load(
                 path,
                 (loadedObject) => {
@@ -282,7 +385,7 @@ export default class CityAssetLoader {
                     try {
                         const modelRootObject = (extension === 'glb' || extension === 'gltf') ? loadedObject.scene : loadedObject;
                         if (!modelRootObject) {
-                            console.error(`[${modelId}] Aucun objet racine trouvé dans ${path}. Asset ignoré.`);
+                            console.error(`[${modelIdBase}] Aucun objet racine trouvé dans ${path}. Asset ignoré.`);
                             return resolve(null);
                         }
                         const materials = [];
@@ -302,21 +405,21 @@ export default class CityAssetLoader {
                                     child.castShadow = true;
                                     child.receiveShadow = true;
                                 } else {
-                                    console.warn(`[${modelId}] Mesh enfant ignoré car géométrie invalide ou manquante dans ${path}`);
+                                    console.warn(`[${modelIdBase}] Mesh enfant ignoré car géométrie invalide ou manquante dans ${path}`);
                                 }
                             }
                         });
                         if (!hasValidMesh) {
-                            console.error(`[${modelId}] Aucune géométrie de mesh valide trouvée dans ${path}. Asset ignoré.`);
+                            console.error(`[${modelIdBase}] Aucune géométrie de mesh valide trouvée dans ${path}. Asset ignoré.`);
                             return resolve(null);
                         }
                         if (geometries.length === 0) {
-                            console.error(`[${modelId}] Aucune géométrie collectée dans ${path}. Asset ignoré.`);
+                            console.error(`[${modelIdBase}] Aucune géométrie collectée dans ${path}. Asset ignoré.`);
                             return resolve(null);
                         }
                         mergedGeometry = mergeGeometries(geometries, false);
                         if (!mergedGeometry) {
-                            console.error(`[${modelId}] Échec de la fusion des géométries pour ${path}. Asset ignoré.`);
+                            console.error(`[${modelIdBase}] Échec de la fusion des géométries pour ${path}. Asset ignoré.`);
                             geometries.forEach(g => g.dispose());
                             return resolve(null);
                         }
@@ -324,7 +427,7 @@ export default class CityAssetLoader {
                         mergedGeometry.computeBoundingBox();
                         const bbox = mergedGeometry.boundingBox;
                         if (!bbox) {
-                            console.error(`[${modelId}] Échec calcul BBox pour ${path}. Asset ignoré.`);
+                            console.error(`[${modelIdBase}] Échec calcul BBox pour ${path}. Asset ignoré.`);
                             mergedGeometry.dispose();
                             geometries.forEach(g => g.dispose());
                             return resolve(null);
@@ -338,7 +441,7 @@ export default class CityAssetLoader {
                             }
                         }
                         if (hasNaN) {
-                            console.error(`!!!!!! [${modelId}] ERREUR NaN détectée dans les positions des vertices APRES fusion/centrage pour ${path}. Cet asset sera ignoré. !!!!!!`);
+                            console.error(`!!!!!! [${modelIdBase}] ERREUR NaN détectée dans les positions des vertices APRES fusion/centrage pour ${path}. Cet asset sera ignoré. !!!!!!`);
                             mergedGeometry.dispose();
                             geometries.forEach(g => g.dispose());
                             return resolve(null);
@@ -358,9 +461,9 @@ export default class CityAssetLoader {
                         }
                         const finalMaterial = baseMaterial.clone();
                         if (!finalMaterial.color) { finalMaterial.color = new THREE.Color(0xcccccc); }
-                        finalMaterial.name = `AssetMat_${modelId}`;
+                        finalMaterial.name = `AssetMat_${modelIdBase}`;
                         resolve({
-                            id: modelId,
+                            id: modelIdBase,
                             geometry: mergedGeometry,
                             material: finalMaterial,
                             fittingScaleFactor: fittingScaleFactor,
@@ -370,7 +473,7 @@ export default class CityAssetLoader {
                         });
                         geometries.forEach(g => g.dispose());
                     } catch (processingError) {
-                        console.error(`Erreur interne pendant traitement ${path} [${modelId}]:`, processingError);
+                        console.error(`Erreur interne pendant traitement ${path} [${modelIdBase}]:`, processingError);
                         geometries?.forEach(g => g?.dispose());
                         if (mergedGeometry) mergedGeometry.dispose();
                         resolve(null);
@@ -378,7 +481,7 @@ export default class CityAssetLoader {
                 },
                 undefined,
                 (error) => {
-                    console.error(`Erreur chargement ${extension.toUpperCase()} ${path} [${modelId}]:`, error);
+                    console.error(`Erreur chargement ${extension.toUpperCase()} ${path} [${modelIdBase}]:`, error);
                     resolve(null);
                 }
             );
