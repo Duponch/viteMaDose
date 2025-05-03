@@ -645,7 +645,8 @@ export default class Agent {
 
         // Calcul LOD (reste ici)
         const cameraPosition = this.experience.camera.instance.position;
-        const distanceToCameraSq = this.position.distanceToSquared(cameraPosition);
+        const tempVector = new THREE.Vector3().subVectors(this.position, cameraPosition);
+        const distanceToCameraSq = tempVector.lengthSq();
         this.isLodActive = distanceToCameraSq > (this.lodDistance * this.lodDistance);
 
         // Calcul progression visuelle (reste ici)

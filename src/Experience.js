@@ -415,7 +415,8 @@ export default class Experience extends EventTarget {
 
                     if (citizenManager?.buildingInstances) {
                         citizenManager.buildingInstances.forEach(buildingInfo => {
-                            const distSq = worldPosition.distanceToSquared(buildingInfo.position);
+                            const tempVector = new THREE.Vector3().subVectors(worldPosition, buildingInfo.position);
+                            const distSq = tempVector.lengthSq();
                             if (distSq < minDistSq && distSq < toleranceSq) {
                                 minDistSq = distSq;
                                 closestBuilding = buildingInfo;
@@ -490,7 +491,8 @@ export default class Experience extends EventTarget {
                         for (let i = 0; i < mesh.count; i++) {
                             mesh.getMatrixAt(i, tempMatrix);
                             instancePosition.setFromMatrixPosition(tempMatrix);
-                            const distSq = instancePosition.distanceToSquared(targetPosition);
+                            const tempVector2 = new THREE.Vector3().subVectors(instancePosition, targetPosition);
+                            const distSq = tempVector2.lengthSq();
 
                             if (distSq < minDistanceSq && distSq < searchToleranceSq) {
                                 minDistanceSq = distSq;

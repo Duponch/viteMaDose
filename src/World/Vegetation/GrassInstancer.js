@@ -200,7 +200,8 @@ export default class GrassInstancer {
         }
         
         // Calculer la distance au carré entre la position actuelle et la position précédente
-        const distanceSquared = cameraPosition.distanceToSquared(this._lastCameraPosition);
+        const tempVector = new THREE.Vector3().subVectors(cameraPosition, this._lastCameraPosition);
+        const distanceSquared = tempVector.lengthSq();
         
         // Mettre à jour la position précédente
         this._lastCameraPosition.copy(cameraPosition);
