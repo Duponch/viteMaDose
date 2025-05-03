@@ -4,7 +4,8 @@ import WorkScheduleStrategy from './Strategies/WorkScheduleStrategy.js';
 import WeekendWalkStrategy from './Strategies/WeekendWalkStrategy.js';
 import AgentState from './AgentState.js';
 import AgentAnimation from './AgentAnimation.js';
-import AgentStateMachine from './AgentStateMachine.js'; // <-- NOUVELLE LIGNE : Importation StateMachine
+import AgentStateMachine from './AgentStateMachine.js';
+import AgentWeekendBehavior from './AgentWeekendBehavior.js'; // <-- NOUVELLE LIGNE: Import du comportement Weekend
 
 let nextAgentId = 0;
 
@@ -42,18 +43,18 @@ export default class Agent {
 
         // --- État & Planification ---
         this.currentState = AgentState.IDLE;
-        // --- NOUVEAU : Instance de AgentStateMachine ---
-        this.stateMachine = new AgentStateMachine(this);
-        // ---------------------------------------------
+        this.stateMachine = new AgentStateMachine(this); // Machine à états
         this.homeBuildingId = null;
         this.workBuildingId = null;
         this.homePosition = null;
         this.workPosition = null;
         this.homeGridNode = null;
         this.workGridNode = null;
-        this.weekendWalkDestination = null;
-        this.weekendWalkGridNode = null;
-        this.weekendWalkEndTime = -1;
+        // --- SUPPRIMÉES: Propriétés Weekend déplacées vers AgentWeekendBehavior ---
+        // this.weekendWalkDestination = null;
+        // this.weekendWalkGridNode = null;
+        // this.weekendWalkEndTime = -1;
+        // -----------------------------------------------------------------------
         this.hasReachedDestination = false;
 
         // --- Trajet Actuel ---
@@ -91,6 +92,16 @@ export default class Agent {
         };
         this.animationHandler = new AgentAnimation(this.config, this.experience);
 
+        // --- Stratégies ---
+        this.workScheduleStrategy = workScheduleStrategy || new WorkScheduleStrategy();
+        // --- NOUVEAU: Passer la stratégie Weekend au Comportement ---
+        const effectiveWeekendWalkStrategy = weekendWalkStrategy || new WeekendWalkStrategy();
+        this.weekendBehavior = new AgentWeekendBehavior(this, effectiveWeekendWalkStrategy);
+        // ----------------------------------------------------------
+        // --- SUPPRIMÉ: Stockage direct de weekendWalkStrategy ---
+        // this.weekendWalkStrategy = weekendWalkStrategy || new WeekendWalkStrategy();
+        // ------------------------------------------------------
+
         // --- Variables temporaires ---
         this._tempV3_1 = new THREE.Vector3();
         this._tempV3_2 = new THREE.Vector3();
@@ -104,17 +115,15 @@ export default class Agent {
         // Matrice de transformation pour le rendu
         this.matrix = new THREE.Matrix4();
 
-        this.workScheduleStrategy = workScheduleStrategy || new WorkScheduleStrategy();
-        this.weekendWalkStrategy = weekendWalkStrategy || new WeekendWalkStrategy();
-
         this._calculateScheduledTimes();
 
-        // Propriétés pour la gestion des parcs
-        this.isInsidePark = false;
-        this.parkSidewalkPosition = null;
-        this.parkSidewalkGridNode = null;
-        this.nextParkMovementTime = 0;
-        this.sidewalkHeight = experience.world?.cityManager?.getNavigationGraph()?.sidewalkHeight || 0.2;
+        // --- SUPPRIMÉES: Propriétés Parc déplacées vers AgentWeekendBehavior ---
+        // this.isInsidePark = false;
+        // this.parkSidewalkPosition = null;
+        // this.parkSidewalkGridNode = null;
+        // this.nextParkMovementTime = 0;
+        // -----------------------------------------------------------------
+        this.sidewalkHeight = experience.world?.cityManager?.getNavigationGraph(false)?.sidewalkHeight || 0.2;
 
 		this.currentVehicle = null;
         this._lastPositionCheck = null;
@@ -654,11 +663,9 @@ export default class Agent {
      * @param {number} currentGameTime - Temps total écoulé dans le jeu (ms).
      */
     updateState(deltaTime, currentHour, currentGameTime) {
-        // Déléguer simplement la mise à jour à la machine à états
         if (this.stateMachine) {
             this.stateMachine.update(deltaTime, currentHour, currentGameTime);
         } else {
-            // Fallback ou log d'erreur si stateMachine n'existe pas
             if (this.currentState !== AgentState.IDLE) {
                  this.currentState = AgentState.IDLE;
                  this.isVisible = false;
