@@ -78,7 +78,7 @@ export default class CityAssetLoader {
 
         // Fonction interne createLoadPromises mise à jour pour gérer les types procéduraux.
         const createLoadPromises = (assetConfigs, dir, type, width, height, depth) => { //
-            if (type === 'house' || type === 'skyscraper' || type === 'tree') { // Keep original logic for these
+            if (type === 'house' || type === 'tree') { // Keep original logic for house/tree
                 console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`); //
                 return [ //
                     this.loadAssetModel(null, type, width, height, depth, 1.0, null) // Pass null for renderer hint
@@ -87,6 +87,23 @@ export default class CityAssetLoader {
                             return null; //
                         })
                 ];
+            } else if (type === 'skyscraper') { // *** NOUVELLE LOGIQUE POUR GRATTE-CIELS ***
+                 console.log(`-> Préparation de la génération procédurale pour les variants de gratte-ciels (6 à 12 étages)...`);
+                 const promises = [];
+                 const minFloors = 6;
+                 const maxFloors = 12;
+                 for (let floors = minFloors; floors <= maxFloors; floors++) {
+                     promises.push(
+                         // Appelle loadAssetModel pour chaque nombre d'étages
+                         // Pass le nombre d'étages via le paramètre rendererTypeHint pour l'instant (pas idéal, mais fonctionne)
+                         this.loadAssetModel(null, type, width, height, depth, 1.0, floors) // Utilise rendererTypeHint pour passer le nombre d'étages
+                            .catch(error => {
+                                console.error(`Echec génération procédurale ${type} (${floors} étages):`, error);
+                                return null;
+                            })
+                     );
+                 }
+                 return promises; // Retourne le tableau de promesses
             } else if (type === 'building') { // *** NEW LOGIC FOR BUILDINGS ***
                 console.log(`-> Préparation de la génération procédurale pour ${this.config.proceduralBuildingVariants ?? 10} variants d'immeubles (50/50)...`);
                 const promises = [];
@@ -303,21 +320,32 @@ export default class CityAssetLoader {
                         return;
                     }
                     try {
-                        assetData = this.skyscraperRenderer.generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale);
+                        // Récupérer le nombre d'étages depuis rendererTypeHint
+                        const numFloors = parseInt(rendererTypeHint, 10);
+                        if (isNaN(numFloors) || numFloors < 6 || numFloors > 12) {
+                             console.error(`loadAssetModel: Nombre d'étages invalide (${rendererTypeHint}) pour gratte-ciel. Annulation.`);
+                             resolve(null);
+                             return;
+                        }
+                        
+                        // Passer le nombre d'étages à la méthode de génération
+                        assetData = this.skyscraperRenderer.generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale, numFloors);
                         if (assetData) {
-                            finalModelId = `skyscraper_proc_${internalCounterId}`;
+                            // Inclure le nombre d'étages dans l'ID pour le rendre unique et identifiable
+                            finalModelId = `skyscraper_proc_${numFloors}fl_${internalCounterId}`;
                             assetData.id = finalModelId;
                             assetData.procedural = true;
                             assetData.rendererType = 'SkyscraperRenderer';
+                            assetData.numFloors = numFloors; // Stocker aussi le nombre d'étages dans l'asset
                             this.loadedAssets.set(finalModelId, assetData);
-                            console.log(`  - Generated procedural skyscraper asset '${finalModelId}'`);
+                            console.log(`  - Generated procedural skyscraper asset '${finalModelId}' (${numFloors} floors)`);
                             resolve(assetData);
                         } else {
-                            console.warn("Procedural generation for skyscraper returned null.");
+                            console.warn(`Procedural generation for skyscraper (${numFloors} floors) returned null.`);
                             resolve(null);
                         }
                     } catch (error) {
-                        console.error("Error during procedural skyscraper generation:", error);
+                        console.error(`Error during procedural skyscraper generation (${rendererTypeHint} floors):`, error);
                         resolve(null);
                     }
                 } else if (type === 'tree') {

@@ -42,28 +42,25 @@ export default class SkyscraperPlacementStrategy extends IZonePlacementStrategy 
         const plotGroundY = this.config.plotGroundY ?? 0.005;
         const sidewalkHeight = this.config.sidewalkHeight ?? 0.2;
 
-        // Récupérer les données de l'asset pour ce type.
-        // Devrait retourner l'asset procédural pré-généré via CityAssetLoader.
-        const assetInfo = this.assetLoader.getRandomAssetData('skyscraper');
+        // Récupérer TOUS les assets de type skyscraper disponibles
+        const allSkyscraperAssets = this.assetLoader.assets.skyscraper;
 
-        if (!assetInfo) {
-            console.warn(`SkyscraperPlacementStrategy: Aucun asset 'skyscraper' trouvé pour Plot ${plot.id}.`);
-            return;
-        }
-        if (!assetInfo.sizeAfterFitting || !assetInfo.centerOffset || !assetInfo.fittingScaleFactor || !assetInfo.id) {
-             console.error(`SkyscraperPlacementStrategy: Données de l'asset 'skyscraper' (ID: ${assetInfo.id}) incomplètes ou invalides pour Plot ${plot.id}.`);
+        if (!allSkyscraperAssets || allSkyscraperAssets.length === 0) {
+             console.warn(`SkyscraperPlacementStrategy: Aucun asset 'skyscraper' trouvé (variantes 6-12 étages attendues) pour Plot ${plot.id}.`);
              return;
         }
-        // Les gratte-ciels générés procéduralement auront des 'parts'
-        if (!assetInfo.parts || assetInfo.parts.length === 0) {
-             console.warn(`SkyscraperPlacementStrategy: L'asset gratte-ciel ${assetInfo.id} n'a pas de 'parts' définies. Comportement inattendu.`);
-             // On pourrait tenter de le traiter comme un asset simple, mais c'est risqué.
-             // return; // Ou gérer un fallback si nécessaire
+
+        // On prend les dimensions du premier asset comme référence pour le placement
+        // (on suppose qu'ils ont tous à peu près la même base)
+        const referenceAssetInfo = allSkyscraperAssets[0];
+        if (!referenceAssetInfo.sizeAfterFitting || !referenceAssetInfo.centerOffset || !referenceAssetInfo.fittingScaleFactor || !referenceAssetInfo.id) {
+             console.error(`SkyscraperPlacementStrategy: Données de l'asset de référence 'skyscraper' (ID: ${referenceAssetInfo.id}) incomplètes ou invalides.`);
+             return;
         }
 
-        // Dimensions cibles basées sur l'asset généré et l'échelle de la grille
-        const targetBuildingWidth = assetInfo.sizeAfterFitting.x * baseScaleFactor;
-        const targetBuildingDepth = assetInfo.sizeAfterFitting.z * baseScaleFactor;
+        // Dimensions cibles basées sur l'asset de référence et l'échelle
+        const targetBuildingWidth = referenceAssetInfo.sizeAfterFitting.x * baseScaleFactor;
+        const targetBuildingDepth = referenceAssetInfo.sizeAfterFitting.z * baseScaleFactor;
 
         const gridPlacement = this.calculateGridPlacement(
             plot,
@@ -90,13 +87,23 @@ export default class SkyscraperPlacementStrategy extends IZonePlacementStrategy 
 
                 const targetRotationY = this.determineBuildingRotation(cellCenterX, cellCenterZ, plot);
 
-                // Utiliser SkyscraperRenderer pour obtenir les matrices d'instance
+                // *** Sélectionner un asset gratte-ciel aléatoire PARMI les variantes ***
+                const randomAssetIndex = Math.floor(Math.random() * allSkyscraperAssets.length);
+                const selectedAssetInfo = allSkyscraperAssets[randomAssetIndex];
+                
+                // Vérifier si l'asset sélectionné est valide (au cas où)
+                if (!selectedAssetInfo || !selectedAssetInfo.parts || selectedAssetInfo.parts.length === 0 || !selectedAssetInfo.id) {
+                     console.warn(`SkyscraperPlacementStrategy: Asset gratte-ciel sélectionné aléatoirement (index ${randomAssetIndex}, ID: ${selectedAssetInfo?.id}) invalide ou sans 'parts' pour Plot ${plot.id}. Passage au suivant.`);
+                     continue; // Passer à la cellule suivante
+                }
+
+                // Utiliser SkyscraperRenderer pour obtenir les matrices d'instance AVEC L'ASSET SÉLECTIONNÉ
                 const skyscraperInstanceData = this.skyscraperRenderer.generateSkyscraperInstance(
                     worldCellCenterPos,
                     plotGroundY,
                     targetRotationY,
                     baseScaleFactor,
-                    assetInfo // Passer les infos complètes de l'asset procédural
+                    selectedAssetInfo // Utiliser l'asset choisi aléatoirement
                 );
 
                 if (skyscraperInstanceData) {
@@ -105,7 +112,7 @@ export default class SkyscraperPlacementStrategy extends IZonePlacementStrategy 
                         if (skyscraperInstanceData.hasOwnProperty(partName) && Array.isArray(skyscraperInstanceData[partName])) {
                             skyscraperInstanceData[partName].forEach(matrix => {
                                 // Créer un identifiant unique pour cette combinaison asset/partie
-                                const instanceKey = `${assetInfo.id}_${partName}`;
+                                const instanceKey = `${selectedAssetInfo.id}_${partName}`;
                                 instanceDataManager.addData('skyscraper', instanceKey, matrix);
                             });
                         }
@@ -123,7 +130,7 @@ export default class SkyscraperPlacementStrategy extends IZonePlacementStrategy 
                         });
                     }
                 } else {
-                    console.warn(`SkyscraperRenderer n'a retourné aucune donnée d'instance pour asset ${assetInfo.id} sur Plot ${plot.id}, cellule (${colIndex},${rowIndex})`);
+                    console.warn(`SkyscraperRenderer n'a retourné aucune donnée d'instance pour asset ${selectedAssetInfo.id} sur Plot ${plot.id}, cellule (${colIndex},${rowIndex})`);
                 }
             } // Fin boucle colIndex
         } // Fin boucle rowIndex

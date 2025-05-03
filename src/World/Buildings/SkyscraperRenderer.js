@@ -199,9 +199,10 @@ export default class SkyscraperRenderer {
      * @param {number} baseHeight - Hauteur cible.
      * @param {number} baseDepth - Profondeur cible.
      * @param {number} [userScale=1] - Facteur d'échelle utilisateur.
+     * @param {number} [numFloors] - Nombre de niveaux du gratte-ciel.
      * @returns {object|null} L'asset généré ou null en cas d'erreur.
      */
-    generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale = 1) {
+    generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale = 1, numFloors) {
         const skyscraper = new THREE.Group();
 
         // --- Définition des matériaux spécifiques ---
@@ -245,7 +246,8 @@ export default class SkyscraperRenderer {
         });
 
         // --- Dimensions générales ---
-        const mainWidth = 9, mainDepth = 9, mainHeight = 30;
+        const mainWidth = 9, mainDepth = 9;
+        const standardFloorHeight = 3.0; // Hauteur fixe pour chaque étage
         const baseHeightVal = 2.5, intermediateStructureHeight = 1.0;
         const intermediateOverhang = 0.5;
         const windowHeightReductionFactor = 0.5;
@@ -255,7 +257,7 @@ export default class SkyscraperRenderer {
         const pillarThickness = 0.4;
         const intermediateBandThickness = pillarThickness / windowWidthReductionFactor;
         const windowInset = 0.05;
-        const floorThickness = 0.1;
+        const floorThickness = 0.1; // Épaisseur visuelle du plancher (pour le maillage)
 
         // --- Base ---
         const baseGeometry = new THREE.BoxGeometry(mainWidth, baseHeightVal, mainDepth);
@@ -317,14 +319,17 @@ export default class SkyscraperRenderer {
 
         // --- Corps principal ---
         const startY = baseHeightVal + intermediateStructureHeight;
-        const numFloors = 9;
-        const floorHeight = mainHeight / numFloors;
-        const structureHeight = mainHeight;
+        if (numFloors === undefined || numFloors < 6 || numFloors > 12) {
+             console.warn(`generateProceduralSkyscraper: numFloors invalide (${numFloors}). Utilisation de 9 par défaut.`);
+             numFloors = 9; // Valeur par défaut si non fourni ou invalide
+        }
+        const structureHeight = numFloors * standardFloorHeight;
+        const floorHeight = standardFloorHeight; // La hauteur de chaque étage est maintenant fixe
         const numWindowsPerFace = 4;
         const numIntermediateBands = numWindowsPerFace - 1;
         const windowHeightVal = floorHeight * windowHeightReductionFactor;
         const horizontalBandHeight = floorHeight - windowHeightVal;
-        const cornerPillarGeom = new THREE.BoxGeometry(pillarThickness + 0.7, structureHeight + 7, pillarThickness + 0.7);
+        const cornerPillarGeom = new THREE.BoxGeometry(pillarThickness + 0.7, structureHeight, pillarThickness + 0.7);
         for (let i = 0; i < 2; i++) {
             for (let j = 0; j < 2; j++) {
                 const pillar = new THREE.Mesh(cornerPillarGeom, structureMaterial);
@@ -385,10 +390,10 @@ export default class SkyscraperRenderer {
             }
         }
         const verticalBandGeomX = intermediateBandThickness > 0.01
-            ? new THREE.BoxGeometry(intermediateBandThickness, structureHeight, pillarThickness)
+            ? new THREE.BoxGeometry(intermediateBandThickness, structureHeight, pillarThickness * 0.95)
             : null;
         const verticalBandGeomZ = intermediateBandThickness > 0.01
-            ? new THREE.BoxGeometry(pillarThickness, structureHeight, intermediateBandThickness)
+            ? new THREE.BoxGeometry(pillarThickness * 0.95, structureHeight, intermediateBandThickness)
             : null;
         const yPosBandVert = startY + structureHeight / 2;
         if (verticalBandGeomX && verticalBandGeomZ && singleWindowWidthX > 0.01 && singleWindowWidthZ > 0.01 && numIntermediateBands > 0) {
@@ -448,7 +453,7 @@ export default class SkyscraperRenderer {
         const floorGeometry = new THREE.BoxGeometry(mainWidth - pillarThickness, floorThickness, mainDepth - pillarThickness);
         for (let floor = 0; floor < numFloors; floor++) {
             const floorBaseY = startY + floor * floorHeight + horizontalBandHeight;
-            const yPosFloor = floorBaseY + floorThickness / 2;
+            const yPosFloor = floorBaseY - floorThickness / 2;
             const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
             floorMesh.position.set(0, yPosFloor, 0);
             floorMesh.receiveShadow = true;
@@ -457,7 +462,7 @@ export default class SkyscraperRenderer {
         const roofHeightVal = 1.5;
         const roofGeom = new THREE.BoxGeometry(mainWidth, roofHeightVal, mainDepth);
         const roofMesh = new THREE.Mesh(roofGeom, baseMaterial);
-        const roofBaseY = startY + numFloors * floorHeight + horizontalBandHeight;
+        const roofBaseY = startY + structureHeight;
         roofMesh.position.y = roofBaseY + roofHeightVal / 2;
         roofMesh.castShadow = true;
         roofMesh.receiveShadow = true;
@@ -551,7 +556,18 @@ export default class SkyscraperRenderer {
         globalSize.x = Math.max(globalSize.x, 0.001);
         globalSize.y = Math.max(globalSize.y, 0.001);
         globalSize.z = Math.max(globalSize.z, 0.001);
-        const fittingScaleFactor = Math.min(baseWidth / globalSize.x, baseHeight / globalSize.y, baseDepth / globalSize.z);
+        
+        // *** Modification du calcul du fittingScaleFactor ***
+        // Calculer l'échelle uniquement en fonction de la largeur et profondeur cibles.
+        // La hauteur (baseHeight) passée en paramètre est ignorée ici.
+        const fittingScaleFactorXZ = Math.min(baseWidth / globalSize.x, baseDepth / globalSize.z);
+        // La hauteur finale sera la hauteur géométrique calculée multipliée par ce facteur d'échelle XZ.
+        const finalHeight = globalSize.y * fittingScaleFactorXZ;
+        
+        // Appliquer le même facteur d'échelle aux trois axes pour conserver les proportions X/Z
+        const fittingScaleFactor = fittingScaleFactorXZ; 
+
+        // Calculer la taille finale après application de l'échelle uniforme
         const sizeAfterFitting = globalSize.clone().multiplyScalar(fittingScaleFactor);
 
         const parts = [];
