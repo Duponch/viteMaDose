@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import HouseRenderer from './HouseRenderer.js';
 import BuildingRenderer from './BuildingRenderer.js';
 import SkyscraperRenderer from './SkyscraperRenderer.js';
+import IndustrialRenderer, { generateProceduralIndustrial } from './IndustrialRenderer.js'; // Ajustez le chemin si nécessaire
 import TreeRenderer from './TreeRenderer.js';
 
 export default class CityAssetLoader {
@@ -68,118 +69,126 @@ export default class CityAssetLoader {
     }
 
     // ----- loadAssets -----
+    // ----- loadAssets -----
     async loadAssets() {
-        console.log("Chargement des assets (maisons via HouseRenderer, immeubles via BuildingRenderer, gratte-ciels via SkyscraperRenderer, etc.)...");
-        this.reset();
+        console.log("Chargement des assets (maisons via HouseRenderer, immeubles via BuildingRenderer, gratte-ciels via SkyscraperRenderer, etc.)..."); //
+        this.reset(); //
 
         // Fonction interne createLoadPromises mise à jour pour gérer les types procéduraux.
-        const createLoadPromises = (assetConfigs, dir, type, width, height, depth) => {
-            if (type === 'house' || type === 'building' || type === 'skyscraper' || type === 'tree') {
-                console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`);
-                return [
-                    this.loadAssetModel(null, type, width, height, depth, 1.0)
-                        .catch(error => {
-                            console.error(`Echec génération procédurale ${type}:`, error);
-                            return null;
+        const createLoadPromises = (assetConfigs, dir, type, width, height, depth) => { //
+            if (type === 'house' || type === 'building' || type === 'skyscraper' || type === 'tree') { //
+                console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`); //
+                return [ //
+                    this.loadAssetModel(null, type, width, height, depth, 1.0) //
+                        .catch(error => { //
+                            console.error(`Echec génération procédurale ${type}:`, error); //
+                            return null; //
                         })
                 ];
             }
-            if (!assetConfigs || !dir || !type || width == null || height == null || depth == null) {
-                console.warn(`Configuration incomplète ou invalide pour le type '${type}', chargement ignoré.`);
-                return [];
+            if (type === 'industrial') { //
+                // Génération procédurale industrielle
+                console.log('-> Génération procédurale pour le type "industrial"...'); //
+                const asset = generateProceduralIndustrial(width, height, depth, {}); //
+                this.assets['industrial'] = [asset]; //
+                return [Promise.resolve(asset)]; //
             }
-            if (!Array.isArray(assetConfigs)) {
-                console.warn(`'${type}ModelFiles' n'est pas un tableau dans la config. Chargement ignoré.`);
-                return [];
+            if (!assetConfigs || !dir || !type || width == null || height == null || depth == null) { //
+                console.warn(`Configuration incomplète ou invalide pour le type '${type}', chargement ignoré.`); //
+                return []; //
             }
-            return assetConfigs.map(assetConfig => {
-                if (typeof assetConfig !== 'object' || assetConfig === null || !assetConfig.file) {
-                    console.error(`Format de configuration d'asset invalide pour le type ${type}:`, assetConfig, `dans ${dir}`);
-                    return Promise.resolve(null);
+            if (!Array.isArray(assetConfigs)) { //
+                console.warn(`'${type}ModelFiles' n'est pas un tableau dans la config. Chargement ignoré.`); //
+                return []; //
+            }
+            return assetConfigs.map(assetConfig => { //
+                if (typeof assetConfig !== 'object' || assetConfig === null || !assetConfig.file) { //
+                    console.error(`Format de configuration d'asset invalide pour le type ${type}:`, assetConfig, `dans ${dir}`); //
+                    return Promise.resolve(null); //
                 }
-                const fileName = assetConfig.file;
-                const userScale = assetConfig.scale !== undefined ? assetConfig.scale : 1;
-                return this.loadAssetModel(dir + fileName, type, width, height, depth, userScale)
-                    .catch(error => {
-                        console.error(`Echec chargement ${type} ${fileName}:`, error);
-                        return null;
+                const fileName = assetConfig.file; //
+                const userScale = assetConfig.scale !== undefined ? assetConfig.scale : 1; //
+                return this.loadAssetModel(dir + fileName, type, width, height, depth, userScale) //
+                    .catch(error => { //
+                        console.error(`Echec chargement ${type} ${fileName}:`, error); //
+                        return null; //
                     });
             });
         };
 
-        const housePromises = createLoadPromises(
-            this.config.houseModelFiles,
-            this.config.houseModelDir,
-            'house',
-            this.config.houseBaseWidth,
-            this.config.houseBaseHeight,
-            this.config.houseBaseDepth
+        const housePromises = createLoadPromises( //
+            this.config.houseModelFiles, //
+            this.config.houseModelDir, //
+            'house', //
+            this.config.houseBaseWidth, //
+            this.config.houseBaseHeight, //
+            this.config.houseBaseDepth //
         );
-        const buildingPromises = createLoadPromises(
-            null,
-            null,
-            'building',
-            this.config.buildingBaseWidth,
-            this.config.buildingBaseHeight,
-            this.config.buildingBaseDepth
+        const buildingPromises = createLoadPromises( //
+            null, //
+            null, //
+            'building', //
+            this.config.buildingBaseWidth, //
+            this.config.buildingBaseHeight, //
+            this.config.buildingBaseDepth //
         );
-        const industrialPromises = createLoadPromises(
-            this.config.industrialModelFiles,
-            this.config.industrialModelDir,
-            'industrial',
-            this.config.industrialBaseWidth,
-            this.config.industrialBaseHeight,
-            this.config.industrialBaseDepth
+        const industrialPromises = createLoadPromises( //
+            this.config.industrialModelFiles, //
+            this.config.industrialModelDir, //
+            'industrial', //
+            this.config.industrialBaseWidth, //
+            this.config.industrialBaseHeight, //
+            this.config.industrialBaseDepth //
         );
-        const parkPromises = createLoadPromises(
-            this.config.parkModelFiles,
-            this.config.parkModelDir,
-            'park',
-            this.config.parkBaseWidth,
-            this.config.parkBaseHeight,
-            this.config.parkBaseDepth
+        const parkPromises = createLoadPromises( //
+            this.config.parkModelFiles, //
+            this.config.parkModelDir, //
+            'park', //
+            this.config.parkBaseWidth, //
+            this.config.parkBaseHeight, //
+            this.config.parkBaseDepth //
         );
-        const treePromises = createLoadPromises(
-            null,
-            null,
-            'tree',
-            this.config.treeBaseWidth,
-            this.config.treeBaseHeight,
-            this.config.treeBaseDepth
+        const treePromises = createLoadPromises( //
+            null, //
+            null, //
+            'tree', //
+            this.config.treeBaseWidth, //
+            this.config.treeBaseHeight, //
+            this.config.treeBaseDepth //
         );
-        const skyscraperPromises = createLoadPromises(
-            this.config.skyscraperModelFiles,
-            this.config.skyscraperModelDir,
-            'skyscraper',
-            this.config.skyscraperBaseWidth,
-            this.config.skyscraperBaseHeight,
-            this.config.skyscraperBaseDepth
+        const skyscraperPromises = createLoadPromises( //
+            this.config.skyscraperModelFiles, //
+            this.config.skyscraperModelDir, //
+            'skyscraper', //
+            this.config.skyscraperBaseWidth, //
+            this.config.skyscraperBaseHeight, //
+            this.config.skyscraperBaseDepth //
         );
 
-        try {
-            const [houseResults, buildingResults, industrialResults, parkResults, treeResults, skyscraperResults] = await Promise.all([
-                Promise.all(housePromises),
-                Promise.all(buildingPromises),
-                Promise.all(industrialPromises),
-                Promise.all(parkPromises),
-                Promise.all(treePromises),
-                Promise.all(skyscraperPromises)
+        try { //
+            const [houseResults, buildingResults, industrialResults, parkResults, treeResults, skyscraperResults] = await Promise.all([ //
+                Promise.all(housePromises), //
+                Promise.all(buildingPromises), //
+                Promise.all(industrialPromises), //
+                Promise.all(parkPromises), //
+                Promise.all(treePromises), //
+                Promise.all(skyscraperPromises) //
             ]);
 
             // Attribution des résultats aux assets, en filtrant les null.
-            this.assets.house = houseResults.filter(r => r !== null);
-            this.assets.building = buildingResults.filter(r => r !== null);
-            this.assets.industrial = industrialResults.filter(r => r !== null);
-            this.assets.park = parkResults.filter(r => r !== null);
-            this.assets.tree = treeResults.filter(r => r !== null);
-            this.assets.skyscraper = skyscraperResults.filter(r => r !== null);
+            this.assets.house = houseResults.filter(r => r !== null); //
+            this.assets.building = buildingResults.filter(r => r !== null); //
+            this.assets.industrial = industrialResults.filter(r => r !== null); //
+            this.assets.park = parkResults.filter(r => r !== null); //
+            this.assets.tree = treeResults.filter(r => r !== null); //
+            this.assets.skyscraper = skyscraperResults.filter(r => r !== null); //
 
-            console.log(`Assets chargés: ${this.assets.house.length} maisons (procédurales), ${this.assets.building.length} immeubles (procéduraux), ${this.assets.industrial.length} usines, ${this.assets.park.length} parcs, ${this.assets.tree.length} arbres, ${this.assets.skyscraper.length} gratte-ciels.`);
-            return this.assets;
-        } catch (error) {
-            console.error("Erreur durant le chargement groupé des assets:", error);
-            this.reset();
-            return this.assets;
+            console.log(`Assets chargés: ${this.assets.house.length} maisons (procédurales), ${this.assets.building.length} immeubles (procéduraux), ${this.assets.industrial.length} usines, ${this.assets.park.length} parcs, ${this.assets.tree.length} arbres, ${this.assets.skyscraper.length} gratte-ciels.`); //
+            return this.assets; //
+        } catch (error) { //
+            console.error("Erreur durant le chargement groupé des assets:", error); //
+            this.reset(); //
+            return this.assets; //
         }
     }
 
