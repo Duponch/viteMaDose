@@ -12,7 +12,7 @@ import TimeControlUI from './UI/TimeControlUI.js';
 import AgentStatsUI from './UI/AgentStatsUI.js';
 // Import nécessaire pour la recherche de mesh par position
 import { Matrix4, Vector3 } from 'three';
-import * as DebugTools from './World/DebugTools.js';
+import * as DebugTools from './World/Rendering/DebugTools.js';
 
 let instance = null;
 

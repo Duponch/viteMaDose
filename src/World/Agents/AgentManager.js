@@ -2,8 +2,8 @@
 import * as THREE from 'three';
 import Agent from './Agent.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import WorkScheduleStrategy from './Strategies/WorkScheduleStrategy.js';
-import WeekendWalkStrategy from './Strategies/WeekendWalkStrategy.js';
+import WorkScheduleStrategy from '../Strategies/WorkScheduleStrategy.js';
+import WeekendWalkStrategy from '../Strategies/WeekendWalkStrategy.js';
 
 // --- Fonctions createCapsuleGeometry, createShoeGeometry (INCHANGÉES) ---
 // ... (coller les fonctions ici) ...
@@ -121,7 +121,7 @@ export default class AgentManager {
 
         try {
             console.log("AgentManager: Initialisation du Pathfinding Worker (mode SharedArrayBuffer)... HORS LIGNE");
-            this.pathfindingWorker = new Worker(new URL('./PathfindingWorker.js', import.meta.url), { type: 'module' });
+            this.pathfindingWorker = new Worker(new URL('../Navigation/PathfindingWorker.js', import.meta.url), { type: 'module' });
             this.pathfindingWorker.onmessage = (event) => this._handleWorkerMessage(event);
             this.pathfindingWorker.onerror = (error) => { 
                  console.error("AgentManager: Erreur dans Pathfinding Worker:", error);

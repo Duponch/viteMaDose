@@ -3,8 +3,8 @@ import * as THREE from 'three';
 
 /**
  * @typedef {import('../Plot.js').default} Plot
- * @typedef {import('../CityAssetLoader.js').default} CityAssetLoader
- * @typedef {import('../InstanceDataManager.js').default} InstanceDataManager
+ * @typedef {import('../Rendering/CityAssetLoader.js').default} CityAssetLoader
+ * @typedef {import('../Rendering/InstanceDataManager.js').default} InstanceDataManager
  * @typedef {import('../CityManager.js').default} CityManager
  * @typedef {import('../../../Experience.js').default} Experience
  */

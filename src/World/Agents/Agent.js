@@ -1,7 +1,7 @@
 // src/World/Agent.js
 import * as THREE from 'three';
-import WorkScheduleStrategy from './Strategies/WorkScheduleStrategy.js';
-import WeekendWalkStrategy from './Strategies/WeekendWalkStrategy.js';
+import WorkScheduleStrategy from '../Strategies/WorkScheduleStrategy.js';
+import WeekendWalkStrategy from '../Strategies/WeekendWalkStrategy.js';
 import AgentState from './AgentState.js';
 import AgentAnimation from './AgentAnimation.js';
 import AgentStateMachine from './AgentStateMachine.js';
@@ -23,7 +23,7 @@ export default class Agent {
         this.config = config;
         this.scale = config.scale ?? 0.1;
         this.agentBaseSpeed = (config.speed ?? 1.5);
-        this.visualSpeed = this.agentBaseSpeed * (0.9 + Math.random() * 0.2);
+        this.visualSpeed = this.agentBaseSpeed * 7;
         this.rotationSpeed = config.rotationSpeed ?? 8.0; // Conservé ici mais utilisé par AgentMovement
         this.yOffset = config.yOffset ?? 0.3;
         this.torsoColor = new THREE.Color(config.torsoColor ?? 0x800080);

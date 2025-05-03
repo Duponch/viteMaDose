@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 
 /**
- * @typedef {import('./InstanceDataManager.js').default} InstanceDataManager
+ * @typedef {import('../Rendering/InstanceDataManager.js').default} InstanceDataManager
  */
 
 /**

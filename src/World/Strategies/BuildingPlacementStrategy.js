@@ -4,10 +4,10 @@ import IZonePlacementStrategy from './IZonePlacementStrategy.js';
 
 /**
  * @typedef {import('../Plot.js').default} Plot
- * @typedef {import('../CityAssetLoader.js').default} CityAssetLoader
- * @typedef {import('../InstanceDataManager.js').default} InstanceDataManager
+ * @typedef {import('../Rendering/CityAssetLoader.js').default} CityAssetLoader
+ * @typedef {import('../Rendering/InstanceDataManager.js').default} InstanceDataManager
  * @typedef {import('../CityManager.js').default} CityManager
- * @typedef {import('../BuildingRenderer.js').default} BuildingRenderer // Assurez-vous que le chemin est correct
+ * @typedef {import('../Buildings/BuildingRenderer.js').default} BuildingRenderer // Assurez-vous que le chemin est correct
  */
 
 export default class BuildingPlacementStrategy extends IZonePlacementStrategy {

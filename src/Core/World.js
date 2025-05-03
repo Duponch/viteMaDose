@@ -1,11 +1,11 @@
 // src/Core/World.js
 import * as THREE from 'three';
 import Environment from '../World/Environment.js';
-import CityManager from '../World/CityManager.js';
-import AgentManager from '../World/AgentManager.js';
-import CarManager from '../World/CarManager.js';
+import CityManager from '../World/City/CityManager.js';
+import AgentManager from '../World/Agents/AgentManager.js';
+import CarManager from '../World/Vehicles/CarManager.js';
 // ... autres imports ...
-import DebugVisualManager from '../World/DebugVisualManager.js'; // Assurez-vous qu'il est importé
+import DebugVisualManager from '../World/Rendering/DebugVisualManager.js'; // Assurez-vous qu'il est importé
 
 export default class World {
     constructor(experience) {

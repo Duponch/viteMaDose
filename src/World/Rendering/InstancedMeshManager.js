@@ -2,10 +2,10 @@
 import * as THREE from 'three';
 
 /**
- * @typedef {import('./CityAssetLoader.js').default} CityAssetLoader
- * @typedef {import('./HouseRenderer.js').default} HouseRenderer
- * @typedef {import('./BuildingRenderer.js').default} BuildingRenderer
- * @typedef {import('./SkyscraperRenderer.js').default} SkyscraperRenderer
+ * @typedef {import('../CityAssetLoader.js').default} CityAssetLoader
+ * @typedef {import('../Buildings/HouseRenderer.js').default} HouseRenderer
+ * @typedef {import('../Buildings/BuildingRenderer.js').default} BuildingRenderer
+ * @typedef {import('../Buildings/SkyscraperRenderer.js').default} SkyscraperRenderer
  * @typedef {import('../../Experience.js').default} Experience
  */
 

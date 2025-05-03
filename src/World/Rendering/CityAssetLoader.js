@@ -4,11 +4,11 @@ import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import HouseRenderer from './HouseRenderer.js';
-import BuildingRenderer from './BuildingRenderer.js';
-import SkyscraperRenderer from './SkyscraperRenderer.js';
-import IndustrialRenderer, { generateProceduralIndustrial } from './IndustrialRenderer.js'; // Ajustez le chemin si nécessaire
-import TreeRenderer from './TreeRenderer.js';
+import HouseRenderer from '../Buildings/HouseRenderer.js';
+import BuildingRenderer from '../Buildings/BuildingRenderer.js';
+import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
+import IndustrialRenderer, { generateProceduralIndustrial } from '../Buildings/IndustrialRenderer.js'; // Ajustez le chemin si nécessaire
+import TreeRenderer from '../Vegetation/TreeRenderer.js';
 
 export default class CityAssetLoader {
     // ----- CONSTRUCTEUR -----

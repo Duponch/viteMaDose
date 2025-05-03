@@ -1,27 +1,27 @@
 // src/World/PlotContentGenerator.js
 import * as THREE from 'three';
-import InstanceDataManager from './InstanceDataManager.js';
-import InstancedMeshManager from './InstancedMeshManager.js';
+import InstanceDataManager from '../Rendering/InstanceDataManager.js';
+import InstancedMeshManager from '../Rendering/InstancedMeshManager.js';
 import SidewalkGenerator from './SidewalkGenerator.js'; // Placeholder import
 import PlotGroundGenerator from './PlotGroundGenerator.js'; // Placeholder import
 import CrosswalkInstancer from './CrosswalkInstancer.js'; // Placeholder import
-import GrassInstancer from './GrassInstancer.js';
+import GrassInstancer from '../Vegetation/GrassInstancer.js';
 
 // Stratégies de placement
-import HousePlacementStrategy from './Strategies/HousePlacementStrategy.js';
-import BuildingPlacementStrategy from './Strategies/BuildingPlacementStrategy.js';
-import IndustrialPlacementStrategy from './Strategies/IndustrialPlacementStrategy.js';
-import SkyscraperPlacementStrategy from './Strategies/SkyscraperPlacementStrategy.js';
-import ParkPlacementStrategy from './Strategies/ParkPlacementStrategy.js';
-import TreePlacementStrategy from './Strategies/TreePlacementStrategy.js'; // Placeholder import
+import HousePlacementStrategy from '../Strategies/HousePlacementStrategy.js';
+import BuildingPlacementStrategy from '../Strategies/BuildingPlacementStrategy.js';
+import IndustrialPlacementStrategy from '../Strategies/IndustrialPlacementStrategy.js';
+import SkyscraperPlacementStrategy from '../Strategies/SkyscraperPlacementStrategy.js';
+import ParkPlacementStrategy from '../Strategies/ParkPlacementStrategy.js';
+import TreePlacementStrategy from '../Strategies/TreePlacementStrategy.js'; // Placeholder import
 
 /**
  * @typedef {import('./Plot.js').default} Plot
- * @typedef {import('./CityAssetLoader.js').default} CityAssetLoader
+ * @typedef {import('../Rendering/CityAssetLoader.js').default} CityAssetLoader
  * @typedef {import('./CityManager.js').default} CityManager
- * @typedef {import('./HouseRenderer.js').default} HouseRenderer
- * @typedef {import('./BuildingRenderer.js').default} BuildingRenderer
- * @typedef {import('./SkyscraperRenderer.js').default} SkyscraperRenderer
+ * @typedef {import('../Buildings/HouseRenderer.js').default} HouseRenderer
+ * @typedef {import('../Buildings/BuildingRenderer.js').default} BuildingRenderer
+ * @typedef {import('../Buildings/SkyscraperRenderer.js').default} SkyscraperRenderer
  * @typedef {import('../../Experience.js').default} Experience
  */
 

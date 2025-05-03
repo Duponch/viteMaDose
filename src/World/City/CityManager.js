@@ -4,17 +4,17 @@ import CityLayoutGenerator from './CityLayoutGenerator.js';
 import RoadNetworkGenerator from './RoadNetworkGenerator.js';
 // Import du PlotContentGenerator refactoré
 import PlotContentGenerator from './PlotContentGenerator.js';
-import CityAssetLoader from './CityAssetLoader.js';
+import CityAssetLoader from '../Rendering/CityAssetLoader.js';
 import DistrictManager from './DistrictManager.js';
 import LampPostManager from './LampPostManager.js';
-import NavigationManager from './NavigationManager.js'; // Utilisation de NavigationManager
+import NavigationManager from '../Navigation/NavigationManager.js'; // Utilisation de NavigationManager
 import CitizenManager from './CitizenManager.js';
-import DebugVisualManager from './DebugVisualManager.js';
+import DebugVisualManager from '../Rendering/DebugVisualManager.js';
 // Renderer spécialisés sont nécessaires pour PlotContentGenerator via Experience/World
-import HouseRenderer from './HouseRenderer.js';
-import BuildingRenderer from './BuildingRenderer.js';
-import SkyscraperRenderer from './SkyscraperRenderer.js';
-import CityMapVisualizer from './CityMapVisualizer.js';
+import HouseRenderer from '../Buildings/HouseRenderer.js';
+import BuildingRenderer from '../Buildings/BuildingRenderer.js';
+import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
+import CityMapVisualizer from '../Rendering/CityMapVisualizer.js';
 
 
 export default class CityManager {
