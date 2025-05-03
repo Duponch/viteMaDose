@@ -243,14 +243,14 @@ export default class AgentWeekendBehavior {
          if (!this.parkSidewalkPosition) { this.parkSidewalkPosition = this.agent.position.clone(); }
          const startPos = this.agent.position.clone();
          const endPos = targetPos.clone();
-         const distance = startPos.distanceTo(endPos);
+         const distanceToTargetSq = startPos.distanceToSquared(endPos);
          const speed = 1.2;
-         const travelTime = distance > 0 ? (distance / speed) * 1000 : 0;
+         const travelTime = distanceToTargetSq > 0 ? (Math.sqrt(distanceToTargetSq) / speed) * 1000 : 0;
          this.agent.currentPathPoints = [startPos, endPos];
          this.agent.departureTimeGame = currentGameTime;
          this.agent.arrivalTmeGame = currentGameTime + travelTime;
          this.agent.calculatedTravelDurationGame = travelTime;
-         this.agent.currentPathLengthWorld = distance;
+         this.agent.currentPathLengthWorld = Math.sqrt(distanceToTargetSq);
          this.agent.currentPathIndexVisual = 0;
          this.agent.visualInterpolationProgress = 0;
          this.nextParkMovementTime = currentGameTime + travelTime + (Math.random() * 10000 + 5000);

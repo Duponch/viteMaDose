@@ -225,10 +225,10 @@ export default class Car {
             const targetPoint = this.path[this.currentPathIndex];
 
             const direction = this._tempVector.subVectors(targetPoint, this.position);
-            let distanceToTarget = direction.length();
+            let distanceToTargetSq = direction.lengthSq();
 
             // --- Vérification si cible déjà atteinte (pour boucle suivante) ---
-            if (distanceToTarget <= this.reachTolerance) {
+            if (distanceToTargetSq <= this.reachTolerance * this.reachTolerance) {
                 this.currentPathIndex++;
                 if (this.currentPathIndex >= this.path.length) {
                     // Fin du chemin ATTEINTE DANS CETTE BOUCLE
@@ -245,9 +245,9 @@ export default class Car {
             }
 
             // --- Calcul du mouvement pour CE pas de temps fixe ---
-            const moveDistanceThisStep = Math.min(this.speed * timeStep, distanceToTarget);
+            const moveDistanceThisStep = Math.min(this.speed * timeStep, Math.sqrt(distanceToTargetSq));
 
-            if (distanceToTarget > 0.001) { // Éviter mouvements infimes
+            if (distanceToTargetSq > 0.001) { // Éviter mouvements infimes
                 direction.normalize();
                 this.position.addScaledVector(direction, moveDistanceThisStep);
 
@@ -269,8 +269,8 @@ export default class Car {
             }
 
             // Vérifier si on a atteint la cible APRES ce petit mouvement
-            distanceToTarget = this.position.distanceTo(targetPoint); // Recalculer la distance
-            if (distanceToTarget <= this.reachTolerance) {
+            distanceToTargetSq = this.position.distanceToSquared(targetPoint); // Recalculer la distance
+            if (distanceToTargetSq <= this.reachTolerance * this.reachTolerance) {
                 this.currentPathIndex++;
                 if (this.currentPathIndex >= this.path.length) {
                     // Fin du chemin ATTEINTE A LA FIN DE CE PAS

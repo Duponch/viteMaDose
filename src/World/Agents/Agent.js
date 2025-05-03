@@ -360,9 +360,9 @@ export default class Agent {
             console.log(`[Agent ${this.id} DEBUG] setPath: Chemin VALIDE reçu (${pathPoints.length} points, longueur ${pathLengthWorld.toFixed(2)}).`);
 
             if (currentStateAtCall === AgentState.REQUESTING_PATH_FOR_HOME && this.weekendBehavior.weekendWalkEndTime > 0 && pathPoints.length > 0) {
-                const startPoint = pathPoints[0]; const distanceToStart = this.position.distanceTo(startPoint);
-                if (distanceToStart > 5.0) {
-                    console.warn(`Agent ${this.id}: Correction téléportation! Distance chemin retour maison: ${distanceToStart.toFixed(2)}m.`);
+                const startPoint = pathPoints[0]; const distanceToStartSq = this.position.distanceToSquared(startPoint);
+                if (distanceToStartSq > 25.0) {
+                    console.warn(`Agent ${this.id}: Correction téléportation! Distance chemin retour maison: ${Math.sqrt(distanceToStartSq).toFixed(2)}m.`);
                     pathPoints[0] = this.position.clone();
                 }
             }
@@ -747,15 +747,14 @@ export default class Agent {
             this._targetPosition.copy(targetPathPoint);
 
             const distanceToTargetSq = this.position.distanceToSquared(this._targetPosition);
-            const distanceToTarget = Math.sqrt(distanceToTargetSq);
             const moveThisFrame = this.speed * (deltaTime / 1000);
 
             let hasArrivedAtPathPoint = false;
 
             // --- Mouvement ---
-            if (distanceToTarget > 0.001) {
+            if (distanceToTargetSq > 0.000001) { // 0.001 * 0.001
                 this._direction.copy(this._targetPosition).sub(this.position).normalize();
-                const actualMove = Math.min(moveThisFrame, distanceToTarget);
+                const actualMove = Math.min(moveThisFrame, Math.sqrt(distanceToTargetSq));
                 this.position.addScaledVector(this._direction, actualMove);
 
                 // Mettre à jour la cible d'orientation vers le point actuel
@@ -767,7 +766,7 @@ export default class Agent {
 
                 // Vérifier si on a atteint la cible (ou presque)
                 // Utiliser distance AVANT mouvement + tolerance
-                if (distanceToTarget <= actualMove + this.reachTolerance) {
+                if (distanceToTargetSq <= Math.pow(actualMove + this.reachTolerance, 2)) {
                     hasArrivedAtPathPoint = true;
                 }
             } else {
