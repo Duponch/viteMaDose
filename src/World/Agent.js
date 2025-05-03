@@ -78,9 +78,8 @@ export default class Agent {
 
         // --- Comportements & Handlers ---
         this.animationHandler = new AgentAnimation(this.config, this.experience);
-        // --- NOUVEAU: Instanciation de AgentMovement ---
         this.movementHandler = new AgentMovement(this);
-        // ----------------------------------------------
+
         this.workScheduleStrategy = workScheduleStrategy || new WorkScheduleStrategy();
         const effectiveWeekendWalkStrategy = weekendWalkStrategy || new WeekendWalkStrategy();
         this.weekendBehavior = new AgentWeekendBehavior(this, effectiveWeekendWalkStrategy);
@@ -115,7 +114,6 @@ export default class Agent {
 
         this._nextStateCheckTime = -1;
     }
-    // --- FIN CONSTRUCTEUR MODIFIÉ ---
 
 	_calculateScheduledTimes() {
         const environment = this.experience.world?.environment;
@@ -495,9 +493,7 @@ export default class Agent {
         }
         console.log(`[Agent ${this.id} DEBUG] Sortie de setPath. État final: ${this.currentState}`);
     }
-    // --- FIN setPath MODIFIÉ ---
 
-    // --- MÉTHODE updateState (MODIFIÉE pour déléguer à la State Machine) ---
     /**
      * Met à jour l'état logique de l'agent en déléguant à AgentStateMachine.
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame (ms).
@@ -588,7 +584,6 @@ export default class Agent {
 
         this.isVisible = false; // Cacher l'agent après récupération
     }
-    // --- FIN forceRecoverFromTimeout MODIFIÉ ---
 
 	/**
      * Met à jour la position et l'orientation VISUELLE de l'agent.
@@ -699,65 +694,6 @@ export default class Agent {
             this._resetAnimationMatrices(); // Fallback
         }
         // ----------------------------------------
-    }
-    // --- FIN updateVisuals MODIFIÉ ---
-
-	_updateWalkAnimation(walkTime) {
-        // Accéder à la config via cityManager
-        let config = this.experience.world?.cityManager?.config;
-        if (!config) {
-             console.warn(`Agent ${this.id}: Impossible d'accéder à la config dans _updateWalkAnimation.`);
-             // Utiliser des valeurs par défaut ou arrêter ? Utilisons des défauts pour l'instant.
-             config = { // Fournir un objet config de secours
-                agentBobAmplitude: 0.15, agentStepLength: 1.5, agentStepHeight: 0.7,
-                agentSwingAmplitude: 1.2, agentAnkleRotationAmplitude: Math.PI / 8,
-                agentHandTiltAmplitude: 0.2, agentHeadBobAmplitude: 0.06,
-                agentAnimationSpeedFactor: 1.0 // Valeur par défaut
-             };
-        }
-
-        // Récupérer les valeurs de la config (avec fallback au cas où)
-        const agentBobAmplitude = config.agentBobAmplitude ?? 0.15;
-        const agentStepLength = config.agentStepLength ?? 1.5;
-        const agentStepHeight = config.agentStepHeight ?? 0.7;
-        const agentSwingAmplitude = config.agentSwingAmplitude ?? 1.2;
-        const agentAnkleRotationAmplitude = config.agentAnkleRotationAmplitude ?? (Math.PI / 8);
-        const agentHandTiltAmplitude = config.agentHandTiltAmplitude ?? 0.2;
-        const agentHeadBobAmplitude = config.agentHeadBobAmplitude ?? 0.06;
-        // Utiliser la valeur de config corrigée ici
-        const agentAnimationSpeedFactor = config.agentAnimationSpeedFactor ?? 1.0;
-
-        // Calcul de la vitesse effective (utilise this.visualSpeed qui est propre à l'agent)
-        const effectiveAnimationSpeed = this.visualSpeed * agentAnimationSpeedFactor;
-
-        // Le reste de la logique d'animation reste inchangé
-        let pos = { x: 0, y: 0, z: 0 }, rot = { x: 0, y: 0, z: 0 };
-        const torsoBobY = Math.sin(walkTime * 2) * agentBobAmplitude;
-
-        // Torso
-        pos.y = torsoBobY; rot.x = 0; rot.y = 0; rot.z = 0;
-        this.currentAnimationMatrix.torso.compose(this._tempV3_1.set(pos.x, pos.y, pos.z), this._tempQuat.identity(), this._tempV3_2.set(1, 1, 1));
-        // Head
-        pos.y = torsoBobY + (Math.sin(walkTime * 1.5 + 0.3) * agentHeadBobAmplitude);
-        this.currentAnimationMatrix.head.compose(this._tempV3_1.set(pos.x, pos.y, pos.z), this._tempQuat.identity(), this._tempV3_2.set(1, 1, 1));
-        // Left Foot
-        pos.z = Math.sin(walkTime) * agentStepLength;
-        pos.y = Math.max(0, Math.cos(walkTime)) * agentStepHeight;
-        rot.x = Math.sin(walkTime) * agentAnkleRotationAmplitude; rot.y = 0; rot.z = 0;
-        this.currentAnimationMatrix.leftFoot.compose(this._tempV3_1.set(pos.x, pos.y, pos.z), this._tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), this._tempV3_2.set(1, 1, 1));
-        // Right Foot
-        pos.z = Math.sin(walkTime + Math.PI) * agentStepLength;
-        pos.y = Math.max(0, Math.cos(walkTime + Math.PI)) * agentStepHeight;
-        rot.x = Math.sin(walkTime + Math.PI) * agentAnkleRotationAmplitude; rot.y = 0; rot.z = 0;
-        this.currentAnimationMatrix.rightFoot.compose(this._tempV3_1.set(pos.x, pos.y, pos.z), this._tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), this._tempV3_2.set(1, 1, 1));
-        // Left Hand
-        pos.z = Math.sin(walkTime + Math.PI) * agentSwingAmplitude;
-        pos.y = torsoBobY; rot.x = 0; rot.y = 0; rot.z = Math.sin(walkTime * 1.8) * agentHandTiltAmplitude;
-        this.currentAnimationMatrix.leftHand.compose(this._tempV3_1.set(pos.x, pos.y, pos.z), this._tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), this._tempV3_2.set(1, 1, 1));
-        // Right Hand
-        pos.z = Math.sin(walkTime) * agentSwingAmplitude;
-        pos.y = torsoBobY; rot.x = 0; rot.y = 0; rot.z = Math.cos(walkTime * 1.8 + 0.5) * agentHandTiltAmplitude;
-        this.currentAnimationMatrix.rightHand.compose(this._tempV3_1.set(pos.x, pos.y, pos.z), this._tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), this._tempV3_2.set(1, 1, 1));
     }
 
 	update(deltaTime, currentHour) {
@@ -876,7 +812,7 @@ export default class Agent {
             // ------------------------------------------
 
         } // Fin if (en déplacement)
-    } // Fin update
+    }
 
 	destroy() {
         this.path = null;
@@ -885,54 +821,6 @@ export default class Agent {
         this.homeGridNode = null;
         this.workGridNode = null;
         this.experience = null; // Libérer la référence à Experience
-    }
-
-    /**
-     * Déplace l'agent à l'intérieur du parc
-     * @param {THREE.Vector3} targetPos - Position cible à l'intérieur du parc
-     * @param {number} currentGameTime - Temps de jeu actuel
-     * @private
-     */
-    _moveInsidePark(targetPos, currentGameTime) {
-        // Marquer que l'agent est maintenant à l'intérieur du parc
-        this.isInsidePark = true;
-        
-        // S'assurer que la position du trottoir est enregistrée avant d'entrer dans le parc
-        if (!this.parkSidewalkPosition) {
-            console.warn(`Agent ${this.id}: Position du trottoir non définie avant d'entrer dans le parc, utilisant position actuelle`);
-            this.parkSidewalkPosition = this.position.clone();
-        }
-        
-        // Créer un chemin direct (ligne droite) entre position actuelle et cible
-        const startPos = this.position.clone();
-        const endPos = targetPos.clone();
-        
-        // Calculer la distance
-        const distanceSq = startPos.distanceToSquared(endPos);
-        const distance = Math.sqrt(distanceSq);
-        
-        // Définir une vitesse de déplacement (peut être ajustée)
-        const speed = 1.2; // mètres par seconde
-        
-        // Calculer le temps de déplacement en millisecondes
-        const travelTime = (distance / speed) * 1000;
-        
-        // Créer un chemin artificiel avec seulement le point de départ et d'arrivée
-        const pathPoints = [startPos, endPos];
-        
-        // Configurer le mouvement
-        this.currentPathPoints = pathPoints;
-        this.departureTimeGame = currentGameTime;
-        this.arrivalTmeGame = currentGameTime + travelTime;
-        this.calculatedTravelDurationGame = travelTime;
-        this.currentPathLengthWorld = distance;
-        this.currentPathIndexVisual = 0;
-        this.visualInterpolationProgress = 0;
-        
-        // Définir un temps de séjour dans le parc avant de chercher un nouveau point
-        this.nextParkMovementTime = currentGameTime + travelTime + (Math.random() * 10000 + 5000); // 5-15 secondes de pause
-        
-        console.log(`Agent ${this.id}: Mouvement dans le parc configuré - durée: ${travelTime.toFixed(0)}ms, distance: ${distance.toFixed(2)}m, position trottoir sauvegardée: [${this.parkSidewalkPosition.x.toFixed(2)}, ${this.parkSidewalkPosition.z.toFixed(2)}]`);
     }
 
     // Ajouter une méthode de secours pour forcer le retour à la maison

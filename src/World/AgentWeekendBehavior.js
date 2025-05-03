@@ -10,20 +10,21 @@ export default class AgentWeekendBehavior {
      */
     constructor(agent, weekendWalkStrategy) {
         this.agent = agent;
-        this.experience = agent.experience;
+        this.experience = agent.experience; // Stocker la référence à experience
         this.weekendWalkStrategy = weekendWalkStrategy;
 
         // Propriétés spécifiques au comportement du weekend
         this.weekendWalkDestination = null;
         this.weekendWalkGridNode = null;
         this.weekendWalkEndTime = -1;
-        this.isInsidePark = false; // Actuellement non utilisé, mais conservé pour logique future
-        this.parkSidewalkPosition = null; // Position sur le trottoir avant d'entrer dans un parc (non utilisé actuellement)
-        this.parkSidewalkGridNode = null; // Nœud correspondant (non utilisé actuellement)
-        this.nextParkMovementTime = 0; // Temps pour le prochain déplacement dans un parc (non utilisé actuellement)
+        this.isInsidePark = false;
+        this.parkSidewalkPosition = null;
+        this.parkSidewalkGridNode = null;
+        this.nextParkMovementTime = 0;
 
         // Récupération de la hauteur du trottoir (peut être utile)
-        this.sidewalkHeight = this.experience.world?.cityManager?.getNavigationGraph(false)?.sidewalkHeight || 0.2;
+        // Utilisation de l'accès via experience
+        this.sidewalkHeight = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(false)?.sidewalkHeight || 0.2;
     }
 
     /**
@@ -38,9 +39,15 @@ export default class AgentWeekendBehavior {
         const agentState = agent.currentState;
         const isWeekendNow = ["Samedi", "Dimanche"].includes(calendarDate?.jourSemaine);
 
+        // --- ACCÈS À L'ENVIRONNEMENT CORRIGÉ ---
+        const environment = this.experience.world?.environment; // Accéder via experience
+        // ---------------------------------------
+
         // --- Logique de DÉCLENCHEMENT (si AT_HOME et c'est le weekend) ---
         if (agentState === AgentState.AT_HOME && isWeekendNow) {
+            // Enregistrer l'agent auprès de la stratégie (si ce n'est déjà fait pour ce jour)
             this.weekendWalkStrategy.registerAgent(agent.id, calendarDate);
+            // Vérifier s'il est temps de partir selon la stratégie
             const shouldStartWalk = this.weekendWalkStrategy.shouldWalkNow(agent.id, calendarDate, currentHour);
 
             if (shouldStartWalk) {
@@ -50,7 +57,7 @@ export default class AgentWeekendBehavior {
                     console.warn(`Agent ${agent.id}: Impossible de trouver une destination de promenade après déclenchement.`);
                     // L'agent restera AT_HOME, la stratégie ne le redéclenchera pas pour cette heure.
                 }
-                // Si destinationFound, requestPath a déjà été appelé et l'état a changé.
+                // Si destinationFound, requestPath a déjà été appelé et l'état a changé dans Agent.js.
                 return; // Sortir car l'état a changé ou la recherche a échoué.
             }
         }
@@ -58,7 +65,9 @@ export default class AgentWeekendBehavior {
         // --- Logique PENDANT la promenade (état WEEKEND_WALKING) ---
         if (agentState === AgentState.WEEKEND_WALKING) {
             agent.isVisible = true; // Assurer visibilité
+            // Vérifier si la destination est atteinte (basé sur le temps d'arrivée calculé ou le flag)
             const destinationReached = (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame) || agent.hasReachedDestination;
+            // Vérifier si le temps alloué à la promenade est écoulé
             const walkTimeOver = this.weekendWalkEndTime > 0 && currentGameTime >= this.weekendWalkEndTime;
 
             if (destinationReached || walkTimeOver) {
@@ -66,13 +75,18 @@ export default class AgentWeekendBehavior {
                 this.resetWeekendState(); // Nettoyer l'état du weekend
                 agent.hasReachedDestination = false; // Important de reset ce flag
 
+                // Demander le chemin du retour à la maison
                 if (agent.homePosition && agent.homeGridNode) {
                     agent._currentPathRequestGoal = 'HOME'; // But retour maison
-                    // Changement d'état et requête gérés DANS requestPath
-                    const navigationManager = this.experience.world?.cityManager?.navigationManager;
-                    const currentNavGraph = navigationManager?.getNavigationGraph(false); // Toujours piéton pour retour
-                    const currentGridNode = currentNavGraph?.getClosestWalkableNode(agent.position);
-                    agent.requestPath(agent.position, agent.homePosition, currentGridNode, agent.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME, currentGameTime);
+                    // La demande de chemin gère le changement d'état vers REQUESTING_* ou WAITING_FOR_PATH
+                    agent.requestPath(
+                        agent.position, // Partir de la position actuelle
+                        agent.homePosition,
+                        null, // Laisser requestPath trouver le nœud courant
+                        agent.homeGridNode,
+                        AgentState.READY_TO_LEAVE_FOR_HOME, // État cible si chemin trouvé
+                        currentGameTime
+                    );
                 } else {
                     console.error(`Agent ${agent.id}: Impossible de rentrer (infos domicile manquantes). Forçage récupération.`);
                     agent.forceRecoverFromTimeout(currentGameTime); // Utiliser récupération
@@ -85,31 +99,38 @@ export default class AgentWeekendBehavior {
         }
 
         // --- Logique pour l'état WEEKEND_WALK_READY ---
-        // (Juste avant de commencer à marcher effectivement)
+        // (Juste après que le chemin ait été trouvé, avant de commencer à marcher)
         if (agentState === AgentState.WEEKEND_WALK_READY) {
             if (agent.currentPathPoints) {
-                agent.currentState = AgentState.WEEKEND_WALKING; // Démarrer la marche
+                agent.currentState = AgentState.WEEKEND_WALKING; // Démarrer la marche effective
                 agent.isVisible = true;
                 agent.departureTimeGame = currentGameTime;
 
-                // Recalculer durée/arrivée basée sur vitesse PIETON
+                // Recalculer durée/arrivée basée sur vitesse PIETON (agentBaseSpeed)
                 if (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) {
                     agent.calculatedTravelDurationGame = (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000;
-                } else { agent.calculatedTravelDurationGame = 15 * 60 * 1000; } // Fallback 15min
+                } else {
+                    agent.calculatedTravelDurationGame = 15 * 60 * 1000; // Fallback 15min jeu
+                }
                 agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
 
-                // Calculer le temps de fin de la promenade globale
+                // --- CALCUL TEMPS FIN PROMENADE CORRIGÉ ---
+                // Utiliser la référence correcte à environment
                 const dayDurationMs = environment?.dayDurationMs || 0;
                 const msPerHour = dayDurationMs > 0 ? dayDurationMs / 24 : 3600000; // Fallback 1h en ms
-                let walkDurationMs = msPerHour; // Durée par défaut
+                let walkDurationMs = msPerHour; // Durée par défaut (1h)
+
                 if (this.weekendWalkStrategy && calendarDate) {
-                     const dayKey = this.weekendWalkStrategy._getDayKey(calendarDate);
-                     const walkInfo = this.weekendWalkStrategy.agentWalkMap?.get(dayKey)?.get(agent.id);
-                     if (walkInfo) { walkDurationMs = walkInfo.duration * msPerHour; }
+                    const dayKey = this.weekendWalkStrategy._getDayKey(calendarDate);
+                    const walkInfo = this.weekendWalkStrategy.agentWalkMap?.get(dayKey)?.get(agent.id);
+                    if (walkInfo?.duration) { // Vérifier que duration existe
+                        walkDurationMs = walkInfo.duration * msPerHour;
+                    }
                 }
                 this.weekendWalkEndTime = currentGameTime + walkDurationMs; // Heure de fin absolue
+                // --------------------------------------------
 
-                console.log(`Agent ${agent.id}: Début promenade weekend. Durée trajet: ${(agent.calculatedTravelDurationGame/1000).toFixed(1)}s. Fin promenade prévue dans: ${(walkDurationMs/1000).toFixed(1)}s`);
+                console.log(`Agent ${agent.id}: Début promenade weekend. Durée trajet: ${(agent.calculatedTravelDurationGame / 1000).toFixed(1)}s. Fin promenade prévue dans: ${(walkDurationMs / 1000).toFixed(1)}s`);
                 agent._pathRequestTimeout = null; // Nettoyer le timeout de requête
             } else {
                 console.warn(`Agent ${agent.id}: Prêt promenade mais pas de chemin. Retour AT_HOME.`);
@@ -120,12 +141,10 @@ export default class AgentWeekendBehavior {
         }
 
         // --- Logique pour WEEKEND_WALK_REQUESTING_PATH ou WEEKEND_WALK_RETURNING_TO_SIDEWALK ---
-        // Ces états sont passifs, ils attendent que setPath soit appelé par le worker.
-        // On pourrait ajouter une vérification ici si le weekend se termine pendant l'attente.
         if ((agentState === AgentState.WEEKEND_WALK_REQUESTING_PATH || agentState === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) && !isWeekendNow) {
-             console.warn(`Agent ${agent.id}: Weekend terminé pendant l'attente du chemin de promenade/retour. Annulation, retour AT_HOME.`);
-             this.resetWeekendState();
-             agent.forceReturnHome(currentGameTime); // Force le retour à la maison
+            console.warn(`Agent ${agent.id}: Weekend terminé pendant l'attente du chemin de promenade/retour. Annulation, retour AT_HOME.`);
+            this.resetWeekendState();
+            agent.forceReturnHome(currentGameTime); // Force le retour à la maison
         }
     }
 
@@ -138,10 +157,11 @@ export default class AgentWeekendBehavior {
     _findRandomWalkDestination(currentGameTime) {
         const agent = this.agent;
         const cityManager = this.experience.world?.cityManager;
-        const navGraph = cityManager?.getNavigationGraph(false); // Toujours piéton pour la promenade
+        const navManager = cityManager?.navigationManager;
+        const navGraph = navManager?.getNavigationGraph(false); // Toujours piéton
 
-        if (!cityManager || !navGraph) {
-            console.warn(`Agent ${agent.id}: Impossible de trouver une destination de promenade - CityManager ou NavGraph piéton manquant.`);
+        if (!cityManager || !navManager || !navGraph) {
+            console.warn(`Agent ${agent.id}: Impossible de trouver une destination de promenade - CityManager, NavManager ou NavGraph piéton manquant.`);
             return false;
         }
 
@@ -154,7 +174,6 @@ export default class AgentWeekendBehavior {
                     const parkPos = park.position.clone();
                     parkPos.y = this.sidewalkHeight; // Utiliser hauteur trottoir
 
-                    // --- Logique pour trouver un nœud proche et valide ---
                     const parkNode = navGraph.getClosestWalkableNode(parkPos);
                     if (parkNode) {
                         const worldPos = navGraph.gridToWorld(parkNode.x, parkNode.y);
@@ -162,19 +181,21 @@ export default class AgentWeekendBehavior {
                             this.weekendWalkDestination = worldPos;
                             this.weekendWalkGridNode = parkNode;
                             console.log(`Agent ${agent.id}: Destination promenade (Parc) trouvée: Noeud(${parkNode.x},${parkNode.y})`);
-                            // --- Demander le chemin ---
-                             if (agent.homePosition && agent.homeGridNode) {
+                            if (agent.homePosition && agent.homeGridNode) {
+                                // --- Mettre à jour l'état avant de demander le chemin ---
+                                agent.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
+                                // ------------------------------------------------------
                                 agent.requestPath(
                                     agent.homePosition, this.weekendWalkDestination,
                                     agent.homeGridNode, this.weekendWalkGridNode,
-                                    AgentState.WEEKEND_WALK_READY, // État cible si chemin trouvé
+                                    AgentState.WEEKEND_WALK_READY,
                                     currentGameTime
                                 );
-                                return true; // Succès, requête lancée
+                                return true;
                             } else {
                                 console.error(`Agent ${agent.id}: Infos domicile manquantes pour lancer requête chemin promenade.`);
-                                this.resetWeekendState(); // Nettoyer état weekend
-                                return false; // Échec
+                                this.resetWeekendState();
+                                return false;
                             }
                         }
                     }
@@ -184,37 +205,40 @@ export default class AgentWeekendBehavior {
 
         // 2) Fallback : Nœud aléatoire sur le graphe piéton
         console.log(`Agent ${agent.id}: Aucun parc valide trouvé, recherche nœud aléatoire...`);
-        const randomNode = navGraph.getRandomWalkableNode?.(50); // Tente 50 fois
+        const randomNode = navGraph.getRandomWalkableNode?.(50);
         if (randomNode) {
             const worldPos = navGraph.gridToWorld(randomNode.x, randomNode.y);
             if (worldPos) {
                 this.weekendWalkDestination = worldPos;
                 this.weekendWalkGridNode = { x: randomNode.x, y: randomNode.y };
                 console.log(`Agent ${agent.id}: Destination promenade (Aléatoire) trouvée: Noeud(${randomNode.x},${randomNode.y})`);
-                // --- Demander le chemin ---
-                 if (agent.homePosition && agent.homeGridNode) {
-                     agent.requestPath(
-                         agent.homePosition, this.weekendWalkDestination,
-                         agent.homeGridNode, this.weekendWalkGridNode,
-                         AgentState.WEEKEND_WALK_READY,
-                         currentGameTime
-                     );
-                     return true; // Succès
-                 } else {
+                if (agent.homePosition && agent.homeGridNode) {
+                    // --- Mettre à jour l'état avant de demander le chemin ---
+                    agent.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
+                    // ------------------------------------------------------
+                    agent.requestPath(
+                        agent.homePosition, this.weekendWalkDestination,
+                        agent.homeGridNode, this.weekendWalkGridNode,
+                        AgentState.WEEKEND_WALK_READY,
+                        currentGameTime
+                    );
+                    return true;
+                } else {
                     console.error(`Agent ${agent.id}: Infos domicile manquantes pour lancer requête chemin promenade aléatoire.`);
                     this.resetWeekendState();
-                    return false; // Échec
-                 }
+                    return false;
+                }
             }
         }
 
         console.warn(`Agent ${agent.id}: Impossible de trouver une destination valide pour la promenade (ni parc, ni aléatoire).`);
         this.resetWeekendState();
-        return false; // Échec final
+        return false;
     }
 
-     // --- Méthodes _moveInsidePark et _findNewPositionInsidePark (conservées mais non utilisées activement) ---
-     _moveInsidePark(targetPos, currentGameTime) {
+    // --- Méthodes _moveInsidePark et _findNewPositionInsidePark (conservées mais non utilisées activement) ---
+    _moveInsidePark(targetPos, currentGameTime) {
+        // ... (logique existante) ...
          this.isInsidePark = true;
          if (!this.parkSidewalkPosition) { this.parkSidewalkPosition = this.agent.position.clone(); }
          const startPos = this.agent.position.clone();
@@ -222,7 +246,6 @@ export default class AgentWeekendBehavior {
          const distance = startPos.distanceTo(endPos);
          const speed = 1.2;
          const travelTime = distance > 0 ? (distance / speed) * 1000 : 0;
-         // Simule un chemin direct
          this.agent.currentPathPoints = [startPos, endPos];
          this.agent.departureTimeGame = currentGameTime;
          this.agent.arrivalTmeGame = currentGameTime + travelTime;
@@ -232,19 +255,35 @@ export default class AgentWeekendBehavior {
          this.agent.visualInterpolationProgress = 0;
          this.nextParkMovementTime = currentGameTime + travelTime + (Math.random() * 10000 + 5000);
          console.log(`Agent ${this.agent.id}: Mouvement DANS parc vers (${targetPos.x.toFixed(1)}, ${targetPos.z.toFixed(1)}).`);
-     }
+    }
 
-     _findNewPositionInsidePark(currentGameTime) {
-        // ... [Logique pour trouver un point aléatoire dans le parc le plus proche] ...
-        // Si trouvé, appeler this._moveInsidePark(newTarget, currentGameTime);
-        // Si non trouvé ou temps de retourner, initier retour au trottoir:
-        // const navGraph = this.experience.world?.cityManager?.getNavigationGraph(false);
-        // if(this.parkSidewalkPosition && this.parkSidewalkGridNode && navGraph) {
-        //      this.agent.requestPath(this.agent.position, this.parkSidewalkPosition, null, this.parkSidewalkGridNode, AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK, currentGameTime);
-        //      this.isInsidePark = false;
-        // } else { /* Gérer erreur */ }
-     }
-     // --- Fin méthodes parc ---
+    _findNewPositionInsidePark(currentGameTime) {
+        // ... (logique existante) ...
+         if (currentGameTime < this.nextParkMovementTime) { return; } // Attendre avant de bouger
+         // Tenter de trouver une nouvelle position aléatoire dans le parc le plus proche
+         // Si réussi, appeler _moveInsidePark(newTarget, currentGameTime);
+         // Si échoue, ou si weekendWalkEndTime est dépassé :
+         const navGraph = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(false);
+         if(this.parkSidewalkPosition && this.parkSidewalkGridNode && navGraph) {
+             // Demander chemin pour retourner au point du trottoir sauvegardé
+             // Changement d'état avant la requête
+             this.agent.currentState = AgentState.WEEKEND_WALK_REQUESTING_PATH; // Utiliser l'état de requête
+             this.agent.requestPath(
+                 this.agent.position, // Partir de la position actuelle DANS le parc
+                 this.parkSidewalkPosition,
+                 null, // Laisser requestPath trouver le nœud de départ
+                 this.parkSidewalkGridNode,
+                 AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK, // État cible spécifique
+                 currentGameTime
+             );
+             this.isInsidePark = false; // Marquer comme n'étant plus dans le parc
+             console.log(`Agent ${this.agent.id}: Quitte le parc, demande chemin retour vers trottoir.`);
+         } else {
+             console.error(`Agent ${this.agent.id}: Impossible de retourner au trottoir (infos manquantes). Forçage récupération.`);
+             this.agent.forceRecoverFromTimeout(currentGameTime);
+         }
+    }
+    // --- Fin méthodes parc ---
 
 
     /**
@@ -258,5 +297,7 @@ export default class AgentWeekendBehavior {
         this.parkSidewalkPosition = null;
         this.parkSidewalkGridNode = null;
         this.nextParkMovementTime = 0;
+        // Réinitialiser aussi le targetState de l'agent si pertinent
+        if(this.agent) this.agent.targetStateFromWeekendWalk = null;
     }
 }

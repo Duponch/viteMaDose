@@ -1,6 +1,6 @@
 // src/World/AgentStateMachine.js
 import AgentState from './AgentState.js';
-// Pas besoin d'importer AgentWeekendBehavior ici, car on y accède via l'instance agent
+// AgentWeekendBehavior is accessed via agent instance
 
 export default class AgentStateMachine {
     /**
@@ -21,6 +21,10 @@ export default class AgentStateMachine {
     update(deltaTime, currentHour, currentGameTime) {
         const agent = this.agent; // Raccourci
 
+        // --- CORRECTION: Capturer l'état AU DÉBUT de l'update ---
+        const previousStateForTimer = agent.currentState;
+        // -------------------------------------------------------
+
         // --- Informations Environnement / Calendrier ---
         const environment = this.experience.world?.environment;
         const calendarDate = environment?.getCurrentCalendarDate ? environment.getCurrentCalendarDate() : null;
@@ -31,6 +35,8 @@ export default class AgentStateMachine {
             if (agent.currentState !== AgentState.IDLE) {
                 agent.currentState = AgentState.IDLE;
                 agent.isVisible = false;
+                // Mettre à jour _stateStartTime si on entre dans IDLE
+                if (previousStateForTimer !== AgentState.IDLE) agent._stateStartTime = null;
             }
             return;
         }
@@ -39,12 +45,10 @@ export default class AgentStateMachine {
         const timeWithinCurrentDayCycle = currentGameTime % dayDurationMs;
         const currentDayNumber = calendarDate.annee * 10000 + (calendarDate.mois) * 100 + calendarDate.jour;
 
-        const carManager = this.experience.world?.carManager;
-
-        // --- VÉRIFICATION SÉCURITÉ ÉTAT BLOQUÉ (inchangée) ---
+        // --- VÉRIFICATION SÉCURITÉ ÉTAT BLOQUÉ ---
         const MAX_TRANSIT_DURATION_FACTOR = 2.0;
         const maxTransitTime = dayDurationMs * MAX_TRANSIT_DURATION_FACTOR;
-        const isStuckCheckState = /* ... mêmes états ... */
+        const isStuckCheckState =
             agent.currentState === AgentState.IN_TRANSIT_TO_WORK || agent.currentState === AgentState.DRIVING_TO_WORK ||
             agent.currentState === AgentState.IN_TRANSIT_TO_HOME || agent.currentState === AgentState.DRIVING_HOME ||
             agent.currentState === AgentState.REQUESTING_PATH_FOR_WORK || agent.currentState === AgentState.REQUESTING_PATH_FOR_HOME ||
@@ -54,328 +58,318 @@ export default class AgentStateMachine {
         if (isStuckCheckState && agent._stateStartTime && currentGameTime - agent._stateStartTime > maxTransitTime) {
             console.warn(`[AGENT ${agent.id} SAFETY] Bloqué en état ${agent.currentState} pendant > ${MAX_TRANSIT_DURATION_FACTOR} jours. Forçage récupération.`);
             agent.forceRecoverFromTimeout(currentGameTime);
+            // Après récupération, on ne continue pas l'update de la state machine pour ce tick
             return;
         }
 
-        // --- Vérification Timeout Path Request (inchangée) ---
-        const PATH_REQUEST_TIMEOUT_MS = 100000;
+        // --- Vérification Timeout Path Request ---
+        const PATH_REQUEST_TIMEOUT_MS = 100000; // 100 secondes
         if (agent._pathRequestTimeout && (agent.currentState.startsWith('REQUESTING_') || agent.currentState === AgentState.WAITING_FOR_PATH) && (currentGameTime - agent._pathRequestTimeout > PATH_REQUEST_TIMEOUT_MS)) {
             console.warn(`Agent ${agent.id}: Path request timed out in state ${agent.currentState}. Forcing recovery.`);
             agent.forceRecoverFromTimeout(currentGameTime);
+            // Après récupération, on ne continue pas l'update
             return;
         }
 
-        // --- Heures Planifiées (inchangé) ---
+        // --- Heures Planifiées ---
         const departWorkTime = agent.exactWorkDepartureTimeGame;
         const departHomeTime = agent.exactHomeDepartureTimeGame;
-        if (departWorkTime < 0 || departHomeTime < 0 ) {
-             if (agent.currentState !== AgentState.IDLE) {
+        if (departWorkTime < 0 || departHomeTime < 0) {
+            if (agent.currentState !== AgentState.IDLE) {
                 agent.currentState = AgentState.IDLE;
                 agent.isVisible = false;
-             }
+                 // Mettre à jour _stateStartTime si on entre dans IDLE
+                if (previousStateForTimer !== AgentState.IDLE) agent._stateStartTime = null;
+            }
             return;
         }
 
-        // --- *** MODIFICATION : Délégation Weekend *** ---
+        // --- Délégation Weekend ---
         const isWeekendNow = ["Samedi", "Dimanche"].includes(calendarDate?.jourSemaine);
         const isWeekendState = agent.currentState.startsWith('WEEKEND_');
 
-        // Si c'est le weekend ET que l'agent est à la maison, OU si l'agent est déjà dans un état weekend
         if ((isWeekendNow && agent.currentState === AgentState.AT_HOME) || isWeekendState) {
             if (agent.weekendBehavior) {
                 agent.weekendBehavior.update(calendarDate, currentHour, currentGameTime);
                 // Si weekendBehavior a changé l'état vers un état NON-weekend ou un état de REQUETE,
-                // on arrête ici pour ce tick. La machine principale reprendra au prochain tick.
-                if (!agent.currentState.startsWith('WEEKEND_') || agent.currentState.startsWith('REQUESTING_')) {
-                   // Mettre à jour _stateStartTime si on vient d'entrer dans un état de requête (initié par weekendBehavior)
-                   if(agent.currentState.startsWith('REQUESTING_') && previousStateForTimer !== agent.currentState) {
-                       agent._stateStartTime = currentGameTime;
-                   }
-                   return;
+                // on arrête ici pour ce tick.
+                const stateAfterWeekendUpdate = agent.currentState; // Lire l'état *après* l'appel à weekendBehavior.update
+                if (!stateAfterWeekendUpdate.startsWith('WEEKEND_') || stateAfterWeekendUpdate.startsWith('REQUESTING_')) {
+                    // --- CORRECTION: Comparer à l'état CAPTURÉ AU DÉBUT ---
+                    // Mettre à jour _stateStartTime si on vient d'entrer dans un état de requête (initié par weekendBehavior)
+                    if (stateAfterWeekendUpdate.startsWith('REQUESTING_') && previousStateForTimer !== stateAfterWeekendUpdate) {
+                        agent._stateStartTime = currentGameTime;
+                    }
+                    // ----------------------------------------------------
+                    return; // La machine principale reprendra au prochain tick
                 }
             } else {
                 console.warn(`Agent ${agent.id}: Comportement Weekend demandé mais weekendBehavior non défini.`);
             }
         }
-        // --- *** FIN MODIFICATION Weekend *** ---
 
-
-        // --- Machine d'état (Logique travail/maison semaine uniquement) ---
-        // Récupérer l'état après l'éventuelle mise à jour par weekendBehavior
+        // --- Machine d'état (Logique travail/maison semaine) ---
+        // Utiliser l'état actuel de l'agent, qui peut avoir été modifié par weekendBehavior
         const currentState = agent.currentState;
-        const previousStateForTimer = agent.currentState; // Utiliser l'état ACTUEL pour comparaison future
 
-        switch (currentState) { // Utiliser la variable locale 'currentState'
-            // --- CAS AT_HOME (Semaine) ---
+        switch (currentState) {
             case AgentState.AT_HOME:
                 agent.isVisible = false;
-                // Si ce n'est pas le weekend (déjà géré au-dessus), vérifier départ travail
-                if (!isWeekendNow) {
-                    const shouldWorkToday = agent.workScheduleStrategy ? agent.workScheduleStrategy.shouldWorkToday(calendarDate) : false;
+                if (!isWeekendNow) { // Si c'est le weekend, la logique est déjà gérée au-dessus
+                    const shouldWorkToday = agent.workScheduleStrategy?.shouldWorkToday(calendarDate) ?? false;
                     const workCheckCondition = (
                         agent.workPosition && shouldWorkToday &&
                         currentDayNumber > agent.lastDepartureDayWork &&
                         timeWithinCurrentDayCycle >= agent.prepareWorkDepartureTimeGame &&
-                        currentHour < agent.departureHomeHour &&
-                        agent.requestedPathForDepartureTime !== currentGameTime
+                        currentHour < agent.departureHomeHour && // Sécurité pour éviter départ tardif
+                        agent.requestedPathForDepartureTime !== currentGameTime // Éviter double requête
                     );
 
                     if (workCheckCondition) {
                         agent.requestedPathForDepartureTime = currentGameTime;
-                        // --- Utilisation de vehicleBehavior ---
                         const shouldUseCar = agent.vehicleBehavior?.shouldUseVehicle() ?? false;
                         if (shouldUseCar) {
-                             // Tenter de demander une voiture
-                             const carRequested = agent.vehicleBehavior.requestCar(
-                                 agent.vehicleBehavior.vehicleHomePosition || agent.homePosition.clone().setY(0.25), // Pos départ voiture
-                                 agent.workPosition // Cible finale
-                             );
-                             if (!carRequested) {
-                                 console.warn(`Agent ${agent.id}: Échec requête voiture (Fallback piéton).`);
-                                 // Pas besoin de changer agent.isInVehicle ici, requestCar le fait
-                             }
+                            const startCarPos = agent.vehicleBehavior.vehicleHomePosition || agent.homePosition.clone().setY(0.25);
+                            const carRequested = agent.vehicleBehavior.requestCar(startCarPos, agent.workPosition);
+                            if (!carRequested) console.warn(`Agent ${agent.id}: Échec requête voiture (Fallback piéton).`);
                         }
-                        // ---------------------------------------
-                         if (agent.homePosition && agent.workPosition) {
-                               agent._currentPathRequestGoal = 'WORK';
-                               // La demande de chemin se fait maintenant dans requestPath,
-                               // qui prend en compte agent.vehicleBehavior.isDriving()
-                               agent.requestPath(
-                                   agent.homePosition, // Départ logique de l'agent
-                                   agent.workPosition, // Arrivée logique de l'agent
-                                   null, null, // Nœuds de grille (calculés dans requestPath)
-                                   AgentState.READY_TO_LEAVE_FOR_WORK, // Prochain état si succès
-                                   currentGameTime
-                               );
-                         } else { agent.requestedPathForDepartureTime = -1; }
+                        if (agent.homePosition && agent.workPosition) {
+                            agent._currentPathRequestGoal = 'WORK';
+                            agent.requestPath(agent.homePosition, agent.workPosition, null, null, AgentState.READY_TO_LEAVE_FOR_WORK, currentGameTime);
+                        } else {
+                            console.error(`Agent ${this.agent.id}: homePosition ou workPosition manquant pour demande travail.`);
+                            agent.requestedPathForDepartureTime = -1;
+                        }
                     }
                 }
                 break;
 
-            // --- CAS AT_WORK (Semaine) ---
             case AgentState.AT_WORK:
                 agent.isVisible = false;
-                 const homeCheckCondition = (
-                     agent.homePosition &&
-                     currentDayNumber > agent.lastDepartureDayHome &&
-                     timeWithinCurrentDayCycle >= agent.prepareHomeDepartureTimeGame &&
-                     agent.requestedPathForDepartureTime !== currentGameTime
-                 );
-                 if (homeCheckCondition) {
-                     agent.requestedPathForDepartureTime = currentGameTime;
-                     // --- Utilisation de vehicleBehavior ---
-                     const shouldUseCar = agent.vehicleBehavior?.shouldUseVehicle() ?? false;
-                     if (shouldUseCar) {
-                         const carRequested = agent.vehicleBehavior.requestCar(
-                             agent.workPosition.clone().setY(0.25), // Pos départ voiture (au travail)
-                             agent.vehicleBehavior.vehicleHomePosition || agent.homePosition.clone().setY(0.25) // Cible voiture (garage)
-                         );
-                         if (!carRequested) {
-                              console.warn(`Agent ${agent.id}: Échec requête voiture pour retour (Fallback piéton).`);
-                         }
-                     }
-                     // ---------------------------------------
-                     if (agent.workPosition && agent.homePosition) {
-                          agent._currentPathRequestGoal = 'HOME';
-                          agent.requestPath(
-                              agent.workPosition, agent.homePosition,
-                              null, null,
-                              AgentState.READY_TO_LEAVE_FOR_HOME,
-                              currentGameTime
-                          );
-                     } else { agent.requestedPathForDepartureTime = -1; }
-                 }
-                 break;
+                const homeCheckCondition = (
+                    agent.homePosition &&
+                    currentDayNumber > agent.lastDepartureDayHome &&
+                    timeWithinCurrentDayCycle >= agent.prepareHomeDepartureTimeGame &&
+                    agent.requestedPathForDepartureTime !== currentGameTime
+                );
+                if (homeCheckCondition) {
+                    agent.requestedPathForDepartureTime = currentGameTime;
+                    const shouldUseCar = agent.vehicleBehavior?.shouldUseVehicle() ?? false;
+                    if (shouldUseCar) {
+                        const startCarPos = agent.workPosition.clone().setY(0.25);
+                        const endCarPos = agent.vehicleBehavior.vehicleHomePosition || agent.homePosition.clone().setY(0.25);
+                        const carRequested = agent.vehicleBehavior.requestCar(startCarPos, endCarPos);
+                        if (!carRequested) console.warn(`Agent ${agent.id}: Échec requête voiture pour retour (Fallback piéton).`);
+                    }
+                    if (agent.workPosition && agent.homePosition) {
+                        agent._currentPathRequestGoal = 'HOME';
+                        agent.requestPath(agent.workPosition, agent.homePosition, null, null, AgentState.READY_TO_LEAVE_FOR_HOME, currentGameTime);
+                    } else {
+                        console.error(`Agent ${this.agent.id}: workPosition ou homePosition manquant pour demande retour.`);
+                        agent.requestedPathForDepartureTime = -1;
+                    }
+                }
+                break;
 
-            // --- CAS READY_TO_LEAVE_* ---
             case AgentState.READY_TO_LEAVE_FOR_WORK:
-                 if (timeWithinCurrentDayCycle >= agent.exactWorkDepartureTimeGame) {
-                    const previousState = agent.currentState;
+                if (timeWithinCurrentDayCycle >= agent.exactWorkDepartureTimeGame) {
                     let departureSuccessful = false;
-                    // --- Utilisation de vehicleBehavior ---
                     const isDriving = agent.vehicleBehavior?.isDriving() ?? false;
-                    // ---------------------------------------
+
                     if (isDriving) {
-                        const car = agent.vehicleBehavior.currentVehicle; // Obtenir la voiture via behavior
+                        const car = agent.vehicleBehavior.currentVehicle;
                         if (car && agent.currentPathPoints) {
-                                // agent.enterVehicle(); // Géré par vehicleBehavior.requestCar
-                                car.setPath(agent.currentPathPoints);
-                                agent.currentState = AgentState.DRIVING_TO_WORK;
-                                agent.isVisible = false;
+                            agent.vehicleBehavior.enterVehicle(); // Confirme que l'agent est bien dans la voiture
+                            car.setPath(agent.currentPathPoints);
+                            agent.currentState = AgentState.DRIVING_TO_WORK;
+                            agent.isVisible = false; // Agent logique caché
+                            agent.departureTimeGame = currentGameTime;
+                            const carSpeed = car.speed;
+                            agent.calculatedTravelDurationGame = (carSpeed > 0 && agent.currentPathLengthWorld > 0) ? (agent.currentPathLengthWorld / carSpeed) * 1000 : 10 * 60 * 1000;
+                            agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                            departureSuccessful = true;
+                        } else { // Problème voiture/chemin -> fallback piéton
+                            console.warn(`Agent ${agent.id}: Problème départ voiture (voiture ou chemin manquant). Tentative départ piéton.`);
+                            agent.vehicleBehavior.exitVehicle(); // Libère la voiture demandée mais non utilisée
+                            if (agent.currentPathPoints) { // Tente départ piéton
+                                agent.currentState = AgentState.IN_TRANSIT_TO_WORK; agent.isVisible = true;
                                 agent.departureTimeGame = currentGameTime;
-                                const carSpeed = car.speed;
-                                if (carSpeed > 0 && agent.currentPathLengthWorld > 0) { agent.calculatedTravelDurationGame = (agent.currentPathLengthWorld / carSpeed) * 1000; }
-                                else { agent.calculatedTravelDurationGame = 10 * 60 * 1000; }
-                                agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame; departureSuccessful = true;
-                        } else {
-                                if (agent.currentPathPoints) {
-                                    agent.currentState = AgentState.IN_TRANSIT_TO_WORK; agent.isVisible = true;
-                                    agent.departureTimeGame = currentGameTime;
-                                    if (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) { agent.calculatedTravelDurationGame = (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000; }
-                                    else { agent.calculatedTravelDurationGame = 10 * 60 * 1000; }
-                                    agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame; departureSuccessful = true;
-                                } else { agent.currentState = AgentState.AT_HOME; agent.isVisible = false; }
-                                agent.vehicleBehavior?.exitVehicle(); // Utiliser vehicleBehavior
+                                agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
+                                agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                                departureSuccessful = true;
+                            } else { // Pas de chemin non plus -> retour maison
+                                agent.currentState = AgentState.AT_HOME; agent.isVisible = false;
+                            }
                         }
                     } else { // Départ Piéton
                         if (agent.currentPathPoints) {
                             agent.currentState = AgentState.IN_TRANSIT_TO_WORK; agent.isVisible = true;
                             agent.departureTimeGame = currentGameTime;
-                            if (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) { agent.calculatedTravelDurationGame = (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000; }
-                            else { agent.calculatedTravelDurationGame = 10 * 60 * 1000; }
-                            agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame; departureSuccessful = true;
-                        } else { agent.currentState = AgentState.AT_HOME; agent.isVisible = false; }
-                        // Assurer que l'agent n'est pas marqué comme conduisant
-                        if(agent.vehicleBehavior) agent.vehicleBehavior.isUsingVehicle = false;
+                            agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
+                            agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                            departureSuccessful = true;
+                        } else { // Pas de chemin -> retour maison
+                            agent.currentState = AgentState.AT_HOME; agent.isVisible = false;
+                        }
+                        if(agent.vehicleBehavior) agent.vehicleBehavior.isUsingVehicle = false; // Assurer état correct
                     }
-                    if (departureSuccessful && previousState !== agent.currentState) { agent.lastDepartureDayWork = currentDayNumber; }
+                    // --- CORRECTION : Comparer à l'état CAPTURÉ AU DÉBUT ---
+                    if (departureSuccessful && previousStateForTimer !== agent.currentState) {
+                        agent.lastDepartureDayWork = currentDayNumber;
+                    }
+                    // --------------------------------------------------
                     agent._pathRequestTimeout = null;
-                 }
+                }
                 break;
+
             case AgentState.READY_TO_LEAVE_FOR_HOME:
                  if (timeWithinCurrentDayCycle >= agent.exactHomeDepartureTimeGame) {
-                     const previousState = agent.currentState;
-                     let departureSuccessful = false;
-                     // --- Utilisation de vehicleBehavior ---
-                     const isDriving = agent.vehicleBehavior?.isDriving() ?? false;
-                     // ---------------------------------------
-                     if (isDriving) {
+                    let departureSuccessful = false;
+                    const isDriving = agent.vehicleBehavior?.isDriving() ?? false;
+                    if (isDriving) {
                         const car = agent.vehicleBehavior.currentVehicle;
                         if (car && agent.currentPathPoints) {
-                            // agent.enterVehicle(); // Géré par vehicleBehavior.requestCar
+                            agent.vehicleBehavior.enterVehicle();
                             car.setPath(agent.currentPathPoints);
                             agent.currentState = AgentState.DRIVING_HOME; agent.isVisible = false;
                             agent.departureTimeGame = currentGameTime;
                             const carSpeed = car.speed;
-                            if (carSpeed > 0 && agent.currentPathLengthWorld > 0) { agent.calculatedTravelDurationGame = (agent.currentPathLengthWorld / carSpeed) * 1000; }
-                            else { agent.calculatedTravelDurationGame = 10 * 60 * 1000; }
-                            agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame; departureSuccessful = true;
-                        } else {
-                            if (agent.currentPathPoints) {
-                                agent.currentState = AgentState.IN_TRANSIT_TO_HOME; agent.isVisible = true;
-                                agent.departureTimeGame = currentGameTime;
-                                if (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) { agent.calculatedTravelDurationGame = (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000; }
-                                else { agent.calculatedTravelDurationGame = 10 * 60 * 1000; }
-                                agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame; departureSuccessful = true;
-                            } else { agent.currentState = AgentState.AT_WORK; agent.isVisible = false; }
-                            agent.vehicleBehavior?.exitVehicle(); // Utiliser vehicleBehavior
+                            agent.calculatedTravelDurationGame = (carSpeed > 0 && agent.currentPathLengthWorld > 0) ? (agent.currentPathLengthWorld / carSpeed) * 1000 : 10 * 60 * 1000;
+                            agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                            departureSuccessful = true;
+                        } else { // Problème voiture/chemin -> fallback piéton
+                             console.warn(`Agent ${agent.id}: Problème départ voiture pour retour (voiture ou chemin manquant). Tentative départ piéton.`);
+                             agent.vehicleBehavior.exitVehicle();
+                             if (agent.currentPathPoints) { // Tente départ piéton
+                                 agent.currentState = AgentState.IN_TRANSIT_TO_HOME; agent.isVisible = true;
+                                 agent.departureTimeGame = currentGameTime;
+                                 agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
+                                 agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                                 departureSuccessful = true;
+                             } else { // Pas de chemin non plus -> retour travail
+                                 agent.currentState = AgentState.AT_WORK; agent.isVisible = false;
+                             }
                         }
-                     } else { // Départ Piéton
+                    } else { // Départ Piéton
                         if (agent.currentPathPoints) {
                             agent.currentState = AgentState.IN_TRANSIT_TO_HOME; agent.isVisible = true;
                             agent.departureTimeGame = currentGameTime;
-                            if (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) { agent.calculatedTravelDurationGame = (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000; }
-                            else { agent.calculatedTravelDurationGame = 10 * 60 * 1000; }
-                            agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame; departureSuccessful = true;
-                        } else { agent.currentState = AgentState.AT_WORK; agent.isVisible = false; }
-                         // Assurer que l'agent n'est pas marqué comme conduisant
+                            agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
+                            agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                            departureSuccessful = true;
+                        } else { // Pas de chemin -> retour travail
+                            agent.currentState = AgentState.AT_WORK; agent.isVisible = false;
+                        }
                          if(agent.vehicleBehavior) agent.vehicleBehavior.isUsingVehicle = false;
-                     }
-                     if (departureSuccessful && previousState !== agent.currentState) { agent.lastDepartureDayHome = currentDayNumber; }
-                     agent._pathRequestTimeout = null;
+                    }
+                     // --- CORRECTION : Comparer à l'état CAPTURÉ AU DÉBUT ---
+                    if (departureSuccessful && previousStateForTimer !== agent.currentState) {
+                         agent.lastDepartureDayHome = currentDayNumber;
+                    }
+                    // --------------------------------------------------
+                    agent._pathRequestTimeout = null;
                  }
                 break;
 
             // --- CAS DRIVING_* ---
             case AgentState.DRIVING_TO_WORK:
-                 agent.isVisible = false; // L'agent logique est caché
-                 const carRefWork = agent.vehicleBehavior?.currentVehicle;
-                 const hasArrivedWorkCar = (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame);
-                 const isCarInactiveWork = carRefWork ? !carRefWork.isActive : true; // Considérer inactive si pas de réf
-
-                 if (hasArrivedWorkCar || isCarInactiveWork) {
-                     if (!hasArrivedWorkCar && isCarInactiveWork) { /* console.warn(...) */ }
-                     agent.currentState = AgentState.AT_WORK;
-                     agent.lastArrivalTimeWork = currentGameTime;
-                     agent.requestedPathForDepartureTime = -1;
-                     agent.vehicleBehavior?.exitVehicle(); // Utiliser vehicleBehavior pour sortir et libérer
-                     agent.currentPathPoints = null; agent.currentPathLengthWorld = 0;
-                     agent.hasReachedDestination = false; agent.arrivalTmeGame = -1;
-                 }
+                agent.isVisible = false;
+                const carRefWork = agent.vehicleBehavior?.currentVehicle;
+                const hasArrivedWorkCar = (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame);
+                const isCarInactiveWork = carRefWork ? !carRefWork.isActive : true;
+                if (hasArrivedWorkCar || isCarInactiveWork) {
+                    if (!hasArrivedWorkCar && isCarInactiveWork) console.warn(`Agent ${agent.id}: Voiture devenue inactive avant arrivée travail.`);
+                    agent.currentState = AgentState.AT_WORK;
+                    agent.lastArrivalTimeWork = currentGameTime;
+                    agent.requestedPathForDepartureTime = -1;
+                    agent.vehicleBehavior?.exitVehicle();
+                    agent.currentPathPoints = null; agent.currentPathLengthWorld = 0;
+                    agent.hasReachedDestination = false; agent.arrivalTmeGame = -1;
+                }
                 break;
             case AgentState.DRIVING_HOME:
-                 agent.isVisible = false; // L'agent logique est caché
-                 const carRefHome = agent.vehicleBehavior?.currentVehicle;
-                 const hasArrivedHomeCar = (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame);
-                 const isCarInactiveHome = carRefHome ? !carRefHome.isActive : true;
-
-                 if (hasArrivedHomeCar || isCarInactiveHome) {
-                     if (!hasArrivedHomeCar && isCarInactiveHome) { /* console.warn(...) */ }
-                     agent.currentState = AgentState.AT_HOME;
-                     agent.lastArrivalTimeHome = currentGameTime;
-                     agent.requestedPathForDepartureTime = -1;
-                     agent.vehicleBehavior?.exitVehicle(); // Utiliser vehicleBehavior pour sortir et libérer
-                     agent.currentPathPoints = null; agent.currentPathLengthWorld = 0;
-                     agent.hasReachedDestination = false; agent.arrivalTmeGame = -1;
-                 }
+                agent.isVisible = false;
+                const carRefHome = agent.vehicleBehavior?.currentVehicle;
+                const hasArrivedHomeCar = (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame);
+                const isCarInactiveHome = carRefHome ? !carRefHome.isActive : true;
+                if (hasArrivedHomeCar || isCarInactiveHome) {
+                    if (!hasArrivedHomeCar && isCarInactiveHome) console.warn(`Agent ${agent.id}: Voiture devenue inactive avant arrivée maison.`);
+                    agent.currentState = AgentState.AT_HOME;
+                    agent.lastArrivalTimeHome = currentGameTime;
+                    agent.requestedPathForDepartureTime = -1;
+                    agent.vehicleBehavior?.exitVehicle();
+                    agent.currentPathPoints = null; agent.currentPathLengthWorld = 0;
+                    agent.hasReachedDestination = false; agent.arrivalTmeGame = -1;
+                }
                 break;
 
             // --- CAS IN_TRANSIT_* (Piéton) ---
             case AgentState.IN_TRANSIT_TO_WORK:
-                 agent.isVisible = true;
-                 const arrivedWorkPed = agent.hasReachedDestination || (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame) || (!agent.currentPathPoints || agent.currentPathPoints.length === 0);
-                 if (arrivedWorkPed) {
-                      agent.currentState = AgentState.AT_WORK; agent.lastArrivalTimeWork = currentGameTime;
-                      agent.requestedPathForDepartureTime = -1; agent.isVisible = false;
-                      agent.currentPathPoints = null; agent.currentPathLengthWorld = 0;
-                      agent.hasReachedDestination = false; agent.arrivalTmeGame = -1;
-                  }
+                agent.isVisible = true;
+                const arrivedWorkPed = agent.hasReachedDestination || (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame) || (!agent.currentPathPoints || agent.currentPathPoints.length === 0);
+                if (arrivedWorkPed) {
+                    agent.currentState = AgentState.AT_WORK; agent.lastArrivalTimeWork = currentGameTime;
+                    agent.requestedPathForDepartureTime = -1; agent.isVisible = false;
+                    agent.currentPathPoints = null; agent.currentPathLengthWorld = 0;
+                    agent.hasReachedDestination = false; agent.arrivalTmeGame = -1;
+                }
                 break;
             case AgentState.IN_TRANSIT_TO_HOME:
-                 agent.isVisible = true;
-                 const arrivedHomePed = agent.hasReachedDestination || (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame) || (!agent.currentPathPoints || agent.currentPathPoints.length === 0);
-                 if (arrivedHomePed) {
-                      agent.currentState = AgentState.AT_HOME; agent.lastArrivalTimeHome = currentGameTime;
-                      agent.requestedPathForDepartureTime = -1; agent.isVisible = false;
-                      agent.currentPathPoints = null; agent.currentPathLengthWorld = 0;
-                      agent.hasReachedDestination = false; agent.arrivalTmeGame = -1;
-                  }
+                agent.isVisible = true;
+                const arrivedHomePed = agent.hasReachedDestination || (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame) || (!agent.currentPathPoints || agent.currentPathPoints.length === 0);
+                if (arrivedHomePed) {
+                    agent.currentState = AgentState.AT_HOME; agent.lastArrivalTimeHome = currentGameTime;
+                    agent.requestedPathForDepartureTime = -1; agent.isVisible = false;
+                    agent.currentPathPoints = null; agent.currentPathLengthWorld = 0;
+                    agent.hasReachedDestination = false; agent.arrivalTmeGame = -1;
+                }
                 break;
 
-            // --- CAS ÉTATS D'ATTENTE (inchangés) ---
+            // --- États d'attente et Weekend (passifs ici ou gérés avant) ---
             case AgentState.REQUESTING_PATH_FOR_WORK:
             case AgentState.REQUESTING_PATH_FOR_HOME:
             case AgentState.WAITING_FOR_PATH:
-                // Passif
-                break;
-
-            // --- CAS ÉTATS WEEKEND (gérés au début) ---
             case AgentState.WEEKEND_WALK_REQUESTING_PATH:
             case AgentState.WEEKEND_WALK_READY:
             case AgentState.WEEKEND_WALKING:
             case AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK:
-                // Logique maintenant dans AgentWeekendBehavior
+                // Pas de logique active ici, géré par setPath ou weekendBehavior
                 break;
 
-            // --- CAS IDLE et DEFAULT (inchangés) ---
+            // --- CAS IDLE et DEFAULT ---
             case AgentState.IDLE:
             default:
-                 agent.isVisible = false;
-                 if (!agent.homeBuildingId && this.experience.world?.cityManager) {
-                     const cityManager = this.experience.world.cityManager;
-                      const homeAssigned = cityManager.assignHomeToCitizen(agent.id);
-                      const workAssigned = cityManager.assignWorkplaceToCitizen(agent.id);
-                      if (homeAssigned) {
-                          agent.initializeLifecycle(agent.homeBuildingId, agent.workBuildingId);
-                      }
-                  }
-                 break;
+                agent.isVisible = false;
+                // Tenter d'initialiser si pas encore fait
+                if (!agent.homeBuildingId && this.experience.world?.cityManager) {
+                    const cityManager = this.experience.world.cityManager;
+                    const citizenInfo = cityManager.registerCitizen(agent.id, agent); // Assurer enregistrement
+                    const homeAssigned = cityManager.assignHomeToCitizen(citizenInfo.id);
+                    const workAssigned = cityManager.assignWorkplaceToCitizen(citizenInfo.id);
+                    if (homeAssigned) {
+                        agent.initializeLifecycle(citizenInfo.homeBuildingId, citizenInfo.workBuildingId);
+                    }
+                }
+                break;
         } // Fin Switch
 
-        // --- Gestion du _stateStartTime (inchangée) ---
+        // --- Gestion finale du _stateStartTime ---
+        // Comparer l'état actuel à l'état capturé au début de l'update
         const newState = agent.currentState;
-        // ... [logique identique pour mettre à jour _stateStartTime] ...
         const justEnteredTransitOrRequestState =
-            (newState === AgentState.IN_TRANSIT_TO_WORK || newState === AgentState.DRIVING_TO_WORK ||
-             newState === AgentState.IN_TRANSIT_TO_HOME || newState === AgentState.DRIVING_HOME ||
-             newState === AgentState.REQUESTING_PATH_FOR_WORK || newState === AgentState.REQUESTING_PATH_FOR_HOME ||
-             newState === AgentState.WEEKEND_WALK_REQUESTING_PATH || newState === AgentState.WEEKEND_WALKING ||
-             newState === AgentState.WAITING_FOR_PATH || newState === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) &&
-            newState !== previousStateForTimer;
+            (newState.startsWith('IN_TRANSIT_') || newState.startsWith('DRIVING_') ||
+             newState.startsWith('REQUESTING_') || newState.startsWith('WEEKEND_WALK_') || // Inclut tous les états weekend actifs/requête
+             newState === AgentState.WAITING_FOR_PATH) &&
+            newState !== previousStateForTimer; // <<< Utiliser l'état capturé au début
+
         const justEnteredStableState =
             (newState === AgentState.AT_HOME || newState === AgentState.AT_WORK || newState === AgentState.IDLE) &&
-            newState !== previousStateForTimer;
-        if (justEnteredTransitOrRequestState) { agent._stateStartTime = currentGameTime; }
-        else if (justEnteredStableState) { agent._stateStartTime = null; }
+            newState !== previousStateForTimer; // <<< Utiliser l'état capturé au début
+
+        if (justEnteredTransitOrRequestState) {
+            agent._stateStartTime = currentGameTime;
+        } else if (justEnteredStableState) {
+            agent._stateStartTime = null;
+        }
     }
 }
