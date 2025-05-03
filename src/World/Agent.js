@@ -796,68 +796,94 @@ export default class Agent {
                 break;
 
             case AgentState.READY_TO_LEAVE_FOR_WORK:
-                  if (timeWithinCurrentDayCycle >= this.exactWorkDepartureTimeGame) {
-                      const previousState = this.currentState;
-                      let departureSuccessful = false;
+                // Vérifier s'il est temps de partir exactement
+                if (timeWithinCurrentDayCycle >= this.exactWorkDepartureTimeGame) {
+                    const previousState = this.currentState; // Pour vérifier si l'état change réellement
+                    let departureSuccessful = false; // Flag pour savoir si on a réussi à partir
 
-                      if (this.isInVehicle) {
-                          const car = carManager?.getCarForAgent(this.id);
-                          if (car && this.currentPathPoints) {
-                               this.currentVehicle = car;
-                               this.enterVehicle();
-                               car.setPath(this.currentPathPoints);
-                               this.currentState = AgentState.DRIVING_TO_WORK;
-                               this.isVisible = false;
-                               { /* departureTimeGame calc */
-                                   const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
-                                   const timeWithinDay = currentGameTime % dayDurationMs;
-                                   const daysElapsed = currentGameTime - timeWithinDay;
-                                   this.departureTimeGame = daysElapsed + this.exactWorkDepartureTimeGame;
-                               }
-                               const carSpeed = car.speed;
-                               if (carSpeed > 0 && this.currentPathLengthWorld > 0) { this.calculatedTravelDurationGame = (this.currentPathLengthWorld / carSpeed) * 1000; }
-                               else { this.calculatedTravelDurationGame = 10*60*1000; }
-                               this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame; // <<< Calcul Arrivée
-                               // console.log(`Agent ${this.id}: Départ travail en voiture (Jour ${currentDayNumber}). Arrivée prévue: ${this.arrivalTmeGame.toFixed(0)}`);
-                               departureSuccessful = true;
-                          } else { // Fallback piéton
-                               // console.warn(`Agent ${this.id} (Voiture): Échec départ travail (voiture/chemin manquant). Fallback piéton.`);
-                               if (this.currentPathPoints) {
-                                   this.currentState = AgentState.IN_TRANSIT_TO_WORK;
-                                   this.isVisible = true;
-                                   { /* departureTimeGame calc */ }
-                                   this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame; // <<< Calcul Arrivée Piéton
-                                   // console.log(`Agent ${this.id}: Départ travail à pied (Fallback Voiture, Jour ${currentDayNumber}). Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
-                                   departureSuccessful = true;
-                               } else {
+                    if (this.isInVehicle) { // Si l'agent utilise une voiture
+                        const car = carManager?.getCarForAgent(this.id);
+                        if (car && this.currentPathPoints) { // S'il y a une voiture ET un chemin
+                                this.currentVehicle = car;
+                                this.enterVehicle();
+                                car.setPath(this.currentPathPoints); // Donne le chemin à la voiture
+                                this.currentState = AgentState.DRIVING_TO_WORK; // Nouvel état
+                                this.isVisible = false; // Cacher l'agent logique
+
+                                // *** CORRECTION: Enregistrer l'heure de départ ***
+                                this.departureTimeGame = currentGameTime;
+                                // --- Fin Correction ---
+
+                                // Calculer l'heure d'arrivée basée sur la voiture
+                                const carSpeed = car.speed;
+                                if (carSpeed > 0 && this.currentPathLengthWorld > 0) {
+                                    this.calculatedTravelDurationGame = (this.currentPathLengthWorld / carSpeed) * 1000;
+                                } else {
+                                    this.calculatedTravelDurationGame = 10 * 60 * 1000; // Fallback 10 min jeu
+                                }
+                                this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                                // console.log(`Agent ${this.id}: Départ travail en voiture (Jour ${currentDayNumber}). Arrivée prévue: ${this.arrivalTmeGame.toFixed(0)}`);
+                                departureSuccessful = true;
+                        } else { // Fallback: Problème voiture ou chemin -> passage piéton
+                                // console.warn(`Agent ${this.id} (Voiture): Échec départ travail (voiture/chemin manquant). Fallback piéton.`);
+                                if (this.currentPathPoints) { // Si au moins le chemin existe
+                                    this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                                    this.isVisible = true; // Rendre l'agent visible car piéton
+
+                                    // *** CORRECTION: Enregistrer l'heure de départ (même en fallback) ***
+                                    this.departureTimeGame = currentGameTime;
+                                    // --- Fin Correction ---
+
+                                    // Recalculer durée/arrivée basée sur vitesse PIETON
+                                    if (this.agentBaseSpeed > 0 && this.currentPathLengthWorld > 0) {
+                                        this.calculatedTravelDurationGame = (this.currentPathLengthWorld / this.agentBaseSpeed) * 1000;
+                                    } else {
+                                        this.calculatedTravelDurationGame = 10 * 60 * 1000; // Fallback
+                                    }
+                                    this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                                    // console.log(`Agent ${this.id}: Départ travail à pied (Fallback Voiture, Jour ${currentDayNumber}). Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
+                                    departureSuccessful = true;
+                                } else {
                                     console.error(`Agent ${this.id}: Voiture ET chemin manquants. Retour AT_HOME.`);
                                     this.currentState = AgentState.AT_HOME;
-                               }
-                               this.isInVehicle = false; this.currentVehicle = null;
-                          }
-                      } else { // Départ Piéton
-                           if (this.currentPathPoints) {
-                               this.currentState = AgentState.IN_TRANSIT_TO_WORK;
-                               this.isVisible = true;
-                               { /* departureTimeGame calc */ }
-                               this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame; // <<< Calcul Arrivée Piéton
-                               // console.log(`Agent ${this.id}: Départ travail à pied (Jour ${currentDayNumber}). Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
-                               departureSuccessful = true;
-                           } else {
-                               console.error(`Agent ${this.id}: Mode piéton mais chemin manquant. Retour AT_HOME.`);
-                               this.currentState = AgentState.AT_HOME;
-                           }
-                           this.isInVehicle = false; this.currentVehicle = null;
-                      }
+                                    this.isVisible = false;
+                                }
+                                this.isInVehicle = false; this.currentVehicle = null; this.exitVehicle();
+                        }
+                    } else { // Départ Piéton
+                            if (this.currentPathPoints) { // Si un chemin existe
+                                this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                                this.isVisible = true;
 
-                      // Mettre à jour le jour SI départ réussi ET changement d'état effectif
-                      if (departureSuccessful && previousState !== this.currentState) {
-                           this.lastDepartureDayWork = currentDayNumber;
-                           // console.log(` -> [AGENT ${this.id} DEBUG DEPART WORK] Updated lastDepartureDayWork: ${this.lastDepartureDayWork}`);
-                      }
-                      this._pathRequestTimeout = null;
-                  }
-                  break;
+                                // *** CORRECTION: Enregistrer l'heure de départ ***
+                                this.departureTimeGame = currentGameTime;
+                                // --- Fin Correction ---
+
+                                // Calcul durée/arrivée basée sur vitesse PIETON (déjà fait dans setPath, mais recalculer ici est plus sûr)
+                                if (this.agentBaseSpeed > 0 && this.currentPathLengthWorld > 0) {
+                                    this.calculatedTravelDurationGame = (this.currentPathLengthWorld / this.agentBaseSpeed) * 1000;
+                                } else {
+                                    this.calculatedTravelDurationGame = 10 * 60 * 1000; // Fallback
+                                }
+                                this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                                // console.log(`Agent ${this.id}: Départ travail à pied (Jour ${currentDayNumber}). Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
+                                departureSuccessful = true;
+                            } else {
+                                console.error(`Agent ${this.id}: Mode piéton mais chemin manquant pour départ travail. Retour AT_HOME.`);
+                                this.currentState = AgentState.AT_HOME;
+                                this.isVisible = false;
+                            }
+                            this.isInVehicle = false; this.currentVehicle = null; // Assurer état véhicule correct
+                    }
+
+                    // Mettre à jour le jour du dernier départ seulement si le départ a réussi ET l'état a changé
+                    if (departureSuccessful && previousState !== this.currentState) {
+                            this.lastDepartureDayWork = currentDayNumber;
+                            // console.log(` -> [AGENT ${this.id} DEBUG DEPART WORK] Updated lastDepartureDayWork: ${this.lastDepartureDayWork}`);
+                    }
+                    this._pathRequestTimeout = null; // Annuler timeout si départ réussi ou échoué et retourné à AT_HOME
+                }
+                break;
 
             case AgentState.AT_WORK:
                 this.isVisible = false;
@@ -900,64 +926,95 @@ export default class Agent {
                  }
                  break;
 
-             case AgentState.READY_TO_LEAVE_FOR_HOME:
-                  if (timeWithinCurrentDayCycle >= this.exactHomeDepartureTimeGame) {
-                      const previousState = this.currentState;
-                      let departureSuccessful = false;
+            case AgentState.READY_TO_LEAVE_FOR_HOME:
+            // Vérifier s'il est temps de partir exactement
+            if (timeWithinCurrentDayCycle >= this.exactHomeDepartureTimeGame) {
+                const previousState = this.currentState;
+                let departureSuccessful = false;
 
-                      if (this.isInVehicle) {
-                          const car = carManager?.getCarForAgent(this.id);
-                          if (car && this.currentPathPoints) {
-                               this.currentVehicle = car;
-                               this.enterVehicle();
-                               car.setPath(this.currentPathPoints);
-                               this.currentState = AgentState.DRIVING_HOME;
-                               this.isVisible = false;
-                               { /* departureTimeGame calc */ }
-                               const carSpeed = car.speed;
-                               if (carSpeed > 0 && this.currentPathLengthWorld > 0) { this.calculatedTravelDurationGame = (this.currentPathLengthWorld / carSpeed) * 1000; }
-                               else { this.calculatedTravelDurationGame = 10*60*1000; }
-                               this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame; // <<< Calcul Arrivée
-                               // console.log(`Agent ${this.id}: Départ maison en voiture (Jour ${currentDayNumber}). Arrivée prévue: ${this.arrivalTmeGame.toFixed(0)}`);
-                               departureSuccessful = true;
-                          } else { // Fallback piéton
-                               // console.warn(`Agent ${this.id} (Voiture): Échec départ maison (voiture/chemin manquant). Fallback piéton.`);
-                               if (this.currentPathPoints) {
-                                   this.currentState = AgentState.IN_TRANSIT_TO_HOME;
-                                   this.isVisible = true;
-                                   { /* departureTimeGame calc */ }
-                                   this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame; // <<< Calcul Arrivée Piéton
-                                   // console.log(`Agent ${this.id}: Départ maison à pied (Fallback Voiture, Jour ${currentDayNumber}). Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
-                                   departureSuccessful = true;
-                               } else {
-                                   console.error(`Agent ${this.id}: Chemin manquant pour retour maison (Voiture Fallback). Retour AT_WORK.`);
-                                   this.currentState = AgentState.AT_WORK;
-                               }
-                               this.isInVehicle = false; this.currentVehicle = null;
-                          }
-                      } else { // Départ Piéton
-                           if (this.currentPathPoints) {
-                               this.currentState = AgentState.IN_TRANSIT_TO_HOME;
-                               this.isVisible = true;
-                               { /* departureTimeGame calc */ }
-                               this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame; // <<< Calcul Arrivée Piéton
-                               // console.log(`Agent ${this.id}: Départ maison à pied (Jour ${currentDayNumber}). Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
-                               departureSuccessful = true;
-                           } else {
-                               console.error(`Agent ${this.id}: Mode piéton mais chemin manquant pour retour maison. Retour AT_WORK.`);
-                               this.currentState = AgentState.AT_WORK;
-                           }
-                           this.isInVehicle = false; this.currentVehicle = null;
-                      }
+                if (this.isInVehicle) { // Si l'agent utilise une voiture
+                    const car = carManager?.getCarForAgent(this.id);
+                    if (car && this.currentPathPoints) { // S'il y a une voiture ET un chemin
+                            this.currentVehicle = car;
+                            this.enterVehicle();
+                            car.setPath(this.currentPathPoints);
+                            this.currentState = AgentState.DRIVING_HOME;
+                            this.isVisible = false;
 
-                      // Mettre à jour le jour SI départ réussi ET changement d'état effectif
-                      if (departureSuccessful && previousState !== this.currentState) {
-                          this.lastDepartureDayHome = currentDayNumber;
-                           // console.log(` -> [AGENT ${this.id} DEBUG DEPART HOME] Updated lastDepartureDayHome: ${this.lastDepartureDayHome}`);
-                      }
-                      this._pathRequestTimeout = null;
-                  }
-                  break;
+                            // *** CORRECTION: Enregistrer l'heure de départ ***
+                            this.departureTimeGame = currentGameTime;
+                            // --- Fin Correction ---
+
+                            // Calculer l'heure d'arrivée basée sur la voiture
+                            const carSpeed = car.speed;
+                            if (carSpeed > 0 && this.currentPathLengthWorld > 0) {
+                                this.calculatedTravelDurationGame = (this.currentPathLengthWorld / carSpeed) * 1000;
+                            } else {
+                                this.calculatedTravelDurationGame = 10 * 60 * 1000; // Fallback 10 min jeu
+                            }
+                            this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                            // console.log(`Agent ${this.id}: Départ maison en voiture (Jour ${currentDayNumber}). Arrivée prévue: ${this.arrivalTmeGame.toFixed(0)}`);
+                            departureSuccessful = true;
+                    } else { // Fallback: Problème voiture ou chemin -> passage piéton
+                            // console.warn(`Agent ${this.id} (Voiture): Échec départ maison (voiture/chemin manquant). Fallback piéton.`);
+                            if (this.currentPathPoints) { // Si au moins le chemin existe
+                                this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                                this.isVisible = true;
+
+                                // *** CORRECTION: Enregistrer l'heure de départ (même en fallback) ***
+                                this.departureTimeGame = currentGameTime;
+                                // --- Fin Correction ---
+
+                                // Recalculer durée/arrivée basée sur vitesse PIETON
+                                if (this.agentBaseSpeed > 0 && this.currentPathLengthWorld > 0) {
+                                    this.calculatedTravelDurationGame = (this.currentPathLengthWorld / this.agentBaseSpeed) * 1000;
+                                } else {
+                                    this.calculatedTravelDurationGame = 10 * 60 * 1000; // Fallback
+                                }
+                                this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                                // console.log(`Agent ${this.id}: Départ maison à pied (Fallback Voiture, Jour ${currentDayNumber}). Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
+                                departureSuccessful = true;
+                            } else {
+                                console.error(`Agent ${this.id}: Chemin manquant pour retour maison (Voiture Fallback). Retour AT_WORK.`);
+                                this.currentState = AgentState.AT_WORK;
+                                this.isVisible = false;
+                            }
+                            this.isInVehicle = false; this.currentVehicle = null; this.exitVehicle();
+                    }
+                } else { // Départ Piéton
+                        if (this.currentPathPoints) { // Si un chemin existe
+                            this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                            this.isVisible = true;
+
+                            // *** CORRECTION: Enregistrer l'heure de départ ***
+                            this.departureTimeGame = currentGameTime;
+                            // --- Fin Correction ---
+
+                            // Calcul durée/arrivée basée sur vitesse PIETON
+                            if (this.agentBaseSpeed > 0 && this.currentPathLengthWorld > 0) {
+                                this.calculatedTravelDurationGame = (this.currentPathLengthWorld / this.agentBaseSpeed) * 1000;
+                            } else {
+                                this.calculatedTravelDurationGame = 10 * 60 * 1000; // Fallback
+                            }
+                            this.arrivalTmeGame = currentGameTime + this.calculatedTravelDurationGame;
+                            // console.log(`Agent ${this.id}: Départ maison à pied (Jour ${currentDayNumber}). Durée: ${(this.calculatedTravelDurationGame / 1000).toFixed(1)}s`);
+                            departureSuccessful = true;
+                        } else {
+                            console.error(`Agent ${this.id}: Mode piéton mais chemin manquant pour retour maison. Retour AT_WORK.`);
+                            this.currentState = AgentState.AT_WORK;
+                            this.isVisible = false;
+                        }
+                        this.isInVehicle = false; this.currentVehicle = null; // Assurer état véhicule correct
+                }
+
+                // Mettre à jour le jour du dernier départ seulement si le départ a réussi ET l'état a changé
+                if (departureSuccessful && previousState !== this.currentState) {
+                    this.lastDepartureDayHome = currentDayNumber;
+                        // console.log(` -> [AGENT ${this.id} DEBUG DEPART HOME] Updated lastDepartureDayHome: ${this.lastDepartureDayHome}`);
+                }
+                this._pathRequestTimeout = null; // Annuler timeout
+            }
+            break;
 
             // --- États de Conduite (Basés sur Temps Calculé + Fallback Voiture Inactive) ---
             case AgentState.DRIVING_TO_WORK:
@@ -1263,11 +1320,18 @@ export default class Agent {
             }
         }
 
+
+        console.log(this.departureTimeGame);
+
+
         // Code existant pour les agents qui se déplacent à pied
         if (!this.currentPathPoints || this.currentPathPoints.length === 0 || this.calculatedTravelDurationGame <= 0 || this.departureTimeGame < 0 || this.currentPathLengthWorld <= 0) {
+            
             this.isVisible = false;
             return;
         }
+
+
 
         // Calculer la distance à la caméra
         const cameraPosition = this.experience.camera.instance.position;
