@@ -10,6 +10,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import TimeUI from './UI/TimeUI.js';
 import TimeControlUI from './UI/TimeControlUI.js';
 import AgentStatsUI from './UI/AgentStatsUI.js';
+import WeatherControlUI from './UI/WeatherControlUI.js';
 // Import nécessaire pour la recherche de mesh par position
 import { Matrix4, Vector3 } from 'three';
 import * as DebugTools from './World/Rendering/DebugTools.js';
@@ -39,6 +40,7 @@ export default class Experience extends EventTarget {
         this.timeUI = new TimeUI(this);
         this.timeControlUI = new TimeControlUI(this);
         this.agentStatsUI = new AgentStatsUI(this); // <--- INSTANCIER LA NOUVELLE UI
+        this.weatherControlUI = new WeatherControlUI(this);
         this.controls = new OrbitControls(this.camera.instance, this.canvas);
         this.controls.enableDamping = true;
         this.stats = new Stats();
@@ -1325,8 +1327,14 @@ export default class Experience extends EventTarget {
 
     // Nettoie les ressources et écouteurs lors de la destruction
     destroy() {
-        console.log("Destroying Experience...");
-
+        console.log("Destruction de l'Experience...");
+        
+        // UI
+        this.timeUI.destroy();
+        this.timeControlUI.destroy();
+        this.agentStatsUI.destroy();
+        this.weatherControlUI.destroy();
+        
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
         this.canvas.removeEventListener('mousedown', this._boundHandleMouseDown);
@@ -1369,6 +1377,7 @@ export default class Experience extends EventTarget {
         this.agentStatsUI?.destroy(); this.agentStatsUI = null;
         this.timeUI?.destroy(); this.timeUI = null;
         this.timeControlUI?.destroy(); this.timeControlUI = null;
+        this.weatherControlUI?.destroy(); this.weatherControlUI = null;
         this.camera?.destroy(); this.camera = null;
         this.world?.destroy(); this.world = null;
         this.controls?.dispose(); this.controls = null;

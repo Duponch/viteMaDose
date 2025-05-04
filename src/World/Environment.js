@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import Calendar from '../Utils/Calendar.js';
+import WeatherSystem from './Weather/WeatherSystem.js';
 
 // --- Objets temporaires pour l'update (performance) ---
 const _tempMatrix = new THREE.Matrix4();
@@ -85,6 +86,10 @@ export default class Environment {
         this.setAmbientLight();
         this.setMoonLight();
         this.setCloudMaterial(); // Crée le matériau partagé
+        
+        // --- NOUVEAU: Système météorologique ---
+        this.weatherSystem = null; // Sera initialisé après le chargement complet de l'environnement
+        // --------------------------------------
     }
 
 	getdayDurationMs() {
@@ -132,6 +137,11 @@ export default class Environment {
 
             this.updateDayNightCycle(0); // Applique l'état initial
             this.isInitialized = true;
+            
+            // --- NOUVEAU: Initialiser le système météorologique ---
+            this.weatherSystem = new WeatherSystem(this.experience, this);
+            // ------------------------------------------------------
+            
             console.log("Environment: Initialisation terminée.");
         } catch (error) { console.error("Environment: Erreur init:", error); }
     }
@@ -633,6 +643,14 @@ export default class Environment {
             console.log("Matériau des nuages disposé.");
         }
         // ---------------------------------------------------
+        
+        // --- NOUVEAU : Nettoyer le système météorologique ---
+        if (this.weatherSystem) {
+            this.weatherSystem.destroy();
+            this.weatherSystem = null;
+            console.log("Système météorologique nettoyé.");
+        }
+        // ---------------------------------------------------
 
         // Nullification des références (INCHANGÉ)
         this.sunLight = null; this.ambientLight = null; this.moonLight = null;
@@ -690,6 +708,12 @@ export default class Environment {
                     }
                 }); // Fin boucle sur InstancedMeshes
             } // Fin animation nuages
+            
+            // --- NOUVEAU : Mettre à jour le système météorologique ---
+            if (this.weatherSystem) {
+                this.weatherSystem.update(deltaTime);
+            }
+            // ---------------------------------------------------------
         } // Fin if (isInitialized)
     }
 
