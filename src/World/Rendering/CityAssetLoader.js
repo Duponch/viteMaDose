@@ -90,10 +90,10 @@ export default class CityAssetLoader {
                         })
                 ];
             } else if (type === 'skyscraper') { // *** NOUVELLE LOGIQUE POUR GRATTE-CIELS ***
-                 console.log(`-> Préparation de la génération procédurale pour les variants de gratte-ciels (6 à 12 étages)...`);
+                 console.log(`-> Préparation de la génération procédurale pour les variants de gratte-ciels (7 à 11 étages)...`);
                  const promises = [];
-                 const minFloors = 6;
-                 const maxFloors = 12;
+                 const minFloors = 7;
+                 const maxFloors = 11;
                  for (let floors = minFloors; floors <= maxFloors; floors++) {
                      promises.push(
                          // Appelle loadAssetModel pour chaque nombre d'étages

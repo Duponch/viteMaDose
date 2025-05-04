@@ -50,19 +50,21 @@ export default class NewSkyscraperRenderer {
 		const skyscraperGroup = new THREE.Group();
 
 		// ----- Dimensions & Params (Copied & Adapted from HTML snippet) -----
-		const mainWidth = 12; const mainDepth = 10;
-		const floorHeight = 3.5;
-		numFloors = (numFloors >= 6 && numFloors <= 12) ? numFloors : 9; // Valider
+		const globalScale = 1.2; // Facteur d'échelle global
+		
+		const mainWidth = 12 * globalScale; const mainDepth = 10 * globalScale;
+		const floorHeight = 3.5 * globalScale;
+		numFloors = (numFloors >= 7 && numFloors <= 11) ? numFloors : 9; // Valider
 		const buildingHeight = floorHeight * numFloors;
-		const pillarSize = 1.0; const horizontalBeamSize = 0.5;
-		const numMullionsPerFacade = 3; const windowRecess = 0.1;
-		const floorThickness = 0.1; const platformOverhang = 0.3;
-		const topSectionRoofThickness = 0.8; const platformRaiseOffset = 0.1;
-		const topSectionHeight = 5; const topSectionWidth = mainWidth * 0.7;
+		const pillarSize = 1.0 * globalScale; const horizontalBeamSize = 0.5 * globalScale;
+		const numMullionsPerFacade = 3; const windowRecess = 0.1 * globalScale;
+		const floorThickness = 0.1 * globalScale; const platformOverhang = 0.3 * globalScale;
+		const topSectionRoofThickness = 0.8 * globalScale; const platformRaiseOffset = 0.1 * globalScale;
+		const topSectionHeight = 5 * globalScale; const topSectionWidth = mainWidth * 0.7;
 		const topSectionDepth = mainDepth * 0.7; const numMullionsTop = 2;
 		const roofBaseWidth = topSectionWidth * 0.8; const roofBaseDepth = topSectionDepth * 0.8;
-		const roofBaseHeight = 1; const poleHeight = 4; const poleRadius = 0.2;
-		const dishRadius = 1.5; const redLightRadius = 0.3;
+		const roofBaseHeight = 1 * globalScale; const poleHeight = 4 * globalScale; const poleRadius = 0.2 * globalScale;
+		const dishRadius = 1.5 * globalScale; const redLightRadius = 0.3 * globalScale;
 		const rearBlockFloors = numFloors - 1;
 		const rearBlockHeight = floorHeight * rearBlockFloors;
 		const rearBlockWidth = mainWidth;

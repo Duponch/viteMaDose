@@ -319,7 +319,7 @@ export default class SkyscraperRenderer {
 
         // --- Corps principal ---
         const startY = baseHeightVal + intermediateStructureHeight;
-        if (numFloors === undefined || numFloors < 6 || numFloors > 12) {
+        if (numFloors === undefined || numFloors < 7 || numFloors > 11) {
              console.warn(`generateProceduralSkyscraper: numFloors invalide (${numFloors}). Utilisation de 9 par défaut.`);
              numFloors = 9; // Valeur par défaut si non fourni ou invalide
         }
