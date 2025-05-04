@@ -9,11 +9,26 @@ export default class NewSkyscraperRenderer {
         this.materials = materials; // Main project materials
         this.assetIdCounter = 0; // Unique IDs for procedural assets
 
+        // Création des textures procédurales
+        const wallTexture = this.createWallTexture();
+        const beamTexture = this.createBeamTexture();
+        const roofTexture = this.createRoofTexture();
+
         // --- Define materials specific to this skyscraper ---
         // Adapt colors and textures as needed from your create...Texture functions or shared materials
         this.localMaterials = {
-            structure: new THREE.MeshStandardMaterial({ color: 0x4a6f8e, roughness: 0.7, metalness: 0.2, name: "NewSkyscraperStructureMat" }),
-            beam: new THREE.MeshStandardMaterial({ color: 0x4a6f8e, roughness: 0.7, metalness: 0.2, name: "NewSkyscraperBeamMat" }),
+            structure: new THREE.MeshStandardMaterial({ 
+                map: wallTexture,
+                roughness: 0.7, 
+                metalness: 0.2, 
+                name: "NewSkyscraperStructureMat" 
+            }),
+            beam: new THREE.MeshStandardMaterial({ 
+                map: wallTexture,
+                roughness: 0.7, 
+                metalness: 0.2, 
+                name: "NewSkyscraperBeamMat" 
+            }),
             // IMPORTANT: Separate window material for lighting updates
             window: new THREE.MeshStandardMaterial({
                 // Base color can be slightly transparent glass-like
@@ -26,14 +41,157 @@ export default class NewSkyscraperRenderer {
                 emissiveIntensity: 0.0, // Start with lights off
                 name: "NewSkyscraperWindowMat" // Unique name for InstancedMeshManager
             }),
-            roof: new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.8, name: "NewSkyscraperRoofMat" }),
-            antenna: new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.6, side: THREE.DoubleSide, name: "NewSkyscraperAntennaMat" }),
+            roof: new THREE.MeshStandardMaterial({ 
+                map: roofTexture,
+                color: 0x666666, 
+                roughness: 0.8, 
+                name: "NewSkyscraperRoofMat" 
+            }),
+            antenna: new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.6, metalness: 0.6, side: THREE.DoubleSide, name: "NewSkyscraperAntennaMat" }),
             door: new THREE.MeshStandardMaterial({ color: 0xA0522D, roughness: 0.8, name: "NewSkyscraperDoorMat" }),
             threshold: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperThresholdMat" }),
             floor: new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 0.8, name: "NewSkyscraperFloorMat" }),
             redLight: new THREE.MeshBasicMaterial({ color: 0xff0000, name: "NewSkyscraperRedLightMat" }) // Non-lit material
         };
+
+        // Ajustement des paramètres de répétition pour les poutres
+        wallTexture.repeat.set(2, 2);
+        wallTexture.offset.set(0, 0);
+        wallTexture.center.set(0.5, 0.5);
+        wallTexture.rotation = 0;
+        wallTexture.needsUpdate = true;
+
         console.log("NewSkyscraperRenderer initialized.");
+    }
+
+    /**
+     * Crée une texture procédurale pour les murs
+     * @returns {THREE.Texture}
+     */
+    createWallTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const context = canvas.getContext('2d');
+
+        // Fond gris plus foncé
+        context.fillStyle = '#6e6e6e';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ajout de motifs de briques
+        const brickWidth = 64;
+        const brickHeight = 32;
+        const mortarWidth = 4;
+
+        context.fillStyle = '#5a5a5a'; // Joints plus foncés
+        for (let y = 0; y < canvas.height; y += brickHeight + mortarWidth) {
+            for (let x = 0; x < canvas.width; x += brickWidth + mortarWidth) {
+                context.fillRect(x, y, brickWidth, brickHeight);
+            }
+        }
+
+        // Ajout de variations de texture
+        context.fillStyle = '#7e7e7e'; // Variations plus foncées
+        for (let i = 0; i < 100; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 20 + 10;
+            context.beginPath();
+            context.arc(x, y, size, 0, Math.PI * 2);
+            context.fill();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        return texture;
+    }
+
+    /**
+     * Crée une texture procédurale pour les poutres horizontales
+     * @returns {THREE.Texture}
+     */
+    createBeamTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 128; // Hauteur réduite pour une texture plus adaptée aux poutres
+        const context = canvas.getContext('2d');
+
+        // Fond gris clair
+        context.fillStyle = '#9e9e9e';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ajout de motifs horizontaux
+        const segmentWidth = 64;
+        const segmentHeight = 16;
+        const jointWidth = 4;
+
+        context.fillStyle = '#8a8a8a';
+        for (let x = 0; x < canvas.width; x += segmentWidth + jointWidth) {
+            context.fillRect(x, 0, segmentWidth, canvas.height);
+        }
+
+        // Ajout de variations de texture horizontales
+        context.fillStyle = '#a8a8a8';
+        for (let i = 0; i < 50; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const width = Math.random() * 20 + 10;
+            const height = Math.random() * 10 + 5;
+            context.fillRect(x, y, width, height);
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 1); // Plus de répétitions en largeur qu'en hauteur
+        return texture;
+    }
+
+    /**
+     * Crée une texture procédurale pour le toit
+     * @returns {THREE.Texture}
+     */
+    createRoofTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const context = canvas.getContext('2d');
+
+        // Fond gris foncé
+        context.fillStyle = '#666666';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ajout de motifs de tuiles
+        const tileSize = 64;
+        context.fillStyle = '#555555';
+        for (let y = 0; y < canvas.height; y += tileSize) {
+            for (let x = 0; x < canvas.width; x += tileSize) {
+                context.beginPath();
+                context.moveTo(x, y);
+                context.lineTo(x + tileSize, y);
+                context.lineTo(x + tileSize/2, y + tileSize/2);
+                context.closePath();
+                context.fill();
+            }
+        }
+
+        // Ajout de variations de texture
+        context.fillStyle = '#777777';
+        for (let i = 0; i < 50; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 30 + 15;
+            context.beginPath();
+            context.arc(x, y, size, 0, Math.PI * 2);
+            context.fill();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 1);
+        return texture;
     }
 
     /**
@@ -63,7 +221,7 @@ export default class NewSkyscraperRenderer {
 		const topSectionHeight = 5 * globalScale; const topSectionWidth = mainWidth * 0.7;
 		const topSectionDepth = mainDepth * 0.7; const numMullionsTop = 2;
 		const roofBaseWidth = topSectionWidth * 0.8; const roofBaseDepth = topSectionDepth * 0.8;
-		const roofBaseHeight = 1 * globalScale; const poleHeight = 4 * globalScale; const poleRadius = 0.2 * globalScale;
+		const roofBaseHeight = 1 * globalScale; const poleHeight = 4 * globalScale; const poleRadius = 0.13 * globalScale;
 		const dishRadius = 1.5 * globalScale; const redLightRadius = 0.15 * globalScale;
 		const rearBlockFloors = numFloors - 1;
 		const rearBlockHeight = floorHeight * rearBlockFloors;
@@ -170,7 +328,7 @@ export default class NewSkyscraperRenderer {
 		// --- Antenna/Pole ---
 		const poleBaseY = roofBaseY + roofBaseHeight;
 		const poleTopY = poleBaseY + poleHeight;
-		const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleHeight, 12);
+		const poleGeo = new THREE.CylinderGeometry(poleRadius, poleRadius, poleHeight, 4);
 		const pole = new THREE.Mesh(poleGeo, antennaMaterial);
 		pole.position.y = poleBaseY + poleHeight / 2;
 		skyscraperGroup.add(pole);
@@ -179,7 +337,7 @@ export default class NewSkyscraperRenderer {
 		// --- Dish ---
 		const dishGeo = new THREE.SphereGeometry(dishRadius, 16, 8, 0, Math.PI * 2, 0, Math.PI / 3);
 		const dish = new THREE.Mesh(dishGeo, antennaMaterial);
-		dish.position.y = roofBaseY + roofBaseHeight + 1.5;
+		dish.position.y = roofBaseY + roofBaseHeight + 1.7;
 		dish.position.x = roofBaseWidth / 3;
 		dish.rotation.x = Math.PI / 5;
 		dish.rotation.z = -Math.PI;

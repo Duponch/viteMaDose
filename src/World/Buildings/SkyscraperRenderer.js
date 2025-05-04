@@ -481,7 +481,7 @@ export default class SkyscraperRenderer {
         skyscraper.add(roofMesh);
 
         const roofTopY = roofBaseY + roofHeightVal;
-        const antennaGeom = new THREE.CylinderGeometry(antennaRadius, antennaRadius, antennaHeight, 8);
+        const antennaGeom = new THREE.CylinderGeometry(antennaRadius, antennaRadius, antennaHeight, 4);
         const antenna1 = new THREE.Mesh(antennaGeom, metallicMaterial);
         antenna1.position.set(mainWidth * 0.3, roofTopY + antennaHeight / 2, mainDepth * 0.3);
         antenna1.castShadow = true;
@@ -512,7 +512,7 @@ export default class SkyscraperRenderer {
         const dishGeometry = new THREE.SphereGeometry(dishRadius, 20, 10, 0, Math.PI * 2, dishThetaStart, dishThetaLength);
         const dish = new THREE.Mesh(dishGeometry, metallicMaterial);
         dish.rotation.x = Math.PI * 0.05;
-        const dishStandGeom = new THREE.CylinderGeometry(0.1, 0.1, dishStandHeight, 8);
+        const dishStandGeom = new THREE.CylinderGeometry(0.1, 0.1, dishStandHeight, 4);
         const dishStand = new THREE.Mesh(dishStandGeom, metallicMaterial);
         dishStand.position.set(mainWidth * -0.25, roofTopY + dishStandHeight / 2, mainDepth * 0.2);
         dishStand.castShadow = true;
