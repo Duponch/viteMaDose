@@ -24,16 +24,33 @@ export default class RainEffect {
         this.minDropSize = 0.1;         // Taille minimale des gouttes - augmentée pour mieux voir la forme
         this.maxDropSize = 0.5;         // Taille maximale des gouttes - augmentée pour mieux voir la forme
         this.stretchFactor = 0.5;       // Facteur d'étirement des gouttes - augmenté
+        this.dropOpacity = 0.8;         // Opacité des gouttes (0-1)
         this.cameraFollowFactor = 0.15; // Facteur de suivi de la caméra (entre 0 et 1) - réduit pour moins d'attraction
         this.verticalFollowFactor = 0.3; // Facteur de suivi vertical de la caméra (plus élevé pour mieux suivre les mouvements verticaux)
         this.inertiaFactor = 0.92;      // Facteur d'inertie (entre 0 et 1) - plus proche de 1 = plus d'inertie
         this.lastCameraPosition = null; // Dernière position de la caméra pour l'inertie
         this.rainVelocity = new THREE.Vector3(0, 0, 0); // Vélocité actuelle du système de pluie
         
+        // Configuration des impacts de gouttes
+        this.enableSplashes = true;     // Activer/désactiver les impacts de gouttes
+        this.maxSplashes = 300;         // Nombre maximum d'impacts affichés simultanément (augmenté de 100 à 300)
+        this.splashSize = { min: 0.8, max: 2.2 }; // Taille des impacts (augmentée)
+        this.splashDuration = { min: 0.2, max: 0.5 }; // Durée de vie plus courte pour plus de rafraîchissement
+        this.splashRate = 120;          // Taux de génération d'impacts par seconde (considérablement augmenté)
+        this.splashAreaSize = 25;       // Zone un peu plus concentrée pour mieux voir les impacts
+        
         // Objets Three.js
         this.rainObject = null;
         this.rainGeometry = null;
         this.rainMaterial = null;
+        
+        // Objets pour les impacts de gouttes
+        this.splashesObject = null;
+        this.splashesGeometry = null;
+        this.splashesMaterial = null;
+        this.splashesPool = [];         // Pool d'impacts de gouttes
+        this.activeSplashes = [];       // Impacts actuellement visibles
+        this.timeToNextSplash = 0;      // Temps avant le prochain impact
         
         // Initialisation
         this.initialize();
@@ -45,6 +62,19 @@ export default class RainEffect {
      * Initialise l'effet de pluie avec un système de particules
      */
     initialize() {
+        // Initialiser la pluie
+        this.initializeRain();
+        
+        // Initialiser les impacts de gouttes si activés
+        if (this.enableSplashes) {
+            this.initializeSplashes();
+        }
+    }
+    
+    /**
+     * Initialise l'effet de pluie avec un système de particules
+     */
+    initializeRain() {
         // Créer la géométrie
         this.rainGeometry = new THREE.BufferGeometry();
         
@@ -130,7 +160,8 @@ export default class RainEffect {
                 fogNear: { value: 1.0 },
                 fogFar: { value: 30.0 },
                 fogDensity: { value: 0.1 },
-                speedIntensityFactor: { value: this.speedIntensityFactor }
+                speedIntensityFactor: { value: this.speedIntensityFactor },
+                dropOpacity: { value: this.dropOpacity }
             },
             vertexShader: `
                 uniform float time;
@@ -197,6 +228,7 @@ export default class RainEffect {
                 uniform float fogNear;
                 uniform float fogFar;
                 uniform float fogDensity;
+                uniform float dropOpacity;
                 
                 varying float vSize;
                 varying float vDistance;
@@ -209,8 +241,8 @@ export default class RainEffect {
                     // Échantillonner la texture de goutte
                     vec4 texColor = texture2D(rainTexture, rotatedUv);
                     
-                    // Transparence de base ajustée par l'intensité
-                    float alpha = texColor.a * intensity;
+                    // Transparence de base ajustée par l'intensité et l'opacité configurée
+                    float alpha = texColor.a * intensity * dropOpacity;
                     
                     // Traitement du brouillard
                     float fogFactor = 0.0;
@@ -261,6 +293,196 @@ export default class RainEffect {
     }
     
     /**
+     * Initialise le système d'impacts de gouttes de pluie
+     */
+    initializeSplashes() {
+        // Créer la texture des impacts
+        const splashTexture = this.createSplashTexture();
+        
+        // Créer le matériau pour les impacts
+        this.splashesMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                splashTexture: { value: splashTexture },
+                time: { value: 0 },
+                intensity: { value: this._intensity }
+            },
+            vertexShader: `
+                attribute float size;
+                attribute float life;
+                attribute float maxLife;
+                attribute float rotation;
+                
+                varying vec2 vUv;
+                varying float vLife;
+                
+                void main() {
+                    // Position dans l'espace caméra
+                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                    
+                    // Calculer la taille en fonction de la distance
+                    float pointSize = size * (300.0 / -mvPosition.z);
+                    
+                    // Ratio de vie restante (entre 0 et 1)
+                    vLife = life / maxLife;
+                    
+                    gl_PointSize = pointSize;
+                    gl_Position = projectionMatrix * mvPosition;
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D splashTexture;
+                uniform float intensity;
+                
+                varying float vLife;
+                
+                void main() {
+                    // Échantillonner la texture d'impact
+                    vec4 texColor = texture2D(splashTexture, gl_PointCoord);
+                    
+                    // Ajuster l'opacité en fonction du temps de vie et de l'intensité
+                    // Fade-in rapide suivi d'un fade-out plus lent
+                    float fadeIn = smoothstep(0.0, 0.1, vLife);
+                    float fadeOut = smoothstep(0.0, 1.0, vLife);
+                    float alpha = texColor.a * fadeIn * (1.0 - fadeOut) * intensity;
+                    
+                    // Couleur finale
+                    gl_FragColor = vec4(texColor.rgb, alpha);
+                    
+                    // Rejeter les pixels trop transparents
+                    if (gl_FragColor.a < 0.01) discard;
+                }
+            `,
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
+        });
+        
+        // Créer la géométrie pour les impacts
+        this.splashesGeometry = new THREE.BufferGeometry();
+        
+        // Tableaux pour les attributs des impacts
+        const positions = new Float32Array(this.maxSplashes * 3);
+        const sizes = new Float32Array(this.maxSplashes);
+        const lives = new Float32Array(this.maxSplashes);
+        const maxLives = new Float32Array(this.maxSplashes);
+        const rotations = new Float32Array(this.maxSplashes);
+        
+        // Initialiser les attributs
+        for (let i = 0; i < this.maxSplashes; i++) {
+            // Position (hors écran initialement)
+            positions[i * 3] = 0;
+            positions[i * 3 + 1] = -1000; // Sous la scène
+            positions[i * 3 + 2] = 0;
+            
+            // Taille, vie et rotation aléatoires
+            sizes[i] = 0;
+            lives[i] = 0;
+            maxLives[i] = 0;
+            rotations[i] = Math.random() * Math.PI * 2;
+        }
+        
+        // Assigner les attributs à la géométrie
+        this.splashesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        this.splashesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+        this.splashesGeometry.setAttribute('life', new THREE.BufferAttribute(lives, 1));
+        this.splashesGeometry.setAttribute('maxLife', new THREE.BufferAttribute(maxLives, 1));
+        this.splashesGeometry.setAttribute('rotation', new THREE.BufferAttribute(rotations, 1));
+        
+        // Créer le système de particules
+        this.splashesObject = new THREE.Points(this.splashesGeometry, this.splashesMaterial);
+        this.splashesObject.frustumCulled = false;
+        this.splashesObject.name = "RainSplashes";
+        
+        // Ajouter à la scène
+        this.scene.add(this.splashesObject);
+        
+        // Initialiser les arrays pour la gestion des impacts
+        this.splashesPool = Array.from({ length: this.maxSplashes }, (_, i) => i);
+        this.activeSplashes = [];
+    }
+    
+    /**
+     * Crée une texture pour les impacts de gouttes
+     */
+    createSplashTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        
+        const context = canvas.getContext('2d');
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Centre du canvas
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = canvas.width * 0.4;
+        
+        // Créer un dégradé radial pour l'impact principal
+        const gradient = context.createRadialGradient(
+            centerX, centerY, 0,
+            centerX, centerY, radius
+        );
+        
+        // Dégradé pour l'impact d'eau - plus lumineux pour mieux voir
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+        gradient.addColorStop(0.2, 'rgba(230, 245, 255, 0.7)');
+        gradient.addColorStop(0.5, 'rgba(210, 235, 255, 0.5)');
+        gradient.addColorStop(1, 'rgba(200, 230, 255, 0)');
+        
+        // Dessiner le cercle central de l'impact
+        context.fillStyle = gradient;
+        context.beginPath();
+        context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        context.fill();
+        
+        // Ajouter de petits cercles pour simuler les éclaboussures
+        const splashCount = 8; // Augmenter le nombre d'éclaboussures
+        const maxSplashDistance = radius * 0.9;
+        
+        for (let i = 0; i < splashCount; i++) {
+            const angle = (i / splashCount) * Math.PI * 2;
+            const distance = maxSplashDistance * (0.4 + Math.random() * 0.6);
+            const splashX = centerX + Math.cos(angle) * distance;
+            const splashY = centerY + Math.sin(angle) * distance;
+            const splashSize = radius * (0.15 + Math.random() * 0.2); // Augmenter la taille
+            
+            // Dégradé pour chaque éclaboussure - plus lumineux
+            const splashGradient = context.createRadialGradient(
+                splashX, splashY, 0,
+                splashX, splashY, splashSize
+            );
+            
+            splashGradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
+            splashGradient.addColorStop(1, 'rgba(220, 240, 255, 0)');
+            
+            context.fillStyle = splashGradient;
+            context.beginPath();
+            context.arc(splashX, splashY, splashSize, 0, Math.PI * 2);
+            context.fill();
+        }
+        
+        // Ajouter un petit cercle central plus lumineux
+        const centerGradient = context.createRadialGradient(
+            centerX, centerY, 0,
+            centerX, centerY, radius * 0.3
+        );
+        
+        centerGradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+        centerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        
+        context.fillStyle = centerGradient;
+        context.beginPath();
+        context.arc(centerX, centerY, radius * 0.3, 0, Math.PI * 2);
+        context.fill();
+        
+        // Créer la texture
+        const texture = new THREE.Texture(canvas);
+        texture.needsUpdate = true;
+        
+        return texture;
+    }
+    
+    /**
      * Met à jour l'effet de pluie
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
      */
@@ -275,6 +497,11 @@ export default class RainEffect {
         // Mise à jour du temps uniforme pour l'animation
         this.rainMaterial.uniforms.time.value += deltaTime / 1000;
         this.rainMaterial.uniforms.intensity.value = this._intensity;
+        
+        // Mise à jour des impacts de gouttes si activés
+        if (this.enableSplashes && this.splashesObject) {
+            this.updateSplashes(deltaTime);
+        }
         
         // Mise à jour des paramètres de brouillard
         try {
@@ -403,6 +630,158 @@ export default class RainEffect {
     }
     
     /**
+     * Met à jour les impacts de gouttes
+     * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
+     */
+    updateSplashes(deltaTime) {
+        // Convertir deltaTime en secondes
+        const deltaSeconds = deltaTime / 1000;
+        
+        // Mettre à jour le temps dans le shader
+        this.splashesMaterial.uniforms.time.value += deltaSeconds;
+        this.splashesMaterial.uniforms.intensity.value = this._intensity;
+        
+        // Ne pas générer d'impacts si l'intensité est trop faible
+        if (this._intensity < 0.1) {
+            // Juste mettre à jour les impacts existants
+            this.updateActiveSplashes(deltaSeconds);
+            return;
+        }
+        
+        // Limiter le nombre d'impacts actifs en fonction de l'intensité
+        const maxActiveBasedOnIntensity = Math.floor(this.maxSplashes * this._intensity);
+        
+        // Si nous avons déjà beaucoup d'impacts actifs, mettre à jour sans en créer de nouveaux
+        if (this.activeSplashes.length > maxActiveBasedOnIntensity) {
+            this.updateActiveSplashes(deltaSeconds);
+            return;
+        }
+        
+        // Mettre à jour le compteur pour la prochaine génération d'impact
+        this.timeToNextSplash -= deltaSeconds;
+        
+        // Taux de génération adaptés à l'intensité
+        const adjustedRate = this.splashRate * this._intensity;
+        const timeBetweenSplashes = 1 / adjustedRate;
+        
+        // Générer de nouveaux impacts de gouttes
+        // Créer plusieurs gouttes par frame pour atteindre plus rapidement un état stable
+        const maxSplashesPerFrame = 5;
+        let splashesCreated = 0;
+        
+        while (this.timeToNextSplash <= 0 && 
+               this.activeSplashes.length < maxActiveBasedOnIntensity && 
+               splashesCreated < maxSplashesPerFrame) {
+            this.createNewSplash();
+            this.timeToNextSplash += timeBetweenSplashes;
+            splashesCreated++;
+        }
+        
+        // Mettre à jour les impacts existants
+        this.updateActiveSplashes(deltaSeconds);
+    }
+    
+    /**
+     * Crée un nouvel impact de goutte
+     */
+    createNewSplash() {
+        // Vérifier si nous avons des impacts disponibles dans le pool
+        if (this.splashesPool.length === 0) return;
+        
+        // Obtenir un index d'impact du pool
+        const splashIndex = this.splashesPool.pop();
+        
+        // Position de la caméra
+        const cameraPosition = this.camera.position.clone();
+        
+        // Générer une position aléatoire autour de la caméra
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.pow(Math.random(), 0.5) * this.splashAreaSize; // Distribution plus uniforme
+        const x = cameraPosition.x + Math.cos(angle) * distance;
+        const z = cameraPosition.z + Math.sin(angle) * distance;
+        
+        // Position Y adaptée au sol
+        // Note importante: pour un placement plus précis, il faudrait faire un raycasting
+        // vers le bas pour trouver la hauteur exacte du sol à cette position x,z
+        const y = 0.05; // Légèrement au-dessus du sol pour être toujours visible
+        
+        // Durée de vie aléatoire
+        const life = 0;
+        const maxLife = THREE.MathUtils.randFloat(
+            this.splashDuration.min, 
+            this.splashDuration.max
+        );
+        
+        // Taille aléatoire, mais avec tendance vers les plus grosses tailles
+        const sizeRandom = Math.pow(Math.random(), 0.7); // Favorise les tailles plus grandes
+        const size = THREE.MathUtils.lerp(
+            this.splashSize.min,
+            this.splashSize.max,
+            sizeRandom
+        );
+        
+        // Mettre à jour les attributs
+        const positions = this.splashesGeometry.getAttribute('position');
+        const sizes = this.splashesGeometry.getAttribute('size');
+        const lives = this.splashesGeometry.getAttribute('life');
+        const maxLives = this.splashesGeometry.getAttribute('maxLife');
+        
+        positions.array[splashIndex * 3] = x;
+        positions.array[splashIndex * 3 + 1] = y;
+        positions.array[splashIndex * 3 + 2] = z;
+        
+        sizes.array[splashIndex] = size;
+        lives.array[splashIndex] = life;
+        maxLives.array[splashIndex] = maxLife;
+        
+        // Marquer les attributs comme nécessitant une mise à jour
+        positions.needsUpdate = true;
+        sizes.needsUpdate = true;
+        lives.needsUpdate = true;
+        maxLives.needsUpdate = true;
+        
+        // Ajouter à la liste des impacts actifs
+        this.activeSplashes.push({
+            index: splashIndex,
+            life: life,
+            maxLife: maxLife
+        });
+    }
+    
+    /**
+     * Met à jour les impacts actifs et supprime ceux qui ont expiré
+     * @param {number} deltaSeconds - Temps écoulé en secondes
+     */
+    updateActiveSplashes(deltaSeconds) {
+        if (this.activeSplashes.length === 0) return;
+        
+        const lives = this.splashesGeometry.getAttribute('life');
+        
+        // Mettre à jour chaque impact actif
+        for (let i = this.activeSplashes.length - 1; i >= 0; i--) {
+            const splash = this.activeSplashes[i];
+            
+            // Incrémenter la vie
+            splash.life += deltaSeconds;
+            lives.array[splash.index] = splash.life;
+            
+            // Si la vie a dépassé la durée maximale, recycler l'impact
+            if (splash.life >= splash.maxLife) {
+                // Mettre la position hors écran
+                const positions = this.splashesGeometry.getAttribute('position');
+                positions.array[splash.index * 3 + 1] = -1000;
+                positions.needsUpdate = true;
+                
+                // Remettre dans le pool et retirer des actifs
+                this.splashesPool.push(splash.index);
+                this.activeSplashes.splice(i, 1);
+            }
+        }
+        
+        lives.needsUpdate = true;
+    }
+    
+    /**
      * Définit l'intensité de la pluie
      * @param {number} value - Intensité de la pluie (0-1)
      */
@@ -454,9 +833,28 @@ export default class RainEffect {
             this.rainMaterial.dispose();
         }
         
+        // Nettoyage des impacts de gouttes
+        if (this.splashesObject) {
+            this.scene.remove(this.splashesObject);
+        }
+        
+        if (this.splashesGeometry) {
+            this.splashesGeometry.dispose();
+        }
+        
+        if (this.splashesMaterial) {
+            if (this.splashesMaterial.uniforms.splashTexture) {
+                this.splashesMaterial.uniforms.splashTexture.value.dispose();
+            }
+            this.splashesMaterial.dispose();
+        }
+        
         this.rainObject = null;
         this.rainGeometry = null;
         this.rainMaterial = null;
+        this.splashesObject = null;
+        this.splashesGeometry = null;
+        this.splashesMaterial = null;
     }
 
     /**
