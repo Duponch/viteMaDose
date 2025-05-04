@@ -1,7 +1,6 @@
 // src/World/HouseRenderer.js
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 export default class HouseRenderer {
     constructor(config, materials) {
@@ -205,38 +204,66 @@ export default class HouseRenderer {
         const ctx = canvas.getContext('2d');
         
         // Couleurs de base pour les briques
-        const brickColor = '#B76E79';  // Rose brique
-        const mortarColor = '#8B5A5A'; // Rose plus foncé pour le mortier
+        const brickColors = [
+            '#B76E79',  // Rose brique clair
+            '#A0522D',  // Rose brique moyen
+            '#8B4513',  // Rose brique foncé
+            '#8B5A5A'   // Rose brique très foncé
+        ];
+        const mortarColor = '#5D2906'; // Mortier plus foncé pour plus de contraste
         
-        // Dimensions des briques (plus petites)
-        const brickWidth = width / 12;  // Augmenté de 8 à 12 pour des briques plus petites
-        const brickHeight = height / 6;  // Augmenté de 4 à 6 pour des briques plus petites
+        // Dimensions des briques (légèrement plus petites)
+        const brickWidth = width / 8;  // Augmenté de 6 à 8 pour des briques plus petites
+        const brickHeight = height / 4;  // Augmenté de 3 à 4 pour des briques plus petites
         const mortarWidth = 3;  // Réduit de 4 à 3 pour un mortier plus fin
         
-        // Fond de base
+        // Fond de base (mortier)
         ctx.fillStyle = mortarColor;
         ctx.fillRect(0, 0, width, height);
         
-        // Dessin des briques
-        for (let y = 0; y < 6; y++) {  // Ajusté pour correspondre à la nouvelle hauteur
+        // Dessin des briques avec irrégularités
+        for (let y = 0; y < 4; y++) {
             // Décalage alterné pour l'effet de briques
             const offsetX = (y % 2 === 0) ? 0 : brickWidth / 2;
             
-            for (let x = 0; x < 12; x++) {  // Ajusté pour correspondre à la nouvelle largeur
+            for (let x = 0; x < 8; x++) {
+                // Sélection aléatoire d'une couleur de brique
+                const brickColor = brickColors[Math.floor(Math.random() * brickColors.length)];
                 ctx.fillStyle = brickColor;
+                
+                // Ajouter des irrégularités aléatoires à la taille et position
+                const randomOffsetX = (Math.random() - 0.5) * 2; // -1 à 1
+                const randomOffsetY = (Math.random() - 0.5) * 2; // -1 à 1
+                const randomWidth = brickWidth - mortarWidth + (Math.random() - 0.5) * 4;
+                const randomHeight = brickHeight - mortarWidth + (Math.random() - 0.5) * 4;
+                
                 ctx.fillRect(
-                    x * brickWidth + offsetX + mortarWidth/2,
-                    y * brickHeight + mortarWidth/2,
-                    brickWidth - mortarWidth,
-                    brickHeight - mortarWidth
+                    x * brickWidth + offsetX + mortarWidth/2 + randomOffsetX,
+                    y * brickHeight + mortarWidth/2 + randomOffsetY,
+                    randomWidth,
+                    randomHeight
                 );
+                
+                // Ajouter des variations de texture à l'intérieur des briques
+                ctx.strokeStyle = mortarColor;
+                ctx.lineWidth = 1;
+                const numLines = Math.floor(Math.random() * 3) + 1; // 1 à 3 lignes par brique
+                for (let i = 0; i < numLines; i++) {
+                    const startX = x * brickWidth + offsetX + mortarWidth/2 + randomOffsetX;
+                    const startY = y * brickHeight + mortarWidth/2 + randomOffsetY + (i + 1) * randomHeight / (numLines + 1);
+                    const endX = startX + randomWidth;
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, startY);
+                    ctx.stroke();
+                }
             }
         }
         
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(3, 3);  // Augmenté de 2 à 3 pour plus de répétition
+        texture.repeat.set(3, 3);
         
         return texture;
     }
@@ -257,16 +284,16 @@ export default class HouseRenderer {
         ctx.fillStyle = '#8080FF';
         ctx.fillRect(0, 0, width, height);
         
-        // Dimensions des briques (plus petites)
-        const brickWidth = width / 12;  // Ajusté pour correspondre à la texture
-        const brickHeight = height / 6;  // Ajusté pour correspondre à la texture
+        // Dimensions des briques (légèrement plus petites)
+        const brickWidth = width / 8;  // Ajusté pour correspondre à la texture
+        const brickHeight = height / 4;  // Ajusté pour correspondre à la texture
         const mortarWidth = 3;  // Ajusté pour correspondre à la texture
         
         // Dessin des briques avec effet de relief
-        for (let y = 0; y < 6; y++) {
+        for (let y = 0; y < 4; y++) {
             const offsetX = (y % 2 === 0) ? 0 : brickWidth / 2;
             
-            for (let x = 0; x < 12; x++) {
+            for (let x = 0; x < 8; x++) {
                 // Légère élévation pour les briques
                 ctx.fillStyle = '#A0A0FF';
                 ctx.fillRect(
@@ -281,7 +308,7 @@ export default class HouseRenderer {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(3, 3);  // Ajusté pour correspondre à la texture
+        texture.repeat.set(3, 3);
         
         return texture;
     }
@@ -302,16 +329,16 @@ export default class HouseRenderer {
         ctx.fillStyle = '#808080';
         ctx.fillRect(0, 0, width, height);
         
-        // Dimensions des briques (plus petites)
-        const brickWidth = width / 12;  // Ajusté pour correspondre à la texture
-        const brickHeight = height / 6;  // Ajusté pour correspondre à la texture
+        // Dimensions des briques (légèrement plus petites)
+        const brickWidth = width / 8;  // Ajusté pour correspondre à la texture
+        const brickHeight = height / 4;  // Ajusté pour correspondre à la texture
         const mortarWidth = 3;  // Ajusté pour correspondre à la texture
         
         // Dessin des briques avec rugosité différente
-        for (let y = 0; y < 6; y++) {
+        for (let y = 0; y < 4; y++) {
             const offsetX = (y % 2 === 0) ? 0 : brickWidth / 2;
             
-            for (let x = 0; x < 12; x++) {
+            for (let x = 0; x < 8; x++) {
                 // Briques plus rugueuses que le mortier
                 ctx.fillStyle = '#606060';
                 ctx.fillRect(
@@ -326,7 +353,7 @@ export default class HouseRenderer {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(3, 3);  // Ajusté pour correspondre à la texture
+        texture.repeat.set(3, 3);
         
         return texture;
     }
@@ -414,18 +441,15 @@ export default class HouseRenderer {
         const windowHeight = 0.4 * armDepth;
         const windowWidth = 0.2;
         const windowDepth = 0.01; // Épaisseur réduite pour les fenêtres
-
-        // Paramètres pour l'arrondi des coins
-        const baseCornerRadius = 0.05;
-        const baseCornerSegments = 1;
-        const detailCornerRadius = 0.01;
-        const detailCornerSegments = 1;
     
-        // --- Géométries de base (arrondies) ---
-        this.baseHouseGeometries.base_part1 = new RoundedBoxGeometry(armLength, armDepth, armWidth, baseCornerSegments, baseCornerRadius);
-        this.baseHouseGeometries.base_part1.translate(armLength / 2, armDepth / 2, armWidth / 2);
-        this.baseHouseGeometries.base_part2 = new RoundedBoxGeometry(armWidth, armDepth, armLength, baseCornerSegments, baseCornerRadius);
-        this.baseHouseGeometries.base_part2.translate(armWidth / 2, armDepth / 2, armLength / 2);
+        // Ajout d'un petit décalage pour éviter le z-fighting
+        const zFightingOffset = 0.001; // Petit décalage de 1mm
+    
+        // --- Géométries de base ---
+        this.baseHouseGeometries.base_part1 = new THREE.BoxGeometry(armLength, armDepth, armWidth);
+        this.baseHouseGeometries.base_part1.translate(armLength / 2, armDepth / 2, armWidth / 2 + zFightingOffset);
+        this.baseHouseGeometries.base_part2 = new THREE.BoxGeometry(armWidth, armDepth, armLength);
+        this.baseHouseGeometries.base_part2.translate(armWidth / 2, armDepth / 2, armLength / 2 - zFightingOffset);
         this.baseHouseGeometries.base_part1.userData = { height: armDepth, minY: 0 };
         this.baseHouseGeometries.base_part2.userData = { height: armDepth, minY: 0 };
     
@@ -603,11 +627,11 @@ export default class HouseRenderer {
         
         this.baseHouseGeometries.roof = roofGeometry;
     
-        // --- Géométries arrondies pour les portes et fenêtres ---
-        this.baseHouseGeometries.door = new RoundedBoxGeometry(doorDepth, doorHeight, doorWidth, detailCornerSegments, detailCornerRadius);
-        this.baseHouseGeometries.garageDoor = new RoundedBoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth, detailCornerSegments, detailCornerRadius);
-        this.baseHouseGeometries.windowYZ = new RoundedBoxGeometry(windowDepth, windowHeight, windowWidth, detailCornerSegments, detailCornerRadius);
-        this.baseHouseGeometries.windowXY = new RoundedBoxGeometry(windowWidth, windowHeight, windowDepth, detailCornerSegments, detailCornerRadius);
+        // --- Géométries pour les portes et fenêtres ---
+        this.baseHouseGeometries.door = new THREE.BoxGeometry(doorDepth, doorHeight, doorWidth);
+        this.baseHouseGeometries.garageDoor = new THREE.BoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth);
+        this.baseHouseGeometries.windowYZ = new THREE.BoxGeometry(windowDepth, windowHeight, windowWidth);
+        this.baseHouseGeometries.windowXY = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth);
     }	
 
     /**
