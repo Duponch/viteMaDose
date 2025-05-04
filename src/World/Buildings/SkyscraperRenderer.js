@@ -263,7 +263,14 @@ export default class SkyscraperRenderer {
         const pillarThickness = 0.4;
         const intermediateBandThickness = pillarThickness / windowWidthReductionFactor;
         const windowInset = 0.05;
-        const floorThickness = 0.1; // Épaisseur visuelle du plancher (pour le maillage)
+        const floorThickness = 0.1;
+        const roofHeightVal = 1.5;
+        const antennaHeight = 3;
+        const antennaRadius = 0.1;
+        const dishRadius = 1.2;
+        const dishDepth = Math.PI * 0.3;
+        const dishStandHeight = 0.5;
+        const boxSize = 0.8;
 
         // --- Base ---
         const baseGeometry = new THREE.BoxGeometry(mainWidth, baseHeightVal, mainDepth);
@@ -335,13 +342,13 @@ export default class SkyscraperRenderer {
         const numIntermediateBands = numWindowsPerFace - 1;
         const windowHeightVal = floorHeight * windowHeightReductionFactor;
         const horizontalBandHeight = floorHeight - windowHeightVal;
-        const cornerPillarGeom = new THREE.BoxGeometry(pillarThickness + 0.7, structureHeight, pillarThickness + 0.7);
+        const cornerPillarGeom = new THREE.BoxGeometry(pillarThickness + 0.7, structureHeight + roofHeightVal + 1.51, pillarThickness + 0.7);
         for (let i = 0; i < 2; i++) {
             for (let j = 0; j < 2; j++) {
                 const pillar = new THREE.Mesh(cornerPillarGeom, structureMaterial);
                 pillar.position.set(
                     (mainWidth / 2) * (i === 0 ? -1 : 1),
-                    startY + structureHeight / 2,
+                    startY + (structureHeight + roofHeightVal + 1.51) / 2,
                     (mainDepth / 2) * (j === 0 ? -1 : 1)
                 );
                 pillar.castShadow = true;
@@ -465,36 +472,58 @@ export default class SkyscraperRenderer {
             floorMesh.receiveShadow = true;
             skyscraper.add(floorMesh);
         }
-        const roofHeightVal = 1.5;
         const roofGeom = new THREE.BoxGeometry(mainWidth, roofHeightVal, mainDepth);
         const roofMesh = new THREE.Mesh(roofGeom, baseMaterial);
-        const roofBaseY = startY + structureHeight;
+        const roofBaseY = startY + numFloors * floorHeight + horizontalBandHeight;
         roofMesh.position.y = roofBaseY + roofHeightVal / 2;
         roofMesh.castShadow = true;
         roofMesh.receiveShadow = true;
         skyscraper.add(roofMesh);
+
         const roofTopY = roofBaseY + roofHeightVal;
-        const antennaHeight = 3, antennaRadius = 0.1;
         const antennaGeom = new THREE.CylinderGeometry(antennaRadius, antennaRadius, antennaHeight, 8);
         const antenna1 = new THREE.Mesh(antennaGeom, metallicMaterial);
         antenna1.position.set(mainWidth * 0.3, roofTopY + antennaHeight / 2, mainDepth * 0.3);
         antenna1.castShadow = true;
         skyscraper.add(antenna1);
 
-        // Ajout de la boule rouge sur l'antenne 1
-        const roofBaseHeight = 1 * userScale; const poleHeight = 4 * userScale; const poleRadius = 0.2 * userScale;
-        const dishRadius = 1.5 * userScale; const redLightRadius = 0.15 * userScale;
-        const redLightGeom = new THREE.SphereGeometry(redLightRadius, 16, 16);
-        const redLight = new THREE.Mesh(redLightGeom, redLightMaterial);
-        redLight.position.copy(antenna1.position);
-        redLight.position.y = antenna1.position.y + antennaHeight / 2 + redLightRadius;
-        redLight.castShadow = true;
-        skyscraper.add(redLight);
-
         const antenna2 = new THREE.Mesh(antennaGeom, metallicMaterial);
         antenna2.position.set(-mainWidth * 0.3, roofTopY + antennaHeight / 2, -mainDepth * 0.3);
         antenna2.castShadow = true;
         skyscraper.add(antenna2);
+
+        const boxGeom = new THREE.BoxGeometry(boxSize, boxSize * 0.5, boxSize);
+        const roofBox1 = new THREE.Mesh(boxGeom, metallicMaterial);
+        roofBox1.position.set(0, roofTopY + (boxSize * 0.5) / 2, -mainDepth * 0.2);
+        roofBox1.castShadow = true;
+        skyscraper.add(roofBox1);
+
+        const dishThetaStart = Math.PI - dishDepth;
+        const dishThetaLength = dishDepth;
+        const dishGeometry = new THREE.SphereGeometry(dishRadius, 20, 10, 0, Math.PI * 2, dishThetaStart, dishThetaLength);
+        const dish = new THREE.Mesh(dishGeometry, metallicMaterial);
+        dish.rotation.x = Math.PI * 0.05;
+        const dishStandGeom = new THREE.CylinderGeometry(0.1, 0.1, dishStandHeight, 8);
+        const dishStand = new THREE.Mesh(dishStandGeom, metallicMaterial);
+        dishStand.position.set(mainWidth * -0.25, roofTopY + dishStandHeight / 2, mainDepth * 0.2);
+        dishStand.castShadow = true;
+        skyscraper.add(dishStand);
+        dish.position.copy(dishStand.position);
+        dish.position.y = dishStand.position.y + dishStandHeight / 2 + dishRadius * 0.3 + 0.8;
+        dish.castShadow = true;
+        skyscraper.add(dish);
+
+        const equipBoxGeom1 = new THREE.BoxGeometry(1.5, 0.8, 0.8);
+        const equipBox1 = new THREE.Mesh(equipBoxGeom1, metallicMaterial);
+        equipBox1.position.set(mainWidth * 0.3, roofTopY + 0.8 / 2, -mainDepth * 0.3);
+        equipBox1.castShadow = true;
+        skyscraper.add(equipBox1);
+
+        const equipCylGeom1 = new THREE.CylinderGeometry(0.4, 0.4, 1.2, 12);
+        const equipCyl1 = new THREE.Mesh(equipCylGeom1, metallicMaterial);
+        equipCyl1.position.set(-mainWidth * 0.1, roofTopY + 1.2 / 2, mainDepth * 0.35);
+        equipCyl1.castShadow = true;
+        skyscraper.add(equipCyl1);
 
         // --- Regroupement par matériau ---
         const allGeoms = [];
@@ -584,7 +613,10 @@ export default class SkyscraperRenderer {
         if (floorGeometry) floorGeometry.dispose();
         if (roofGeom) roofGeom.dispose();
         if (antennaGeom) antennaGeom.dispose();
-        if (redLightGeom) redLightGeom.dispose();
+        if (dishGeometry) dishGeometry.dispose();
+        if (dishStandGeom) dishStandGeom.dispose();
+        if (equipBoxGeom1) equipBoxGeom1.dispose();
+        if (equipCylGeom1) equipCylGeom1.dispose();
         if (windowGeomX) windowGeomX.dispose();
         if (windowGeomZ) windowGeomZ.dispose();
         if (doorGeomX) doorGeomX.dispose();
