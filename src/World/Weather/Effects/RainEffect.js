@@ -16,13 +16,14 @@ export default class RainEffect {
         
         // Configuration
         this._intensity = 0;            // Intensité (0-1), modifie la visibilité et la quantité
-        this.dropCount = 25000;         // Nombre de gouttes de pluie - augmenté pour plus de densité
+        this.dropCount = 250000;         // Nombre de gouttes de pluie - augmenté pour plus de densité
         this.rainSpeed = 18;            // Vitesse de base de la pluie - augmentée légèrement
         this.rainArea = 70;             // Zone de pluie - rayon autour de la caméra - augmentée
         this.rainHeight = 45;           // Hauteur maximale de la pluie - augmentée
-        this.minDropSize = 0.3;         // Taille minimale des gouttes - augmentée pour mieux voir la forme
-        this.maxDropSize = 0.8;         // Taille maximale des gouttes - augmentée pour mieux voir la forme
-        this.stretchFactor = 0.7;       // Facteur d'étirement des gouttes - augmenté
+        this.speedIntensityFactor = 0.5; // Facteur de proportionnalité entre l'intensité et la vitesse (0-1)
+        this.minDropSize = 0.1;         // Taille minimale des gouttes - augmentée pour mieux voir la forme
+        this.maxDropSize = 0.5;         // Taille maximale des gouttes - augmentée pour mieux voir la forme
+        this.stretchFactor = 0.5;       // Facteur d'étirement des gouttes - augmenté
         this.cameraFollowFactor = 0.15; // Facteur de suivi de la caméra (entre 0 et 1) - réduit pour moins d'attraction
         this.inertiaFactor = 0.92;      // Facteur d'inertie (entre 0 et 1) - plus proche de 1 = plus d'inertie
         this.lastCameraPosition = null; // Dernière position de la caméra pour l'inertie
@@ -127,7 +128,8 @@ export default class RainEffect {
                 fogColor: { value: new THREE.Color(0x000000) },
                 fogNear: { value: 1.0 },
                 fogFar: { value: 30.0 },
-                fogDensity: { value: 0.1 }
+                fogDensity: { value: 0.1 },
+                speedIntensityFactor: { value: this.speedIntensityFactor }
             },
             vertexShader: `
                 uniform float time;
@@ -136,6 +138,7 @@ export default class RainEffect {
                 uniform float rainHeight;
                 uniform vec3 cameraForward;
                 uniform float stretchFactor;
+                uniform float speedIntensityFactor;
                 
                 attribute float size;
                 attribute float velocity;
@@ -154,7 +157,7 @@ export default class RainEffect {
                     vec3 basePos = position;
                     
                     // Animation de chute
-                    float fallSpeed = rainSpeed * velocity * intensity;
+                    float fallSpeed = rainSpeed * velocity * (1.0 + (intensity - 1.0) * speedIntensityFactor);
                     // Ajout d'un léger décalage aléatoire à la vitesse pour plus de réalisme
                     fallSpeed *= (0.9 + 0.2 * fract(sin(dot(vec2(basePos.x, basePos.z), vec2(12.9898, 78.233))) * 43758.5453));
                     float yPos = mod(basePos.y - time * fallSpeed + offset, rainHeight) - rainHeight * 0.5;
