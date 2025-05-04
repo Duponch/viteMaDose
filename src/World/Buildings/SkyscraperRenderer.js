@@ -487,6 +487,15 @@ export default class SkyscraperRenderer {
         antenna1.castShadow = true;
         skyscraper.add(antenna1);
 
+        // Ajout de la boule rouge sur l'antenne 1
+        const redLightRadius = 0.15;
+        const redLightGeom = new THREE.SphereGeometry(redLightRadius, 16, 16);
+        const redLight = new THREE.Mesh(redLightGeom, redLightMaterial);
+        redLight.position.copy(antenna1.position);
+        redLight.position.y = antenna1.position.y + antennaHeight / 2 + redLightRadius;
+        redLight.castShadow = true;
+        skyscraper.add(redLight);
+
         const antenna2 = new THREE.Mesh(antennaGeom, metallicMaterial);
         antenna2.position.set(-mainWidth * 0.3, roofTopY + antennaHeight / 2, -mainDepth * 0.3);
         antenna2.castShadow = true;
@@ -621,6 +630,7 @@ export default class SkyscraperRenderer {
         if (windowGeomZ) windowGeomZ.dispose();
         if (doorGeomX) doorGeomX.dispose();
         if (doorGeomZ) doorGeomZ.dispose();
+        if (redLightGeom) redLightGeom.dispose();
 
         const asset = {
             id: `skyscraper_procedural_${this.assetIdCounter++}`,
