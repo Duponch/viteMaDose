@@ -1,12 +1,14 @@
 import BuildingRenderer from '../Buildings/BuildingRenderer.js';
 import NewBuildingRenderer from '../Buildings/NewBuildingRenderer.js';
 import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
+import NewSkyscraperRenderer from '../Buildings/NewSkyscraperRenderer.js';
 
         // --- Initialisation des Composants Dépendants ---
         // Crée InstancedMeshManager maintenant qu'on a les renderers
         const allRenderers = {
             ...renderers,
-            newBuildingRenderer: new NewBuildingRenderer(this.config, this.materials)
+            newBuildingRenderer: new NewBuildingRenderer(this.config, this.materials),
+            newSkyscraperRenderer: new NewSkyscraperRenderer(this.config, this.materials)
         };
         
         this.instancedMeshManager = new InstancedMeshManager(

@@ -7,17 +7,18 @@ import IZonePlacementStrategy from './IZonePlacementStrategy.js';
  * @typedef {import('../Rendering/CityAssetLoader.js').default} CityAssetLoader
  * @typedef {import('../Rendering/InstanceDataManager.js').default} InstanceDataManager
  * @typedef {import('../CityManager.js').default} CityManager
- * @typedef {import('../Buildings/SkyscraperRenderer.js').default} SkyscraperRenderer // Assurez-vous que le chemin est correct
+ * @typedef {import('../Buildings/SkyscraperRenderer.js').default} SkyscraperRenderer
+ * @typedef {import('../Buildings/NewSkyscraperRenderer.js').default} NewSkyscraperRenderer
  */
 
 export default class SkyscraperPlacementStrategy extends IZonePlacementStrategy {
 
     /**
      * Stratégie de placement pour les zones de type gratte-ciel ('skyscraper').
-     * Utilise SkyscraperRenderer pour générer les instances (probablement procédurales).
+     * Utilise SkyscraperRenderer et NewSkyscraperRenderer pour générer les instances.
      * @param {object} config - La configuration globale.
      * @param {CityAssetLoader} assetLoader - Le gestionnaire d'assets.
-     * @param {{skyscraperRenderer?: SkyscraperRenderer}} specificRenderers - Doit contenir skyscraperRenderer.
+     * @param {{skyscraperRenderer?: SkyscraperRenderer, newSkyscraperRenderer?: NewSkyscraperRenderer}} specificRenderers - Doit contenir skyscraperRenderer et newSkyscraperRenderer.
      * @param {Experience} experience - Référence à l'instance Experience.
      */
     constructor(config, assetLoader, specificRenderers, experience = null) {
@@ -25,8 +26,9 @@ export default class SkyscraperPlacementStrategy extends IZonePlacementStrategy 
         if (!this.renderers.skyscraperRenderer) {
             throw new Error("SkyscraperPlacementStrategy requires 'skyscraperRenderer' in specificRenderers.");
         }
-        // Raccourci pratique
+        // Raccourcis pratiques
         this.skyscraperRenderer = this.renderers.skyscraperRenderer;
+        this.newSkyscraperRenderer = this.renderers.newSkyscraperRenderer;
     }
 
     /**
@@ -96,9 +98,14 @@ export default class SkyscraperPlacementStrategy extends IZonePlacementStrategy 
                      console.warn(`SkyscraperPlacementStrategy: Asset gratte-ciel sélectionné aléatoirement (index ${randomAssetIndex}, ID: ${selectedAssetInfo?.id}) invalide ou sans 'parts' pour Plot ${plot.id}. Passage au suivant.`);
                      continue; // Passer à la cellule suivante
                 }
+                
+                // Déterminer quel renderer utiliser en fonction du type d'asset
+                const useNewRenderer = selectedAssetInfo.rendererType === 'NewSkyscraperRenderer';
+                const renderer = useNewRenderer && this.newSkyscraperRenderer ? 
+                                this.newSkyscraperRenderer : this.skyscraperRenderer;
 
-                // Utiliser SkyscraperRenderer pour obtenir les matrices d'instance AVEC L'ASSET SÉLECTIONNÉ
-                const skyscraperInstanceData = this.skyscraperRenderer.generateSkyscraperInstance(
+                // Utiliser le renderer approprié pour obtenir les matrices d'instance
+                const skyscraperInstanceData = renderer.generateSkyscraperInstance(
                     worldCellCenterPos,
                     plotGroundY,
                     targetRotationY,
@@ -130,7 +137,7 @@ export default class SkyscraperPlacementStrategy extends IZonePlacementStrategy 
                         });
                     }
                 } else {
-                    console.warn(`SkyscraperRenderer n'a retourné aucune donnée d'instance pour asset ${selectedAssetInfo.id} sur Plot ${plot.id}, cellule (${colIndex},${rowIndex})`);
+                    console.warn(`${useNewRenderer ? 'NewSkyscraperRenderer' : 'SkyscraperRenderer'} n'a retourné aucune donnée d'instance pour asset ${selectedAssetInfo.id} sur Plot ${plot.id}, cellule (${colIndex},${rowIndex})`);
                 }
             } // Fin boucle colIndex
         } // Fin boucle rowIndex

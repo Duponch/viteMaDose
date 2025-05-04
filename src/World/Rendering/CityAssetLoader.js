@@ -8,6 +8,7 @@ import HouseRenderer from '../Buildings/HouseRenderer.js';
 import BuildingRenderer from '../Buildings/BuildingRenderer.js';
 import NewBuildingRenderer from '../Buildings/NewBuildingRenderer.js';
 import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
+import NewSkyscraperRenderer from '../Buildings/NewSkyscraperRenderer.js';
 import IndustrialRenderer, { generateProceduralIndustrial } from '../Buildings/IndustrialRenderer.js'; // Ajustez le chemin si nécessaire
 import TreeRenderer from '../Vegetation/TreeRenderer.js';
 
@@ -36,6 +37,7 @@ export default class CityAssetLoader {
         this.buildingRenderer = new BuildingRenderer(config, {});
         this.newBuildingRenderer = new NewBuildingRenderer(config, {});
         this.skyscraperRenderer = new SkyscraperRenderer(config, {});
+        this.newSkyscraperRenderer = new NewSkyscraperRenderer(config, {});
         this.treeRenderer = new TreeRenderer(config, materials);
         console.log("CityAssetLoader initialisé. Utilisation de HouseRenderer pour les maisons, BuildingRenderer pour les immeubles et SkyscraperRenderer pour les gratte-ciels.");
     }
@@ -314,40 +316,51 @@ export default class CityAssetLoader {
                     }
                     // *** MODIFICATION END ***
                 } else if (type === 'skyscraper') {
-                    if (!this.skyscraperRenderer) {
-                        console.error("SkyscraperRenderer not initialized.");
+                    // *** MODIFICATION START ***
+                    // Récupérer le nombre d'étages depuis rendererTypeHint
+                    const numFloors = parseInt(rendererTypeHint, 10);
+                    if (isNaN(numFloors) || numFloors < 6 || numFloors > 12) {
+                        console.error(`loadAssetModel: Nombre d'étages invalide (${rendererTypeHint}) pour gratte-ciel. Annulation.`);
                         resolve(null);
                         return;
                     }
+                    
+                    // Alternance entre les deux types de renderers pour les gratte-ciels
+                    // On utilise un calcul simple: si le nombre d'étages est pair, on utilise le nouveau renderer
+                    const useNewRenderer = numFloors % 2 === 0; // Utiliser NewSkyscraperRenderer pour les étages pairs
+                    const renderer = useNewRenderer ? this.newSkyscraperRenderer : this.skyscraperRenderer;
+                    const rendererName = useNewRenderer ? 'NewSkyscraperRenderer' : 'SkyscraperRenderer';
+                    
+                    if (!renderer) {
+                        console.error(`Renderer (${rendererName}) not initialized for type 'skyscraper'.`);
+                        resolve(null);
+                        return;
+                    }
+                    
                     try {
-                        // Récupérer le nombre d'étages depuis rendererTypeHint
-                        const numFloors = parseInt(rendererTypeHint, 10);
-                        if (isNaN(numFloors) || numFloors < 6 || numFloors > 12) {
-                             console.error(`loadAssetModel: Nombre d'étages invalide (${rendererTypeHint}) pour gratte-ciel. Annulation.`);
-                             resolve(null);
-                             return;
-                        }
-                        
                         // Passer le nombre d'étages à la méthode de génération
-                        assetData = this.skyscraperRenderer.generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale, numFloors);
+                        assetData = useNewRenderer ? renderer.generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale) :
+                                                   renderer.generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale, numFloors);
+                        
                         if (assetData) {
-                            // Inclure le nombre d'étages dans l'ID pour le rendre unique et identifiable
-                            finalModelId = `skyscraper_proc_${numFloors}fl_${internalCounterId}`;
+                            // Inclure le nombre d'étages et le type de renderer dans l'ID pour le rendre unique et identifiable
+                            finalModelId = `skyscraper_proc_${rendererName}_${numFloors}fl_${internalCounterId}`;
                             assetData.id = finalModelId;
                             assetData.procedural = true;
-                            assetData.rendererType = 'SkyscraperRenderer';
+                            assetData.rendererType = rendererName;
                             assetData.numFloors = numFloors; // Stocker aussi le nombre d'étages dans l'asset
                             this.loadedAssets.set(finalModelId, assetData);
-                            console.log(`  - Generated procedural skyscraper asset '${finalModelId}' (${numFloors} floors)`);
+                            console.log(`  - Generated procedural skyscraper asset '${finalModelId}' (${numFloors} floors) using ${rendererName}`);
                             resolve(assetData);
                         } else {
-                            console.warn(`Procedural generation for skyscraper (${numFloors} floors) returned null.`);
+                            console.warn(`Procedural generation for skyscraper (${numFloors} floors) using ${rendererName} returned null.`);
                             resolve(null);
                         }
                     } catch (error) {
-                        console.error(`Error during procedural skyscraper generation (${rendererTypeHint} floors):`, error);
+                        console.error(`Error during procedural skyscraper generation (${numFloors} floors) with ${rendererName}:`, error);
                         resolve(null);
                     }
+                    // *** MODIFICATION END ***
                 } else if (type === 'tree') {
                     if (!this.treeRenderer) {
                         console.error("TreeRenderer not initialized.");
