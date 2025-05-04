@@ -25,6 +25,7 @@ export default class RainEffect {
         this.maxDropSize = 0.5;         // Taille maximale des gouttes - augmentée pour mieux voir la forme
         this.stretchFactor = 0.5;       // Facteur d'étirement des gouttes - augmenté
         this.cameraFollowFactor = 0.15; // Facteur de suivi de la caméra (entre 0 et 1) - réduit pour moins d'attraction
+        this.verticalFollowFactor = 0.3; // Facteur de suivi vertical de la caméra (plus élevé pour mieux suivre les mouvements verticaux)
         this.inertiaFactor = 0.92;      // Facteur d'inertie (entre 0 et 1) - plus proche de 1 = plus d'inertie
         this.lastCameraPosition = null; // Dernière position de la caméra pour l'inertie
         this.rainVelocity = new THREE.Vector3(0, 0, 0); // Vélocité actuelle du système de pluie
@@ -326,24 +327,39 @@ export default class RainEffect {
                 // Calculer le déplacement de la caméra depuis la dernière frame
                 const displacement = cameraPosition.clone().sub(this.lastCameraPosition);
                 
-                // Calculer le mouvement souhaité de la pluie (suivi partiel de la caméra)
-                const targetPosition = this.rainObject.position.clone().add(
-                    displacement.multiplyScalar(this.cameraFollowFactor)
+                // Appliquer un facteur de suivi différent pour le mouvement vertical
+                // Cela permettra une meilleure réponse aux mouvements verticaux de caméra
+                const adjustedDisplacement = new THREE.Vector3(
+                    displacement.x * this.cameraFollowFactor,
+                    displacement.y * this.verticalFollowFactor, // Facteur plus élevé pour les mouvements verticaux
+                    displacement.z * this.cameraFollowFactor
                 );
+                
+                // Calculer le mouvement souhaité de la pluie avec facteurs ajustés
+                const targetPosition = this.rainObject.position.clone().add(adjustedDisplacement);
                 
                 // Calculer une vélocité cible vers cette position avec inertie
                 const targetVelocity = targetPosition.clone().sub(this.rainObject.position);
                 
                 // Appliquer un facteur d'inertie pour lisser le mouvement
-                this.rainVelocity.multiplyScalar(this.inertiaFactor).add(
-                    targetVelocity.multiplyScalar(1 - this.inertiaFactor)
+                // Réduire légèrement l'inertie pour les mouvements verticaux
+                const yInertiaFactor = Math.min(this.inertiaFactor, 0.85);
+                this.rainVelocity.x = this.rainVelocity.x * this.inertiaFactor + targetVelocity.x * (1 - this.inertiaFactor);
+                this.rainVelocity.y = this.rainVelocity.y * yInertiaFactor + targetVelocity.y * (1 - yInertiaFactor);
+                this.rainVelocity.z = this.rainVelocity.z * this.inertiaFactor + targetVelocity.z * (1 - this.inertiaFactor);
+                
+                // Force de "recentrage" pour ramener la pluie vers la caméra graduellement
+                // Particulièrement importante pour éviter que la pluie ne s'éloigne trop verticalement
+                const distanceToCamera = this.rainObject.position.distanceTo(cameraPosition);
+                const recenterForce = cameraPosition.clone().sub(this.rainObject.position).normalize().multiplyScalar(
+                    Math.max(0, distanceToCamera - this.rainArea * 0.25) * 0.01
                 );
+                this.rainVelocity.add(recenterForce);
                 
                 // Appliquer la vélocité à la position actuelle
                 this.rainObject.position.add(this.rainVelocity);
                 
                 // Limiter la distance maximale à la caméra pour éviter que la pluie ne s'éloigne trop
-                const distanceToCamera = this.rainObject.position.distanceTo(cameraPosition);
                 const maxDistance = this.rainArea * 0.5;
                 
                 if (distanceToCamera > maxDistance) {
@@ -351,6 +367,23 @@ export default class RainEffect {
                     this.rainObject.position.copy(
                         cameraPosition.clone().add(direction.multiplyScalar(maxDistance))
                     );
+                    
+                    // Réinitialiser la vélocité pour éviter l'accumulation d'élan
+                    this.rainVelocity.multiplyScalar(0.5);
+                }
+                
+                // Garantir que la différence de hauteur entre la pluie et la caméra ne soit pas trop grande
+                const heightDifference = Math.abs(this.rainObject.position.y - cameraPosition.y);
+                const maxHeightDifference = this.rainHeight * 0.3;
+                
+                if (heightDifference > maxHeightDifference) {
+                    if (this.rainObject.position.y > cameraPosition.y) {
+                        this.rainObject.position.y = cameraPosition.y + maxHeightDifference;
+                    } else {
+                        this.rainObject.position.y = cameraPosition.y - maxHeightDifference;
+                    }
+                    // Réduire la vélocité verticale lorsqu'une limite est atteinte
+                    this.rainVelocity.y *= 0.5;
                 }
             }
             
