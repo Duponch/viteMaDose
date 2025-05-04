@@ -1,6 +1,7 @@
 /**
  * Système de nuages amélioré pour le système météorologique
  * Gère la densité, l'opacité et l'animation des nuages
+ * Version optimisée pour une meilleure réactivité avec l'interface à curseurs
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -21,11 +22,15 @@ export default class CloudSystem {
         this.environment = weatherSystem.environment;
         
         // Configuration
-        this.numberOfCloudBaseShapes = 5; // Nombre de formes de base différentes
-        this.totalNumberOfClouds = 40;    // Nombre total de nuages (augmenté)
+        this.numberOfCloudBaseShapes = 6; // Plus de formes de base pour plus de variété
+        this.totalNumberOfClouds = 45;    // Plus de nuages pour une meilleure couverture
         this.cloudAnimationSpeed = 0.00005; // Vitesse de base de l'animation
         this.cloudOpacity = 0.5;         // Opacité initiale des nuages (0-1)
         this.cloudDensity = 0.3;         // Densité initiale des nuages (0-1)
+        this.updateThreshold = 0.05;     // Seuil pour déclenchement d'une mise à jour complète
+        this.lastDensity = this.cloudDensity; // Mémoriser la dernière densité appliquée
+        this.pendingFullUpdate = false;   // Drapeau pour mise à jour complète différée
+        this.lastFullUpdateTime = 0;      // Éviter les mises à jour trop fréquentes
         
         // Groupes et références
         this.cloudGroup = new THREE.Group();
@@ -49,7 +54,8 @@ export default class CloudSystem {
             metalness: 0.1,
             flatShading: true,
             transparent: true,
-            opacity: this.cloudOpacity
+            opacity: this.cloudOpacity,
+            depthWrite: false // Améliore le rendu avec transparence
         });
         
         // Créer les formes de base des nuages
@@ -63,7 +69,7 @@ export default class CloudSystem {
         // Ajouter le groupe de nuages à la scène
         this.scene.add(this.cloudGroup);
         
-        console.log(`Système de nuages initialisé avec ${this.totalNumberOfClouds} nuages`);
+        console.log(`Système de nuages initialisé avec ${this.totalNumberOfClouds} nuages potentiels`);
     }
     
     /**
@@ -74,10 +80,11 @@ export default class CloudSystem {
         const cloudPartGeometries = [];
         const baseGeometry = new THREE.IcosahedronGeometry(5, 0);
 
-        const numParts = THREE.MathUtils.randInt(6, 12); // Plus de parties pour plus de variation
+        // Plus de parties et de variété dans les nuages
+        const numParts = THREE.MathUtils.randInt(7, 14);
         const maxOffset = 6;
         const minPartScale = 0.3;
-        const maxPartScale = 0.8; // Légèrement plus grand
+        const maxPartScale = 0.8;
 
         for (let i = 0; i < numParts; i++) {
             const randomPosition = new THREE.Vector3(
@@ -148,9 +155,10 @@ export default class CloudSystem {
     placeClouds() {
         // Configuration du placement
         const skyHeight = 230;
-        const spreadRadius = this.weatherSystem.experience.world.cityManager.config.mapSize * 0.8;
+        const mapSize = this.weatherSystem.experience.world.cityManager.config.mapSize;
+        const spreadRadius = mapSize * 0.9; // Étendu légèrement
         const scaleMin = 0.8;
-        const scaleMax = 15.0; // Plus grand pour une meilleure couverture
+        const scaleMax = 15.0;
         
         // Compteurs pour chaque mesh instancié
         let currentInstanceIndex = 0;
@@ -159,28 +167,42 @@ export default class CloudSystem {
         // Déterminer combien de nuages placer en fonction de la densité
         const actualCloudCount = Math.floor(this.totalNumberOfClouds * this.cloudDensity);
         
-        while (currentInstanceIndex < actualCloudCount) {
+        while (currentInstanceIndex < this.totalNumberOfClouds) {
             const meshIndex = currentInstanceIndex % this.numberOfCloudBaseShapes;
             const targetInstancedMesh = this.cloudInstancedMeshes[meshIndex];
             const indexInMesh = instanceCounters[meshIndex];
             
             if (indexInMesh < targetInstancedMesh.count) {
-                // Paramètres aléatoires pour cette instance
-                const angle = Math.random() * Math.PI * 2;
-                const radius = Math.random() * spreadRadius;
-                const x = Math.cos(angle) * radius;
-                const z = Math.sin(angle) * radius;
-                const y = skyHeight + (Math.random() - 0.5) * 90;
-                const randomYRotation = Math.random() * Math.PI * 2;
+                // Déterminer si ce nuage doit être visible ou caché
+                const isVisible = currentInstanceIndex < actualCloudCount;
                 
-                // Échelle variable pour simuler différentes tailles de nuages
-                const randomScale = THREE.MathUtils.randFloat(scaleMin, scaleMax);
-                
-                // Composer la matrice de transformation
-                _tempPosition.set(x, y, z);
-                _tempQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), randomYRotation);
-                _tempScale.set(randomScale, randomScale, randomScale);
-                _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+                if (isVisible) {
+                    // Paramètres aléatoires pour cette instance
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = Math.random() * spreadRadius;
+                    const x = Math.cos(angle) * radius;
+                    const z = Math.sin(angle) * radius;
+                    const y = skyHeight + (Math.random() - 0.5) * 100; // Plus de variation en hauteur
+                    const randomYRotation = Math.random() * Math.PI * 2;
+                    
+                    // Échelle variable selon la position (plus grands au centre)
+                    const distanceFromCenter = Math.sqrt(x * x + z * z) / spreadRadius;
+                    const sizeFactor = 1.0 - distanceFromCenter * 0.3; // Plus grand au centre
+                    const finalScaleMax = scaleMax * sizeFactor;
+                    const randomScale = THREE.MathUtils.randFloat(scaleMin, finalScaleMax);
+                    
+                    // Composer la matrice de transformation
+                    _tempPosition.set(x, y, z);
+                    _tempQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), randomYRotation);
+                    _tempScale.set(randomScale, randomScale, randomScale);
+                    _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+                } else {
+                    // Pour les nuages invisibles, les placer sous le terrain (hors vue)
+                    _tempPosition.set(0, -1000, 0);
+                    _tempQuaternion.identity();
+                    _tempScale.set(0.001, 0.001, 0.001);
+                    _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+                }
                 
                 // Appliquer à l'instance
                 targetInstancedMesh.setMatrixAt(indexInMesh, _tempMatrix);
@@ -190,21 +212,6 @@ export default class CloudSystem {
             currentInstanceIndex++;
         }
         
-        // Cacher les instances inutilisées en les déplaçant sous le monde
-        for (let meshIndex = 0; meshIndex < this.cloudInstancedMeshes.length; meshIndex++) {
-            const mesh = this.cloudInstancedMeshes[meshIndex];
-            const usedInstances = instanceCounters[meshIndex];
-            
-            // Pour chaque instance inutilisée, placer une matrice "invisible"
-            for (let i = usedInstances; i < mesh.count; i++) {
-                _tempPosition.set(0, -1000, 0); // Loin sous le terrain
-                _tempQuaternion.identity();
-                _tempScale.set(0.001, 0.001, 0.001); // Très petit
-                _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
-                mesh.setMatrixAt(i, _tempMatrix);
-            }
-        }
-        
         // Mettre à jour les matrices
         this.cloudInstancedMeshes.forEach(mesh => {
             mesh.instanceMatrix.needsUpdate = true;
@@ -212,6 +219,11 @@ export default class CloudSystem {
         
         // Mettre à jour l'opacité
         this.updateCloudOpacity();
+        
+        // Mémoriser la densité qui vient d'être appliquée
+        this.lastDensity = this.cloudDensity;
+        this.lastFullUpdateTime = this.weatherSystem.time.elapsed;
+        this.pendingFullUpdate = false;
     }
     
     /**
@@ -221,18 +233,19 @@ export default class CloudSystem {
         if (!this.cloudMaterial) return;
         
         // Ajuster l'opacité en fonction de la densité pour un effet plus réaliste
-        // Rendons les nuages plus denses également plus sombres
         const baseOpacity = this.cloudOpacity;
-        const densityFactor = 1.0 + (this.cloudDensity - 0.5) * 0.4; // 0.8 - 1.2 suivant densité
+        const densityFactor = 1.0 + (this.cloudDensity - 0.5) * 0.4;
         
         this.cloudMaterial.opacity = baseOpacity * densityFactor;
         
-        // Si très dense, assombrir légèrement la couleur
+        // Ajuster la couleur selon la densité
         if (this.cloudDensity > 0.7) {
-            const darknessFactor = 1.0 - (this.cloudDensity - 0.7) * 0.5; // 1.0 -> 0.85
+            // Nuages denses = plus gris/sombres
+            const darknessFactor = 1.0 - (this.cloudDensity - 0.7) * 0.5;
             this.cloudMaterial.color.setRGB(darknessFactor, darknessFactor, darknessFactor);
         } else {
-            this.cloudMaterial.color.setRGB(1, 1, 1); // Blanc pur
+            // Nuages légers = plus blancs
+            this.cloudMaterial.color.setRGB(1, 1, 1);
         }
     }
     
@@ -241,16 +254,26 @@ export default class CloudSystem {
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
      */
     update(deltaTime) {
-        // Vérifier si les matrices d'instances existent
+        // Vérifier si on doit effectuer une mise à jour complète du placement
+        // (Ce code pourrait être déplacé dans la méthode spécifique updateCloudSystem)
+        if (this.pendingFullUpdate) {
+            const currentTime = this.weatherSystem.time.elapsed;
+            // Éviter les mises à jour trop fréquentes (max 1x par seconde)
+            if (currentTime - this.lastFullUpdateTime > 1000) {
+                this.placeClouds();
+            }
+        }
+        
+        // Si pas de meshes, rien à faire
         if (!this.cloudInstancedMeshes || this.cloudInstancedMeshes.length === 0) return;
         
         // Calculer la vitesse de déplacement, ajustée selon densité
-        // Plus c'est dense, plus ça se déplace lentement
-        const speedMultiplier = 1.0 - this.cloudDensity * 0.3; // 1.0 -> 0.7
+        const speedMultiplier = 1.0 - this.cloudDensity * 0.3;
         const actualCloudSpeed = this.cloudAnimationSpeed * deltaTime * speedMultiplier;
         
         // Obtenir la limite de disparition des nuages
-        const limit = (this.weatherSystem.experience.world.cityManager.config.mapSize * 1.5) * 1.1;
+        const mapSize = this.weatherSystem.experience.world.cityManager.config.mapSize;
+        const limit = mapSize * 1.5 * 1.1;
         
         // Mettre à jour chaque mesh instancié
         this.cloudInstancedMeshes.forEach(instancedMesh => {
@@ -272,7 +295,16 @@ export default class CloudSystem {
                 if (_tempPosition.x > limit) {
                     _tempPosition.x = -limit;
                     _tempPosition.z = (Math.random() - 0.5) * limit * 1.5;
-                    _tempPosition.y = 230 + (Math.random() - 0.5) * 90;
+                    _tempPosition.y = 230 + (Math.random() - 0.5) * 100;
+                    
+                    // Ajuster la taille en fonction de la distance au centre
+                    const distanceFromCenter = Math.abs(_tempPosition.z) / (limit * 1.5);
+                    const newScale = THREE.MathUtils.lerp(
+                        15.0, // Grande taille au centre
+                        5.0,  // Taille plus petite aux bords
+                        distanceFromCenter
+                    );
+                    _tempScale.set(newScale, newScale, newScale);
                 }
                 
                 // Recomposer la matrice
@@ -290,14 +322,19 @@ export default class CloudSystem {
     
     /**
      * Met à jour le système de nuages en fonction des changements de densité/opacité
+     * Cette méthode est appelée par les setters lorsque les propriétés changent
      */
     updateCloudSystem() {
-        // Mettre à jour le placement si la densité a changé de manière significative
-        // (évite de recalculer pour de petits changements)
-        this.placeClouds();
+        // Si le changement de densité est significatif, planifier une mise à jour complète
+        const densityDifference = Math.abs(this.cloudDensity - this.lastDensity);
         
-        // Mettre à jour l'opacité
-        this.updateCloudOpacity();
+        if (densityDifference > this.updateThreshold) {
+            // Marquer pour mise à jour complète (différée pour éviter trop de recalculs)
+            this.pendingFullUpdate = true;
+        } else {
+            // Sinon, juste mettre à jour l'opacité
+            this.updateCloudOpacity();
+        }
     }
     
     /**
@@ -308,8 +345,7 @@ export default class CloudSystem {
         const oldDensity = this._cloudDensity;
         this._cloudDensity = THREE.MathUtils.clamp(density, 0, 1);
         
-        // Mise à jour seulement si le changement est significatif
-        if (Math.abs(oldDensity - this._cloudDensity) > 0.05) {
+        if (oldDensity !== this._cloudDensity) {
             this.updateCloudSystem();
         }
     }

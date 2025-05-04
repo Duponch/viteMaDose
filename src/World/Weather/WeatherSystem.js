@@ -1,7 +1,7 @@
 /**
  * Système de météo pour le jeu
  * Gère les différents effets météorologiques (pluie, brouillard, nuages, etc.)
- * et les transitions entre eux.
+ * Version modifiée pour contrôle direct par curseurs
  */
 import * as THREE from 'three';
 import RainEffect from './Effects/RainEffect.js';
@@ -24,12 +24,12 @@ export default class WeatherSystem {
         // Configuration
         this.debug = this.experience.debug;
         this.enabled = true;
-        this.transitionDuration = 10000; // Durée de transition en ms
-        this.autoWeatherChangeProbability = 0.001; // Chance à chaque update de changer la météo
+        this.transitionDuration = 5000; // Durée de transition en ms (réduit pour plus de réactivité)
+        this.autoWeatherChangeProbability = 0; // Désactivé par défaut pour laisser le contrôle à l'utilisateur
         this.minWeatherDuration = 60000; // Durée minimale d'une météo (1 minute)
         
         // État météorologique actuel et cible (pour transitions)
-        this.currentWeatherState = new WeatherState('clear');
+        this.currentWeatherState = new WeatherState('custom');
         this.targetWeatherState = this.currentWeatherState.clone();
         this.transitionProgress = 1.0; // 1.0 = transition terminée
         this.lastWeatherChangeTime = 0;
@@ -46,7 +46,7 @@ export default class WeatherSystem {
             this.cloudSystem
         ];
         
-        // Préréglages de météo
+        // Préréglages de météo (conservés pour compatibilité, mais non utilisés par les curseurs)
         this.weatherPresets = {
             clear: {
                 name: 'Ciel dégagé',
@@ -98,14 +98,12 @@ export default class WeatherSystem {
             }
         };
         
-        // Initialiser avec météo par défaut
-        this.setWeather('clear');
-        
         console.log("Système météorologique initialisé");
     }
     
     /**
      * Définit la météo actuelle avec transition
+     * Note: Cette méthode est conservée pour compatibilité mais n'est plus utilisée par l'interface à curseurs
      * @param {string} presetName - Nom du préréglage météo à appliquer
      * @param {boolean} instantTransition - Si vrai, la transition est instantanée
      */
@@ -153,8 +151,12 @@ export default class WeatherSystem {
     
     /**
      * Considère un changement météo aléatoire en fonction de la probabilité
+     * Note: Cette méthode est désactivée par défaut avec la nouvelle interface à curseurs
      */
     considerRandomWeatherChange() {
+        // Si la probabilité est nulle, ne rien faire
+        if (this.autoWeatherChangeProbability <= 0) return;
+        
         if (Math.random() < this.autoWeatherChangeProbability) {
             // Sélectionner un préréglage aléatoire différent du préréglage actuel
             const presetNames = Object.keys(this.weatherPresets);
@@ -170,6 +172,7 @@ export default class WeatherSystem {
     
     /**
      * Met à jour les transitions et tous les effets météorologiques
+     * Note: Le comportement est modifié pour que les changements de curseurs soient immédiatement appliqués
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
      */
     update(deltaTime) {
@@ -227,14 +230,28 @@ export default class WeatherSystem {
             }
         }
         
-        // Considérer un changement météo aléatoire
+        // Considérer un changement météo aléatoire (désactivé avec autoWeatherChangeProbability = 0)
         this.considerRandomWeatherChange();
         
-        // Mettre à jour tous les effets
+        // Mettre à jour tous les effets météorologiques
         for (const effect of this.effects) {
             if (effect.update) {
                 effect.update(deltaTime);
             }
+        }
+        
+        // Sauvegarde de l'état actuel pour les transitions futures (depuis les curseurs)
+        if (this.transitionProgress >= 1.0) {
+            this.currentWeatherState.cloudDensity = this.cloudSystem.cloudDensity;
+            this.currentWeatherState.cloudOpacity = this.cloudSystem.cloudOpacity;
+            this.currentWeatherState.rainIntensity = this.rainEffect.intensity; 
+            this.currentWeatherState.fogDensity = this.fogEffect.fogDensity;
+            this.currentWeatherState.sunBrightness = this.environment.sunLight ? 
+                (this.environment.sunLight.intensity / 3.0) : 1.0;
+            this.currentWeatherState.type = 'custom';
+            
+            // Copier les valeurs actuelles aux valeurs cibles pour éviter les transitions involontaires
+            this.targetWeatherState = this.currentWeatherState.clone();
         }
     }
     
