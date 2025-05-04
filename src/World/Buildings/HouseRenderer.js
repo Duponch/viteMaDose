@@ -203,39 +203,35 @@ export default class HouseRenderer {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         
-        // Couleurs de base pour les briques
-        const brickColors = [
-            '#B76E79',  // Rose brique clair
-            '#A0522D',  // Rose brique moyen
-            '#8B4513',  // Rose brique foncé
-            '#8B5A5A'   // Rose brique très foncé
-        ];
-        const mortarColor = '#5D2906'; // Mortier plus foncé pour plus de contraste
+        // Couleurs de base pour les briques (réduites à deux variations)
+        const baseBrickColor = '#8B6B5D';  // Couleur principale des briques (plus grisée)
+        const darkerBrickColor = '#7B5B4D'; // Couleur plus foncée pour certaines briques (moins foncée)
+        const mortarColor = '#4A2C2A'; // Mortier plus foncé pour plus de contraste
         
-        // Dimensions des briques (légèrement plus petites)
-        const brickWidth = width / 8;  // Augmenté de 6 à 8 pour des briques plus petites
-        const brickHeight = height / 4;  // Augmenté de 3 à 4 pour des briques plus petites
-        const mortarWidth = 3;  // Réduit de 4 à 3 pour un mortier plus fin
+        // Dimensions des briques (augmentées)
+        const brickWidth = width / 6;  // Réduit de 8 à 6 pour des briques plus grandes
+        const brickHeight = height / 3;  // Réduit de 4 à 3 pour des briques plus grandes
+        const mortarWidth = 2;  // Réduit de 3 à 2 pour un mortier plus fin
         
         // Fond de base (mortier)
         ctx.fillStyle = mortarColor;
         ctx.fillRect(0, 0, width, height);
         
         // Dessin des briques avec irrégularités
-        for (let y = 0; y < 4; y++) {
+        for (let y = 0; y < 3; y++) {
             // Décalage alterné pour l'effet de briques
             const offsetX = (y % 2 === 0) ? 0 : brickWidth / 2;
             
-            for (let x = 0; x < 8; x++) {
-                // Sélection aléatoire d'une couleur de brique
-                const brickColor = brickColors[Math.floor(Math.random() * brickColors.length)];
+            for (let x = 0; x < 6; x++) {
+                // Sélection aléatoire de la couleur de brique (20% de chance d'être plus foncée)
+                const brickColor = Math.random() < 0.2 ? darkerBrickColor : baseBrickColor;
                 ctx.fillStyle = brickColor;
                 
                 // Ajouter des irrégularités aléatoires à la taille et position
                 const randomOffsetX = (Math.random() - 0.5) * 2; // -1 à 1
                 const randomOffsetY = (Math.random() - 0.5) * 2; // -1 à 1
-                const randomWidth = brickWidth - mortarWidth + (Math.random() - 0.5) * 4;
-                const randomHeight = brickHeight - mortarWidth + (Math.random() - 0.5) * 4;
+                const randomWidth = brickWidth - mortarWidth + (Math.random() - 0.5) * 2;
+                const randomHeight = brickHeight - mortarWidth + (Math.random() - 0.5) * 2;
                 
                 ctx.fillRect(
                     x * brickWidth + offsetX + mortarWidth/2 + randomOffsetX,
@@ -247,7 +243,7 @@ export default class HouseRenderer {
                 // Ajouter des variations de texture à l'intérieur des briques
                 ctx.strokeStyle = mortarColor;
                 ctx.lineWidth = 1;
-                const numLines = Math.floor(Math.random() * 3) + 1; // 1 à 3 lignes par brique
+                const numLines = Math.floor(Math.random() * 2) + 1; // 1 à 2 lignes par brique
                 for (let i = 0; i < numLines; i++) {
                     const startX = x * brickWidth + offsetX + mortarWidth/2 + randomOffsetX;
                     const startY = y * brickHeight + mortarWidth/2 + randomOffsetY + (i + 1) * randomHeight / (numLines + 1);
@@ -263,7 +259,8 @@ export default class HouseRenderer {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(3, 3);
+        // Suppression de la répétition par défaut
+        texture.repeat.set(1, 1);
         
         return texture;
     }
@@ -370,6 +367,11 @@ export default class HouseRenderer {
 
         this.baseHouseMaterials = {};
 
+        // Configuration de la répétition de texture pour les murs
+        this.sharedBrickTexture.repeat.set(2, 2);
+        this.sharedBrickNormalMap.repeat.set(2, 2);
+        this.sharedBrickRoughnessMap.repeat.set(2, 2);
+
         // Matériaux des murs avec texture de briques
         this.baseHouseMaterials.base_part1 = new THREE.MeshStandardMaterial({
             color: facadeColor,
@@ -382,16 +384,8 @@ export default class HouseRenderer {
             roughnessMap: this.sharedBrickRoughnessMap
         });
         
-        this.baseHouseMaterials.base_part2 = new THREE.MeshStandardMaterial({
-            color: facadeColor,
-            roughness: 0.8,
-            metalness: 0.0,
-            name: "HouseBase2Mat",
-            map: this.sharedBrickTexture,
-            normalMap: this.sharedBrickNormalMap,
-            normalScale: new THREE.Vector2(0.5, 0.5),
-            roughnessMap: this.sharedBrickRoughnessMap
-        });
+        // Utilisation du même matériau pour base_part2
+        this.baseHouseMaterials.base_part2 = this.baseHouseMaterials.base_part1;
         
         // Utilisation des textures partagées pour le toit
         this.baseHouseMaterials.roof = new THREE.MeshStandardMaterial({
