@@ -64,7 +64,7 @@ export default class NewSkyscraperRenderer {
 		const topSectionDepth = mainDepth * 0.7; const numMullionsTop = 2;
 		const roofBaseWidth = topSectionWidth * 0.8; const roofBaseDepth = topSectionDepth * 0.8;
 		const roofBaseHeight = 1 * globalScale; const poleHeight = 4 * globalScale; const poleRadius = 0.2 * globalScale;
-		const dishRadius = 1.5 * globalScale; const redLightRadius = 0.3 * globalScale;
+		const dishRadius = 1.5 * globalScale; const redLightRadius = 0.15 * globalScale;
 		const rearBlockFloors = numFloors - 1;
 		const rearBlockHeight = floorHeight * rearBlockFloors;
 		const rearBlockWidth = mainWidth;

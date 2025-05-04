@@ -244,6 +244,12 @@ export default class SkyscraperRenderer {
             emissive: 0xfcffe0,
             name: "SkyscraperWindowMat_Standard"
         });
+        const redLightMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+            emissive: 0xff0000,
+            emissiveIntensity: 1.0,
+            name: "SkyscraperRedLightMat"
+        });
 
         // --- Dimensions générales ---
         const mainWidth = 9, mainDepth = 9;
@@ -474,43 +480,21 @@ export default class SkyscraperRenderer {
         antenna1.position.set(mainWidth * 0.3, roofTopY + antennaHeight / 2, mainDepth * 0.3);
         antenna1.castShadow = true;
         skyscraper.add(antenna1);
+
+        // Ajout de la boule rouge sur l'antenne 1
+        const roofBaseHeight = 1 * userScale; const poleHeight = 4 * userScale; const poleRadius = 0.2 * userScale;
+        const dishRadius = 1.5 * userScale; const redLightRadius = 0.15 * userScale;
+        const redLightGeom = new THREE.SphereGeometry(redLightRadius, 16, 16);
+        const redLight = new THREE.Mesh(redLightGeom, redLightMaterial);
+        redLight.position.copy(antenna1.position);
+        redLight.position.y = antenna1.position.y + antennaHeight / 2 + redLightRadius;
+        redLight.castShadow = true;
+        skyscraper.add(redLight);
+
         const antenna2 = new THREE.Mesh(antennaGeom, metallicMaterial);
         antenna2.position.set(-mainWidth * 0.3, roofTopY + antennaHeight / 2, -mainDepth * 0.3);
         antenna2.castShadow = true;
         skyscraper.add(antenna2);
-        const boxSize = 0.8;
-        const boxGeom = new THREE.BoxGeometry(boxSize, boxSize * 0.5, boxSize);
-        const roofBox1 = new THREE.Mesh(boxGeom, metallicMaterial);
-        roofBox1.position.set(0, roofTopY + (boxSize * 0.5) / 2, -mainDepth * 0.2);
-        roofBox1.castShadow = true;
-        skyscraper.add(roofBox1);
-        const dishRadius = 1.2;
-        const dishDepth = Math.PI * 0.3;
-        const dishThetaStart = Math.PI - dishDepth;
-        const dishThetaLength = dishDepth;
-        const dishGeometry = new THREE.SphereGeometry(dishRadius, 20, 10, 0, Math.PI * 2, dishThetaStart, dishThetaLength);
-        const dish = new THREE.Mesh(dishGeometry, metallicMaterial);
-        dish.rotation.x = Math.PI * 0.05;
-        const dishStandHeight = 0.5;
-        const dishStandGeom = new THREE.CylinderGeometry(0.1, 0.1, dishStandHeight, 8);
-        const dishStand = new THREE.Mesh(dishStandGeom, metallicMaterial);
-        dishStand.position.set(mainWidth * -0.25, roofTopY + dishStandHeight / 2, mainDepth * 0.2);
-        dishStand.castShadow = true;
-        skyscraper.add(dishStand);
-        dish.position.copy(dishStand.position);
-        dish.position.y = dishStand.position.y + dishStandHeight / 2 + dishRadius * 0.3 + 0.8;
-        dish.castShadow = true;
-        skyscraper.add(dish);
-        const equipBoxGeom1 = new THREE.BoxGeometry(1.5, 0.8, 0.8);
-        const equipBox1 = new THREE.Mesh(equipBoxGeom1, metallicMaterial);
-        equipBox1.position.set(mainWidth * 0.3, roofTopY + 0.8 / 2, -mainDepth * 0.3);
-        equipBox1.castShadow = true;
-        skyscraper.add(equipBox1);
-        const equipCylGeom1 = new THREE.CylinderGeometry(0.4, 0.4, 1.2, 12);
-        const equipCyl1 = new THREE.Mesh(equipCylGeom1, metallicMaterial);
-        equipCyl1.position.set(-mainWidth * 0.1, roofTopY + 1.2 / 2, mainDepth * 0.35);
-        equipCyl1.castShadow = true;
-        skyscraper.add(equipCyl1);
 
         // --- Regroupement par matériau ---
         const allGeoms = [];
@@ -520,6 +504,7 @@ export default class SkyscraperRenderer {
         materialMap.set(metallicMaterial.name, { material: metallicMaterial.clone(), geoms: [] });
         materialMap.set(floorMaterial.name, { material: floorMaterial.clone(), geoms: [] });
         materialMap.set(skyscraperWindowMaterial.name, { material: skyscraperWindowMaterial.clone(), geoms: [] });
+        materialMap.set(redLightMaterial.name, { material: redLightMaterial.clone(), geoms: [] });
 
         skyscraper.traverse(child => {
             if (child.isMesh && child.geometry && child.material) {
@@ -599,11 +584,7 @@ export default class SkyscraperRenderer {
         if (floorGeometry) floorGeometry.dispose();
         if (roofGeom) roofGeom.dispose();
         if (antennaGeom) antennaGeom.dispose();
-        if (boxGeom) boxGeom.dispose();
-        if (dishGeometry) dishGeometry.dispose();
-        if (dishStandGeom) dishStandGeom.dispose();
-        if (equipBoxGeom1) equipBoxGeom1.dispose();
-        if (equipCylGeom1) equipCylGeom1.dispose();
+        if (redLightGeom) redLightGeom.dispose();
         if (windowGeomX) windowGeomX.dispose();
         if (windowGeomZ) windowGeomZ.dispose();
         if (doorGeomX) doorGeomX.dispose();
