@@ -316,52 +316,56 @@ export default class CityAssetLoader {
                     }
                     // *** MODIFICATION END ***
                 } else if (type === 'skyscraper') {
-                    // *** MODIFICATION START ***
-                    // Récupérer le nombre d'étages depuis rendererTypeHint
-                    const numFloors = parseInt(rendererTypeHint, 10);
-                    if (isNaN(numFloors) || numFloors < 6 || numFloors > 12) {
-                        console.error(`loadAssetModel: Nombre d'étages invalide (${rendererTypeHint}) pour gratte-ciel. Annulation.`);
-                        resolve(null);
-                        return;
-                    }
-                    
-                    // Alternance entre les deux types de renderers pour les gratte-ciels
-                    // On utilise un calcul simple: si le nombre d'étages est pair, on utilise le nouveau renderer
-                    const useNewRenderer = numFloors % 2 === 0; // Utiliser NewSkyscraperRenderer pour les étages pairs
-                    const renderer = useNewRenderer ? this.newSkyscraperRenderer : this.skyscraperRenderer;
-                    const rendererName = useNewRenderer ? 'NewSkyscraperRenderer' : 'SkyscraperRenderer';
-                    
-                    if (!renderer) {
-                        console.error(`Renderer (${rendererName}) not initialized for type 'skyscraper'.`);
-                        resolve(null);
-                        return;
-                    }
-                    
-                    try {
-                        // Passer le nombre d'étages à la méthode de génération
-                        assetData = useNewRenderer ? renderer.generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale) :
-                                                   renderer.generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale, numFloors);
-                        
-                        if (assetData) {
-                            // Inclure le nombre d'étages et le type de renderer dans l'ID pour le rendre unique et identifiable
-                            finalModelId = `skyscraper_proc_${rendererName}_${numFloors}fl_${internalCounterId}`;
-                            assetData.id = finalModelId;
-                            assetData.procedural = true;
-                            assetData.rendererType = rendererName;
-                            assetData.numFloors = numFloors; // Stocker aussi le nombre d'étages dans l'asset
-                            this.loadedAssets.set(finalModelId, assetData);
-                            console.log(`  - Generated procedural skyscraper asset '${finalModelId}' (${numFloors} floors) using ${rendererName}`);
-                            resolve(assetData);
-                        } else {
-                            console.warn(`Procedural generation for skyscraper (${numFloors} floors) using ${rendererName} returned null.`);
-                            resolve(null);
-                        }
-                    } catch (error) {
-                        console.error(`Error during procedural skyscraper generation (${numFloors} floors) with ${rendererName}:`, error);
-                        resolve(null);
-                    }
-                    // *** MODIFICATION END ***
-                } else if (type === 'tree') {
+					// --- Récupération et validation numFloors ---
+					const numFloors = parseInt(rendererTypeHint, 10); // rendererTypeHint contient le nb d'étages
+					if (isNaN(numFloors) || numFloors < 6 || numFloors > 12) {
+						console.error(`loadAssetModel: Nombre d'étages invalide (${rendererTypeHint}) pour gratte-ciel. Annulation.`);
+						resolve(null); // Rejeter la promesse
+						return; // Sortir de la fonction loadAssetModel pour cet appel
+					}
+				
+					// --- Sélection du renderer (inchangé) ---
+					// Alternance entre les deux types de renderers pour les gratte-ciels
+					const useNewRenderer = numFloors % 2 === 0; // Utiliser NewSkyscraperRenderer pour les étages pairs
+					const renderer = useNewRenderer ? this.newSkyscraperRenderer : this.skyscraperRenderer;
+					const rendererName = useNewRenderer ? 'NewSkyscraperRenderer' : 'SkyscraperRenderer';
+				
+					if (!renderer) {
+						console.error(`Renderer (${rendererName}) not initialized for type 'skyscraper'.`);
+						resolve(null);
+						return;
+					}
+				
+					// --- Appel à generateProceduralSkyscraper (MODIFIÉ) ---
+					try {
+						// On passe maintenant numFloors aux DEUX renderers
+						assetData = renderer.generateProceduralSkyscraper(
+							baseWidth,
+							baseHeight, // Moins pertinent maintenant que numFloors est passé
+							baseDepth,
+							userScale,
+							numFloors // *** Passer numFloors ici ***
+						);
+				
+						if (assetData) {
+							// L'ID est généré DANS le renderer maintenant, on le récupère juste
+							finalModelId = assetData.id; // Utiliser l'ID généré par le renderer
+							assetData.procedural = true;
+							assetData.rendererType = rendererName;
+							assetData.numFloors = numFloors; // Assurer que numFloors est bien dans l'asset
+							this.loadedAssets.set(finalModelId, assetData); // Cache l'asset
+							console.log(`  - Generated procedural skyscraper asset '${finalModelId}' (${numFloors} floors) using ${rendererName}`);
+							resolve(assetData); // Résout la promesse avec l'asset généré
+						} else {
+							console.warn(`Procedural generation for skyscraper (${numFloors} floors) using ${rendererName} returned null.`);
+							resolve(null); // Rejeter si la génération a échoué
+						}
+					} catch (error) {
+						console.error(`Error during procedural skyscraper generation (${numFloors} floors) with ${rendererName}:`, error);
+						resolve(null); // Rejeter en cas d'erreur
+					}
+					return; // Sortir car c'est procédural
+				} else if (type === 'tree') {
                     if (!this.treeRenderer) {
                         console.error("TreeRenderer not initialized.");
                         resolve(null);
