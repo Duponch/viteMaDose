@@ -20,8 +20,8 @@ export default class RainEffect {
         this.rainSpeed = 18;            // Vitesse de base de la pluie - augmentée légèrement
         this.rainArea = 70;             // Zone de pluie - rayon autour de la caméra - augmentée
         this.rainHeight = 45;           // Hauteur maximale de la pluie - augmentée
-        this.minDropSize = 0.2;         // Taille minimale des gouttes
-        this.maxDropSize = 0.6;         // Taille maximale des gouttes - augmentée
+        this.minDropSize = 0.3;         // Taille minimale des gouttes - augmentée pour mieux voir la forme
+        this.maxDropSize = 0.8;         // Taille maximale des gouttes - augmentée pour mieux voir la forme
         this.stretchFactor = 0.7;       // Facteur d'étirement des gouttes - augmenté
         this.cameraFollowFactor = 0.15; // Facteur de suivi de la caméra (entre 0 et 1) - réduit pour moins d'attraction
         this.inertiaFactor = 0.92;      // Facteur d'inertie (entre 0 et 1) - plus proche de 1 = plus d'inertie
@@ -144,18 +144,11 @@ export default class RainEffect {
                 
                 varying float vSize;
                 varying float vDistance;
+                varying vec2 vUv;
                 
                 void main() {
                     // Paramètres de la goutte
                     vSize = size;
-                    
-                    // Calculer l'angle de la caméra pour orienter les gouttes
-                    float cameraAngle = atan(cameraForward.z, cameraForward.x);
-                    
-                    // Rotation pour orienter les particules vers la caméra
-                    float rotAngle = angle + cameraAngle;
-                    float cosA = cos(rotAngle);
-                    float sinA = sin(rotAngle);
                     
                     // Position de base
                     vec3 basePos = position;
@@ -182,11 +175,12 @@ export default class RainEffect {
                     vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
                     vDistance = -mvPosition.z;
                     
-                    // Appliquer la taille et l'étirement basé sur la vitesse
-                    float stretch = velocity * stretchFactor;
-                    // Augmenter la taille des gouttes en fonction de l'intensité
+                    // Appliquer la taille en fonction de la distance et de l'intensité
                     float sizeBoost = 1.0 + intensity * 0.5;
                     float pointSize = size * sizeBoost * (300.0 / vDistance); // Adapter taille à la distance
+                    
+                    // Coordonnées UV pour orienter la texture
+                    vUv = vec2(0.5, 0.5);
                     
                     gl_PointSize = pointSize;
                     gl_Position = projectionMatrix * mvPosition;
@@ -202,10 +196,14 @@ export default class RainEffect {
                 
                 varying float vSize;
                 varying float vDistance;
+                varying vec2 vUv;
                 
                 void main() {
+                    // Orienter les coordonnées UV pour que la pointe de la goutte pointe vers le bas
+                    vec2 rotatedUv = gl_PointCoord;
+                    
                     // Échantillonner la texture de goutte
-                    vec4 texColor = texture2D(rainTexture, gl_PointCoord);
+                    vec4 texColor = texture2D(rainTexture, rotatedUv);
                     
                     // Transparence de base ajustée par l'intensité
                     float alpha = texColor.a * intensity;
@@ -431,34 +429,91 @@ export default class RainEffect {
      */
     createRainDropTexture() {
         const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 64;
+        canvas.width = 128;
+        canvas.height = 128;
         
         const context = canvas.getContext('2d');
         context.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Créer un dégradé vertical pour la goutte - couleur plus visible et légèrement bleutée
-        const mainGradient = context.createLinearGradient(32, 0, 32, 64);
-        mainGradient.addColorStop(0, 'rgba(210, 235, 255, 0.0)');
-        mainGradient.addColorStop(0.2, 'rgba(210, 235, 255, 0.6)');
-        mainGradient.addColorStop(0.4, 'rgba(210, 235, 255, 1.0)');
-        mainGradient.addColorStop(0.6, 'rgba(210, 235, 255, 1.0)');
-        mainGradient.addColorStop(0.8, 'rgba(210, 235, 255, 0.6)');
-        mainGradient.addColorStop(1.0, 'rgba(210, 235, 255, 0.0)');
+        // Créer une forme de goutte en forme de larme réaliste
+        // Utiliser un dégradé vertical avec plus de détails
+        const larmeGradient = context.createLinearGradient(64, 20, 64, 100);
+        larmeGradient.addColorStop(0, 'rgba(230, 245, 255, 1.0)');
+        larmeGradient.addColorStop(0.2, 'rgba(220, 240, 255, 0.95)');
+        larmeGradient.addColorStop(0.5, 'rgba(210, 235, 255, 0.9)');
+        larmeGradient.addColorStop(0.8, 'rgba(200, 230, 255, 0.6)');
+        larmeGradient.addColorStop(1.0, 'rgba(190, 225, 255, 0.0)');
         
-        // Dessiner la forme de la goutte - légèrement plus large
-        context.fillStyle = mainGradient;
-        context.fillRect(27, 0, 10, 64);
+        // Dessiner la forme de goutte d'eau classique
+        context.fillStyle = larmeGradient;
+        context.beginPath();
         
-        // Ajouter un point brillant au milieu de la goutte - plus intense
-        const glowGradient = context.createRadialGradient(32, 32, 0, 32, 32, 10);
-        glowGradient.addColorStop(0, 'rgba(235, 245, 255, 1.0)');
-        glowGradient.addColorStop(0.5, 'rgba(235, 245, 255, 0.5)');
-        glowGradient.addColorStop(1, 'rgba(235, 245, 255, 0.0)');
+        // Utiliser une forme de goutte avec une tête arrondie et une queue en pointe
+        // Commencer par le haut de la goutte
+        context.moveTo(64, 30);
+        
+        // Créer la forme de larme à l'aide de courbes de Bézier
+        // Partie supérieure arrondie
+        context.bezierCurveTo(
+            74, 30, // point de contrôle 1
+            82, 38, // point de contrôle 2
+            82, 48  // point d'arrivée
+        );
+        
+        // Partie intermédiaire
+        context.bezierCurveTo(
+            82, 65, // point de contrôle 1
+            75, 80, // point de contrôle 2
+            64, 95  // point d'arrivée (pointe)
+        );
+        
+        // Partie inférieure (symétrique)
+        context.bezierCurveTo(
+            53, 80, // point de contrôle 1
+            46, 65, // point de contrôle 2
+            46, 48  // point d'arrivée
+        );
+        
+        // Fermer la forme
+        context.bezierCurveTo(
+            46, 38, // point de contrôle 1
+            54, 30, // point de contrôle 2
+            64, 30  // point de départ/fin
+        );
+        
+        context.fill();
+        
+        // Ajouter un effet de volume avec un dégradé radial
+        const volumeGradient = context.createRadialGradient(58, 45, 5, 64, 55, 35);
+        volumeGradient.addColorStop(0, 'rgba(255, 255, 255, 0.25)');
+        volumeGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
+        volumeGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        
+        context.globalCompositeOperation = 'source-atop';
+        context.fillStyle = volumeGradient;
+        context.fillRect(25, 25, 80, 70);
+        
+        // Ajouter un reflet brillant en haut à gauche (comme la lumière réfléchie)
+        const refletGradient = context.createRadialGradient(55, 40, 0, 55, 40, 15);
+        refletGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+        refletGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
+        refletGradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
         
         context.globalCompositeOperation = 'lighter';
-        context.fillStyle = glowGradient;
-        context.fillRect(22, 22, 20, 20);
+        context.fillStyle = refletGradient;
+        context.beginPath();
+        context.arc(55, 40, 15, 0, Math.PI * 2);
+        context.fill();
+        
+        // Ajouter un petit reflet secondaire
+        const refletSecondaire = context.createRadialGradient(72, 50, 0, 72, 50, 8);
+        refletSecondaire.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+        refletSecondaire.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+        
+        context.fillStyle = refletSecondaire;
+        context.beginPath();
+        context.arc(72, 50, 8, 0, Math.PI * 2);
+        context.fill();
         
         // Créer la texture
         const texture = new THREE.Texture(canvas);
