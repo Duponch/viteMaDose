@@ -69,8 +69,14 @@ export default class BuildingRenderer {
         
         for (let y = 0; y < height; y += brickHeight) {
             for (let x = 0; x < width; x += brickWidth) {
-                // Variation aléatoire de la couleur de base
-                const variation = Math.random() * 20 - 10;
+                // Variation aléatoire plus prononcée avec une probabilité de briques plus foncées
+                let variation;
+                if (Math.random() < 0.2) { // 20% de chance d'avoir une brique plus foncée
+                    variation = Math.random() * 40 - 60; // Variation plus forte vers le foncé
+                } else {
+                    variation = Math.random() * 30 - 15; // Variation normale
+                }
+                
                 const r = Math.min(255, Math.max(0, 240 + variation));
                 const g = Math.min(255, Math.max(0, 230 + variation));
                 const b = Math.min(255, Math.max(0, 210 + variation));
