@@ -34,16 +34,19 @@ export default class WeatherSystem {
         this.transitionProgress = 1.0; // 1.0 = transition terminée
         this.lastWeatherChangeTime = 0;
         
-        // Créer les sous-systèmes
-        this.rainEffect = new RainEffect(this);
+        // Créer les sous-systèmes dans un ordre précis pour éviter les dépendances circulaires
+        // D'abord le brouillard qui peut fonctionner sans les autres composants
         this.fogEffect = new FogEffect(this);
+        // Ensuite les nuages qui peuvent être référencés par le brouillard
         this.cloudSystem = new CloudSystem(this);
+        // Enfin la pluie qui peut dépendre des deux précédents
+        this.rainEffect = new RainEffect(this);
         
-        // Liste de tous les effets pour itération facile
+        // Liste de tous les effets pour itération facile dans l'ordre d'importance visuelle
         this.effects = [
-            this.rainEffect,
             this.fogEffect,
-            this.cloudSystem
+            this.cloudSystem,
+            this.rainEffect
         ];
         
         // Préréglages de météo (conservés pour compatibilité, mais non utilisés par les curseurs)

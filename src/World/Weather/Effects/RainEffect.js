@@ -12,7 +12,7 @@ export default class RainEffect {
     constructor(weatherSystem) {
         this.weatherSystem = weatherSystem;
         this.scene = weatherSystem.scene;
-        this.camera = weatherSystem.camera;
+        this.camera = weatherSystem.camera.instance;
         
         // Configuration
         this.rainCount = 20000;         // Nombre maximum de gouttes de pluie (augmenté)
@@ -179,7 +179,7 @@ export default class RainEffect {
         const opacities = this.rainGeometry.attributes.opacity.array;
         
         // Position de la caméra pour centrer la pluie autour d'elle
-        const cameraPosition = this.camera.instance.position.clone();
+        const cameraPosition = this.camera.position.clone();
         
         // Calculer combien de gouttes devraient être visibles en fonction de l'intensité
         const targetVisibleDroplets = Math.floor(this.rainCount * this.intensity);
