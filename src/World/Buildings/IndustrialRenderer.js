@@ -1,6 +1,5 @@
 // src/World/IndustrialRenderer.js
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'; // Nécessaire pour la génération procédurale
 
 export default class IndustrialRenderer {
@@ -189,13 +188,9 @@ export default class IndustrialRenderer {
         const factoryWidth = 24;
         const factoryDepth = 16;
         const factoryHeight = 8;
-        const cornerRadius = 0.3;
-        const cornerSegments = 4;
-
         const backBuildingWidth = factoryWidth;
         const backBuildingDepth = 12 * 0.7;
         const backBuildingHeight = factoryHeight * 0.7;
-        const backCornerRadius = cornerRadius * 0.7;
 
         const numTeeth = 6;
         const toothWidth = factoryWidth / numTeeth;
@@ -224,13 +219,13 @@ export default class IndustrialRenderer {
         this.baseIndustrialGeometries = {};
 
         // --- Géométries principales ---
-        this.baseIndustrialGeometries.factoryBody = new RoundedBoxGeometry(
-            factoryWidth, factoryHeight, factoryDepth, cornerSegments, cornerRadius
+        this.baseIndustrialGeometries.factoryBody = new THREE.BoxGeometry(
+            factoryWidth, factoryHeight, factoryDepth
         );
         // NOTE: Pas de translation ici, la position sera gérée par la matrice d'instance
 
-        this.baseIndustrialGeometries.backBuildingBody = new RoundedBoxGeometry(
-            backBuildingWidth, backBuildingHeight, backBuildingDepth, cornerSegments, backCornerRadius
+        this.baseIndustrialGeometries.backBuildingBody = new THREE.BoxGeometry(
+            backBuildingWidth, backBuildingHeight, backBuildingDepth
         );
 
         // --- Géométrie du toit (combinée) ---
@@ -336,7 +331,7 @@ export default class IndustrialRenderer {
         // --- Dimensions (pour positionnement local) ---
         const factoryWidth = 24; const factoryDepth = 16; const factoryHeight = 8;
         const backBuildingWidth = factoryWidth; const backBuildingDepth = 12 * 0.7; const backBuildingHeight = factoryHeight * 0.7;
-        const cornerRadius = 0.3; const overlapAmount = 0.5;
+        const overlapAmount = 0.5;
         const numTeeth = 6; const totalToothHeight = 2.0 + 2.5; const roofSinkAmount = 0.1;
         const doorWidth = 5; const doorHeight = 6; const placementOffset = 0.15;
         const windowWidth = 2.5; const windowHeight = 2; const windowYPos = factoryHeight * 0.6;
@@ -364,8 +359,7 @@ export default class IndustrialRenderer {
 
         // 4. Porte
         const doorMesh = new THREE.Mesh(warehouseDoorGeom, doorPanelMat);
-        // Position relative à l'origine, sur la face avant
-        doorMesh.position.set(0, doorHeight / 2, factoryDepth / 2 + cornerRadius - placementOffset);
+        doorMesh.position.set(0, doorHeight / 2, factoryDepth / 2 - placementOffset);
         industrialGroup.add(doorMesh);
 
         // 5. Fenêtres (créer un groupe par fenêtre pour gérer les 2 matériaux)
@@ -379,8 +373,8 @@ export default class IndustrialRenderer {
             windowGroup.add(paneMesh);
 
             // Positionner le groupe entier
-            const surfacePositionX = factoryWidth / 2 + cornerRadius;
-            const surfacePositionZ = factoryDepth / 2 + cornerRadius;
+            const surfacePositionX = factoryWidth / 2;
+            const surfacePositionZ = factoryDepth / 2;
             const inwardOffset = placementOffset;
 
             if (Math.abs(rotationY - Math.PI / 2) < 0.1) { // Droite
