@@ -97,12 +97,21 @@ export default class NewBuildingRenderer {
                 roughness: 0.8,
                 metalness: 0.1
             })).clone(),
+            door: new THREE.MeshStandardMaterial({ 
+                color: 0x8a7967, 
+                name: "NewBuildingDoor",
+                metalness: 0.8,
+                roughness: 0.2,
+                emissive: 0xfcffe0,
+                emissiveIntensity: 0.0,
+                map: null
+            }),
         };
 
         // Assigner des noms uniques aux matériaux clonés pour éviter conflits
         Object.keys(this.localMaterials).forEach(key => {
-            // Pour les fenêtres, utiliser un nom fixe
-            if (key === 'window' || key === 'balconyWindow') {
+            if (key === 'window' || key === 'balconyWindow' || key === 'door') {
+                // Pour les fenêtres et les portes, utiliser un nom fixe
                 this.localMaterials[key].name = `NewBuilding${key.charAt(0).toUpperCase() + key.slice(1)}`;
             } else {
                 // Pour les autres matériaux, générer un nom unique
@@ -135,8 +144,14 @@ export default class NewBuildingRenderer {
         
         for (let y = 0; y < height; y += brickHeight) {
             for (let x = 0; x < width; x += brickWidth) {
-                // Variation aléatoire de la couleur de base
-                const variation = Math.random() * 20 - 10;
+                // Variation aléatoire plus prononcée avec une probabilité de briques plus foncées
+                let variation;
+                if (Math.random() < 0.2) { // 20% de chance d'avoir une brique plus foncée
+                    variation = Math.random() * 40 - 60; // Variation plus forte vers le foncé
+                } else {
+                    variation = Math.random() * 30 - 15; // Variation normale
+                }
+                
                 const r = Math.min(255, Math.max(0, 240 + variation));
                 const g = Math.min(255, Math.max(0, 230 + variation));
                 const b = Math.min(255, Math.max(0, 210 + variation));
@@ -222,6 +237,7 @@ export default class NewBuildingRenderer {
         const antennaMaterial = this.localMaterials.antenna;
         const balconyWallMaterial = this.localMaterials.balconyWall; // Trim par défaut
         const ledgeMaterial = trimMaterial; // Utilise le trim pour les rebords
+        const doorMaterial = this.localMaterials.door;
 
         // ----- Création des Géométries et Meshes (Copier/Adapter du HTML) -----
 
@@ -449,14 +465,14 @@ export default class NewBuildingRenderer {
         const pizzaWindowWidth = Math.max(0.1, recessWidth - doorWidthPlaceholder * 0.5); // Assurer largeur min
         const pizzaWindowHeight = 2.5;
         const pizzaWindowGeo = new THREE.BoxGeometry(pizzaWindowWidth, pizzaWindowHeight, 0.1);
-        const pizzaWindowMesh = new THREE.Mesh(pizzaWindowGeo, groundFloorMaterial);
+        const pizzaWindowMesh = new THREE.Mesh(pizzaWindowGeo, windowMaterial);
         pizzaWindowMesh.position.set(mainWidth / 2 + recessWidth / 2 - pizzaWindowWidth / 2 - doorWidthPlaceholder * 0.25, groundFloorY, -(mainDepth - recessDepth) / 2 + recessDepth / 2 + 0.06);
         buildingGroup.add(pizzaWindowMesh);
 
         const downtownWindowWidth = mainWidth * 0.5;
         const downtownWindowHeight = 2.5;
         const downtownWindowGeo = new THREE.BoxGeometry(downtownWindowWidth, downtownWindowHeight, 0.1);
-        const downtownWindowMesh = new THREE.Mesh(downtownWindowGeo, groundFloorMaterial);
+        const downtownWindowMesh = new THREE.Mesh(downtownWindowGeo, windowMaterial);
         downtownWindowMesh.position.set(-(recessWidth / 2) - mainWidth / 2 + downtownWindowWidth / 2 + windowSpacingMain, groundFloorY, mainDepth / 2 + 0.06);
         buildingGroup.add(downtownWindowMesh);
 

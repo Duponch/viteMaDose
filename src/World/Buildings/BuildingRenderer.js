@@ -221,7 +221,12 @@ export default class BuildingRenderer {
             emissive: 0xfcffe0,
             name: "BuildingWindowMat"
         });
-        const doorMaterial = new THREE.MeshStandardMaterial({ color: doorColor, name: "BuildingDoorMat" });
+        const doorMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x8a7967, 
+            name: "BuildingDoorMat",
+            metalness: 0.7,
+            roughness: 0.3
+        });
         const equipmentMaterial = new THREE.MeshStandardMaterial({
             color: equipmentColor,
             metalness: 0.9,
