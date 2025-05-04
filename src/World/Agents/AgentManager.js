@@ -312,6 +312,10 @@ export default class AgentManager {
             metalness: 0.1, // Peu métallique
             name: 'AgentHairMat'
         });
+        this.baseMaterials.faceFeature = new THREE.MeshBasicMaterial({
+            color: 0x000000, // Noir
+            name: 'AgentFaceFeatureMat'
+        });
 		// Matériau pour le marqueur de débogage
         this.baseMaterials.agentMarker = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
 		// this.baseMaterials.homeMarker = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
@@ -331,9 +335,47 @@ export default class AgentManager {
 		// Appliquer le décalage local des cheveux avant fusion
 		const hairOffset = this._getPartLocalOffsetMatrix('hair');
 		hairGeom.applyMatrix4(hairOffset);
-		// Fusionner tête + cheveux en créant des groups pour appliquer plusieurs matériaux
-		this.baseGeometries.head = mergeGeometries([headGeom, hairGeom], true);
-		headGeom.dispose(); hairGeom.dispose();
+
+		// Créer les géométries pour les yeux et la bouche
+		const eyeRadius = 0.3;
+		const eyeGeom = new THREE.SphereGeometry(eyeRadius, 12, 8);
+		const smileRadius = 0.6;
+		const smileTube = 0.08;
+		const smileStartAngle = Math.PI * 1.15;
+		const smileArc = Math.PI * 0.7;
+		const mouthGeom = new THREE.TorusGeometry(smileRadius, smileTube, 8, 25, smileArc, smileStartAngle);
+
+		// Positionner les yeux et la bouche
+		const eyeY = 0.3;
+		const eyeX = 0.8;
+		const eyeZ = this.headRadius * 0.9;
+		const mouthY = -0.7;
+		const mouthZ = this.headRadius;
+
+		// Créer les matrices de transformation pour les yeux et la bouche
+		const leftEyeMatrix = new THREE.Matrix4();
+		leftEyeMatrix.makeTranslation(-eyeX, eyeY, eyeZ);
+		const rightEyeMatrix = new THREE.Matrix4();
+		rightEyeMatrix.makeTranslation(eyeX, eyeY, eyeZ);
+		const mouthMatrix = new THREE.Matrix4();
+		mouthMatrix.makeTranslation(0, mouthY, mouthZ);
+		mouthMatrix.multiply(new THREE.Matrix4().makeRotationX(Math.PI / 16));
+		mouthMatrix.multiply(new THREE.Matrix4().makeRotationZ(-Math.PI / 1.15));
+
+		// Appliquer les transformations aux géométries
+		const leftEyeGeom = eyeGeom.clone().applyMatrix4(leftEyeMatrix);
+		const rightEyeGeom = eyeGeom.clone().applyMatrix4(rightEyeMatrix);
+		const mouthGeomTransformed = mouthGeom.clone().applyMatrix4(mouthMatrix);
+
+		// Fusionner toutes les géométries
+		this.baseGeometries.head = mergeGeometries([headGeom, hairGeom, leftEyeGeom, rightEyeGeom, mouthGeomTransformed], true);
+		headGeom.dispose();
+		hairGeom.dispose();
+		eyeGeom.dispose();
+		mouthGeom.dispose();
+		leftEyeGeom.dispose();
+		rightEyeGeom.dispose();
+		mouthGeomTransformed.dispose();
 
 		this.baseGeometries.torso = createCapsuleGeometry(torsoRadius, torsoLength, 24);
 		this.baseGeometries.hand = createCapsuleGeometry(handRadius, handLength, 12);
@@ -374,7 +416,10 @@ export default class AgentManager {
         // Head fusionné avec cheveux : passer un tableau de matériaux (skin, hair)
         createInstMesh('head', this.baseGeometries.head, [
             this.baseMaterials.skin,
-            this.baseMaterials.hair
+            this.baseMaterials.hair,
+            this.baseMaterials.faceFeature,
+            this.baseMaterials.faceFeature,
+            this.baseMaterials.faceFeature
         ], this.maxAgents);
         createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents, true);
         createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2);
