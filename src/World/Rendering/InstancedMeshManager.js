@@ -264,8 +264,8 @@ export default class InstancedMeshManager {
                             "NewBuildingWindow",
                             "NewBuildingBalconyWindow",
                             "HouseWindowMat",
-                            "IndustrialWindowPaneMat" // Ajouter si fenêtres industrielles doivent s'allumer
-                            // Ajouter d'autres noms si nécessaire
+                            "IndustrialWindowPaneMat",
+							"NewSkyscraperWindowMat"
                         ];
                         isWindowFinal = windowMaterialNames.includes(material.name) || material.name?.startsWith("Inst_HouseWindow_");
 
@@ -365,6 +365,7 @@ export default class InstancedMeshManager {
 
             // Identifier le type de fenêtre basé sur le nom du matériau (convention établie)
             const isSkyscraperWindow = material.name === "SkyscraperWindowMat_Standard";
+			const isNewSkyscraperWindow = material.name === "NewSkyscraperWindowMat"; // <-- AJOUTER CETTE VÉRIFICATION
             const isHouseWindow = material.name.startsWith("Inst_HouseWindow_");
             const isBuildingWindow = material.name === "BuildingWindowMat";
             const isNewBuildingWindow = material.name === "NewBuildingWindow" || material.name === "NewBuildingBalconyWindow";
@@ -390,6 +391,15 @@ export default class InstancedMeshManager {
                 targetIntensity = lightsOn ? 0.8 : 0.0; // Valeur spécifique immeuble
             } else if (isNewBuildingWindow) {
                 targetIntensity = lightsOn ? 0.9 : 0.0; // Même valeur que BuildingWindow
+            } else if (isNewSkyscraperWindow) { // <-- AJOUTER CE BLOC
+                targetIntensity = lightsOn ? 0.9 : 0.0; // Choisissez une intensité (ex: 1.1)
+                // Ajoutez ici toute autre logique spécifique si nécessaire (transmission, roughness, etc.)
+                // Exemple:
+                // const targetRoughness = lightsOn ? 0.5 : 0.2;
+                // if (material.roughness !== targetRoughness) {
+                //     material.roughness = targetRoughness;
+                //     needsMaterialUpdate = true;
+                // }
             } else {
                 // Fenêtre non reconnue ou type non géré
                 return;
