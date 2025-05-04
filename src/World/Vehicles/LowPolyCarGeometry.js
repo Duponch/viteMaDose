@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 /**
  * Crée les géométries fusionnées et matériaux pour chaque partie du modèle low-poly.
  * Retourne un objet { body, windows, wheels, metal, lights, rearLights } pour instancing par matériau.
+ * @param {Object} options - Options de personnalisation incluant bodyColor pour la couleur de la carrosserie
  */
 export function createLowPolyCarGeometry(options = {}) {
     // Couleurs principales (personnalisables)
@@ -16,8 +17,8 @@ export function createLowPolyCarGeometry(options = {}) {
     const metalColor = options.metalColor || 0xaaaaaa;
     const lightColor = options.lightColor || 0xffffff;
     const rearLightColor = options.rearLightColor || 0xff0000;
-
-    // Matériaux
+    
+    // Matériaux - création de matériaux avec les propriétés adéquates mais sans cloner (pour instancing)
     const bodyMaterial = new THREE.MeshStandardMaterial({ color: bodyColor, metalness: 0.4, roughness: 0.7 });
     const windowMaterial = new THREE.MeshPhongMaterial({ color: windowColor, transparent: true, opacity: 0.7 });
     const wheelMaterial = new THREE.MeshStandardMaterial({ color: wheelColor, metalness: 0.1, roughness: 0.9 });

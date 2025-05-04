@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import Car from './Car.js';
 import { createLowPolyCarGeometry } from './LowPolyCarGeometry.js';
+import { getCarColorById } from './CarColors.js';
 
 export default class CarManager {
     constructor(scene, experience) {
@@ -13,6 +14,12 @@ export default class CarManager {
         this.agentToCar = new Map(); // Agent ID -> Car instance
         this.carPoolIndices = new Map(); // Agent ID -> Index dans this.cars (et InstancedMesh)
         this.instanceIdToAgentId = new Array(this.maxCars); // instanceId -> Agent ID
+        
+        // Stockage des couleurs pour chaque voiture
+        this.carColors = new Array(this.maxCars);
+        for (let i = 0; i < this.maxCars; i++) {
+            this.carColors[i] = getCarColorById(i);
+        }
         // --- FIN MODIFIÉ ---
 
         // --- NOUVEAU : Initialisation des matériaux et géométries ---
@@ -82,6 +89,21 @@ export default class CarManager {
                 mesh.frustumCulled = false;
                 mesh.renderOrder = 1;
                 mesh.userData.isCarPart = true;
+                
+                // Préparer la personnalisation des couleurs pour InstancedMesh
+                if (part === 'body') {
+                    // Activer les instances colors pour l'InstancedMesh du corps
+                    mesh.instanceColor = new THREE.InstancedBufferAttribute(
+                        new Float32Array(this.maxCars * 3), 3
+                    );
+                    
+                    // Initialiser les couleurs pour chaque instance
+                    for (let i = 0; i < this.maxCars; i++) {
+                        const color = new THREE.Color(this.carColors[i]);
+                        mesh.setColorAt(i, color);
+                    }
+                }
+                
                 this.scene.add(mesh);
                 mesh.computeBoundingSphere();
                 mesh.computeBoundingBox();
@@ -155,6 +177,13 @@ export default class CarManager {
         // Mettre à jour tous les InstancedMeshs pour cette voiture spécifique
         for (const part of this.carMeshOrder) {
             this.instancedMeshes[part].setMatrixAt(availableCarIndex, availableCar.matrix);
+            
+            // Assurer que la couleur est correctement définie (pour la carrosserie)
+            if (part === 'body' && this.instancedMeshes[part].instanceColor) {
+                const color = new THREE.Color(this.carColors[availableCarIndex]);
+                this.instancedMeshes[part].setColorAt(availableCarIndex, color);
+                this.instancedMeshes[part].instanceColor.needsUpdate = true;
+            }
         }
 
         // Enregistrer l'association
