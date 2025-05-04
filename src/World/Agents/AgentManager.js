@@ -292,38 +292,28 @@ export default class AgentManager {
     // 2) _initializeMeshes (modifiée pour démarrer à count=0)
 	_initializeMeshes() {
 		console.log("AgentManager: Initialisation des InstancedMesh...");
-		// Matériaux (Ajout du matériau pour les cheveux)
+		// Matériaux (Ajout des matériaux pour le torse détaillé)
 		this.baseMaterials.skin = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.6, metalness: 0.1, name: 'AgentSkinMat' });
-		// Torso Color sera appliqué par instance via vertexColors ou instanceColor
-		this.baseMaterials.torso = new THREE.MeshStandardMaterial({
-            color: this.config.torsoColor ?? 0x800080, // Couleur par défaut
-            roughness: 0.5, metalness: 0.2, name: 'AgentTorsoMat',
-            // vertexColors: true // Décommenter si on utilise des couleurs par vertex
-        });
+		this.baseMaterials.shirt = new THREE.MeshStandardMaterial({ color: 0x4466cc, roughness: 0.7, metalness: 0.1, name: 'AgentShirtMat' });
+		this.baseMaterials.belt = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.6, metalness: 0.2, name: 'AgentBeltMat' });
+		this.baseMaterials.pants = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.7, metalness: 0.1, name: 'AgentPantsMat' });
 		this.baseMaterials.hand = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.7, metalness: 0.1, name: 'AgentHandMat' });
-        // Matériaux séparés pour la chaussure (si on voulait des couleurs différentes)
-		// this.baseMaterials.shoeTop = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7, metalness: 0.1, name: 'AgentShoeTopMat' });
-		// this.baseMaterials.shoeSole = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8, metalness: 0.1, name: 'AgentShoeSoleMat' });
-        // Pour InstancedMesh, un seul matériau est plus simple
-        this.baseMaterials.shoe = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7, metalness: 0.1, name: 'AgentShoeMat' });
-        this.baseMaterials.hair = new THREE.MeshStandardMaterial({
-            color: 0x332211, // Brun foncé
-            roughness: 0.8, // Assez rugueux
-            metalness: 0.1, // Peu métallique
-            name: 'AgentHairMat'
-        });
-        this.baseMaterials.faceFeature = new THREE.MeshBasicMaterial({
-            color: 0x000000, // Noir
-            name: 'AgentFaceFeatureMat'
-        });
-		// Matériau pour le marqueur de débogage
-        this.baseMaterials.agentMarker = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
-		// this.baseMaterials.homeMarker = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
-		// this.baseMaterials.workMarker = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+		this.baseMaterials.shoe = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7, metalness: 0.1, name: 'AgentShoeMat' });
+		this.baseMaterials.hair = new THREE.MeshStandardMaterial({
+			color: 0x332211,
+			roughness: 0.8,
+			metalness: 0.1,
+			name: 'AgentHairMat'
+		});
+		this.baseMaterials.faceFeature = new THREE.MeshBasicMaterial({
+			color: 0x000000,
+			name: 'AgentFaceFeatureMat'
+		});
+		this.baseMaterials.agentMarker = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
 
 		// Géométries de base
 		const torsoRadius = this.config.torsoRadius ?? 1.5;
-		const torsoLength = this.config.torsoLength ?? 1.5;
+		const torsoLength = this.config.torsoLength ?? 2.0; // Augmenté pour le nouveau design
 		const handRadius = this.config.handRadius ?? 0.8;
 		const handLength = this.config.handLength ?? 1.0;
 
@@ -377,25 +367,71 @@ export default class AgentManager {
 		rightEyeGeom.dispose();
 		mouthGeomTransformed.dispose();
 
-		this.baseGeometries.torso = createCapsuleGeometry(torsoRadius, torsoLength, 24);
+		// --- NOUVEAU : Création du torse détaillé ---
+		const beltHeight = 0.2;
+		const remainingLength = torsoLength - beltHeight;
+		const shirtHeight = remainingLength * 0.7; // 70% pour la chemise
+		const pantsHeight = remainingLength * 0.3; // 30% pour le pantalon
+
+		// Créer les géométries pour chaque partie du torse
+		const shirtCylinder = new THREE.CylinderGeometry(torsoRadius, torsoRadius, shirtHeight, 24);
+		const beltCylinder = new THREE.CylinderGeometry(torsoRadius, torsoRadius, beltHeight, 24);
+		const pantsCylinder = new THREE.CylinderGeometry(torsoRadius, torsoRadius, pantsHeight, 24);
+		const torsoTopCap = new THREE.SphereGeometry(torsoRadius, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+		const torsoBottomCap = new THREE.SphereGeometry(torsoRadius, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
+		const shirtLine = new THREE.BoxGeometry(0.1, shirtHeight, 0.1);
+
+		// Positionner les parties du torse
+		const shirtY = (beltHeight + pantsHeight) / 2;
+		const beltY = (pantsHeight - shirtHeight) / 2;
+		const pantsY = -(shirtHeight + beltHeight) / 2;
+		const capY = torsoLength / 2;
+
+		// Créer des matrices de transformation pour chaque partie
+		const shirtMatrix = new THREE.Matrix4().makeTranslation(0, shirtY, 0);
+		const beltMatrix = new THREE.Matrix4().makeTranslation(0, beltY, 0);
+		const pantsMatrix = new THREE.Matrix4().makeTranslation(0, pantsY, 0);
+		const topCapMatrix = new THREE.Matrix4().makeTranslation(0, capY, 0);
+		const bottomCapMatrix = new THREE.Matrix4().makeTranslation(0, -capY, 0).multiply(new THREE.Matrix4().makeRotationX(Math.PI));
+		const shirtLineMatrix = new THREE.Matrix4().makeTranslation(0, shirtY, torsoRadius - 0.05);
+
+		// Appliquer les transformations aux géométries
+		shirtCylinder.applyMatrix4(shirtMatrix);
+		beltCylinder.applyMatrix4(beltMatrix);
+		pantsCylinder.applyMatrix4(pantsMatrix);
+		torsoTopCap.applyMatrix4(topCapMatrix);
+		torsoBottomCap.applyMatrix4(bottomCapMatrix);
+		shirtLine.applyMatrix4(shirtLineMatrix);
+
+		// Fusionner les géométries en deux groupes pour éviter les problèmes de fusion
+		const upperTorso = mergeGeometries([shirtCylinder, torsoTopCap, shirtLine], true);
+		const lowerTorso = mergeGeometries([beltCylinder, pantsCylinder, torsoBottomCap], true);
+
+		// Fusionner les deux groupes
+		this.baseGeometries.torso = mergeGeometries([upperTorso, lowerTorso], true);
+
+		// Nettoyer les géométries temporaires
+		shirtCylinder.dispose();
+		beltCylinder.dispose();
+		pantsCylinder.dispose();
+		torsoTopCap.dispose();
+		torsoBottomCap.dispose();
+		shirtLine.dispose();
+		upperTorso.dispose();
+		lowerTorso.dispose();
+
 		this.baseGeometries.hand = createCapsuleGeometry(handRadius, handLength, 12);
-		// Fusionner la chaussure existante
 		const shoeParts = createShoeGeometry();
 		this.baseGeometries.shoe = mergeGeometries([shoeParts.top, shoeParts.sole], false);
-		shoeParts.top.dispose(); shoeParts.sole.dispose();
+		shoeParts.top.dispose();
+		shoeParts.sole.dispose();
 
-		// Géométrie pour le marqueur de débogage (losange)
-        this.baseGeometries.agentMarker = new THREE.OctahedronGeometry(0.5);
-		// this.baseGeometries.homeMarker = new THREE.BoxGeometry(0.6, 0.6, 0.6);
-		// this.baseGeometries.workMarker = new THREE.SphereGeometry(0.4);
-
+		this.baseGeometries.agentMarker = new THREE.OctahedronGeometry(0.5);
 
 		// Création des InstancedMesh
 		const createInstMesh = (name, geom, mat, count, needsColor = false) => {
 			console.log(`Creating InstancedMesh '${name}' with count ${count}`);
-			// Créer l'InstancedMesh en passant mat tel quel (material ou array de materials)
 			const mesh = new THREE.InstancedMesh(geom, mat, count);
-			// Si mat est un tableau (multi-material), activer la mise à jour des groupes
 			if (Array.isArray(mat)) {
 				mesh.geometry.groupsNeedUpdate = true;
 			}
@@ -413,29 +449,36 @@ export default class AgentManager {
 			this.instanceMeshes[name] = mesh;
 		};
 
-        // Head fusionné avec cheveux : passer un tableau de matériaux (skin, hair)
-        createInstMesh('head', this.baseGeometries.head, [
-            this.baseMaterials.skin,
-            this.baseMaterials.hair,
-            this.baseMaterials.faceFeature,
-            this.baseMaterials.faceFeature,
-            this.baseMaterials.faceFeature
-        ], this.maxAgents);
-        createInstMesh('torso', this.baseGeometries.torso, this.baseMaterials.torso, this.maxAgents, true);
-        createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2);
-        createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2);
+		// Head fusionné avec cheveux : passer un tableau de matériaux
+		createInstMesh('head', this.baseGeometries.head, [
+			this.baseMaterials.skin,
+			this.baseMaterials.hair,
+			this.baseMaterials.faceFeature,
+			this.baseMaterials.faceFeature,
+			this.baseMaterials.faceFeature
+		], this.maxAgents);
 
-        // Créer les meshes pour les marqueurs de débogage
-        if (this.experience.isDebugMode) {
-             createInstMesh('agentMarker', this.baseGeometries.agentMarker, this.baseMaterials.agentMarker, this.maxAgents);
-            // createInstMesh('homeMarker', this.baseGeometries.homeMarker, this.baseMaterials.homeMarker, this.maxAgents);
-            // createInstMesh('workMarker', this.baseGeometries.workMarker, this.baseMaterials.workMarker, this.maxAgents);
-        }
+		// Torso avec les nouveaux matériaux
+		createInstMesh('torso', this.baseGeometries.torso, [
+			this.baseMaterials.shirt,
+			this.baseMaterials.belt,
+			this.baseMaterials.pants,
+			this.baseMaterials.shirt,
+			this.baseMaterials.pants,
+			this.baseMaterials.faceFeature
+		], this.maxAgents, true);
 
-        // Réinitialiser le pool
-        this.activeCount = 0;
-        this.agentToInstanceId.clear();
-        this.instanceIdToAgent.fill(null); // Remplir de null
+		createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2);
+		createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2);
+
+		if (this.experience.isDebugMode) {
+			createInstMesh('agentMarker', this.baseGeometries.agentMarker, this.baseMaterials.agentMarker, this.maxAgents);
+		}
+
+		// Réinitialiser le pool
+		this.activeCount = 0;
+		this.agentToInstanceId.clear();
+		this.instanceIdToAgent.fill(null);
 		console.log("InstancedMeshes créés:", Object.keys(this.instanceMeshes));
 	}
 
