@@ -16,12 +16,12 @@ export default class RainEffect {
         
         // Configuration
         this._intensity = 0;            // Intensité (0-1), modifie la visibilité et la quantité
-        this.dropCount = 10000;         // Nombre de gouttes de pluie
-        this.rainSpeed = 10;            // Vitesse de base de la pluie
-        this.rainArea = 40;             // Zone de pluie
-        this.rainHeight = 30;           // Hauteur maximale de la pluie
-        this.minDropLength = 0.3;       // Longueur minimale des gouttes
-        this.maxDropLength = 0.7;       // Longueur maximale des gouttes
+        this.dropCount = 15000;         // Nombre de gouttes de pluie (réduit pour meilleures performances)
+        this.rainSpeed = 15;            // Vitesse de base de la pluie (augmentée)
+        this.rainArea = 60;             // Zone de pluie - rayon autour de la caméra (augmentée)
+        this.rainHeight = 40;           // Hauteur maximale de la pluie (augmentée)
+        this.minDropLength = 0.4;       // Longueur minimale des gouttes (augmentée)
+        this.maxDropLength = 1.0;       // Longueur maximale des gouttes (augmentée)
         
         // Objets Three.js
         this.rainObject = null;
@@ -43,34 +43,46 @@ export default class RainEffect {
         const dropEnds = [];
         const dropParams = [];
         
-        const halfRainArea = this.rainArea / 2;
-        
+        // Distribution des gouttes en cercle autour du centre
         for (let i = 0; i < this.dropCount; i++) {
-            // Position XZ aléatoire dans la zone
-            const x = THREE.MathUtils.randFloatSpread(this.rainArea);
-            const z = THREE.MathUtils.randFloatSpread(this.rainArea);
-            // Position Y aléatoire pour distribuer la hauteur
-            const y = THREE.MathUtils.randFloat(0, this.rainHeight);
-            // Longueur de la goutte
-            const length = THREE.MathUtils.randFloat(this.minDropLength, this.maxDropLength);
-            // Vitesse de la goutte (variation)
-            const speed = THREE.MathUtils.randFloat(0.8, 1.2);
+            // Distribution circulaire pour une meilleure couverture visuelle
+            const angle = Math.random() * Math.PI * 2; // Angle aléatoire
+            
+            // Utiliser une racine carrée pour une distribution uniforme en surface
+            // (évite la concentration au centre)
+            const radius = Math.sqrt(Math.random()) * this.rainArea;
+            
+            // Position XZ basée sur l'angle et le rayon (distribution circulaire)
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius;
+            
+            // Position Y basée sur une distribution exponentielle modifiée
+            // (plus de gouttes en haut qu'en bas pour un effet plus réaliste)
+            const heightFactor = Math.pow(Math.random(), 0.5); // Exposant < 1 donne plus de concentration en haut
+            const y = heightFactor * this.rainHeight - this.rainHeight * 0.5;
+            
+            // Longueur de la goutte (proportionnelle à la vitesse pour les grosses gouttes)
+            const speedFactor = THREE.MathUtils.randFloat(0.8, 1.2);
+            const length = THREE.MathUtils.lerp(
+                this.minDropLength,
+                this.maxDropLength,
+                speedFactor - 0.8 // Normaliser entre 0 et 1
+            );
             
             // Chaque goutte de pluie est une ligne avec deux points
             positions.push(
-                x, y, z,     // Point de départ de la ligne
-                x, y - length, z  // Point de fin de la ligne (vers le bas)
+                x, y, z,                 // Point de départ de la ligne
+                x, y - length, z         // Point de fin de la ligne (vers le bas)
             );
             
-            // Paramètres pour les deux points (utilisés dans le shader)
-            // 0 = point de départ, 1 = point de fin
+            // Paramètres pour les points (0 = point de départ, 1 = point de fin)
             dropEnds.push(0, 1);
             
-            // Paramètres supplémentaires (vitesse et décalage)
+            // Paramètres supplémentaires (vitesse, décalage, longueur)
             dropParams.push(
-                speed, 
-                THREE.MathUtils.randFloat(0, this.rainHeight), // Décalage initial pour éviter un pattern visible
-                length
+                speedFactor,                              // Vitesse
+                THREE.MathUtils.randFloat(0, this.rainHeight), // Décalage initial
+                length                                    // Longueur 
             );
         }
         
@@ -80,29 +92,50 @@ export default class RainEffect {
         this.rainGeometry.setAttribute('dropEnd', new THREE.Float32BufferAttribute(dropEnds, 1));
         this.rainGeometry.setAttribute('dropParams', new THREE.Float32BufferAttribute(dropParams, 3));
         
-        // Créer le matériau avec un shader personnalisé
-        this.rainMaterial = new THREE.ShaderMaterial({
+        // Créer le matériau avec un shader personnalisé sans variables intégrées de Three.js
+        this.rainMaterial = new THREE.RawShaderMaterial({
             uniforms: {
                 time: { value: 0 },
                 intensity: { value: this._intensity },
                 rainSpeed: { value: this.rainSpeed },
                 rainHeight: { value: this.rainHeight },
+                cameraForward: { value: new THREE.Vector3(0, 0, -1) },
+                modelViewMatrix: { value: new THREE.Matrix4() },
+                projectionMatrix: { value: new THREE.Matrix4() },
                 fogColor: { value: new THREE.Color(0x000000) },
                 fogNear: { value: 1.0 },
                 fogFar: { value: 30.0 },
                 fogDensity: { value: 0.1 }
             },
             vertexShader: `
+                precision highp float;
+                precision highp int;
+                
+                // Custom uniforms
                 uniform float time;
                 uniform float intensity;
                 uniform float rainSpeed;
                 uniform float rainHeight;
+                uniform vec3 cameraForward;
+                uniform mat4 modelViewMatrix;
+                uniform mat4 projectionMatrix;
                 
+                // Custom attributes
+                attribute vec3 position;
                 attribute float dropEnd;
                 attribute vec3 dropParams;
                 
+                // Varyings
                 varying float vDropEnd;
                 varying float vDistance;
+                
+                // Fonction pour obtenir une position sur un cercle
+                vec2 getCircularPosition(float radius, float angle) {
+                    return vec2(
+                        cos(angle) * radius,
+                        sin(angle) * radius
+                    );
+                }
                 
                 void main() {
                     vDropEnd = dropEnd;
@@ -112,27 +145,46 @@ export default class RainEffect {
                     float dropOffset = dropParams.y;
                     float dropLength = dropParams.z;
                     
-                    // Ajuster la position Y de la goutte en fonction du temps
-                    vec3 pos = position;
+                    // Calculer l'angle et le rayon depuis l'origine pour cette goutte
+                    float initialAngle = atan(position.z, position.x);
+                    float radius = length(vec2(position.x, position.z));
+                    
+                    // Calculer l'angle de la caméra dans le plan XZ pour orienter les gouttes
+                    float cameraAngle = atan(cameraForward.z, cameraForward.x);
+                    
+                    // Calculer la position XZ de la goutte autour de la caméra
+                    vec2 circularPos = getCircularPosition(radius, initialAngle + cameraAngle);
+                    
+                    // Position finale des gouttes, centrée sur la caméra
+                    vec3 finalPos = vec3(
+                        circularPos.x,
+                        position.y,
+                        circularPos.y
+                    );
+                    
+                    // Animer la chute en fonction du temps
                     float fallSpeed = rainSpeed * dropSpeed * intensity;
-                    float yPos = mod(pos.y - time * fallSpeed + dropOffset, rainHeight);
+                    float yPos = mod(finalPos.y - time * fallSpeed + dropOffset, rainHeight) - rainHeight * 0.5;
                     
                     // Si l'intensité est 0, déplacer les gouttes très loin (invisibles)
                     if (intensity < 0.01) {
                         yPos = -1000.0;
                     }
                     
-                    // Point de départ ou de fin
-                    pos.y = yPos - dropEnd * dropLength;
+                    // Ajuster la position Y en fonction de l'extrémité de la goutte
+                    finalPos.y = yPos - dropEnd * dropLength;
                     
                     // Position dans l'espace caméra
-                    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                    vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
                     vDistance = -mvPosition.z;
                     
                     gl_Position = projectionMatrix * mvPosition;
                 }
             `,
             fragmentShader: `
+                precision highp float;
+                precision highp int;
+                
                 uniform float intensity;
                 uniform vec3 fogColor;
                 uniform float fogNear;
@@ -162,7 +214,7 @@ export default class RainEffect {
                     
                     // Appliquer le brouillard
                     if (fogFactor > 0.001) {
-                        color = mix(color, fogColor, min(fogFactor, 0.8)); // Limiter à 0.8 pour préserver un peu la couleur de la pluie
+                        color = mix(color, fogColor, min(fogFactor, 0.8));
                     }
                     
                     gl_FragColor = vec4(color, alpha);
@@ -171,7 +223,7 @@ export default class RainEffect {
             transparent: true,
             depthWrite: false,
             blending: THREE.AdditiveBlending,
-            fog: false
+            side: THREE.DoubleSide
         });
         
         // Créer l'objet
@@ -235,14 +287,28 @@ export default class RainEffect {
             console.warn("Erreur lors de la mise à jour du brouillard dans la pluie:", error);
         }
         
-        // Déplacer la pluie pour qu'elle suive la caméra
+        // Positionner la pluie pour qu'elle suive la caméra exactement
         if (this.camera) {
-            const cameraPosition = this.camera.position;
-            this.rainObject.position.set(
-                cameraPosition.x,
-                0,
-                cameraPosition.z
-            );
+            // Obtenir la position exacte de la caméra
+            const cameraPosition = this.camera.position.clone();
+            
+            // Calculer la direction de vue de la caméra (pour le shader)
+            const cameraDirection = new THREE.Vector3(0, 0, -1);
+            cameraDirection.applyQuaternion(this.camera.quaternion);
+            
+            // Mettre à jour les uniforms pour la caméra
+            this.rainMaterial.uniforms.cameraForward.value.copy(cameraDirection);
+            
+            // Pour le RawShaderMaterial, nous devons passer les matrices manuellement
+            // Copier les matrices depuis la caméra
+            this.rainMaterial.uniforms.modelViewMatrix.value.copy(this.camera.matrixWorldInverse);
+            this.rainMaterial.uniforms.projectionMatrix.value.copy(this.camera.projectionMatrix);
+            
+            // Centrer la pluie directement sur la position de la caméra
+            this.rainObject.position.copy(cameraPosition);
+            
+            // Garder la rotation à zéro pour que la pluie tombe toujours verticalement
+            this.rainObject.rotation.set(0, 0, 0);
         }
     }
     
@@ -298,4 +364,4 @@ export default class RainEffect {
         this.rainGeometry = null;
         this.rainMaterial = null;
     }
-} 
+}
