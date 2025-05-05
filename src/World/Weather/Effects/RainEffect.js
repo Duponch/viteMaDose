@@ -33,11 +33,11 @@ export default class RainEffect {
         
         // Configuration des impacts de gouttes
         this.enableSplashes = true;     // Activer/désactiver les impacts de gouttes
-        this.maxSplashes = 300;         // Nombre maximum d'impacts affichés simultanément (augmenté de 100 à 300)
+        this.maxSplashes = 2000;         // Nombre maximum d'impacts affichés simultanément (augmenté de 100 à 300)
         this.splashSize = { min: 0.8, max: 2.2 }; // Taille des impacts (augmentée)
-        this.splashDuration = { min: 0.2, max: 0.5 }; // Durée de vie plus courte pour plus de rafraîchissement
-        this.splashRate = 120;          // Taux de génération d'impacts par seconde (considérablement augmenté)
-        this.splashAreaSize = 25;       // Zone un peu plus concentrée pour mieux voir les impacts
+        this.splashDuration = { min: 0.3, max: 0.6 }; // Durée de vie plus courte pour plus de rafraîchissement
+        this.splashRate = 2000;          // Taux de génération d'impacts par seconde (considérablement augmenté)
+        this.splashAreaSize = 50;       // Zone un peu plus concentrée pour mieux voir les impacts
         
         // Objets Three.js
         this.rainObject = null;
