@@ -11,6 +11,7 @@ export default class WeatherState {
      * @param {number} fogDensity - Densité du brouillard (0-1)
      * @param {number} sunBrightness - Luminosité du soleil (0-1)
      * @param {number} lightningIntensity - Intensité des éclairs (0-1)
+     * @param {number} rainbowOpacity - Opacité de l'arc-en-ciel (0-1)
      */
     constructor(
         type = 'clear',
@@ -19,7 +20,8 @@ export default class WeatherState {
         rainIntensity = 0,
         fogDensity = 0,
         sunBrightness = 1.0,
-        lightningIntensity = 0
+        lightningIntensity = 0,
+        rainbowOpacity = 0
     ) {
         this.type = type;
         this.cloudDensity = cloudDensity;
@@ -28,6 +30,7 @@ export default class WeatherState {
         this.fogDensity = fogDensity;
         this.sunBrightness = sunBrightness;
         this.lightningIntensity = lightningIntensity;
+        this.rainbowOpacity = rainbowOpacity;
     }
 
     /**
@@ -42,7 +45,8 @@ export default class WeatherState {
             this.rainIntensity,
             this.fogDensity,
             this.sunBrightness,
-            this.lightningIntensity
+            this.lightningIntensity,
+            this.rainbowOpacity
         );
     }
 } 
