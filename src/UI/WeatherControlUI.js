@@ -24,7 +24,7 @@ export default class WeatherControlUI {
                     rainIntensity: 0,
                     cloudDensity: 0.3, // Valeur par défaut dans CloudSystem
                     cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
-                    fogDensity: 0,     // Pas de brouillard par défaut
+                    fogDensity: 0.03,     // Valeur par défaut du brouillard
                     lightningIntensity: 0 // Pas d'éclairs par défaut
                 };
                 
