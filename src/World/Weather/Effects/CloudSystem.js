@@ -55,7 +55,10 @@ export default class CloudSystem {
             flatShading: true,
             transparent: true,
             opacity: this.cloudOpacity,
-            depthWrite: false // Améliore le rendu avec transparence
+            depthWrite: true,
+            depthTest: true,
+            alphaTest: 0.01,
+            blending: THREE.NormalBlending
         });
         
         // Créer les formes de base des nuages
@@ -253,10 +256,10 @@ export default class CloudSystem {
         if (this.cloudDensity > 0.7) {
             // Nuages denses = plus gris/sombres
             const darknessFactor = 1.0 - (this.cloudDensity - 0.7) * 0.5;
-            this.cloudMaterial.color.setRGB(darknessFactor, darknessFactor, darknessFactor);
+            this.cloudMaterial.color = new THREE.Color(darknessFactor, darknessFactor, darknessFactor);
         } else {
             // Nuages légers = plus blancs
-            this.cloudMaterial.color.setRGB(1, 1, 1);
+            this.cloudMaterial.color = new THREE.Color(1, 1, 1);
         }
     }
     
@@ -265,72 +268,54 @@ export default class CloudSystem {
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
      */
     update(deltaTime) {
-        // Vérifier si on doit effectuer une mise à jour complète du placement
-        if (this.pendingFullUpdate) {
-            const currentTime = this.weatherSystem.time.elapsed;
-            // Éviter les mises à jour trop fréquentes (max 1x par seconde)
-            if (currentTime - this.lastFullUpdateTime > 1000) {
-                this.placeClouds();
-            }
-        }
-        
-        // Si pas de meshes, rien à faire
         if (!this.cloudInstancedMeshes || this.cloudInstancedMeshes.length === 0) return;
+
+        // Obtenir la position de la caméra
+        const cameraPosition = this.weatherSystem.camera.instance.position;
         
-        // Calculer la vitesse de déplacement, ajustée selon densité
-        const speedMultiplier = 1.0 - this.cloudDensity * 0.3;
-        const actualCloudSpeed = this.cloudAnimationSpeed * deltaTime * speedMultiplier;
-        
-        // Obtenir la limite de disparition des nuages
-        const mapSize = this.weatherSystem.experience.world.cityManager.config.mapSize;
-        const limit = mapSize * 1.5 * 1.1;
+        // Calculer la vitesse de déplacement
+        const speed = this.cloudAnimationSpeed * deltaTime;
         
         // Mettre à jour chaque mesh instancié
         this.cloudInstancedMeshes.forEach(instancedMesh => {
             let needsMatrixUpdate = false;
             
-            // Mise à jour de chaque instance
+            // Tableau pour stocker les distances et indices
+            const distances = [];
+            
+            // Calculer les distances à la caméra pour chaque instance
             for (let i = 0; i < instancedMesh.count; i++) {
                 instancedMesh.getMatrixAt(i, _tempMatrix);
                 _tempMatrix.decompose(_tempPosition, _tempQuaternion, _tempScale);
                 
-                // Ignorer les instances "cachées" (sous le terrain)
-                if (_tempPosition.y < -500) {
-                    // S'assurer que les nuages cachés restent sous le terrain
-                    _tempPosition.set(0, -1000, 0);
-                    _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
-                    instancedMesh.setMatrixAt(i, _tempMatrix);
-                    needsMatrixUpdate = true;
-                    continue;
-                }
+                // Calculer la distance à la caméra
+                const distance = _tempPosition.distanceTo(cameraPosition);
+                distances.push({ index: i, distance: distance });
+            }
+            
+            // Trier les instances par distance (du plus éloigné au plus proche)
+            distances.sort((a, b) => b.distance - a.distance);
+            
+            // Mettre à jour les positions dans l'ordre trié
+            distances.forEach(({ index }) => {
+                instancedMesh.getMatrixAt(index, _tempMatrix);
+                _tempMatrix.decompose(_tempPosition, _tempQuaternion, _tempScale);
                 
-                // Déplacer le nuage (vitesse variable selon la taille)
-                const speed = actualCloudSpeed * (1.0 + (_tempScale.x - 5.0) * 0.02);
+                // Déplacer le nuage
                 _tempPosition.x += speed;
                 
-                // Si le nuage sort des limites, le replacer de l'autre côté
-                if (_tempPosition.x > limit) {
-                    _tempPosition.x = -limit;
-                    _tempPosition.z = (Math.random() - 0.5) * limit * 1.5;
-                    _tempPosition.y = skyHeight + (Math.random() - 0.5) * 100;
-                    
-                    // Ajuster la taille en fonction de la distance au centre
-                    const distanceFromCenter = Math.abs(_tempPosition.z) / (limit * 1.5);
-                    const newScale = THREE.MathUtils.lerp(
-                        15.0, // Grande taille au centre
-                        5.0,  // Taille plus petite aux bords
-                        distanceFromCenter
-                    );
-                    _tempScale.set(newScale, newScale, newScale);
+                // Vérifier les limites et réinitialiser si nécessaire
+                if (_tempPosition.x > 1000) {
+                    _tempPosition.x = -1000;
+                    _tempPosition.z = (Math.random() - 0.5) * 2000;
                 }
                 
                 // Recomposer la matrice
                 _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
-                instancedMesh.setMatrixAt(i, _tempMatrix);
+                instancedMesh.setMatrixAt(index, _tempMatrix);
                 needsMatrixUpdate = true;
-            }
+            });
             
-            // Mettre à jour la matrice si nécessaire
             if (needsMatrixUpdate) {
                 instancedMesh.instanceMatrix.needsUpdate = true;
             }
