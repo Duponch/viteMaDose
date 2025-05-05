@@ -15,8 +15,8 @@ export default class FogEffect {
         this.experience = weatherSystem.experience;
         
         // Configuration
-        this._fogDensity = 0;        // Densité du brouillard (0-1)
-        this.minFogExp = 0.0005;     // Densité minimale du brouillard exponentiel
+        this._fogDensity = 0.03;        // Densité du brouillard (0-1)
+        this.minFogExp = 0;     // Densité minimale du brouillard exponentiel
         this.maxFogExp = 0.02;       // Densité maximale du brouillard exponentiel
         this.isUpdating = false;     // Verrou pour éviter les mises à jour concurrentes
         this.needsUpdate = false;    // Drapeau pour indiquer qu'une mise à jour est nécessaire
@@ -56,9 +56,10 @@ export default class FogEffect {
             this.originalFogParams = this.saveFogParams();
         }
         
-        // Créer notre propre brouillard exponentiel avec une densité nulle pour commencer
+        // Créer notre propre brouillard exponentiel avec la densité initiale
         const fogColor = this.calculateFogColor();
-        this.weatherFog = new THREE.FogExp2(fogColor, this.minFogExp);
+        const initialDensity = this._fogDensity * (this.maxFogExp - this.minFogExp) + this.minFogExp;
+        this.weatherFog = new THREE.FogExp2(fogColor, initialDensity);
         
         // Remplacer le brouillard de la scène par le nôtre
         this.scene.fog = this.weatherFog;
