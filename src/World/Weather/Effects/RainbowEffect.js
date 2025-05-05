@@ -98,7 +98,7 @@ export default class RainbowEffect {
         
         // Distance à la skybox
         const skyboxRadius = this.weatherSystem.environment.skyboxRadius;
-        const distance = skyboxRadius * 1.1; // Légèrement en avant de la skybox
+        const distance = skyboxRadius * 1; // Légèrement en avant de la skybox
         
         // Position finale (toujours au même endroit par rapport à la caméra)
         const position = cameraPosition.clone().add(
