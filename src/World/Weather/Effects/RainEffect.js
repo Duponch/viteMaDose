@@ -28,35 +28,23 @@ export default class RainEffect {
         this.cameraFollowFactor = 0.15; // Facteur de suivi de la caméra (entre 0 et 1) - réduit pour moins d'attraction
         this.verticalFollowFactor = 0.3; // Facteur de suivi vertical de la caméra (plus élevé pour mieux suivre les mouvements verticaux)
         this.inertiaFactor = 0.92;      // Facteur d'inertie (entre 0 et 1) - plus proche de 1 = plus d'inertie
-        this.lastCameraPosition = null; // Dernière position de la caméra pour l'inertie
-        this.rainVelocity = new THREE.Vector3(0, 0, 0); // Vélocité actuelle du système de pluie
+        this.lastCameraPosition = null;
         
-        // Vecteurs réutilisables pour éviter les allocations
+        // Vecteurs temporaires pour les calculs
         this._tempVector1 = new THREE.Vector3();
         this._tempVector2 = new THREE.Vector3();
         this._tempVector3 = new THREE.Vector3();
         this._tempVector4 = new THREE.Vector3();
+        this.rainVelocity = new THREE.Vector3();
         
-        // Configuration des impacts de gouttes
-        this.enableSplashes = true;     // Activer/désactiver les impacts de gouttes
-        this.maxSplashes = 2000;         // Nombre maximum d'impacts affichés simultanément (augmenté de 100 à 300)
+        // Configuration des impacts
+        this.enableSplashes = true;
+        this.maxSplashes = 1000;
+        this.splashRate = 20;
+        this.timeToNextSplash = 0;
+        this.splashAreaSize = 50;       // Zone un peu plus concentrée pour mieux voir les impacts
         this.splashSize = { min: 0.8, max: 2.2 }; // Taille des impacts (augmentée)
         this.splashDuration = { min: 0.05, max: 0.1 }; // Durée de vie plus courte pour plus de rafraîchissement
-        this.splashRate = 2000;          // Taux de génération d'impacts par seconde (considérablement augmenté)
-        this.splashAreaSize = 50;       // Zone un peu plus concentrée pour mieux voir les impacts
-        
-        // Objets Three.js
-        this.rainObject = null;
-        this.rainGeometry = null;
-        this.rainMaterial = null;
-        
-        // Objets pour les impacts de gouttes
-        this.splashesObject = null;
-        this.splashesGeometry = null;
-        this.splashesMaterial = null;
-        this.splashesPool = [];         // Pool d'impacts de gouttes
-        this.activeSplashes = [];       // Impacts actuellement visibles
-        this.timeToNextSplash = 0;      // Temps avant le prochain impact
         
         // Initialisation
         this.initialize();
@@ -65,22 +53,36 @@ export default class RainEffect {
     }
     
     /**
-     * Initialise l'effet de pluie avec un système de particules
+     * Initialise l'effet de pluie de manière asynchrone
      */
-    initialize() {
-        // Initialiser la pluie
-        this.initializeRain();
-        
-        // Initialiser les impacts de gouttes si activés
-        if (this.enableSplashes) {
-            this.initializeSplashes();
+    async initialize() {
+        try {
+            await this.initializeRain();
+            if (this.enableSplashes) {
+                await this.initializeSplashes();
+            }
+        } catch (error) {
+            console.error("Erreur lors de l'initialisation de l'effet de pluie:", error);
         }
     }
     
     /**
      * Initialise l'effet de pluie avec un système de particules
      */
-    initializeRain() {
+    async initializeRain() {
+        // Chargement des shaders
+        const [vertexResponse, fragmentResponse] = await Promise.all([
+            fetch('src/World/Shaders/RainVertex.glsl'),
+            fetch('src/World/Shaders/RainFragment.glsl')
+        ]);
+        
+        if (!vertexResponse.ok || !fragmentResponse.ok) {
+            throw new Error(`Erreur chargement shaders: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`);
+        }
+        
+        const vertexShader = await vertexResponse.text();
+        const fragmentShader = await fragmentResponse.text();
+        
         // Créer la géométrie
         this.rainGeometry = new THREE.BufferGeometry();
         
@@ -119,7 +121,7 @@ export default class RainEffect {
             initialPositions[i * 3 + 2] = z;
             
             // Taille de la goutte - relation avec la vitesse
-            const velocity = THREE.MathUtils.randFloat(0.8, 1.2); 
+            const velocity = THREE.MathUtils.randFloat(0.8, 1.2);
             velocities[i] = velocity;
             
             // Taille basée sur la vitesse (gouttes plus rapides = plus grosses)
@@ -169,117 +171,8 @@ export default class RainEffect {
                 speedIntensityFactor: { value: this.speedIntensityFactor },
                 dropOpacity: { value: this.dropOpacity }
             },
-            vertexShader: `
-                uniform float time;
-                uniform float intensity;
-                uniform float rainSpeed;
-                uniform float rainHeight;
-                uniform vec3 cameraForward;
-                uniform float stretchFactor;
-                uniform float speedIntensityFactor;
-                
-                attribute float size;
-                attribute float velocity;
-                attribute float angle;
-                attribute float offset;
-                
-                varying float vSize;
-                varying float vDistance;
-                varying vec2 vUv;
-                
-                void main() {
-                    // Paramètres de la goutte
-                    vSize = size;
-                    
-                    // Position de base
-                    vec3 basePos = position;
-                    
-                    // Animation de chute
-                    float fallSpeed = rainSpeed * velocity * (1.0 + (intensity - 1.0) * speedIntensityFactor);
-                    // Ajout d'un léger décalage aléatoire à la vitesse pour plus de réalisme
-                    fallSpeed *= (0.9 + 0.2 * fract(sin(dot(vec2(basePos.x, basePos.z), vec2(12.9898, 78.233))) * 43758.5453));
-                    float yPos = mod(basePos.y - time * fallSpeed + offset, rainHeight) - rainHeight * 0.5;
-                    
-                    // Position finale
-                    vec3 finalPos = vec3(
-                        basePos.x,
-                        yPos,
-                        basePos.z
-                    );
-                    
-                    // Si intensité est 0, cacher les gouttes
-                    if (intensity < 0.01) {
-                        finalPos.y = -1000.0;
-                    }
-                    
-                    // Position et taille dans l'espace caméra
-                    vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
-                    vDistance = -mvPosition.z;
-                    
-                    // Appliquer la taille en fonction de la distance et de l'intensité
-                    float sizeBoost = 1.0 + intensity * 0.5;
-                    float pointSize = size * sizeBoost * (300.0 / vDistance); // Adapter taille à la distance
-                    
-                    // Coordonnées UV pour orienter la texture
-                    vUv = vec2(0.5, 0.5);
-                    
-                    gl_PointSize = pointSize;
-                    gl_Position = projectionMatrix * mvPosition;
-                }
-            `,
-            fragmentShader: `
-                uniform sampler2D rainTexture;
-                uniform float intensity;
-                uniform vec3 fogColor;
-                uniform float fogNear;
-                uniform float fogFar;
-                uniform float fogDensity;
-                uniform float dropOpacity;
-                
-                varying float vSize;
-                varying float vDistance;
-                varying vec2 vUv;
-                
-                void main() {
-                    // Orienter les coordonnées UV pour que la pointe de la goutte pointe vers le bas
-                    vec2 rotatedUv = gl_PointCoord;
-                    
-                    // Échantillonner la texture de goutte
-                    vec4 texColor = texture2D(rainTexture, rotatedUv);
-                    
-                    // Transparence de base ajustée par l'intensité et l'opacité configurée
-                    float alpha = texColor.a * intensity * dropOpacity;
-                    
-                    // Traitement du brouillard
-                    float fogFactor = 0.0;
-                    
-                    // Choix du type de brouillard (exponentiel ou linéaire)
-                    #ifdef USE_FOG_EXP2
-                        fogFactor = 1.0 - exp(-fogDensity * vDistance);
-                    #else
-                        fogFactor = smoothstep(fogNear, fogFar, vDistance);
-                    #endif
-                    
-                    // Limiter l'effet de brouillard sur les gouttes pour qu'elles restent plus visibles
-                    fogFactor = min(fogFactor * 0.8, 0.6);
-                    
-                    // Appliquer le brouillard
-                    vec3 finalColor = texColor.rgb;
-                    if (fogFactor > 0.001) {
-                        // Mélanger avec le brouillard mais préserver plus de luminosité
-                        finalColor = mix(finalColor, fogColor * 1.2, fogFactor);
-                        
-                        // Augmenter légèrement l'opacité pour compenser le brouillard
-                        alpha = alpha * (1.0 + fogFactor * 0.3);
-                    }
-                    
-                    // Couleur finale
-                    gl_FragColor = vec4(finalColor, alpha);
-                    
-                    // Rejeter les pixels trop transparents
-                    if (gl_FragColor.a < 0.01) discard;
-                }
-            `,
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
             transparent: true,
             depthWrite: false,
             blending: THREE.AdditiveBlending,
@@ -301,7 +194,20 @@ export default class RainEffect {
     /**
      * Initialise le système d'impacts de gouttes de pluie
      */
-    initializeSplashes() {
+    async initializeSplashes() {
+        // Chargement des shaders
+        const [vertexResponse, fragmentResponse] = await Promise.all([
+            fetch('src/World/Shaders/RainSplashVertex.glsl'),
+            fetch('src/World/Shaders/RainSplashFragment.glsl')
+        ]);
+        
+        if (!vertexResponse.ok || !fragmentResponse.ok) {
+            throw new Error(`Erreur chargement shaders splashes: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`);
+        }
+        
+        const vertexShader = await vertexResponse.text();
+        const fragmentShader = await fragmentResponse.text();
+        
         // Créer la texture des impacts
         const splashTexture = this.createSplashTexture();
         
@@ -312,52 +218,8 @@ export default class RainEffect {
                 time: { value: 0 },
                 intensity: { value: this._intensity }
             },
-            vertexShader: `
-                attribute float size;
-                attribute float life;
-                attribute float maxLife;
-                attribute float rotation;
-                
-                varying vec2 vUv;
-                varying float vLife;
-                
-                void main() {
-                    // Position dans l'espace caméra
-                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                    
-                    // Calculer la taille en fonction de la distance
-                    float pointSize = size * (300.0 / -mvPosition.z);
-                    
-                    // Ratio de vie restante (entre 0 et 1)
-                    vLife = life / maxLife;
-                    
-                    gl_PointSize = pointSize;
-                    gl_Position = projectionMatrix * mvPosition;
-                }
-            `,
-            fragmentShader: `
-                uniform sampler2D splashTexture;
-                uniform float intensity;
-                
-                varying float vLife;
-                
-                void main() {
-                    // Échantillonner la texture d'impact
-                    vec4 texColor = texture2D(splashTexture, gl_PointCoord);
-                    
-                    // Ajuster l'opacité en fonction du temps de vie et de l'intensité
-                    // Fade-in rapide suivi d'un fade-out plus lent
-                    float fadeIn = smoothstep(0.0, 0.1, vLife);
-                    float fadeOut = smoothstep(0.0, 1.0, vLife);
-                    float alpha = texColor.a * fadeIn * (1.0 - fadeOut) * intensity;
-                    
-                    // Couleur finale
-                    gl_FragColor = vec4(texColor.rgb, alpha);
-                    
-                    // Rejeter les pixels trop transparents
-                    if (gl_FragColor.a < 0.01) discard;
-                }
-            `,
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
             transparent: true,
             depthWrite: false,
             blending: THREE.AdditiveBlending
