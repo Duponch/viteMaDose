@@ -532,6 +532,38 @@ export default class RainEffect {
         context.arc(centerX, centerY, radius * 1.2, 0, Math.PI * 2);
         context.fill();
         
+        // Ajouter un effet de volume avec un dégradé radial
+        const volumeGradient = context.createRadialGradient(70, 50, 5, 70, 50, 40);
+        volumeGradient.addColorStop(0, 'rgba(200, 220, 255, 0.15)');
+        volumeGradient.addColorStop(0.5, 'rgba(190, 210, 255, 0.05)');
+        volumeGradient.addColorStop(1, 'rgba(180, 200, 255, 0)');
+        
+        context.globalCompositeOperation = 'source-atop';
+        context.fillStyle = volumeGradient;
+        context.fillRect(25, 25, 80, 70);
+        
+        // Ajouter un reflet brillant en haut à gauche (comme la lumière réfléchie)
+        const refletGradient = context.createRadialGradient(60, 35, 0, 60, 35, 15);
+        refletGradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+        refletGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
+        refletGradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+        
+        context.globalCompositeOperation = 'lighter';
+        context.fillStyle = refletGradient;
+        context.beginPath();
+        context.arc(60, 35, 15, 0, Math.PI * 2);
+        context.fill();
+        
+        // Ajouter un petit reflet secondaire
+        const refletSecondaire = context.createRadialGradient(70, 45, 0, 70, 45, 8);
+        refletSecondaire.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+        refletSecondaire.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+        
+        context.fillStyle = refletSecondaire;
+        context.beginPath();
+        context.arc(70, 45, 8, 0, Math.PI * 2);
+        context.fill();
+        
         // Créer la texture
         const texture = new THREE.Texture(canvas);
         texture.needsUpdate = true;
@@ -893,11 +925,11 @@ export default class RainEffect {
         // Créer une forme de goutte en forme de larme réaliste
         // Utiliser un dégradé vertical avec plus de détails
         const larmeGradient = context.createLinearGradient(64, 20, 64, 100);
-        larmeGradient.addColorStop(0, 'rgba(230, 245, 255, 1.0)');
-        larmeGradient.addColorStop(0.2, 'rgba(220, 240, 255, 0.95)');
-        larmeGradient.addColorStop(0.5, 'rgba(210, 235, 255, 0.9)');
-        larmeGradient.addColorStop(0.8, 'rgba(200, 230, 255, 0.6)');
-        larmeGradient.addColorStop(1.0, 'rgba(190, 225, 255, 0.0)');
+        larmeGradient.addColorStop(0, 'rgba(200, 220, 255, 0.8)');
+        larmeGradient.addColorStop(0.2, 'rgba(190, 210, 255, 0.7)');
+        larmeGradient.addColorStop(0.5, 'rgba(180, 200, 255, 0.6)');
+        larmeGradient.addColorStop(0.8, 'rgba(170, 190, 255, 0.4)');
+        larmeGradient.addColorStop(1.0, 'rgba(160, 180, 255, 0.0)');
         
         // Dessiner la forme de goutte d'eau classique
         context.fillStyle = larmeGradient;
@@ -939,35 +971,35 @@ export default class RainEffect {
         context.fill();
         
         // Ajouter un effet de volume avec un dégradé radial
-        const volumeGradient = context.createRadialGradient(58, 45, 5, 64, 55, 35);
-        volumeGradient.addColorStop(0, 'rgba(255, 255, 255, 0.25)');
-        volumeGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.1)');
-        volumeGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        const volumeGradient = context.createRadialGradient(64, 50, 5, 64, 50, 40);
+        volumeGradient.addColorStop(0, 'rgba(200, 220, 255, 0.15)');
+        volumeGradient.addColorStop(0.5, 'rgba(190, 210, 255, 0.05)');
+        volumeGradient.addColorStop(1, 'rgba(180, 200, 255, 0)');
         
         context.globalCompositeOperation = 'source-atop';
         context.fillStyle = volumeGradient;
         context.fillRect(25, 25, 80, 70);
         
         // Ajouter un reflet brillant en haut à gauche (comme la lumière réfléchie)
-        const refletGradient = context.createRadialGradient(55, 40, 0, 55, 40, 15);
-        refletGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-        refletGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.3)');
+        const refletGradient = context.createRadialGradient(60, 35, 0, 60, 35, 15);
+        refletGradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+        refletGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
         refletGradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
         
         context.globalCompositeOperation = 'lighter';
         context.fillStyle = refletGradient;
         context.beginPath();
-        context.arc(55, 40, 15, 0, Math.PI * 2);
+        context.arc(60, 35, 15, 0, Math.PI * 2);
         context.fill();
         
         // Ajouter un petit reflet secondaire
-        const refletSecondaire = context.createRadialGradient(72, 50, 0, 72, 50, 8);
-        refletSecondaire.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+        const refletSecondaire = context.createRadialGradient(70, 45, 0, 70, 45, 8);
+        refletSecondaire.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
         refletSecondaire.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
         
         context.fillStyle = refletSecondaire;
         context.beginPath();
-        context.arc(72, 50, 8, 0, Math.PI * 2);
+        context.arc(70, 45, 8, 0, Math.PI * 2);
         context.fill();
         
         // Créer la texture
