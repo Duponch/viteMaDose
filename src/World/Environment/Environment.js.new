@@ -1,0 +1,82 @@
+// src/World/Environment/Environment.js
+import * as THREE from 'three';
+import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import Calendar from '../../Utils/Calendar.js';
+import WeatherSystem from '../Weather/WeatherSystem.js';
+import EnvironmentSystem from './EnvironmentSystem.js';
+
+// --- Objets temporaires pour l'update (performance) ---
+const _tempMatrix = new THREE.Matrix4();
+const _tempPosition = new THREE.Vector3();
+const _tempQuaternion = new THREE.Quaternion();
+const _tempScale = new THREE.Vector3();
+
+export default class Environment {
+    constructor(experience, world) {
+        this.experience = experience;
+        this.world = world;
+        this.scene = this.experience.scene;
+        this.debug = this.experience.debug;
+        this.config = this.world.cityManager.config;
+
+        // Supprimé: Config spécifique aux nuages instanciés (maintenant géré par CloudSystem)
+        this.mapSize = this.config.mapSize + 550;
+        this.outerGroundDisplayRadius = 0;
+
+        // --- Propriétés Cycle Jour/Nuit --- (INCHANGÉ)
+        this.cycleEnabled = this.config.dayNightCycleEnabled;
+        this.dayDurationMs = (this.config.dayDurationMinutes ?? 20) * 60 * 1000; // Assurer initialisation
+        const initialNormalizedTime = this.config.startTimeOfDay ?? 0.25;
+		this.cycleTime = (this.dayDurationMs > 0) ? (this.experience.time.elapsed % this.dayDurationMs) : 0; // Initialiser basé sur temps global
+        this.sunDistance = 0;
+
+        // --- Lumières Soleil & Ambiante & Couleurs Ciel --- (INCHANGÉ)
+        this.sunColors = { dawn: new THREE.Color(0xFFCA87), day: new THREE.Color(0xFFFFFF), dusk: new THREE.Color(0xFFB17A), night: new THREE.Color(0x435E7A) };
+        this.sunIntensity = { day: 3.0, night: 0.01 };
+        this.ambientColors = { day: new THREE.Color(0xADCDE7), night: new THREE.Color(0x2B3A4F) };
+        this.ambientIntensity = { day: 0.7, night: 0.1 };
+        this.dayZenithColor = new THREE.Color('#87CEEB');
+        this.nightZenithColor = new THREE.Color('#00001a');
+        this.dayMiddleColor = new THREE.Color('#ADD8E6');
+        this.nightMiddleColor = new THREE.Color('#00002a');
+        this.dayHorizonColor = new THREE.Color('#B0E0E6');
+        this.nightHorizonColor = new THREE.Color('#0b1028');
+
+        // --- Uniforms pour le Shader Skybox --- (INCHANGÉ)
+        this.skyUniforms = {
+            uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
+            uDayFactor: { value: 0.0 },
+            uCurrentZenithColor: { value: new THREE.Color() },
+            uCurrentMiddleColor: { value: new THREE.Color() },
+            uCurrentHorizonColor: { value: new THREE.Color() },
+            uSunInfluenceColor: { value: new THREE.Color(0xffccaa) }
+         };
+
+        // --- Propriétés de la Lune --- (INCHANGÉ)
+        this.moonLight = null; this.moonMesh = null; this.moonDistance = 0;
+        this.moonColor = new THREE.Color('#E8F0F5'); this.moonIntensity = { max: 0.2, min: 0.0 };
+        this.moonSize = 30;
+
+        this.vertexShaderCode = null;
+        this.fragmentShaderCode = null;
+        this.isInitialized = false;
+        this.skyBox = null; this.starsMesh = null; this.outerGroundMesh = null;
+        this.skyboxRadius = 0;
+
+        // --- Intégration du calendrier ---
+        this.calendar = new Calendar({
+            startDate: '2025-04-24', // Peut être rendu configurable plus tard
+            dayDurationMs: this.dayDurationMs
+        });
+
+        // --- Appels d'initialisation ---
+        this.setSunLight();
+        this.setAmbientLight();
+        this.setMoonLight();
+        
+        // --- Système météorologique et environnemental ---
+        this.weatherSystem = null; // Sera initialisé après le chargement complet de l'environnement
+        this.environmentSystem = null; // Système d'environnement (oiseaux, etc.)
+        // --------------------------------------
+    }

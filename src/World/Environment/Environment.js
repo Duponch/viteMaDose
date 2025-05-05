@@ -79,6 +79,87 @@ export default class Environment {
         this.weatherSystem = null; // Sera initialisé après le chargement complet de l'environnement
         this.environmentSystem = null; // Système d'environnement (oiseaux, etc.)
         // --------------------------------------
+
+        // Créer la texture procédurale pour le sol
+        this.outerGroundTexture = this.createOuterGroundTexture();
+    }
+
+    /**
+     * Crée une texture procédurale pour le sol extérieur
+     * @returns {THREE.CanvasTexture} La texture générée
+     */
+    createOuterGroundTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 1024;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base de l'herbe
+        const baseColor = new THREE.Color(0x4c7f33);
+        ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ajouter des variations de couleur pour simuler des touffes d'herbe
+        for (let i = 0; i < 500; i++) {
+            // Position aléatoire
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            
+            // Taille aléatoire
+            const size = Math.random() * 30 + 15;
+            
+            // Variation de couleur (plus claire ou plus foncée)
+            const variation = Math.random() * 40 - 20;
+            const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
+            const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
+            const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
+            
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            
+            // Dessiner une touffe d'herbe
+            ctx.beginPath();
+            const numBlades = 5 + Math.floor(Math.random() * 5);
+            for (let j = 0; j < numBlades; j++) {
+                const angle = (j / numBlades) * Math.PI * 2;
+                const radius = size * (0.7 + Math.random() * 0.6);
+                const px = x + Math.cos(angle) * radius;
+                const py = y + Math.sin(angle) * radius;
+                
+                if (j === 0) {
+                    ctx.moveTo(px, py);
+                } else {
+                    ctx.lineTo(px, py);
+                }
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Ajouter des rochers et des cailloux
+        for (let i = 0; i < 100; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 20 + 5;
+            
+            // Couleur du rocher (gris)
+            const rockColor = new THREE.Color(0x808080);
+            const variation = Math.random() * 30 - 15;
+            const r = Math.max(0, Math.min(255, rockColor.r * 255 + variation));
+            const g = Math.max(0, Math.min(255, rockColor.g * 255 + variation));
+            const b = Math.max(0, Math.min(255, rockColor.b * 255 + variation));
+            
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(10, 10); // Répéter la texture pour couvrir une grande surface
+
+        return texture;
     }
 
 	getdayDurationMs() {
@@ -392,7 +473,13 @@ export default class Environment {
         }
         geometry.attributes.position.needsUpdate = true;
         geometry.computeVertexNormals();
-        const material = new THREE.MeshStandardMaterial({ color: 0x2e3407, metalness: 0.1, roughness: 0.9 });
+        const material = new THREE.MeshStandardMaterial({ 
+            map: this.outerGroundTexture,
+            color: 0x4c7f33,
+            roughness: 0.8,
+            metalness: 0.0,
+            side: THREE.DoubleSide
+        });
         this.outerGroundMesh = new THREE.Mesh(geometry, material);
         this.outerGroundMesh.position.y = -0.1;
         this.outerGroundMesh.receiveShadow = true;
