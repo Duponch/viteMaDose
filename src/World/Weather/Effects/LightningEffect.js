@@ -146,33 +146,151 @@ export default class LightningEffect {
     }
     
     /**
-     * Crée un maillage représentant un éclair avec une forme plus simple
+     * Crée un maillage représentant un éclair avec une forme en zigzag
      * @returns {THREE.Mesh} Le maillage de l'éclair
      */
     createLightningBolt() {
-        // Optimisation: moins de segments, géométrie plus simple
+        // Paramètres pour l'éclair en zigzag
+        const height = 300 + Math.random() * 100; // Hauteur totale de l'éclair
+        const segments = 8 + Math.floor(Math.random() * 4); // Nombre de segments (plus élevé pour plus de détails)
+        const maxOffset = 30; // Déviation maximale du zigzag
+        const thickness = 3 + Math.random() * 2; // Épaisseur de l'éclair
+        
+        // Créer la géométrie en forme de zigzag
         const points = [];
-        const segments = 4 + Math.floor(Math.random() * 2); // 4-5 segments seulement
-        const width = 10 + Math.random() * 15;
-        const height = 300 + Math.random() * 100;
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
         
-        points.push(new THREE.Vector3(0, 0, 0));
+        // Créer les points du zigzag
+        const zigzagPoints = [];
+        zigzagPoints.push(new THREE.Vector3(0, 0, 0)); // Point de départ (haut)
         
-        // Créer des points en zigzag plus simples
+        // Générer le chemin en zigzag vers le bas
         for (let i = 1; i < segments; i++) {
             const t = i / segments;
-            const x = (Math.random() - 0.5) * width * 2;
             const y = -t * height;
-            const z = (Math.random() - 0.5) * width;
-            points.push(new THREE.Vector3(x, y, z));
+            // Plus de zigzag au milieu, moins aux extrémités
+            const intensity = Math.sin(t * Math.PI);
+            const x = (Math.random() - 0.5) * maxOffset * 2 * intensity;
+            zigzagPoints.push(new THREE.Vector3(x, y, 0));
         }
         
-        // Utiliser une géométrie plus simple et optimisée
-        const curve = new THREE.CatmullRomCurve3(points);
-        const geometry = new THREE.TubeGeometry(curve, segments * 2, 1.5, 6, false);
+        // Dernier point (bas)
+        zigzagPoints.push(new THREE.Vector3(
+            (Math.random() - 0.5) * maxOffset * 0.5, 
+            -height, 
+            0
+        ));
         
-        // Utiliser un clone du matériau commun plutôt qu'un nouveau matériau
-        return new THREE.Mesh(geometry, this.lightningMaterial.clone());
+        // Créer des triangles à partir des points du zigzag
+        for (let i = 0; i < zigzagPoints.length - 1; i++) {
+            const current = zigzagPoints[i];
+            const next = zigzagPoints[i + 1];
+            
+            // Direction entre les points
+            const direction = new THREE.Vector3()
+                .subVectors(next, current)
+                .normalize();
+            
+            // Vecteur perpendiculaire pour l'épaisseur
+            const perpendicular = new THREE.Vector3(-direction.y, direction.x, 0)
+                .multiplyScalar(thickness);
+            
+            // Diminuer progressivement l'épaisseur vers le bas
+            const thicknessFactor = 1 - (i / (zigzagPoints.length - 1)) * 0.5;
+            perpendicular.multiplyScalar(thicknessFactor);
+            
+            // 4 coins du segment
+            const v1 = new THREE.Vector3().addVectors(current, perpendicular);
+            const v2 = new THREE.Vector3().subVectors(current, perpendicular);
+            const v3 = new THREE.Vector3().addVectors(next, perpendicular);
+            const v4 = new THREE.Vector3().subVectors(next, perpendicular);
+            
+            // Ajouter les vertices
+            const baseIndex = vertices.length / 3;
+            vertices.push(
+                v1.x, v1.y, v1.z,
+                v2.x, v2.y, v2.z,
+                v3.x, v3.y, v3.z,
+                v4.x, v4.y, v4.z
+            );
+            
+            // Ajouter les indices pour les triangles
+            indices.push(
+                baseIndex, baseIndex + 1, baseIndex + 2,
+                baseIndex + 1, baseIndex + 3, baseIndex + 2
+            );
+            
+            // Ajouter des branches occasionnelles
+            if (i > 1 && i < segments - 2 && Math.random() < 0.4) {
+                const branchLength = height * (0.1 + Math.random() * 0.15);
+                const branchDirection = Math.random() > 0.5 ? 1 : -1;
+                const branchAngle = (Math.PI / 4) * (0.5 + Math.random() * 0.5) * branchDirection;
+                
+                // Calculer la direction de la branche
+                const branchDir = new THREE.Vector3(direction.x, direction.y, 0)
+                    .applyAxisAngle(new THREE.Vector3(0, 0, 1), branchAngle);
+                
+                // Point de fin de la branche
+                const branchEnd = new THREE.Vector3()
+                    .addVectors(current, branchDir.multiplyScalar(branchLength));
+                
+                // Perpendiculaire pour la branche
+                const branchPerp = new THREE.Vector3(-branchDir.y, branchDir.x, 0)
+                    .normalize()
+                    .multiplyScalar(thickness * 0.7);
+                
+                // 4 coins du segment de branche
+                const b1 = new THREE.Vector3().addVectors(current, branchPerp);
+                const b2 = new THREE.Vector3().subVectors(current, branchPerp);
+                const b3 = new THREE.Vector3().addVectors(branchEnd, branchPerp.multiplyScalar(0.5));
+                const b4 = new THREE.Vector3().subVectors(branchEnd, branchPerp.multiplyScalar(0.5));
+                
+                // Ajouter les vertices
+                const branchBaseIndex = vertices.length / 3;
+                vertices.push(
+                    b1.x, b1.y, b1.z,
+                    b2.x, b2.y, b2.z,
+                    b3.x, b3.y, b3.z,
+                    b4.x, b4.y, b4.z
+                );
+                
+                // Ajouter les indices pour les triangles
+                indices.push(
+                    branchBaseIndex, branchBaseIndex + 1, branchBaseIndex + 2,
+                    branchBaseIndex + 1, branchBaseIndex + 3, branchBaseIndex + 2
+                );
+            }
+        }
+        
+        // Définir les attributs de la géométrie
+        geometry.setIndex(indices);
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        geometry.computeVertexNormals();
+        
+        // Créer un matériau avec un effet de lueur
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xeeeeff,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending
+        });
+        
+        const lightningMesh = new THREE.Mesh(geometry, material);
+        
+        // Positionner l'éclair dans le ciel
+        lightningMesh.position.set(
+            (Math.random() - 0.5) * 500, // Position X aléatoire
+            150 + Math.random() * 100,   // Hauteur dans le ciel
+            (Math.random() - 0.5) * 500  // Position Z aléatoire
+        );
+        
+        // Rotation aléatoire pour varier l'apparence
+        lightningMesh.rotation.z = Math.random() * Math.PI * 0.25;
+        
+        return lightningMesh;
     }
     
     /**
