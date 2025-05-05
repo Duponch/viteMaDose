@@ -39,8 +39,8 @@ export default class RainEffect {
         
         // Configuration des impacts
         this.enableSplashes = true;
-        this.maxSplashes = 1000;
-        this.splashRate = 20;
+        this.maxSplashes = 2000;
+        this.splashRate = 2000;
         this.timeToNextSplash = 0;
         this.splashAreaSize = 50;       // Zone un peu plus concentrée pour mieux voir les impacts
         this.splashSize = { min: 0.8, max: 2.2 }; // Taille des impacts (augmentée)
