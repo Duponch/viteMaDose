@@ -45,10 +45,11 @@ export default class EnvironmentSystem {
      */
     setBirdDensity(density) {
         if (this.birdSystem) {
+            // Appliquer directement au système d'oiseaux
             this.birdSystem.birdDensity = density;
-            // Mettre également à jour l'état cible
+            
+            // Mettre également à jour l'état cible pour les transitions futures
             this.targetEnvironmentState.birdDensity = density;
-            // Pas de transition ici, mise à jour directe
             this.currentEnvironmentState.birdDensity = density;
         }
     }
