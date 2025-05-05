@@ -435,7 +435,8 @@ export default class BirdSystem {
             transparent: true,
             depthWrite: true,
             depthTest: true,
-            alphaTest: 0.1
+            alphaTest: 0.1,
+            fog: true
         });
         
         // Créer le mesh
@@ -443,6 +444,10 @@ export default class BirdSystem {
         this.birdMesh.rotation.y = Math.PI / 2;
         this.birdMesh.matrixAutoUpdate = false;
         this.birdMesh.updateMatrix();
+        
+        // Désactiver le culling et ajuster les paramètres de rendu
+        this.birdMesh.frustumCulled = false;
+        this.birdMesh.renderOrder = 1; // S'assurer que les oiseaux sont rendus après les autres objets
         
         // Ajouter au groupe
         this.birdGroup.add(this.birdMesh);
