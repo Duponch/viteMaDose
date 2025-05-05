@@ -18,10 +18,14 @@ export default class LightningEffect {
         // Configuration
         this.enabled = true;
         this.intensity = 0; // 0 = pas d'éclairs, 1 = éclairs maximum
-        this.lastLightningTime = performance.now(); // Utiliser le temps réel
-        this.lightningDuration = 150; // durée d'un éclair en ms
-        this.currentLightningAlpha = 0; // pour l'animation de flash
+        this.lastLightningTime = performance.now();
+        this.lightningDuration = 150; // durée d'un éclair principal en ms
+        this.subLightningDuration = 30; // durée d'un sous-éclair en ms (réduit de 50 à 30)
+        this.currentLightningAlpha = 0;
         this.isLightningActive = false;
+        this.subLightnings = []; // Tableau pour stocker les sous-éclairs
+        this.maxSubLightnings = 5; // Nombre maximum de sous-éclairs (augmenté de 3 à 5)
+        this.subLightningDelay = 0.3; // Délai entre chaque sous-éclair en ms (réduit de 20 à 10)
         
         // Performance: pré-calculer les couleurs d'éclairs pour éviter les allocations
         this.lightningColors = {
@@ -181,7 +185,7 @@ export default class LightningEffect {
         if (this.isLightningActive) return;
         
         // Performance: limiter la fréquence des éclairs
-        const currentTime = performance.now(); // Utiliser le temps réel
+        const currentTime = performance.now();
         const timeSinceLastLightning = currentTime - this.lastLightningTime;
         if (timeSinceLastLightning < this.minTimeBetweenLightnings) return;
         
@@ -191,7 +195,23 @@ export default class LightningEffect {
         if (Math.random() < probability) {
             this.isLightningActive = true;
             this.currentLightningAlpha = 1.0;
-            this.lastLightningTime = currentTime; // Utiliser le temps réel
+            this.lastLightningTime = currentTime;
+            
+            // Réinitialiser les sous-éclairs
+            this.subLightnings = [];
+            
+            // Déterminer le nombre de sous-éclairs (2-5)
+            const numSubLightnings = Math.floor(Math.random() * (this.maxSubLightnings - 1)) + 3;
+            
+            // Créer les sous-éclairs avec des délais différents
+            for (let i = 0; i < numSubLightnings; i++) {
+                this.subLightnings.push({
+                    startTime: currentTime + (i + 1) * this.subLightningDelay,
+                    alpha: 0,
+                    active: false,
+                    intensity: 0.8 + Math.random() * 0.4 // Intensité variable entre 0.8 et 1.2
+                });
+            }
             
             // Optimisation: activer moins d'éclairs en même temps
             const numBolts = Math.ceil(Math.random() * 2 * this.intensity);
@@ -300,9 +320,10 @@ export default class LightningEffect {
         // Tenter de déclencher un éclair
         this.triggerLightning();
         
+        const currentTime = performance.now();
+        
         // Gérer l'animation des éclairs actifs
         if (this.isLightningActive) {
-            const currentTime = performance.now(); // Utiliser le temps réel
             const timeSinceLightning = currentTime - this.lastLightningTime;
             
             if (timeSinceLightning < this.lightningDuration) {
@@ -329,6 +350,32 @@ export default class LightningEffect {
                 // Mettre à jour l'opacité du dôme céleste
                 if (this.skyDomeMaterial) {
                     this.skyDomeMaterial.opacity = 0.2 * this.intensity * this.currentLightningAlpha;
+                }
+                
+                // Gérer les sous-éclairs
+                for (let i = 0; i < this.subLightnings.length; i++) {
+                    const subLightning = this.subLightnings[i];
+                    const timeSinceSubLightning = currentTime - subLightning.startTime;
+                    
+                    if (timeSinceSubLightning >= 0 && timeSinceSubLightning < this.subLightningDuration) {
+                        subLightning.active = true;
+                        const subT = timeSinceSubLightning / this.subLightningDuration;
+                        subLightning.alpha = 1.0 - subT;
+                        
+                        // Appliquer l'effet des sous-éclairs avec intensité variable
+                        const subFlashIntensity = subLightning.alpha * this.intensity * subLightning.intensity;
+                        this.lightningLight.intensity += subFlashIntensity * 1.2;
+                        if (this.lightningDirectional) {
+                            this.lightningDirectional.intensity += subFlashIntensity;
+                        }
+                        
+                        // Mettre à jour l'opacité du dôme pour les sous-éclairs
+                        if (this.skyDomeMaterial) {
+                            this.skyDomeMaterial.opacity += 0.15 * this.intensity * subLightning.alpha;
+                        }
+                    } else if (timeSinceSubLightning >= this.subLightningDuration) {
+                        subLightning.active = false;
+                    }
                 }
                 
                 // Performance: restauration progressive seulement pour intensité élevée
@@ -363,6 +410,7 @@ export default class LightningEffect {
                 
                 // Nettoyer les références temporaires
                 this.tempSkyColors = null;
+                this.subLightnings = [];
             }
         }
     }
