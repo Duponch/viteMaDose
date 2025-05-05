@@ -24,7 +24,7 @@ export default class CloudSystem {
         // Configuration
         this.numberOfCloudBaseShapes = 6;
         this.totalNumberOfClouds = 200;
-        this.cloudAnimationSpeed = 0.00005;
+        this.cloudAnimationSpeed = 0.004;
         this._cloudOpacity = 0.5; // Opacité de base des nuages
         this._cloudDensity = 0.5; // Densité (nombre) de nuages
         this._cloudColor = new THREE.Color(0xffffff); // Couleur de base des nuages

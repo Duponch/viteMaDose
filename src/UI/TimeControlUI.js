@@ -46,8 +46,12 @@ export default class TimeControlUI {
         // --- Bouton Carte de la Ville ---
         this.elements.cityMapButton = this._createButton('city-map-button', '🗺', "Afficher/Masquer la carte de la ville");
 
+        // --- Boutons Météo et Environnement ---
+        this.elements.weatherUIButton = this._createButton('weather-ui-button', '🌤', "Afficher/Masquer l'UI météo");
+        this.elements.environmentUIButton = this._createButton('environment-ui-button', '♣', "Afficher/Masquer l'UI environnement");
+
         // --- Bouton Debug Principal (inchangé) ---
-        this.elements.debugToggleButton = this._createButton('debug-toggle-button', '♣', "Afficher/Masquer les contrôles Debug");
+        this.elements.debugToggleButton = this._createButton('debug-toggle-button', '#', "Afficher/Masquer les contrôles Debug");
 
         // --- STRUCTURE DES CALQUES ET SOUS-CALQUES ---
         const layerStructure = {
@@ -143,6 +147,8 @@ export default class TimeControlUI {
 
         // --- Ajout final au container principal de l'UI (en bas à droite) ---
         this.container.appendChild(this.elements.cityMapButton);
+        this.container.appendChild(this.elements.weatherUIButton);
+        this.container.appendChild(this.elements.environmentUIButton);
         this.container.appendChild(this.elements.debugToggleButton);
         this.container.appendChild(this.elements.speedDisplay);
         this.container.appendChild(this.elements.decreaseButton);
@@ -165,11 +171,18 @@ export default class TimeControlUI {
         this.elements.pausePlayButton.addEventListener('click', () => this.time.togglePause());
         this.elements.increaseButton.addEventListener('click', () => {
             this.time.increaseSpeed();
-            //if(this.time.isPaused) this.time.play();
         });
         this.elements.decreaseButton.addEventListener('click', () => {
             this.time.decreaseSpeed();
-            //if(this.time.isPaused) this.time.play();
+        });
+
+        // --- Listeners Boutons Météo et Environnement ---
+        this.elements.weatherUIButton.addEventListener('click', () => {
+            this.experience.toggleWeatherUI();
+        });
+
+        this.elements.environmentUIButton.addEventListener('click', () => {
+            this.experience.toggleEnvironmentUI();
         });
 
         // --- Listener Bouton Debug Principal (inchangé) ---

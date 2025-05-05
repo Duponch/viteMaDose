@@ -1040,7 +1040,6 @@ export default class Experience extends EventTarget {
     }
 
     toggleDebugMode() {
-        // --- AJOUT DE LA NOUVELLE LOGIQUE DANS toggleDebugMode AUSSI ---
         this.isDebugMode = !this.isDebugMode;
         console.log(`Debug Mode global ${this.isDebugMode ? 'ENABLED' : 'DISABLED'}`);
 
@@ -1052,7 +1051,7 @@ export default class Experience extends EventTarget {
             this.world.setDebugMode(this.isDebugMode);
         }
 
-        // --- AJOUT : Réinitialiser la sélection des éléments debug lors de l'activation ---
+        // Réinitialiser la sélection des éléments debug lors de l'activation
         if (this.isDebugMode) {
             this.resetDebugLayerVisibility();
         }
@@ -1060,21 +1059,27 @@ export default class Experience extends EventTarget {
         // Forcer l'état des sous-menus basé sur le mode debug
         for (const category in this.debugLayerVisibility) {
             if (this.debugLayerVisibility[category]._showSubMenu !== undefined) {
-                // Si on active le debug, on montre tout. Si on désactive, on cache tout.
                 this.debugLayerVisibility[category]._showSubMenu = this.isDebugMode;
             }
         }
-        // --- FIN AJOUT ---
 
         this.dispatchEvent(new CustomEvent('debugmodechanged', { detail: { isEnabled: this.isDebugMode } }));
     }
 
-    /**
-     * NOUVELLE MÉTHODE: Bascule l'état de *tous* les sous-calques d'une catégorie donnée.
-     * Si au moins un est actif, tous passent à inactif.
-     * Si tous sont inactifs, tous passent à actif.
-     * @param {string} categoryName - Nom de la catégorie (ex: 'plot', 'district').
-     */
+    toggleWeatherUI() {
+        const weatherUI = document.querySelector('.weather-control-ui');
+        if (weatherUI) {
+            weatherUI.style.display = weatherUI.style.display === 'none' ? 'block' : 'none';
+        }
+    }
+
+    toggleEnvironmentUI() {
+        const environmentUI = document.querySelector('.environment-control-ui');
+        if (environmentUI) {
+            environmentUI.style.display = environmentUI.style.display === 'none' ? 'block' : 'none';
+        }
+    }
+
     toggleAllSubLayersInCategory(categoryName) {
         console.log(`[Experience] Entrée dans toggleAllSubLayersInCategory pour ${categoryName}`);
         if (!this.debugLayerVisibility.hasOwnProperty(categoryName)) {
@@ -1134,10 +1139,6 @@ export default class Experience extends EventTarget {
         }
     }
 
-    /**
-     * Bascule la visibilité globale d'une catégorie de debug. (Utilisé pour les catégories SANS enfants)
-     * @param {string} categoryName - Nom de la catégorie ('district', 'plot', 'buildingOutline', 'navGrid', 'agentPath').
-     */
     toggleCategoryVisibility(categoryName) {
         if (!this.debugLayerVisibility.hasOwnProperty(categoryName)) {
             console.warn(`Experience.toggleCategoryVisibility: Unknown category name '${categoryName}'`);
