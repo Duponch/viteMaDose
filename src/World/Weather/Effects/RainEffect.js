@@ -17,10 +17,10 @@ export default class RainEffect {
         // Configuration
         this._intensity = 0;            // Intensité (0-1), modifie la visibilité et la quantité
         this.dropCount = 250000;         // Nombre de gouttes de pluie - augmenté pour plus de densité
-        this.rainSpeed = 18;            // Vitesse de base de la pluie - augmentée légèrement
+        this.rainSpeed = 40;            // Vitesse de base de la pluie - augmentée légèrement
         this.rainArea = 70;             // Zone de pluie - rayon autour de la caméra - augmentée
         this.rainHeight = 45;           // Hauteur maximale de la pluie - augmentée
-        this.speedIntensityFactor = 0.5; // Facteur de proportionnalité entre l'intensité et la vitesse (0-1)
+        this.speedIntensityFactor = 0.6; // Facteur de proportionnalité entre l'intensité et la vitesse (0-1)
         this.minDropSize = 0.1;         // Taille minimale des gouttes - augmentée pour mieux voir la forme
         this.maxDropSize = 0.5;         // Taille maximale des gouttes - augmentée pour mieux voir la forme
         this.stretchFactor = 0.5;       // Facteur d'étirement des gouttes - augmenté
