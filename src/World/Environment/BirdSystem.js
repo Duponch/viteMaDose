@@ -432,10 +432,10 @@ export default class BirdSystem {
             vertexShader: birdVS,
             fragmentShader: birdFS,
             side: THREE.DoubleSide,
-            transparent: true,
-            depthWrite: true,
-            depthTest: true,
-            alphaTest: 0.1,
+            transparent: false,      // Les oiseaux ne sont pas transparents
+            depthWrite: true,        // Ils écrivent dans le buffer de profondeur
+            depthTest: true,         // Ils respectent le test de profondeur
+            alphaTest: 0.5,          // Seuil plus élevé pour éviter les pixels semi-transparents
             fog: true
         });
         
@@ -447,7 +447,7 @@ export default class BirdSystem {
         
         // Désactiver le culling et ajuster les paramètres de rendu
         this.birdMesh.frustumCulled = false;
-        this.birdMesh.renderOrder = 1; // S'assurer que les oiseaux sont rendus après les autres objets
+        this.birdMesh.renderOrder = 0; // Rendre les oiseaux avant les nuages 
         
         // Ajouter au groupe
         this.birdGroup.add(this.birdMesh);

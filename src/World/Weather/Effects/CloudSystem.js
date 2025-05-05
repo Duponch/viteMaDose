@@ -55,9 +55,9 @@ export default class CloudSystem {
             flatShading: true,
             transparent: true,
             opacity: this.cloudOpacity,
-            depthWrite: false, // Désactivé pour permettre de voir à travers les nuages transparents
+            depthWrite: true, // Réactivé mais sera géré dynamiquement en fonction de l'opacité
             depthTest: true,
-            alphaTest: 0.01,
+            alphaTest: 0.05, // Augmenté pour éliminer les pixels trop transparents
             blending: THREE.NormalBlending
         });
         
@@ -144,6 +144,7 @@ export default class CloudSystem {
             instancedMesh.castShadow = true;
             instancedMesh.receiveShadow = false;
             instancedMesh.name = `CloudMesh_${index}`;
+            instancedMesh.renderOrder = 1; // Nuages rendus après les oiseaux (renderOrder = 0)
             
             // Initialiser toutes les instances sous le terrain
             for (let i = 0; i < instancesPerMesh; i++) {
@@ -250,7 +251,26 @@ export default class CloudSystem {
         const baseOpacity = this.cloudOpacity;
         const densityFactor = 1.0 + (this.cloudDensity - 0.5) * 0.4;
         
-        this.cloudMaterial.opacity = baseOpacity * densityFactor;
+        const finalOpacity = baseOpacity * densityFactor;
+        this.cloudMaterial.opacity = finalOpacity;
+        
+        // IMPORTANT: Gérer dynamiquement les paramètres de rendu en fonction de l'opacité
+        // - Pour les nuages très opaques (>0.85), activer l'écriture de profondeur pour masquer les objets derrière
+        // - Pour les nuages semi-transparents, désactiver l'écriture de profondeur pour voir à travers
+        this.cloudMaterial.depthWrite = finalOpacity > 0.85;
+        
+        // Ajuster l'alphaTest en fonction de l'opacité - cela permet d'avoir des bords plus nets
+        // quand l'opacité est élevée, et des bords plus doux quand l'opacité est basse
+        this.cloudMaterial.alphaTest = 0.05 + (finalOpacity > 0.85 ? 0.05 : 0);
+        
+        // Définir le mode de mélange en fonction de l'opacité
+        if (finalOpacity > 0.9) {
+            // Pour les nuages très denses, utiliser un mélange standard
+            this.cloudMaterial.blending = THREE.NormalBlending;
+        } else {
+            // Pour les nuages légers, utiliser un mélange additif pour un effet plus aérien
+            this.cloudMaterial.blending = THREE.NormalBlending;
+        }
         
         // Ajuster la couleur selon la densité
         if (this.cloudDensity > 0.7) {
