@@ -1,9 +1,9 @@
-// src/World/Environment.js
+// src/World/Environment/Environment.js
 import * as THREE from 'three';
 import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import Calendar from '../Utils/Calendar.js';
-import WeatherSystem from './Weather/WeatherSystem.js';
+import Calendar from '../../Utils/Calendar.js';
+import WeatherSystem from '../Weather/WeatherSystem.js';
 
 // --- Objets temporaires pour l'update (performance) ---
 const _tempMatrix = new THREE.Matrix4();

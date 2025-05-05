@@ -1,6 +1,6 @@
 // src/Core/World.js
 import * as THREE from 'three';
-import Environment from '../World/Environment.js';
+import Environment from '../World/Environment/Environment.js';
 import CityManager from '../World/City/CityManager.js';
 import AgentManager from '../World/Agents/AgentManager.js';
 import CarManager from '../World/Vehicles/CarManager.js';
