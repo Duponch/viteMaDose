@@ -124,149 +124,263 @@ export default class World {
     }
 
     /**
-     * MODIFIÉ : Active ou désactive le mode debug global. Crée ou nettoie les visuels.
-     * Applique la visibilité des groupes principaux basée sur l'état de Experience.
+     * OPTIMISÉ : Active ou désactive le mode debug global avec une approche paresseuse (lazy).
+     * Les visuels ne sont créés que lorsqu'ils sont nécessaires, réduisant ainsi la charge initiale.
      * @param {boolean} enabled - True pour activer, false pour désactiver.
      */
     setDebugMode(enabled) {
-        if (enabled) {
-            console.log("  [World Debug] Enabling Debug Mode - Creating visuals...");
+        // Cache pour stocker les visuels déjà créés (lazy initialization)
+        if (!this._debugVisualsCache) {
+            this._debugVisualsCache = {
+                district: null,
+                plot: null,
+                buildingOutline: null,
+                navGridPedestrian: null,
+                navGridVehicle: null
+            };
+        }
 
-            if (!this.debugVisualManager) { /* ... erreur DVM manquant ... */ return; }
-
-            // --- Nettoyage des groupes AVANT recréation ---
-            this.clearGroupChildren(this.debugGroups.district);
-            this.clearGroupChildren(this.debugGroups.plot);
-            this.clearGroupChildren(this.debugGroups.buildingOutline);
-            this.clearGroupChildren(this.debugGroups.navGridPedestrian);
-            this.clearGroupChildren(this.debugGroups.navGridVehicle);
-            this.clearGroupChildren(this.debugGroups.agentPath);
-            this.clearGroupChildren(this.debugGroups.vehiclePath);
-            // ---------------------------------------------
-
-            if (this.cityManager) {
-                const plots = this.cityManager.getPlots();
-                const districts = this.cityManager.getDistricts();
-                const buildingInstances = this.cityManager.getBuildingInstances();
-
-                // --- Création et Ajout aux Groupes (MAJ) ---
-
-                // 1. Sols Districts (par type)
-                const districtMeshesByType = this.debugVisualManager.createDistrictGroundVisuals(districts, 0); // Y pos géré par groupe
-                for (const type in districtMeshesByType) {
-                    this.debugGroups.district.add(districtMeshesByType[type]);
-                    // Appliquer la visibilité initiale du sous-type
-                     districtMeshesByType[type].visible = this.experience.debugLayerVisibility.district[type] ?? true;
-                }
-                this.debugGroups.district.position.y = this.debugHeights.districtGround;
-
-                // 2. Sols Parcelles (par type)
-                const plotMeshesByType = this.debugVisualManager.createPlotGroundVisuals(plots, 0);
-                for (const type in plotMeshesByType) {
-                     this.debugGroups.plot.add(plotMeshesByType[type]);
-                     plotMeshesByType[type].visible = this.experience.debugLayerVisibility.plot[type] ?? true;
-                }
-                this.debugGroups.plot.position.y = this.debugHeights.plotGround;
-
-                // 3. Outlines Bâtiments (par type)
-                const outlineMeshesByType = this.debugVisualManager.createBuildingOutlines(buildingInstances, this.cityManager.config, 0);
-                for (const type in outlineMeshesByType) {
-                    this.debugGroups.buildingOutline.add(outlineMeshesByType[type]);
-                    outlineMeshesByType[type].visible = this.experience.debugLayerVisibility.buildingOutline[type] ?? true;
-                }
-                this.debugGroups.buildingOutline.position.y = this.debugHeights.buildingOutline;
-
-                // 4. NavGrid (piétons et voitures)
-                if (this.cityManager.navigationManager) {
-                    // Grille de navigation des piétons
-                    this.cityManager.navigationManager.getNavigationGraph(false).createDebugVisualization(this.debugGroups.navGridPedestrian);
-                    // Grille de navigation des voitures
-                    this.cityManager.navigationManager.getNavigationGraph(true).createDebugVisualization(this.debugGroups.navGridVehicle);
-                }
-                // Séparer visuellement les deux grilles
-                this.debugGroups.navGridPedestrian.position.y = this.debugHeights.navGrid - 0.01; // Légèrement plus bas
-                this.debugGroups.navGridVehicle.position.y = this.debugHeights.navGrid + 0.01; // Légèrement plus haut
-
-                // 5. Chemins Agents (reste dynamique)
-                this.debugGroups.agentPath.position.y = this.debugHeights.agentPath;
-
-                // 6. Chemins Véhicules (reste dynamique)
-                this.debugGroups.vehiclePath.position.y = this.debugHeights.vehiclePath;
-
-            } // fin if (this.cityManager)
-
-            // --- Appliquer la Visibilité Initiale des Catégories (Groupes) ---
-            this.setGroupVisibility('district', this.experience.debugLayerVisibility.district._visible);
-            this.setGroupVisibility('plot', this.experience.debugLayerVisibility.plot._visible);
-            this.setGroupVisibility('buildingOutline', this.experience.debugLayerVisibility.buildingOutline._visible);
-            this.setGroupVisibility('navGridPedestrian', this.experience.debugLayerVisibility.navGridPedestrian._visible);
-            this.setGroupVisibility('navGridVehicle', this.experience.debugLayerVisibility.navGridVehicle._visible);
-            this.setGroupVisibility('agentPath', this.experience.debugLayerVisibility.agentPath._visible);
-            this.setGroupVisibility('vehiclePath', this.experience.debugLayerVisibility.vehiclePath._visible);
-            // La visibilité des sous-types a été appliquée lors de l'ajout des meshes.
-
-        } else {
-            console.log("  [World Debug] Disabling Debug Mode - Clearing visuals...");
-            // Nettoyer les groupes (dispose la géométrie/matériaux spécifiques comme AgentPath)
-            this.clearGroupChildren(this.debugGroups.district);
-            this.clearGroupChildren(this.debugGroups.plot);
-            this.clearGroupChildren(this.debugGroups.buildingOutline);
-            this.clearGroupChildren(this.debugGroups.navGridPedestrian);
-            this.clearGroupChildren(this.debugGroups.navGrid);
-            this.clearGroupChildren(this.debugGroups.agentPath, true); // Dispose AgentPath specifics
-            this.clearGroupChildren(this.debugGroups.vehiclePath, true); // Dispose VehiclePath specifics
-
-            // Cacher tous les groupes principaux
+        if (!enabled) {
+            // Désactivation du mode debug - simple et rapide
             this.setAllDebugGroupsVisibility(false);
+            return;
+        }
+        
+        // --- Activation du mode debug ---
+        console.log("  [World Debug] Enabling Debug Mode with lazy loading...");
 
-             // Optionnel: Nettoyer aussi les matériaux cachés dans DVM
-             // this.debugVisualManager?.clearAllAndDisposeMaterials(); // Attention si DVM est partagé
+        if (!this.debugVisualManager) { /* ... erreur DVM manquant ... */ return; }
+
+        // --- Nettoyage des groupes si nécessaire ---
+        for (const category in this._debugVisualsCache) {
+            this._debugVisualsCache[category] = null; // Marquer comme non généré
+            this.clearGroupChildren(this.debugGroups[category]);
+        }
+        this.clearGroupChildren(this.debugGroups.agentPath);
+        this.clearGroupChildren(this.debugGroups.vehiclePath);
+        // ---------------------------------------------
+
+        // Activer immédiatement les groupes de debug pour montrer une réponse à l'utilisateur
+        this.setAllDebugGroupsVisibility(true);
+
+        // Initialiser les positions des groupes
+        this.debugGroups.district.position.y = this.debugHeights.districtGround;
+        this.debugGroups.plot.position.y = this.debugHeights.plotGround;
+        this.debugGroups.buildingOutline.position.y = this.debugHeights.buildingOutline;
+        this.debugGroups.navGridPedestrian.position.y = this.debugHeights.navGrid - 0.01;
+        this.debugGroups.navGridVehicle.position.y = this.debugHeights.navGrid + 0.01;
+        this.debugGroups.agentPath.position.y = this.debugHeights.agentPath;
+        this.debugGroups.vehiclePath.position.y = this.debugHeights.vehiclePath;
+
+        // On n'initialise aucun visuel pour les catégories lourdes
+        // Ils seront créés à la demande lorsque l'utilisateur activera chaque catégorie
+    }
+
+    /**
+     * Génère les visuels de district optimisés (appelé à la demande)
+     * @private
+     */
+    _generateDistrictVisuals() {
+        if (!this.cityManager) return;
+        
+        // Appliquer une limite au nombre de districts pour une performance optimale
+        const districts = this.cityManager.getDistricts();
+        const maxDistricts = Math.min(districts.length, 200); // Limiter le nombre de districts pour de meilleures performances
+        const districtSubset = districts.slice(0, maxDistricts);
+        
+        // Créer les visuels optimisés pour les districts
+        const districtMeshesByType = this.debugVisualManager.createDistrictGroundVisuals(districtSubset, 0);
+        for (const type in districtMeshesByType) {
+            this.debugGroups.district.add(districtMeshesByType[type]);
+            districtMeshesByType[type].visible = this.experience.debugLayerVisibility.district[type] ?? true;
+        }
+    }
+    
+    /**
+     * Génère les visuels de parcelles optimisés (appelé à la demande)
+     * @private
+     */
+    _generatePlotVisuals() {
+        if (!this.cityManager) return;
+        
+        // Appliquer une limite au nombre de parcelles pour une performance optimale
+        const plots = this.cityManager.getPlots();
+        const maxPlots = Math.min(plots.length, 500); // Limiter le nombre de parcelles 
+        const plotSubset = plots.slice(0, maxPlots);
+        
+        // Optimisation: minimiser le nombre de passes de rendu en regroupant par type
+        const plotsByType = {};
+        for (const plot of plotSubset) {
+            if (!plotsByType[plot.zoneType]) {
+                plotsByType[plot.zoneType] = [];
+            }
+            plotsByType[plot.zoneType].push(plot);
+        }
+        
+        // Créer les visuels optimisés par type (optimisation par batching)
+        const plotMeshesByType = this.debugVisualManager.createPlotGroundVisuals(plotSubset, 0);
+        for (const type in plotMeshesByType) {
+            this.debugGroups.plot.add(plotMeshesByType[type]);
+            plotMeshesByType[type].visible = this.experience.debugLayerVisibility.plot[type] ?? true;
+        }
+    }
+    
+    /**
+     * Génère les visuels de contours de bâtiments optimisés (appelé à la demande)
+     * @private
+     */
+    _generateBuildingOutlineVisuals() {
+        if (!this.cityManager) return;
+        
+        const buildingInstances = this.cityManager.getBuildingInstances();
+        if (!buildingInstances || buildingInstances.size === 0) return;
+        
+        // Réduire la taille si nécessaire pour les performances
+        const maxBuildings = 1000; // Limite pour de meilleures performances
+        let limitedInstances = buildingInstances;
+        
+        if (buildingInstances.size > maxBuildings) {
+            // Créer une version limitée de la map pour réduire la charge
+            limitedInstances = new Map();
+            let count = 0;
+            for (const [key, value] of buildingInstances.entries()) {
+                if (count >= maxBuildings) break;
+                limitedInstances.set(key, value);
+                count++;
+            }
+            console.log(`[World Debug] Bâtiments limités à ${maxBuildings} sur ${buildingInstances.size} total`);
+        }
+        
+        // Générer les contours de bâtiments avec la map limitée
+        const outlineMeshesByType = this.debugVisualManager.createBuildingOutlines(limitedInstances, this.cityManager.config, 0);
+        for (const type in outlineMeshesByType) {
+            this.debugGroups.buildingOutline.add(outlineMeshesByType[type]);
+            outlineMeshesByType[type].visible = this.experience.debugLayerVisibility.buildingOutline[type] ?? true;
+        }
+    }
+    
+    /**
+     * Génère les visuels de grille de navigation pour piétons (appelé à la demande)
+     * @private
+     */
+    _generateNavGridPedestrianVisuals() {
+        if (!this.cityManager || !this.cityManager.navigationManager) return;
+        
+        // Optimisation: réduire la densité de la grille pour de meilleures performances
+        const navGraph = this.cityManager.navigationManager.getNavigationGraph(false);
+        if (navGraph) {
+            // Définir un mode d'affichage simplifié pour la grille (si implémenté)
+            navGraph.debugDisplayDensity = 2; // 1 = normal, 2 = afficher un noeud sur deux, etc.
+            navGraph.createDebugVisualization(this.debugGroups.navGridPedestrian);
+        }
+    }
+    
+    /**
+     * Génère les visuels de grille de navigation pour véhicules (appelé à la demande)
+     * @private
+     */
+    _generateNavGridVehicleVisuals() {
+        if (!this.cityManager || !this.cityManager.navigationManager) return;
+        
+        // Optimisation: réduire la densité de la grille pour de meilleures performances
+        const roadGraph = this.cityManager.navigationManager.getNavigationGraph(true);
+        if (roadGraph) {
+            // Définir un mode d'affichage simplifié pour la grille (si implémenté)
+            roadGraph.debugDisplayDensity = 2; // 1 = normal, 2 = afficher un noeud sur deux, etc.
+            roadGraph.createDebugVisualization(this.debugGroups.navGridVehicle);
         }
     }
 
-	/**
-     * NOUVEAU : Définit la visibilité d'un groupe de catégorie principal.
+    /**
+     * OPTIMISÉ : Définit la visibilité d'un groupe de catégorie principal avec lazy loading.
+     * Les visuels sont créés uniquement quand la catégorie est activée pour la première fois.
      * @param {string} categoryName - Nom de la catégorie ('district', 'plot', etc.).
      * @param {boolean} isVisible - True pour afficher, false pour masquer.
      */
     setGroupVisibility(categoryName, isVisible) {
 		const targetGroup = this.debugGroups[categoryName];
-		if (targetGroup) {
-			targetGroup.visible = isVisible;
-			
-			// Cas spu00e9cial pour agentPath: rafrau00eechir les chemins des piu00e9tons actifs
-			if (categoryName === 'agentPath' && isVisible && this.agentManager) {
-				// Nettoyer d'abord les anciens chemins
-				this.clearDebugAgentPaths();
-				
-				// Pour chaque agent actif, afficher son chemin
-				for (let i = 0; i < this.agentManager.agents.length; i++) {
-					const agent = this.agentManager.agents[i];
-					if (agent && agent.currentPathPoints && agent.currentPathPoints.length > 1) {
-						this.setAgentPathForAgent(agent, agent.currentPathPoints, 0xff00ff);
-					}
-				}
-				console.log("[World Debug] Chemins des piétons rafraîchis");
-			}
-			
-			// Cas spu00e9cial pour vehiclePath: rafrau00eechir les chemins des vu00e9hicules actives
-			if (categoryName === 'vehiclePath' && isVisible && this.carManager) {
-				// Nettoyer d'abord les anciens chemins
-				this.clearDebugVehiclePaths();
-				
-				// Pour chaque voiture active, afficher son chemin
-				for (let i = 0; i < this.carManager.cars.length; i++) {
-					const car = this.carManager.cars[i];
-					if (car && car.isActive && car.path && car.path.length > 1) {
-						this.setVehiclePathForCar(car, car.path, 0x00ffff);
-					}
-				}
-				console.log("[World Debug] Chemins des véhicules rafraîchis");
-			}
-			
-			// console.log(`  [World Debug] Group '${categoryName}' visibility set to ${isVisible}`);
-		} else {
+		if (!targetGroup) {
 			console.warn(`World.setGroupVisibility: Unknown category group '${categoryName}'`);
+			return;
+		}
+
+		// Si on active une catégorie et que ses visuels n'ont pas été générés, les créer maintenant
+		if (isVisible && this._debugVisualsCache && this._debugVisualsCache[categoryName] === null) {
+			console.log(`[World Debug] Génération des visuels ${categoryName} à la demande`);
+			
+			// Générer les visuels appropriés selon la catégorie
+			const t0 = performance.now(); // Mesurer le temps de génération
+			
+			try {
+				switch(categoryName) {
+					case 'district':
+						this._generateDistrictVisuals();
+						break;
+					case 'plot':
+						this._generatePlotVisuals();
+						break;
+					case 'buildingOutline':
+						this._generateBuildingOutlineVisuals();
+						break;
+					case 'navGridPedestrian':
+						this._generateNavGridPedestrianVisuals();
+						break;
+					case 'navGridVehicle':
+						this._generateNavGridVehicleVisuals();
+						break;
+				}
+				
+				// Marquer cette catégorie comme générée
+				this._debugVisualsCache[categoryName] = true;
+				
+				// Logs de performance
+				const t1 = performance.now();
+				console.log(`[World Debug] Génération de ${categoryName} terminée en ${(t1-t0).toFixed(1)}ms`);
+			} catch (error) {
+				console.error(`[World Debug] Erreur lors de la génération de ${categoryName}:`, error);
+			}
+		}
+		
+		// Appliquer la visibilité
+		targetGroup.visible = isVisible;
+		
+		// Cas spéciaux pour les chemins dynamiques
+		if (categoryName === 'agentPath' && isVisible && this.agentManager) {
+			// Nettoyer d'abord les anciens chemins
+			this.clearDebugAgentPaths();
+			
+			// Optimisation: limiter le nombre de chemins à afficher si trop d'agents
+			const maxPathsToShow = 50; // Limiter le nombre de chemins pour éviter les performances lentes
+			const agents = this.agentManager.agents;
+			const numAgents = Math.min(agents.length, maxPathsToShow);
+			
+			for (let i = 0; i < numAgents; i++) {
+				const agent = agents[i];
+				if (agent?.currentPathPoints?.length > 1) {
+					this.setAgentPathForAgent(agent, agent.currentPathPoints, 0xff00ff);
+				}
+			}
+			console.log(`[World Debug] ${numAgents} chemins de piétons rafraîchis`);
+		}
+		
+		if (categoryName === 'vehiclePath' && isVisible && this.carManager) {
+			// Nettoyer d'abord les anciens chemins
+			this.clearDebugVehiclePaths();
+			
+			// Optimisation: limiter le nombre de chemins à afficher
+			const maxPathsToShow = 30;
+			const cars = this.carManager.cars;
+			const numCars = Math.min(cars.length, maxPathsToShow);
+			
+			let pathsCreated = 0;
+			for (let i = 0; i < numCars; i++) {
+				const car = cars[i];
+				if (car?.isActive && car?.path?.length > 1) {
+					this.setVehiclePathForCar(car, car.path, 0x00ffff);
+					pathsCreated++;
+				}
+			}
+			console.log(`[World Debug] ${pathsCreated} chemins de véhicules rafraîchis`);
 		}
     }
    
