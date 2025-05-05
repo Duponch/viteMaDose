@@ -51,7 +51,7 @@ export default class GrassInstancer {
 
         // Création du matériau standard qui réagira naturellement à la lumière
         this.leavesMaterial = new THREE.MeshStandardMaterial({
-            color: 0x61874c, // Même couleur que le sol des parcelles de type parc et maison
+            color: 0x485e3c, // Même couleur que le sol des parcelles de type parc et maison
             roughness: 0.8,
             metalness: 0.0,
             side: THREE.DoubleSide
