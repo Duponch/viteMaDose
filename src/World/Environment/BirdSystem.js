@@ -428,7 +428,11 @@ export default class BirdSystem {
             },
             vertexShader: birdVS,
             fragmentShader: birdFS,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            transparent: true,
+            depthWrite: true,
+            depthTest: true,
+            alphaTest: 0.1
         });
         
         // Créer le mesh
