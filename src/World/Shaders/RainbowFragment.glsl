@@ -21,8 +21,12 @@ void main() {
     // Transformer les UV pour avoir (0,0) au centre
     vec2 centeredUv = vUv * 2.0 - 1.0;
     
-    // Distance du pixel au centre
-    float dist = length(centeredUv);
+    // Facteur d'échelle vertical pour créer un ovale (1.5 = 50% plus haut que large)
+    float verticalScale = 1.5;
+    vec2 scaledUv = vec2(centeredUv.x, centeredUv.y * verticalScale);
+    
+    // Distance du pixel au centre (maintenant elliptique)
+    float dist = length(scaledUv);
     
     // Si la distance est hors des rayons définis, transparence totale
     if (dist < uInnerRadius || dist > uOuterRadius) {
@@ -30,7 +34,7 @@ void main() {
     }
     
     // Angle du pixel (en radians)
-    float angle = atan(centeredUv.y, centeredUv.x);
+    float angle = atan(scaledUv.y, scaledUv.x);
     // Normaliser l'angle entre 0 et 1
     float normalizedAngle = (angle + 3.14159) / (2.0 * 3.14159);
     

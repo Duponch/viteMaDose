@@ -65,7 +65,7 @@ export default class RainbowEffect {
             });
             
             // Création de la géométrie (un plan circulaire)
-            const radius = this.weatherSystem.environment.skyboxRadius * 1.2;
+            const radius = this.weatherSystem.environment.skyboxRadius * 1.8;
             const geometry = new THREE.CircleGeometry(radius, 64);
             
             // Création du mesh
@@ -98,7 +98,7 @@ export default class RainbowEffect {
         
         // Distance à la skybox
         const skyboxRadius = this.weatherSystem.environment.skyboxRadius;
-        const distance = skyboxRadius * 1; // Légèrement en avant de la skybox
+        const distance = skyboxRadius * 1.5; // Augmenté de 1.0 à 1.5 pour éloigner l'arc-en-ciel
         
         // Position finale (toujours au même endroit par rapport à la caméra)
         const position = cameraPosition.clone().add(
