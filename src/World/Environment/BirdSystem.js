@@ -238,6 +238,8 @@ uniform vec3 color;
 uniform float ambientLightIntensity;
 uniform vec3 sunDirection;
 uniform float sunIntensity;
+uniform vec3 fogColor;
+uniform float fogDensity;
 
 void main() {
   // Si l'intensité de la lumière est 0, rendre l'oiseau complètement noir
@@ -251,7 +253,15 @@ void main() {
     float totalLight = ambientLightIntensity + sunLight;
     
     vec3 finalColor = vColor.rgb * totalLight;
-    gl_FragColor = vec4(finalColor, 1.0);
+
+    // Calculer le facteur de brouillard exponentiel
+    float depth = -z;
+    float fogFactor = 1.0 - exp(-fogDensity * fogDensity * depth * depth);
+    
+    // Mélanger la couleur finale avec le brouillard
+    vec3 colorWithFog = mix(finalColor, fogColor, fogFactor);
+    
+    gl_FragColor = vec4(colorWithFog, 1.0);
   }
 }`;
 
@@ -404,7 +414,9 @@ export default class BirdSystem {
                 delta: { value: 0.0 },
                 ambientLightIntensity: { value: 0.5 },
                 sunDirection: { value: new THREE.Vector3(0, 1, 0) },
-                sunIntensity: { value: 0.0 }
+                sunIntensity: { value: 0.0 },
+                fogColor: { value: new THREE.Color(0, 0, 0) },
+                fogDensity: { value: 0.0 },
             },
             vertexShader: birdVS,
             fragmentShader: birdFS,
@@ -577,6 +589,16 @@ export default class BirdSystem {
         if (sunLight) {
             this.birdMesh.material.uniforms.sunDirection.value.copy(sunLight.position).normalize();
             this.birdMesh.material.uniforms.sunIntensity.value = sunLight.visible ? sunLight.intensity : 0.0;
+        }
+
+        // Mise à jour des paramètres du brouillard
+        const fog = this.environmentSystem.getFog();
+        if (fog) {
+            this.birdMesh.material.uniforms.fogColor.value.copy(fog.color);
+            this.birdMesh.material.uniforms.fogDensity.value = fog.density;
+        } else {
+            // Si pas de brouillard, désactiver l'effet
+            this.birdMesh.material.uniforms.fogDensity.value = 0;
         }
 
         // Convertir deltaTime en secondes

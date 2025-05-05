@@ -159,4 +159,21 @@ export default class EnvironmentSystem {
         });
         return sunLight;
     }
+    
+    /**
+     * Récupère les paramètres du brouillard
+     * @returns {Object|null} Les paramètres du brouillard ou null si non trouvé
+     */
+    getFog() {
+        // Vérifier si la scène a un brouillard
+        if (this.scene.fog) {
+            if (this.scene.fog instanceof THREE.FogExp2) {
+                return {
+                    color: this.scene.fog.color,
+                    density: this.scene.fog.density
+                };
+            }
+        }
+        return null;
+    }
 } 
