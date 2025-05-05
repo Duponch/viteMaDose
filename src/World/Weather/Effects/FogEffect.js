@@ -17,7 +17,7 @@ export default class FogEffect {
         // Configuration
         this._fogDensity = 0;        // Densité du brouillard (0-1)
         this.minFogExp = 0.0005;     // Densité minimale du brouillard exponentiel
-        this.maxFogExp = 0.03;       // Densité maximale du brouillard exponentiel
+        this.maxFogExp = 0.02;       // Densité maximale du brouillard exponentiel
         this.isUpdating = false;     // Verrou pour éviter les mises à jour concurrentes
         this.needsUpdate = false;    // Drapeau pour indiquer qu'une mise à jour est nécessaire
         
