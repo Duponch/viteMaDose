@@ -19,13 +19,13 @@ export default class LightningEffect {
         this.enabled = true;
         this.intensity = 0; // 0 = pas d'éclairs, 1 = éclairs maximum
         this.lastLightningTime = performance.now();
-        this.lightningDuration = 150; // durée d'un éclair principal en ms
-        this.subLightningDuration = 30; // durée d'un sous-éclair en ms (réduit de 50 à 30)
+        this.lightningDuration = 300; // durée d'un éclair principal en ms (augmenté de 150 à 300)
+        this.subLightningDuration = 200; // durée d'un sous-éclair en ms (augmenté de 30 à 100)
         this.currentLightningAlpha = 0;
         this.isLightningActive = false;
         this.subLightnings = []; // Tableau pour stocker les sous-éclairs
-        this.maxSubLightnings = 5; // Nombre maximum de sous-éclairs (augmenté de 3 à 5)
-        this.subLightningDelay = 0.3; // Délai entre chaque sous-éclair en ms (réduit de 20 à 10)
+        this.maxSubLightnings = 5; // Nombre maximum de sous-éclairs
+        this.subLightningDelay = 0.4; // Délai entre chaque sous-éclair en ms
         
         // Performance: pré-calculer les couleurs d'éclairs pour éviter les allocations
         this.lightningColors = {
@@ -327,11 +327,11 @@ export default class LightningEffect {
             const timeSinceLightning = currentTime - this.lastLightningTime;
             
             if (timeSinceLightning < this.lightningDuration) {
-                // Temps normalisé (0-1)
+                // Temps normalisé (0-1) avec une courbe d'animation plus douce
                 const t = timeSinceLightning / this.lightningDuration;
                 
-                // Animation d'opacité: rapide au début, puis décroissance
-                this.currentLightningAlpha = 1.0 - t;
+                // Animation d'opacité: plus douce au début, puis décroissance plus lente
+                this.currentLightningAlpha = Math.pow(1.0 - t, 0.7); // Ajout d'un exposant pour ralentir la décroissance
                 
                 // Appliquer la luminosité (flash)
                 const flashIntensity = this.currentLightningAlpha * this.intensity;
@@ -360,7 +360,7 @@ export default class LightningEffect {
                     if (timeSinceSubLightning >= 0 && timeSinceSubLightning < this.subLightningDuration) {
                         subLightning.active = true;
                         const subT = timeSinceSubLightning / this.subLightningDuration;
-                        subLightning.alpha = 1.0 - subT;
+                        subLightning.alpha = Math.pow(1.0 - subT, 0.7); // Même courbe d'animation que l'éclair principal
                         
                         // Appliquer l'effet des sous-éclairs avec intensité variable
                         const subFlashIntensity = subLightning.alpha * this.intensity * subLightning.intensity;
