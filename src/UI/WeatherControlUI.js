@@ -54,14 +54,6 @@ export default class WeatherControlUI {
         this.container.style.fontSize = '14px';
         this.container.style.width = '250px';
         
-        // Titre
-        const title = document.createElement('h3');
-        title.textContent = 'Contrôle Météo';
-        title.style.margin = '0 0 15px 0';
-        title.style.textAlign = 'center';
-        title.style.fontWeight = 'bold';
-        this.container.appendChild(title);
-        
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
         this.createSlider('Nuages', 'cloud-density', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudDensity);
@@ -164,29 +156,66 @@ export default class WeatherControlUI {
         slider.style.backgroundColor = 'black';
         slider.style.border = 'none';
         slider.style.outline = 'none';
-        slider.style.webkitAppearance = 'none';
-        slider.style.mozAppearance = 'none';
         
-        // Style du curseur pour Chrome/Safari
-        slider.style.setProperty('--track-color', 'black');
-        slider.style.setProperty('--thumb-color', 'white');
+        // Ajouter des styles CSS pour le curseur
+        const style = document.createElement('style');
+        style.textContent = `
+            input[type="range"] {
+                -webkit-appearance: none;
+                background: black;
+                height: 8px;
+                border-radius: 4px;
+            }
+            input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 16px;
+                height: 16px;
+                background: white;
+                border-radius: 50%;
+                cursor: pointer;
+                margin-top: -4px;
+            }
+            input[type="range"]::-moz-range-thumb {
+                width: 16px;
+                height: 16px;
+                background: white;
+                border: none;
+                border-radius: 50%;
+                cursor: pointer;
+            }
+            input[type="range"]::-webkit-slider-runnable-track {
+                background: black;
+                height: 8px;
+                border-radius: 4px;
+            }
+            input[type="range"]::-moz-range-track {
+                background: black;
+                height: 8px;
+                border-radius: 4px;
+            }
+            input[type="range"]::-webkit-slider-runnable-track {
+                background: linear-gradient(to right, white 0%, white var(--value), black var(--value), black 100%);
+            }
+            input[type="range"]::-moz-range-progress {
+                background: white;
+                height: 8px;
+                border-radius: 4px;
+            }
+        `;
+        document.head.appendChild(style);
         
-        // Style du curseur pour Firefox
-        slider.style.setProperty('--moz-range-track', 'black');
-        slider.style.setProperty('--moz-range-thumb', 'white');
-        
-        // Style du curseur pour Webkit
-        slider.style.setProperty('--webkit-slider-thumb-background', 'white');
-        slider.style.setProperty('--webkit-slider-runnable-track', 'black');
-        
-        // Événement de changement en temps réel
+        // Mettre à jour la valeur CSS lors du changement
         slider.addEventListener('input', (e) => {
             const value = parseFloat(e.target.value);
             valueEl.textContent = value.toFixed(2);
+            slider.style.setProperty('--value', `${(value - min) / (max - min) * 100}%`);
             
             // Mettre à jour le paramètre correspondant dans le système météo
             this.updateWeatherParameter(id, value);
         });
+        
+        // Initialiser la valeur CSS
+        slider.style.setProperty('--value', `${(initialValue - min) / (max - min) * 100}%`);
         
         sliderContainer.appendChild(slider);
         this.container.appendChild(sliderContainer);
