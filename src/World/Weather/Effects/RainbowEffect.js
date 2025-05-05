@@ -50,7 +50,8 @@ export default class RainbowEffect {
                 uInnerRadius: { value: this.innerRadius },
                 uOuterRadius: { value: this.outerRadius },
                 uArcSpan: { value: this.arcSpan },
-                uPosition: { value: new THREE.Vector3(0, 0, 0) }
+                uPosition: { value: new THREE.Vector3(0, 0, 0) },
+                groundHeight: { value: 0 }
             };
             
             // Création du matériau utilisant les shaders
@@ -104,8 +105,11 @@ export default class RainbowEffect {
             cameraDirection.multiplyScalar(distance)
         );
         
-        // Ajuster la hauteur pour placer l'arc-en-ciel au-dessus de la carte
-        position.y = Math.max(position.y, 100); // Minimum 100 unités au-dessus du sol
+        // Ajuster la hauteur pour placer l'arc-en-ciel au niveau du sol
+        position.y = 0; // Position au niveau du sol
+        
+        // Mettre à jour la hauteur du sol dans les uniforms
+        this.uniforms.groundHeight.value = position.y;
         
         // Appliquer la position
         this.rainbowMesh.position.copy(position);
