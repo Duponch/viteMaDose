@@ -23,10 +23,10 @@ export default class CloudSystem {
         
         // Configuration
         this.numberOfCloudBaseShapes = 6; // Plus de formes de base pour plus de variété
-        this.totalNumberOfClouds = 45;    // Plus de nuages pour une meilleure couverture
+        this.totalNumberOfClouds = 60;    // Plus de nuages pour une meilleure couverture
         this.cloudAnimationSpeed = 0.00005; // Vitesse de base de l'animation
         this.cloudOpacity = 0.5;         // Opacité initiale des nuages (0-1)
-        this.cloudDensity = 0.3;         // Densité initiale des nuages (0-1)
+        this.cloudDensity = 0.5;         // Densité initiale des nuages (0-1)
         this.updateThreshold = 0.05;     // Seuil pour déclenchement d'une mise à jour complète
         this.lastDensity = this.cloudDensity; // Mémoriser la dernière densité appliquée
         this.pendingFullUpdate = false;   // Drapeau pour mise à jour complète différée
