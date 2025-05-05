@@ -74,6 +74,10 @@ export default class Experience extends EventTarget {
         }
         this.buildingTooltipTargetPosition = new THREE.Vector3();
 
+        // --- Gestion des oiseaux (NOUVEAU) ---
+        this.mouseMoveHandler = this._handleMouseMove.bind(this);
+        window.addEventListener('mousemove', this.mouseMoveHandler);
+
         // --- NOUVELLE STRUCTURE : État de Visibilité des Calques et Sous-Calques Debug ---
         this.debugLayerVisibility = {
             district: {
@@ -1344,6 +1348,7 @@ export default class Experience extends EventTarget {
         this.time.removeEventListener('tick', this.updateHandler);
         this.canvas.removeEventListener('mousedown', this._boundHandleMouseDown);
         this.canvas.removeEventListener('mouseup', this._boundHandleMouseUp);
+        window.removeEventListener('mousemove', this.mouseMoveHandler);
         if (this.buildingTooltipElement) {
             this.buildingTooltipElement.removeEventListener('click', this._boundHandleBuildingTooltipClick);
             // Retirer aussi l'écouteur du panneau stats SI attaché ici (ancienne méthode, sécurité)
@@ -1403,5 +1408,21 @@ export default class Experience extends EventTarget {
     // Propriété pour accéder facilement au gestionnaire de voitures
     get carManager() {
         return this.world?.carManager;
+    }
+
+    /**
+     * Gère les mouvements de souris pour le système d'oiseaux
+     * @param {MouseEvent} event - L'événement de mouvement de souris
+     * @private
+     */
+    _handleMouseMove(event) {
+        // Coordonnées normalisées pour le système d'oiseaux
+        const x = event.clientX;
+        const y = event.clientY;
+        
+        // Mettre à jour la position du prédateur dans le système d'oiseaux
+        if (this.world?.environment?.environmentSystem?.birdSystem) {
+            this.world.environment.environmentSystem.birdSystem.updatePredator(x, y);
+        }
     }
 }
