@@ -35,7 +35,7 @@ export default class RainEffect {
         this.enableSplashes = true;     // Activer/désactiver les impacts de gouttes
         this.maxSplashes = 2000;         // Nombre maximum d'impacts affichés simultanément (augmenté de 100 à 300)
         this.splashSize = { min: 0.8, max: 2.2 }; // Taille des impacts (augmentée)
-        this.splashDuration = { min: 0.3, max: 0.6 }; // Durée de vie plus courte pour plus de rafraîchissement
+        this.splashDuration = { min: 0.05, max: 0.1 }; // Durée de vie plus courte pour plus de rafraîchissement
         this.splashRate = 2000;          // Taux de génération d'impacts par seconde (considérablement augmenté)
         this.splashAreaSize = 50;       // Zone un peu plus concentrée pour mieux voir les impacts
         
@@ -406,8 +406,8 @@ export default class RainEffect {
      */
     createSplashTexture() {
         const canvas = document.createElement('canvas');
-        canvas.width = 128;
-        canvas.height = 128;
+        canvas.width = 256;
+        canvas.height = 256;
         
         const context = canvas.getContext('2d');
         context.clearRect(0, 0, canvas.width, canvas.height);
@@ -415,64 +415,115 @@ export default class RainEffect {
         // Centre du canvas
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
-        const radius = canvas.width * 0.4;
+        const radius = canvas.width * 0.3;
         
         // Créer un dégradé radial pour l'impact principal
-        const gradient = context.createRadialGradient(
+        const mainGradient = context.createRadialGradient(
             centerX, centerY, 0,
             centerX, centerY, radius
         );
         
-        // Dégradé pour l'impact d'eau - plus lumineux pour mieux voir
-        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-        gradient.addColorStop(0.2, 'rgba(230, 245, 255, 0.7)');
-        gradient.addColorStop(0.5, 'rgba(210, 235, 255, 0.5)');
-        gradient.addColorStop(1, 'rgba(200, 230, 255, 0)');
+        // Dégradé principal plus réaliste avec des variations de couleur
+        mainGradient.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+        mainGradient.addColorStop(0.1, 'rgba(240, 250, 255, 0.85)');
+        mainGradient.addColorStop(0.3, 'rgba(220, 240, 255, 0.7)');
+        mainGradient.addColorStop(0.5, 'rgba(200, 230, 255, 0.4)');
+        mainGradient.addColorStop(0.7, 'rgba(180, 220, 255, 0.2)');
+        mainGradient.addColorStop(1, 'rgba(160, 210, 255, 0)');
         
-        // Dessiner le cercle central de l'impact
-        context.fillStyle = gradient;
+        // Dessiner le cercle principal avec une légère distorsion
+        context.fillStyle = mainGradient;
         context.beginPath();
-        context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+        context.ellipse(
+            centerX, centerY,
+            radius * (0.3 + Math.random() * 0.2),
+            radius * (0.1 + Math.random() * 0.2),
+            0, 0, Math.PI * 2
+        );
         context.fill();
         
-        // Ajouter de petits cercles pour simuler les éclaboussures
-        const splashCount = 8; // Augmenter le nombre d'éclaboussures
-        const maxSplashDistance = radius * 0.9;
+        // Ajouter des éclaboussures secondaires
+        const secondarySplashes = 12;
+        const maxSplashDistance = radius * 1.5;
         
-        for (let i = 0; i < splashCount; i++) {
-            const angle = (i / splashCount) * Math.PI * 2;
-            const distance = maxSplashDistance * (0.4 + Math.random() * 0.6);
+        for (let i = 0; i < secondarySplashes; i++) {
+            const angle = (i / secondarySplashes) * Math.PI * 2;
+            const distance = maxSplashDistance * (0.3 + Math.random() * 0.7);
             const splashX = centerX + Math.cos(angle) * distance;
             const splashY = centerY + Math.sin(angle) * distance;
-            const splashSize = radius * (0.15 + Math.random() * 0.2); // Augmenter la taille
             
-            // Dégradé pour chaque éclaboussure - plus lumineux
+            // Taille et forme variables pour chaque éclaboussure
+            const splashSize = radius * (0.15 + Math.random() * 0.25);
+            const splashWidth = splashSize * (0.7 + Math.random() * 0.6);
+            const splashHeight = splashSize * (0.5 + Math.random() * 0.4);
+            
+            // Rotation aléatoire pour plus de naturel
+            const rotation = Math.random() * Math.PI * 2;
+            
+            // Dégradé pour chaque éclaboussure
             const splashGradient = context.createRadialGradient(
                 splashX, splashY, 0,
                 splashX, splashY, splashSize
             );
             
-            splashGradient.addColorStop(0, 'rgba(255, 255, 255, 0.7)');
-            splashGradient.addColorStop(1, 'rgba(220, 240, 255, 0)');
+            splashGradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+            splashGradient.addColorStop(0.5, 'rgba(220, 240, 255, 0.4)');
+            splashGradient.addColorStop(1, 'rgba(200, 230, 255, 0)');
             
+            context.save();
+            context.translate(splashX, splashY);
+            context.rotate(rotation);
             context.fillStyle = splashGradient;
             context.beginPath();
-            context.arc(splashX, splashY, splashSize, 0, Math.PI * 2);
+            context.ellipse(0, 0, splashWidth, splashHeight, 0, 0, Math.PI * 2);
+            context.fill();
+            context.restore();
+        }
+        
+        // Ajouter des petites gouttelettes éparpillées
+        const droplets = 20;
+        for (let i = 0; i < droplets; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = maxSplashDistance * (0.5 + Math.random() * 0.5);
+            const dropletX = centerX + Math.cos(angle) * distance;
+            const dropletY = centerY + Math.sin(angle) * distance;
+            const dropletSize = radius * (0.04 + Math.random() * 0.06);
+            
+            context.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            context.beginPath();
+            context.arc(dropletX, dropletY, dropletSize, 0, Math.PI * 2);
             context.fill();
         }
         
-        // Ajouter un petit cercle central plus lumineux
+        // Ajouter un point lumineux central avec halo
         const centerGradient = context.createRadialGradient(
             centerX, centerY, 0,
             centerX, centerY, radius * 0.3
         );
         
         centerGradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
-        centerGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        centerGradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.8)');
+        centerGradient.addColorStop(0.6, 'rgba(240, 250, 255, 0.4)');
+        centerGradient.addColorStop(1, 'rgba(220, 240, 255, 0)');
         
         context.fillStyle = centerGradient;
         context.beginPath();
         context.arc(centerX, centerY, radius * 0.3, 0, Math.PI * 2);
+        context.fill();
+        
+        // Ajouter un effet de "wetness" autour de l'impact
+        const wetnessGradient = context.createRadialGradient(
+            centerX, centerY, radius * 0.3,
+            centerX, centerY, radius * 0.9
+        );
+        
+        wetnessGradient.addColorStop(0, 'rgba(200, 230, 255, 0.1)');
+        wetnessGradient.addColorStop(0.5, 'rgba(180, 220, 255, 0.05)');
+        wetnessGradient.addColorStop(1, 'rgba(160, 210, 255, 0)');
+        
+        context.fillStyle = wetnessGradient;
+        context.beginPath();
+        context.arc(centerX, centerY, radius * 1.2, 0, Math.PI * 2);
         context.fill();
         
         // Créer la texture
