@@ -18,8 +18,8 @@ export default class RainbowEffect {
         this.uniforms = null;
         
         // Dimensions
-        this.innerRadius = 0.65; // Rayon intérieur relatif [0-1]
-        this.outerRadius = 0.85; // Rayon extérieur relatif [0-1]
+        this.innerRadius = 0.45; // Rayon intérieur relatif [0-1]
+        this.outerRadius = 0.65; // Rayon extérieur relatif [0-1]
         this.arcSpan = 0.5;      // Étendue de l'arc (0.5 = demi-cercle)
         
         // Initialisation
@@ -65,7 +65,7 @@ export default class RainbowEffect {
             });
             
             // Création de la géométrie (un plan circulaire)
-            const radius = this.weatherSystem.environment.skyboxRadius * 0.7;
+            const radius = this.weatherSystem.environment.skyboxRadius * 1.2;
             const geometry = new THREE.CircleGeometry(radius, 64);
             
             // Création du mesh
@@ -98,7 +98,7 @@ export default class RainbowEffect {
         
         // Distance à la skybox
         const skyboxRadius = this.weatherSystem.environment.skyboxRadius;
-        const distance = skyboxRadius * 0.9; // Légèrement en avant de la skybox
+        const distance = skyboxRadius * 1.1; // Légèrement en avant de la skybox
         
         // Position finale (toujours au même endroit par rapport à la caméra)
         const position = cameraPosition.clone().add(
