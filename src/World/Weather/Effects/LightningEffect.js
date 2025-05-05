@@ -154,7 +154,7 @@ export default class LightningEffect {
         const height = 300 + Math.random() * 100; // Hauteur totale de l'éclair
         const segments = 8 + Math.floor(Math.random() * 4); // Nombre de segments (plus élevé pour plus de détails)
         const maxOffset = 30; // Déviation maximale du zigzag
-        const thickness = 3 + Math.random() * 2; // Épaisseur de l'éclair
+        const thickness = 1.2 + Math.random() * 2; // Épaisseur de l'éclair
         
         // Créer la géométrie en forme de zigzag
         const points = [];
