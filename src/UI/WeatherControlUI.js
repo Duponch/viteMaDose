@@ -44,7 +44,7 @@ export default class WeatherControlUI {
         // Style de l'interface
         this.container.style.position = 'absolute';
         this.container.style.top = '10px';
-        this.container.style.right = '10px';
+        this.container.style.left = '10px';
         this.container.style.zIndex = '1000';
         this.container.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
         this.container.style.padding = '15px';
@@ -71,15 +71,24 @@ export default class WeatherControlUI {
         
         // Bouton pour réinitialiser les valeurs par défaut
         const resetButton = document.createElement('button');
-        resetButton.textContent = 'Réinitialiser aux valeurs par défaut';
+        resetButton.textContent = 'Réinitialiser par défaut';
         resetButton.style.width = '100%';
         resetButton.style.padding = '8px';
         resetButton.style.marginTop = '15px';
-        resetButton.style.backgroundColor = '#555';
+        resetButton.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
         resetButton.style.color = 'white';
-        resetButton.style.border = '1px solid #777';
+        resetButton.style.border = 'none';
         resetButton.style.borderRadius = '4px';
         resetButton.style.cursor = 'pointer';
+        resetButton.style.transition = 'background-color 0.2s';
+        
+        resetButton.addEventListener('mouseover', () => {
+            resetButton.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+        });
+        
+        resetButton.addEventListener('mouseout', () => {
+            resetButton.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+        });
         
         resetButton.addEventListener('click', () => {
             this.resetToDefaults();
@@ -150,9 +159,25 @@ export default class WeatherControlUI {
         slider.step = step;
         slider.value = initialValue;
         slider.style.width = '100%';
-        slider.style.accentColor = '#4a90e2';
         slider.style.height = '8px';
         slider.style.borderRadius = '4px';
+        slider.style.backgroundColor = 'black';
+        slider.style.border = 'none';
+        slider.style.outline = 'none';
+        slider.style.webkitAppearance = 'none';
+        slider.style.mozAppearance = 'none';
+        
+        // Style du curseur pour Chrome/Safari
+        slider.style.setProperty('--track-color', 'black');
+        slider.style.setProperty('--thumb-color', 'white');
+        
+        // Style du curseur pour Firefox
+        slider.style.setProperty('--moz-range-track', 'black');
+        slider.style.setProperty('--moz-range-thumb', 'white');
+        
+        // Style du curseur pour Webkit
+        slider.style.setProperty('--webkit-slider-thumb-background', 'white');
+        slider.style.setProperty('--webkit-slider-runnable-track', 'black');
         
         // Événement de changement en temps réel
         slider.addEventListener('input', (e) => {
