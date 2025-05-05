@@ -42,6 +42,11 @@ export default class WeatherControlUI {
         this.container = document.createElement('div');
         this.container.className = 'weather-control-ui';
         this.container.dataset.uiInteractive = 'true';
+
+		// Titre de la section
+        const title = document.createElement('h3');
+        title.textContent = 'Météo';
+        this.container.appendChild(title);
         
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
