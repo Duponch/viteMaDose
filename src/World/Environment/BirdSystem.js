@@ -8,8 +8,8 @@ import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRe
 
 // Constantes
 const WIDTH = 32;
-const MAX_BIRDS_COUNT_RATIO = 0.75; // Ratio maximum pour le calcul du nombre d'oiseaux
-const MIN_BIRDS_COUNT_RATIO = 0.1; // Ratio minimum pour le calcul du nombre d'oiseaux
+const MAX_BIRDS_COUNT_RATIO = 1.0; // Ratio maximum pour le calcul du nombre d'oiseaux (100%)
+const MIN_BIRDS_COUNT_RATIO = 0.0; // Ratio minimum pour le calcul du nombre d'oiseaux (0%)
 const MAX_BIRDS_COUNT = Math.round(WIDTH * WIDTH * MAX_BIRDS_COUNT_RATIO);
 const BOUNDS = 800;
 const BOUNDS_HALF = BOUNDS / 2;
@@ -249,8 +249,8 @@ export default class BirdSystem {
         
         // Paramètres de configuration des oiseaux
         this.config = {
-            color1: "paleturquoise",
-            color2: "royalblue",
+            color1: "#333333",
+            color2: "#111111",
             colorMode: "lerpGradient",
             separation: 21,
             alignment: 20,
