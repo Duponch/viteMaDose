@@ -307,15 +307,6 @@ export default class TimeControlUI {
         const maxSpeed = this.time.speedSteps[this.time.speedSteps.length - 1];
         this.elements.decreaseButton.disabled = currentScale <= minSpeed;
         this.elements.increaseButton.disabled = currentScale >= maxSpeed;
-
-        // --- MàJ Bouton Debug Principal ---
-        if (this.experience.isDebugMode) {
-            this.elements.debugToggleButton.style.opacity = '1.0';
-            this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 120, 150, 0.7)';
-        } else {
-            this.elements.debugToggleButton.style.opacity = '0.6';
-            this.elements.debugToggleButton.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
-        }
     }
 
 	/**
