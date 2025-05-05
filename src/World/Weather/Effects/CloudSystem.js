@@ -63,9 +63,9 @@ export default class CloudSystem {
             flatShading: true,
             transparent: true,
             opacity: this._cloudOpacity,
-            depthWrite: true, // Réactivé mais sera géré dynamiquement en fonction de l'opacité
+            depthWrite: true,
             depthTest: true,
-            alphaTest: 0.05, // Augmenté pour éliminer les pixels trop transparents
+            alphaTest: 0.1,
             blending: THREE.NormalBlending
         });
         
@@ -417,6 +417,24 @@ export default class CloudSystem {
         // Mettre à jour l'opacité du matériau
         if (this.cloudMaterial) {
             this.cloudMaterial.opacity = opacity;
+            
+            // Ajuster les paramètres de rendu en fonction de l'opacité
+            if (opacity > 0.9) {
+                // Pour les nuages très opaques
+                this.cloudMaterial.depthWrite = true;
+                this.cloudMaterial.alphaTest = 0.1;
+                this.cloudMaterial.blending = THREE.NormalBlending;
+            } else if (opacity > 0.5) {
+                // Pour les nuages semi-opaques
+                this.cloudMaterial.depthWrite = true;
+                this.cloudMaterial.alphaTest = 0.05;
+                this.cloudMaterial.blending = THREE.NormalBlending;
+            } else {
+                // Pour les nuages très transparents
+                this.cloudMaterial.depthWrite = false;
+                this.cloudMaterial.alphaTest = 0.01;
+                this.cloudMaterial.blending = THREE.NormalBlending;
+            }
         }
     }
     
