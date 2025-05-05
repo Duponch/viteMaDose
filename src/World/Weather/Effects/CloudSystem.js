@@ -23,7 +23,7 @@ export default class CloudSystem {
         
         // Configuration
         this.numberOfCloudBaseShapes = 6;
-        this.totalNumberOfClouds = 60;
+        this.totalNumberOfClouds = 200;
         this.cloudAnimationSpeed = 0.00005;
         this._cloudOpacity = 0.5; // Opacité de base des nuages
         this._cloudDensity = 0.5; // Densité (nombre) de nuages
