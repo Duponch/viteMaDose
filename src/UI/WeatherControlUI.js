@@ -178,30 +178,35 @@ export default class WeatherControlUI {
                     this.sliders.rain.value = value;
                     this.valueDisplays.rain.textContent = value.toFixed(2);
                     this.weatherSystem.rainEffect.intensity = value;
+                    this.sliders.rain.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'cloudDensity':
                     this.sliders.cloudDensity.value = value;
                     this.valueDisplays.cloudDensity.textContent = value.toFixed(2);
                     this.weatherSystem.cloudSystem.cloudDensity = value;
+                    this.sliders.cloudDensity.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'cloudOpacity':
                     this.sliders.cloudOpacity.value = value;
                     this.valueDisplays.cloudOpacity.textContent = value.toFixed(2);
                     this.weatherSystem.cloudSystem.cloudOpacity = value;
+                    this.sliders.cloudOpacity.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'fogDensity':
                     this.sliders.fog.value = value;
                     this.valueDisplays.fog.textContent = value.toFixed(2);
                     this.weatherSystem.fogEffect.fogDensity = value;
+                    this.sliders.fog.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'lightningIntensity':
                     this.sliders.lightning.value = value;
                     this.valueDisplays.lightning.textContent = value.toFixed(2);
                     this.weatherSystem.lightningEffect.intensity = value;
+                    this.sliders.lightning.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
             }
         }
