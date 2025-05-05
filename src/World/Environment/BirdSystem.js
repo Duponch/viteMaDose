@@ -59,8 +59,8 @@ float zoneRadiusSquared = 1600.0;
 float separationThresh = 0.45;
 float alignmentThresh = 0.65;
 
-const float UPPER_BOUNDS = BOUNDS;
-const float LOWER_BOUNDS = 50.0; // Limite inférieure pour garder les oiseaux dans le ciel
+const float UPPER_BOUNDS = BOUNDS * 1.5; // Augmentation de la limite supérieure
+const float LOWER_BOUNDS = 50.0;
 
 float rand(vec2 co){
   return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
@@ -113,13 +113,16 @@ void main() {
   dir = selfPosition - central;
   dist = length(dir);
 
-  // Forcer les oiseaux à rester dans le ciel
+  // Forcer les oiseaux à rester dans le ciel avec une réaction plus douce
   if (selfPosition.y < LOWER_BOUNDS) {
     velocity.y += (LOWER_BOUNDS - selfPosition.y) * delta * 2.0;
   }
   if (selfPosition.y > UPPER_BOUNDS) {
-    velocity.y -= (selfPosition.y - UPPER_BOUNDS) * delta * 2.0;
+    velocity.y -= (selfPosition.y - UPPER_BOUNDS) * delta * 0.5; // Réaction plus douce en haut
   }
+
+  // Ajouter une légère tendance à monter
+  velocity.y += delta * 0.1;
 
   dir.y *= 2.5;
   velocity -= normalize(dir) * delta * 5.;
