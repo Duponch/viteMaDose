@@ -41,6 +41,7 @@ export default class WeatherControlUI {
         // Créer les éléments de l'interface
         this.container = document.createElement('div');
         this.container.className = 'weather-control-ui';
+        this.container.dataset.uiInteractive = 'true';
         
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
@@ -96,6 +97,7 @@ export default class WeatherControlUI {
     createSlider(label, id, min, max, step, initialValue) {
         const sliderContainer = document.createElement('div');
         sliderContainer.className = 'slider-container';
+        sliderContainer.dataset.uiInteractive = 'true';
         
         // Ligne d'étiquette et valeur
         const labelRow = document.createElement('div');

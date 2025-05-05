@@ -322,7 +322,10 @@ export default class Camera {
     }
 
     _handleMouseMove(event) {
-        if (this.isFollowing && this.isLeftMouseDown) {
+        const targetElement = event.target;
+        const isUIInteraction = targetElement.closest('[data-ui-interactive="true"]');
+
+        if (this.isFollowing && this.isLeftMouseDown && !isUIInteraction) {
             this.mouseYaw -= event.movementX * this.mouseSensitivityX;
             this.mousePitch -= event.movementY * this.mouseSensitivityY;
             this.mousePitch = Math.max(this.minPitch, Math.min(this.maxPitch, this.mousePitch));

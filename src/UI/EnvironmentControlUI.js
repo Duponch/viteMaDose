@@ -32,6 +32,7 @@ export default class EnvironmentControlUI {
         // Créer les éléments de l'interface
         this.container = document.createElement('div');
         this.container.className = 'environment-control-ui';
+        this.container.dataset.uiInteractive = 'true';
         
         // Titre de la section
         const title = document.createElement('h3');
@@ -85,6 +86,7 @@ export default class EnvironmentControlUI {
     createSlider(label, id, min, max, step, initialValue) {
         const sliderContainer = document.createElement('div');
         sliderContainer.className = 'slider-container';
+        sliderContainer.dataset.uiInteractive = 'true';
         
         // Ligne d'étiquette et valeur
         const labelRow = document.createElement('div');
