@@ -121,8 +121,8 @@ export default class PlotGroundGenerator {
         canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
-        // Couleur de base de l'herbe (même que les parcs)
-        const baseColor = new THREE.Color(0x61874c);
+        // Couleur de base de l'herbe (plus claire)
+        const baseColor = new THREE.Color(0x7a9c6c);
         ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -135,8 +135,8 @@ export default class PlotGroundGenerator {
             // Taille aléatoire
             const size = Math.random() * 20 + 10;
             
-            // Variation de couleur (plus claire ou plus foncée)
-            const variation = Math.random() * 40 - 20;
+            // Variation de couleur (plus claire)
+            const variation = Math.random() * 30 + 10; // Variation uniquement vers le plus clair
             const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
             const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
             const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
@@ -162,16 +162,16 @@ export default class PlotGroundGenerator {
             ctx.fill();
         }
 
-        // Ajouter des taches plus foncées pour plus de variété
+        // Ajouter des taches plus claires pour plus de variété
         for (let i = 0; i < 50; i++) {
             const x = Math.random() * canvas.width;
             const y = Math.random() * canvas.height;
             const size = Math.random() * 30 + 20;
             
-            const darkVariation = -30;
-            const r = Math.max(0, Math.min(255, baseColor.r * 255 + darkVariation));
-            const g = Math.max(0, Math.min(255, baseColor.g * 255 + darkVariation));
-            const b = Math.max(0, Math.min(255, baseColor.b * 255 + darkVariation));
+            const lightVariation = 30; // Variation vers le plus clair
+            const r = Math.max(0, Math.min(255, baseColor.r * 255 + lightVariation));
+            const g = Math.max(0, Math.min(255, baseColor.g * 255 + lightVariation));
+            const b = Math.max(0, Math.min(255, baseColor.b * 255 + lightVariation));
             
             ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
             ctx.beginPath();
@@ -182,7 +182,7 @@ export default class PlotGroundGenerator {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(4, 4); // Même répétition que les parcs
+        texture.repeat.set(4, 4);
         return texture;
     }
 
