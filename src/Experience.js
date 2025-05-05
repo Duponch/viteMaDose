@@ -11,7 +11,9 @@ import TimeUI from './UI/TimeUI.js';
 import TimeControlUI from './UI/TimeControlUI.js';
 import AgentStatsUI from './UI/AgentStatsUI.js';
 import WeatherControlUI from './UI/WeatherControlUI.js';
+import EnvironmentControlUI from './UI/EnvironmentControlUI.js';
 import './UI/WeatherUI.css';
+import './UI/EnvironmentUI.css';
 // Import nécessaire pour la recherche de mesh par position
 import { Matrix4, Vector3 } from 'three';
 import * as DebugTools from './World/Rendering/DebugTools.js';
@@ -40,8 +42,9 @@ export default class Experience extends EventTarget {
         this.isDebugMode = false;
         this.timeUI = new TimeUI(this);
         this.timeControlUI = new TimeControlUI(this);
-        this.agentStatsUI = new AgentStatsUI(this); // <--- INSTANCIER LA NOUVELLE UI
+        this.agentStatsUI = new AgentStatsUI(this);
         this.weatherControlUI = new WeatherControlUI(this);
+        this.environmentControlUI = new EnvironmentControlUI(this);
         this.controls = new OrbitControls(this.camera.instance, this.canvas);
         this.controls.enableDamping = true;
         this.stats = new Stats();
@@ -1335,6 +1338,7 @@ export default class Experience extends EventTarget {
         this.timeControlUI.destroy();
         this.agentStatsUI.destroy();
         this.weatherControlUI.destroy();
+        this.environmentControlUI.destroy();
         
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
@@ -1379,6 +1383,7 @@ export default class Experience extends EventTarget {
         this.timeUI?.destroy(); this.timeUI = null;
         this.timeControlUI?.destroy(); this.timeControlUI = null;
         this.weatherControlUI?.destroy(); this.weatherControlUI = null;
+        this.environmentControlUI?.destroy(); this.environmentControlUI = null;
         this.camera?.destroy(); this.camera = null;
         this.world?.destroy(); this.world = null;
         this.controls?.dispose(); this.controls = null;

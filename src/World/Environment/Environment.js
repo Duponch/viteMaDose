@@ -4,6 +4,7 @@ import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import Calendar from '../../Utils/Calendar.js';
 import WeatherSystem from '../Weather/WeatherSystem.js';
+import EnvironmentSystem from './EnvironmentSystem.js';
 
 // --- Objets temporaires pour l'update (performance) ---
 const _tempMatrix = new THREE.Matrix4();
@@ -74,8 +75,9 @@ export default class Environment {
         this.setAmbientLight();
         this.setMoonLight();
         
-        // --- NOUVEAU: Système météorologique ---
+        // --- Système météorologique et environnemental ---
         this.weatherSystem = null; // Sera initialisé après le chargement complet de l'environnement
+        this.environmentSystem = null; // Système d'environnement (oiseaux, etc.)
         // --------------------------------------
     }
 
@@ -120,8 +122,9 @@ export default class Environment {
             this.updateDayNightCycle(0); // Applique l'état initial
             this.isInitialized = true;
             
-            // --- NOUVEAU: Initialiser le système météorologique ---
+            // --- Initialiser les systèmes météorologiques et d'environnement ---
             this.weatherSystem = new WeatherSystem(this.experience, this);
+            this.environmentSystem = new EnvironmentSystem(this.experience, this);
             // ------------------------------------------------------
             
             console.log("Environment: Initialisation terminée.");
@@ -231,7 +234,7 @@ export default class Environment {
 
     updateDayNightCycle() { // Suppression du paramètre deltaTime
         // Vérifications initiales
-        if (!this.isInitialized || !this.cycleEnabled || !this.dayDurationMs || this.dayDurationMs <= 0) {
+        if (!this.isInitialized || !this.cycleEnabled || this.dayDurationMs <= 0) {
             // Si le cycle est désactivé ou non prêt, ne rien faire ou appliquer un état fixe
              if (!this.cycleEnabled && this.isInitialized) {
                  // Appliquer l'état de départ fixe si le cycle est désactivé
@@ -331,7 +334,7 @@ export default class Environment {
 
             // Mise à jour de la couleur du fog
             if (this.experience.scene.fog) {
-                this.experience.scene.fog.color.copy(this.skyUniforms.uCurrentZenithColor.value);
+                this.experience.scene.fog.color.copy(this.skyUniforms.uCurrentHorizonColor.value);
             }
         }
 
@@ -409,11 +412,17 @@ export default class Environment {
         if (this.outerGroundMesh) { this.scene.remove(this.outerGroundMesh); this.outerGroundMesh.geometry?.dispose(); this.outerGroundMesh.material?.dispose(); this.outerGroundMesh = null; }
         if (this.moonMesh) { this.scene.remove(this.moonMesh); this.moonMesh.geometry?.dispose(); this.moonMesh.material?.dispose(); this.moonMesh = null; }
         
-        // --- NOUVEAU : Nettoyer le système météorologique ---
+        // --- NOUVEAU : Nettoyer les systèmes météorologiques et d'environnement ---
         if (this.weatherSystem) {
             this.weatherSystem.destroy();
             this.weatherSystem = null;
             console.log("Système météorologique nettoyé.");
+        }
+        
+        if (this.environmentSystem) {
+            this.environmentSystem.destroy();
+            this.environmentSystem = null;
+            console.log("Système d'environnement nettoyé.");
         }
         // ---------------------------------------------------
 
@@ -430,21 +439,47 @@ export default class Environment {
 
             // 1. Mettre à jour le cycle Jour/Nuit (calcul couleurs, positions soleil/lune)
             // Cette fonction utilise deltaTime pour faire avancer this.cycleTime
-			this.updateDayNightCycle(); // Utilise le temps global depuis experience.time
+			this.updateDayNightCycle();
             
-            // --- NOUVEAU : Mettre à jour le système météorologique ---
+            // --- NOUVEAU : Mettre à jour les systèmes ---
             if (this.weatherSystem) {
                 this.weatherSystem.update(deltaTime);
             }
+            
+            if (this.environmentSystem) {
+                this.environmentSystem.update(deltaTime);
+            }
             // ---------------------------------------------------------
-        } // Fin if (isInitialized)
+        }
     }
 
     /**
-     * Retourne la date courante du jeu (jour, mois, année, jour de la semaine, etc.)
+     * Retourne la date courante du jeu
+     * @returns {Object} Objet contenant la date et l'heure du jeu
      */
     getCurrentCalendarDate() {
-        // Utilise le temps de jeu écoulé
+        // Utilise le temps de jeu écoulé pour calculer la date
         return this.calendar.getCurrentDate(this.experience.time.elapsed);
+    }
+    
+    /**
+     * Définit la densité des oiseaux
+     * @param {number} density - Densité des oiseaux entre 0 et 1
+     */
+    setBirdDensity(density) {
+        if (this.environmentSystem) {
+            this.environmentSystem.setBirdDensity(density);
+        }
+    }
+    
+    /**
+     * Obtient la densité actuelle des oiseaux
+     * @returns {number} Densité des oiseaux entre 0 et 1
+     */
+    getBirdDensity() {
+        if (this.environmentSystem) {
+            return this.environmentSystem.getBirdDensity();
+        }
+        return 0;
     }
 }
