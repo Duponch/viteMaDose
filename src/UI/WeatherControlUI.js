@@ -2,6 +2,8 @@
  * Interface utilisateur pour contrôler le système météorologique
  * Version améliorée avec curseurs indépendants
  */
+import * as THREE from 'three';
+
 export default class WeatherControlUI {
     /**
      * @param {Object} experience - Référence à l'instance principale
@@ -23,6 +25,7 @@ export default class WeatherControlUI {
                 this.defaultValues = {
                     rainIntensity: 0,
                     cloudDensity: 0.3, // Valeur par défaut dans CloudSystem
+                    cloudColor: 0, // Valeur 0 = blanc (défaut), 1 = noir
                     cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
                     fogDensity: 0.03,     // Valeur par défaut du brouillard
                     lightningIntensity: 0, // Pas d'éclairs par défaut
@@ -51,6 +54,7 @@ export default class WeatherControlUI {
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
         this.createSlider('Nuages', 'cloud-density', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudDensity);
+        this.createSlider('Couleur Nuages', 'cloud-color', 0, 1, 0.01, 0); // 0 = blanc, 1 = noir
         this.createSlider('Opacité Nuages', 'cloud-opacity', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudOpacity);
         this.createSlider('Brouillard', 'fog', 0, 1, 0.01, this.weatherSystem.fogEffect.fogDensity);
         this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
@@ -72,6 +76,7 @@ export default class WeatherControlUI {
         this.sliders = {
             rain: this.container.querySelector('#slider-rain'),
             cloudDensity: this.container.querySelector('#slider-cloud-density'),
+            cloudColor: this.container.querySelector('#slider-cloud-color'),
             cloudOpacity: this.container.querySelector('#slider-cloud-opacity'),
             fog: this.container.querySelector('#slider-fog'),
             lightning: this.container.querySelector('#slider-lightning'),
@@ -81,6 +86,7 @@ export default class WeatherControlUI {
         this.valueDisplays = {
             rain: this.container.querySelector('#value-rain'),
             cloudDensity: this.container.querySelector('#value-cloud-density'),
+            cloudColor: this.container.querySelector('#value-cloud-color'),
             cloudOpacity: this.container.querySelector('#value-cloud-opacity'),
             fog: this.container.querySelector('#value-fog'),
             lightning: this.container.querySelector('#value-lightning'),
@@ -147,7 +153,7 @@ export default class WeatherControlUI {
     
     /**
      * Met à jour un paramètre spécifique dans le système météo
-     * @param {string} param - Nom du paramètre (rain, cloud-density, cloud-opacity, fog, lightning, rainbow)
+     * @param {string} param - Nom du paramètre (rain, cloud-density, cloud-color, cloud-opacity, fog, lightning, rainbow)
      * @param {number} value - Nouvelle valeur (0-1)
      */
     updateWeatherParameter(param, value) {
@@ -160,6 +166,16 @@ export default class WeatherControlUI {
                 
             case 'cloud-density':
                 this.weatherSystem.cloudSystem.cloudDensity = value;
+                break;
+                
+            case 'cloud-color':
+                // Interpoler entre blanc (0xffffff) et noir (0x000000) en fonction de la valeur
+                const r = 1 - value;  // Blanc (1) vers noir (0)
+                const g = 1 - value;
+                const b = 1 - value;
+                const color = new THREE.Color(r, g, b);
+                console.log(`Mise à jour de la couleur des nuages: ${r}, ${g}, ${b}`);
+                this.weatherSystem.cloudSystem.cloudColor = color;
                 break;
                 
             case 'cloud-opacity':
@@ -201,6 +217,19 @@ export default class WeatherControlUI {
                     this.valueDisplays.cloudDensity.textContent = value.toFixed(2);
                     this.weatherSystem.cloudSystem.cloudDensity = value;
                     this.sliders.cloudDensity.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
+                    break;
+                    
+                case 'cloudColor':
+                    this.sliders.cloudColor.value = value;
+                    this.valueDisplays.cloudColor.textContent = value.toFixed(2);
+                    // Interpoler entre blanc (0xffffff) et noir (0x000000)
+                    const r = 1 - value;  // Blanc (1) vers noir (0)
+                    const g = 1 - value;
+                    const b = 1 - value;
+                    const color = new THREE.Color(r, g, b);
+                    console.log(`Réinitialisation de la couleur des nuages: ${r}, ${g}, ${b}`);
+                    this.weatherSystem.cloudSystem.cloudColor = color;
+                    this.sliders.cloudColor.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'cloudOpacity':

@@ -36,6 +36,17 @@ export default class WeatherSystem {
         this.transitionProgress = 1.0; // 1.0 = transition terminée
         this.lastWeatherChangeTime = 0;
         
+        // Configuration du debug
+        if (this.debug && this.debug.active) {
+            console.log('Initialisation de l\'interface de débogage météo');
+            this.debugFolder = this.debug.ui.addFolder('Météo');
+            
+            // Ajouter un contrôle simple pour vérifier que l'interface fonctionne
+            this.debugFolder.add(this, 'enabled').name('Activer/Désactiver');
+            
+            // ... existing debug controls ...
+        }
+        
         // Créer les sous-systèmes dans un ordre précis pour éviter les dépendances circulaires
         // D'abord le brouillard qui peut fonctionner sans les autres composants
         this.fogEffect = new FogEffect(this);
@@ -56,6 +67,11 @@ export default class WeatherSystem {
             this.rainEffect,
             this.rainbowEffect
         ];
+        
+        // Ajouter le contrôle de couleur des nuages après l'initialisation du cloudSystem
+        if (this.debug && this.debug.active) {
+            this.debugFolder.addColor(this.cloudSystem, 'cloudColor').name('Couleur des nuages');
+        }
         
         // Préréglages de météo (conservés pour compatibilité, mais non utilisés par les curseurs)
         this.weatherPresets = {

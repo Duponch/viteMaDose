@@ -27,6 +27,7 @@ export default class CloudSystem {
         this.cloudAnimationSpeed = 0.00005;
         this._cloudOpacity = 0.5; // Opacité de base des nuages
         this._cloudDensity = 0.5; // Densité (nombre) de nuages
+        this._cloudColor = new THREE.Color(0xffffff); // Couleur de base des nuages
         this.updateThreshold = 0.01;
         this.lastDensity = this._cloudDensity;
         this.pendingFullUpdate = false;
@@ -57,7 +58,7 @@ export default class CloudSystem {
     initialize() {
         // Créer le matériau des nuages
         this.cloudMaterial = new THREE.MeshStandardMaterial({
-            color: 0xffffff,
+            color: this.weatherSystem.cloudColor,
             roughness: 0.9,
             metalness: 0.1,
             flatShading: true,
@@ -288,14 +289,18 @@ export default class CloudSystem {
             this.cloudMaterial.blending = THREE.NormalBlending;
         }
         
-        // Ajuster la couleur selon la densité
-        if (this._cloudDensity > 0.7) {
-            // Nuages denses = plus gris/sombres
-            const darknessFactor = 1.0 - (this._cloudDensity - 0.7) * 0.5;
-            this.cloudMaterial.color = new THREE.Color(darknessFactor, darknessFactor, darknessFactor);
-        } else {
-            // Nuages légers = plus blancs
-            this.cloudMaterial.color = new THREE.Color(1, 1, 1);
+        // Remarque: Nous ne modifions plus la couleur ici
+        // car elle est maintenant controlée par le curseur de couleur
+        // Cette section a été retirée pour permettre au curseur de couleur de fonctionner correctement
+    }
+    
+    /**
+     * Met à jour la couleur des nuages
+     */
+    updateCloudColor() {
+        if (this.cloudMaterial) {
+            // Utiliser la couleur interne stockée dans this._cloudColor
+            this.cloudMaterial.color.copy(this._cloudColor);
         }
     }
     
@@ -344,6 +349,12 @@ export default class CloudSystem {
                 instancedMesh.instanceMatrix.needsUpdate = true;
             }
         });
+
+        // Mettre à jour la couleur des nuages
+        this.updateCloudColor();
+        
+        // Mettre à jour l'opacité des nuages
+        this.updateCloudOpacity();
     }
     
     /**
@@ -444,6 +455,25 @@ export default class CloudSystem {
      */
     get cloudOpacity() {
         return this._cloudOpacity;
+    }
+    
+    /**
+     * Définit la couleur des nuages
+     * @param {THREE.Color} color - La nouvelle couleur des nuages
+     */
+    set cloudColor(color) {
+        this._cloudColor.copy(color);
+        if (this.cloudMaterial) {
+            this.cloudMaterial.color.copy(color);
+        }
+    }
+
+    /**
+     * Obtient la couleur actuelle des nuages
+     * @returns {THREE.Color} La couleur des nuages
+     */
+    get cloudColor() {
+        return this._cloudColor;
     }
     
     /**
