@@ -19,6 +19,8 @@ export default class PlotGroundGenerator {
         this.materials = materials;
         this.grassTexture = this.createGrassTexture();
         this.lawnTexture = this.createLawnTexture();
+        this.concreteTexture = this.createConcreteTexture();
+        this.tileTexture = this.createTileTexture();
 
         // Vérifier si les matériaux nécessaires existent (optionnel mais recommandé)
         const requiredMaterials = [
@@ -59,7 +61,7 @@ export default class PlotGroundGenerator {
             const size = Math.random() * 20 + 10;
             
             // Variation de couleur (plus claire ou plus foncée)
-            const variation = Math.random() * 20 - 10;
+            const variation = Math.random() * 40 - 20;
             const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
             const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
             const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
@@ -185,6 +187,232 @@ export default class PlotGroundGenerator {
     }
 
     /**
+     * Crée une texture procédurale pour simuler du béton
+     * @returns {THREE.CanvasTexture} La texture générée
+     */
+    createConcreteTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base du béton
+        const baseColor = new THREE.Color(0xC0C0C0);
+        ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ajouter des motifs géométriques
+        const patternSize = 64; // Taille de base pour les motifs
+        for (let y = 0; y < canvas.height; y += patternSize) {
+            for (let x = 0; x < canvas.width; x += patternSize) {
+                // Variation de couleur pour chaque motif
+                const variation = Math.random() * 30 - 15;
+                const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
+                const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
+                const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
+                
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                
+                // Dessiner des formes géométriques variées
+                const shapeType = Math.floor(Math.random() * 4);
+                ctx.beginPath();
+                
+                switch (shapeType) {
+                    case 0: // Rectangle
+                        const width = patternSize * (0.6 + Math.random() * 0.4);
+                        const height = patternSize * (0.6 + Math.random() * 0.4);
+                        const offsetX = (patternSize - width) / 2;
+                        const offsetY = (patternSize - height) / 2;
+                        ctx.rect(x + offsetX, y + offsetY, width, height);
+                        break;
+                        
+                    case 1: // Triangle
+                        const size = patternSize * (0.6 + Math.random() * 0.4);
+                        const centerX = x + patternSize / 2;
+                        const centerY = y + patternSize / 2;
+                        ctx.moveTo(centerX, centerY - size/2);
+                        ctx.lineTo(centerX + size/2, centerY + size/2);
+                        ctx.lineTo(centerX - size/2, centerY + size/2);
+                        break;
+                        
+                    case 2: // Lignes croisées
+                        const crossSize = patternSize * (0.6 + Math.random() * 0.4);
+                        const crossCenterX = x + patternSize / 2;
+                        const crossCenterY = y + patternSize / 2;
+                        ctx.moveTo(crossCenterX - crossSize/2, crossCenterY);
+                        ctx.lineTo(crossCenterX + crossSize/2, crossCenterY);
+                        ctx.moveTo(crossCenterX, crossCenterY - crossSize/2);
+                        ctx.lineTo(crossCenterX, crossCenterY + crossSize/2);
+                        break;
+                        
+                    case 3: // Motif en échelle
+                        const stepSize = patternSize * (0.6 + Math.random() * 0.4);
+                        const stepWidth = stepSize / 4;
+                        for (let i = 0; i < 4; i++) {
+                            const stepX = x + (patternSize - stepSize) / 2 + i * stepWidth;
+                            const stepY = y + (patternSize - stepSize) / 2;
+                            ctx.rect(stepX, stepY, stepWidth, stepSize);
+                        }
+                        break;
+                }
+                
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+
+        // Ajouter des lignes de jointure
+        ctx.strokeStyle = '#A0A0A0';
+        ctx.lineWidth = 2;
+        for (let y = patternSize; y < canvas.height; y += patternSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+        for (let x = patternSize; x < canvas.width; x += patternSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+
+        // Ajouter des fissures aléatoires
+        ctx.strokeStyle = '#808080';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 20; i++) {
+            const startX = Math.random() * canvas.width;
+            const startY = Math.random() * canvas.height;
+            const length = Math.random() * 100 + 50;
+            const angle = Math.random() * Math.PI * 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(
+                startX + Math.cos(angle) * length,
+                startY + Math.sin(angle) * length
+            );
+            ctx.stroke();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 2);
+        return texture;
+    }
+
+    /**
+     * Crée une texture procédurale pour simuler du carrelage
+     * @returns {THREE.CanvasTexture} La texture générée
+     */
+    createTileTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base du carrelage (gris foncé)
+        const baseColor = new THREE.Color(0x808080);
+        ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Taille des carreaux
+        const tileSize = 64;
+        const jointWidth = 2;
+
+        // Dessiner les joints (plus foncés)
+        ctx.strokeStyle = '#606060';
+        ctx.lineWidth = jointWidth;
+
+        // Lignes horizontales
+        for (let y = tileSize; y < canvas.height; y += tileSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+
+        // Lignes verticales
+        for (let x = tileSize; x < canvas.width; x += tileSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+
+        // Dessiner les carreaux avec des variations
+        for (let y = 0; y < canvas.height; y += tileSize) {
+            for (let x = 0; x < canvas.width; x += tileSize) {
+                // Variation de couleur pour chaque carreau (plus foncée)
+                const variation = Math.random() * 30 - 15;
+                const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
+                const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
+                const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
+                
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(
+                    x + jointWidth/2,
+                    y + jointWidth/2,
+                    tileSize - jointWidth,
+                    tileSize - jointWidth
+                );
+
+                // Ajouter des motifs subtils sur certains carreaux
+                if (Math.random() < 0.3) { // 30% de chance d'avoir un motif
+                    const patternType = Math.floor(Math.random() * 3);
+                    const centerX = x + tileSize/2;
+                    const centerY = y + tileSize/2;
+                    const patternSize = tileSize * 0.4;
+
+                    // Motifs plus foncés
+                    ctx.strokeStyle = `rgb(${r - 40}, ${g - 40}, ${b - 40})`;
+                    ctx.lineWidth = 1;
+
+                    switch (patternType) {
+                        case 0: // Carré
+                            const squareSize = patternSize * 0.8;
+                            ctx.strokeRect(
+                                centerX - squareSize/2,
+                                centerY - squareSize/2,
+                                squareSize,
+                                squareSize
+                            );
+                            break;
+
+                        case 1: // Croix
+                            ctx.beginPath();
+                            ctx.moveTo(centerX - patternSize/2, centerY);
+                            ctx.lineTo(centerX + patternSize/2, centerY);
+                            ctx.moveTo(centerX, centerY - patternSize/2);
+                            ctx.lineTo(centerX, centerY + patternSize/2);
+                            ctx.stroke();
+                            break;
+
+                        case 2: // Points
+                            const numPoints = 4;
+                            for (let i = 0; i < numPoints; i++) {
+                                const angle = (i / numPoints) * Math.PI * 2;
+                                const px = centerX + Math.cos(angle) * patternSize/2;
+                                const py = centerY + Math.sin(angle) * patternSize/2;
+                                ctx.beginPath();
+                                ctx.arc(px, py, 2, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                            break;
+                    }
+                }
+            }
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 1);
+        return texture;
+    }
+
+    /**
      * Crée et retourne un groupe contenant les meshes de sol pour toutes les parcelles.
      * @param {Array<Plot>} plots - Tableau des parcelles finales (feuilles).
      * @returns {THREE.Group | null} Le groupe contenant les meshes de sol ou null si pas de parcelles.
@@ -219,7 +447,6 @@ export default class PlotGroundGenerator {
                     });
                     break;
                 case 'house':
-                    // Utiliser la même texture que les parcs mais avec une légère variation de couleur
                     groundMaterial = new THREE.MeshStandardMaterial({
                         map: this.lawnTexture,
                         color: 0x61874c,
@@ -228,13 +455,31 @@ export default class PlotGroundGenerator {
                     });
                     break;
                 case 'building':
-                    groundMaterial = this.materials.buildingGroundMaterial;
+                    // Utiliser la texture de béton pour les immeubles
+                    groundMaterial = new THREE.MeshStandardMaterial({
+                        map: this.concreteTexture,
+                        color: 0xC0C0C0,
+                        roughness: 0.9,
+                        metalness: 0.0
+                    });
                     break;
                 case 'industrial':
-                    groundMaterial = this.materials.industrialGroundMaterial;
+                    // Utiliser la texture de béton pour les zones industrielles
+                    groundMaterial = new THREE.MeshStandardMaterial({
+                        map: this.concreteTexture,
+                        color: 0xA0A0A0, // Un peu plus foncé pour les zones industrielles
+                        roughness: 0.95, // Plus rugueux pour un aspect plus usé
+                        metalness: 0.0
+                    });
                     break;
                 case 'skyscraper':
-                    groundMaterial = this.materials.skyscraperGroundMaterial;
+                    // Utiliser la texture de carrelage pour les gratte-ciels avec des couleurs plus foncées
+                    groundMaterial = new THREE.MeshStandardMaterial({
+                        map: this.tileTexture,
+                        color: 0x808080,
+                        roughness: 0.7,
+                        metalness: 0.1
+                    });
                     break;
                 case 'unbuildable':
                      // Pas de sol visible pour les zones non constructibles (ou un matériau différent)
