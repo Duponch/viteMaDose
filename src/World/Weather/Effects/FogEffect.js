@@ -92,41 +92,16 @@ export default class FogEffect {
      * @returns {THREE.Color} Couleur du brouillard adaptée
      */
     calculateFogColor() {
-        // Obtenir la couleur du ciel pour adapter le brouillard
+        // Obtenir la couleur du ciel en temps réel
         const skyColor = this.weatherSystem.environment.skyUniforms?.uCurrentHorizonColor?.value;
         
-        // Vérifier si les autres systèmes sont initialisés
-        const rainIntensity = this.weatherSystem.rainEffect?.intensity ?? 0;
-        const cloudDensity = this.weatherSystem.cloudSystem?.cloudDensity ?? 0;
-        
-        // Déterminer la couleur de base en fonction des conditions
-        let baseColor;
-        if (rainIntensity > 0.5) {
-            // Pluie forte
-            baseColor = this.fogColors.heavyRain;
-        } else if (rainIntensity > 0.1) {
-            // Pluie légère
-            baseColor = this.fogColors.rainy;
-        } else if (cloudDensity > 0.7) {
-            // Nuageux
-            baseColor = this.fogColors.cloudy;
-        } else if (this._fogDensity > 0.6) {
-            // Brouillard dense
-            baseColor = this.fogColors.foggy;
-        } else {
-            // Temps clair
-            baseColor = this.fogColors.clear;
-        }
-        
-        // Mélanger avec la couleur du ciel si disponible
         if (skyColor) {
-            const result = new THREE.Color();
-            // Plus de couleur du ciel quand la densité est faible
-            const skyInfluence = Math.max(0.3, 1.0 - this._fogDensity * 0.8);
-            return result.lerpColors(baseColor, skyColor, skyInfluence);
+            // Utiliser directement la couleur du ciel
+            return new THREE.Color(skyColor);
         }
         
-        return baseColor;
+        // Fallback si la couleur du ciel n'est pas disponible
+        return this.fogColors.clear;
     }
     
     /**
@@ -134,51 +109,12 @@ export default class FogEffect {
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
      */
     update(deltaTime) {
-        // Si une mise à jour est en cours, éviter d'en lancer une nouvelle
-        if (this.isUpdating) return;
+        if (!this.weatherFog || !this.enabled) return;
         
-        // Si aucune mise à jour n'est nécessaire et que la densité est très faible, ne rien faire
-        if (!this.needsUpdate && this._fogDensity <= 0.001) return;
-        
-        this.isUpdating = true;
-        this.needsUpdate = false;
-        
-        try {
-            // Si la densité est très faible et que notre brouillard est actif, le cacher
-            if (this._fogDensity <= 0.001) {
-                if (this.weatherFog) {
-                    this.weatherFog.density = 0;
-                }
-                this.isUpdating = false;
-                return;
-            }
-            
-            // S'assurer que notre brouillard est actif
-            if (!this.weatherFog) {
-                this.initWeatherFog();
-            }
-            
-            // Calculer la couleur et la densité
-            const fogColor = this.calculateFogColor();
-            
-            // Appliquer une courbe non linéaire pour un résultat plus intéressant
-            const fogDensityPower = Math.pow(this._fogDensity, 1.5); // Courbe non linéaire
-            const fogDensity = THREE.MathUtils.lerp(
-                this.minFogExp, 
-                this.maxFogExp, 
-                fogDensityPower
-            );
-            
-            // Mettre à jour notre brouillard
-            if (this.weatherFog) {
-                this.weatherFog.color.copy(fogColor);
-                this.weatherFog.density = fogDensity;
-            }
-        } catch (error) {
-            console.error('Erreur lors de la mise à jour du brouillard:', error);
-        } finally {
-            // Toujours libérer le verrou
-            this.isUpdating = false;
+        // Mettre à jour la couleur du brouillard uniquement si nécessaire
+        const newFogColor = this.calculateFogColor();
+        if (!this.weatherFog.color.equals(newFogColor)) {
+            this.weatherFog.color.copy(newFogColor);
         }
     }
     
@@ -214,12 +150,11 @@ export default class FogEffect {
      * @param {number} density - Densité du brouillard (0-1)
      */
     set fogDensity(density) {
-        const oldDensity = this._fogDensity;
         this._fogDensity = THREE.MathUtils.clamp(density, 0, 1);
-        
-        // Marquer comme nécessitant une mise à jour si la densité change
-        if (Math.abs(oldDensity - this._fogDensity) > 0.005) {
-            this.needsUpdate = true;
+        // Forcer la mise à jour immédiate
+        if (this.weatherFog) {
+            const targetDensity = this._fogDensity * (this.maxFogExp - this.minFogExp) + this.minFogExp;
+            this.weatherFog.density = targetDensity;
         }
     }
     
