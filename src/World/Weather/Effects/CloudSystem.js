@@ -55,7 +55,7 @@ export default class CloudSystem {
             flatShading: true,
             transparent: true,
             opacity: this.cloudOpacity,
-            depthWrite: true,
+            depthWrite: false, // Désactivé pour permettre de voir à travers les nuages transparents
             depthTest: true,
             alphaTest: 0.01,
             blending: THREE.NormalBlending
