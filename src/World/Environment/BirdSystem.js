@@ -8,8 +8,9 @@ import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRe
 
 // Constantes
 const WIDTH = 32;
-const BIRDS_COUNT_RATIO = 0.3;
-const BIRDS_COUNT = Math.round(WIDTH * WIDTH * BIRDS_COUNT_RATIO);
+const MAX_BIRDS_COUNT_RATIO = 0.75; // Ratio maximum pour le calcul du nombre d'oiseaux
+const MIN_BIRDS_COUNT_RATIO = 0.1; // Ratio minimum pour le calcul du nombre d'oiseaux
+const MAX_BIRDS_COUNT = Math.round(WIDTH * WIDTH * MAX_BIRDS_COUNT_RATIO);
 const BOUNDS = 800;
 const BOUNDS_HALF = BOUNDS / 2;
 
@@ -328,7 +329,7 @@ export default class BirdSystem {
         // Ajouter le groupe à la scène
         this.scene.add(this.birdGroup);
         
-        console.log(`Système d'oiseaux GPgPU initialisé avec ${BIRDS_COUNT} oiseaux potentiels`);
+        console.log(`Système d'oiseaux GPgPU initialisé avec ${MAX_BIRDS_COUNT} oiseaux potentiels`);
     }
     
     /**
@@ -404,7 +405,7 @@ export default class BirdSystem {
         const geometry = new THREE.BufferGeometry();
         
         // Positions pour les triangles
-        const verticesCount = 3 * 3 * BIRDS_COUNT;
+        const verticesCount = 3 * 3 * MAX_BIRDS_COUNT;
         const positions = new Float32Array(verticesCount * 3);
         
         // Attributs pour la référence et le vertex
@@ -418,7 +419,7 @@ export default class BirdSystem {
         const wingSpan = this.config.wingSpan;
         
         // Créer chaque oiseau
-        for (let f = 0; f < BIRDS_COUNT; f++) {
+        for (let f = 0; f < MAX_BIRDS_COUNT; f++) {
             // Corps
             positions[v * 3 + 0] = 0;
             positions[v * 3 + 1] = -0;
@@ -477,7 +478,7 @@ export default class BirdSystem {
             birdVertex[i] = i % 9;
             
             // Couleur de l'oiseau (basée sur l'index)
-            const colorRatio = birdIndex / BIRDS_COUNT;
+            const colorRatio = birdIndex / MAX_BIRDS_COUNT;
             const color = this.getBirdColor(colorRatio, colorsMap);
             
             birdColors[i * 3 + 0] = color.r;
@@ -592,10 +593,38 @@ export default class BirdSystem {
         
         // Ajuster la visibilité en fonction de la densité
         if (this.birdMesh) {
-            // Ici, nous utilisons l'échelle pour simuler la densité
-            // Une autre approche pourrait être de modifier le BIRDS_COUNT_RATIO
-            const scale = this._birdDensity;
-            this.birdMesh.scale.set(scale, scale, scale);
+            // Calculer le nombre d'oiseaux basé sur la densité
+            const actualRatio = MIN_BIRDS_COUNT_RATIO + this._birdDensity * (MAX_BIRDS_COUNT_RATIO - MIN_BIRDS_COUNT_RATIO);
+            const visibleBirdsCount = Math.round(WIDTH * WIDTH * actualRatio);
+            
+            // Mettre à jour l'attribut d'instance pour contrôler les oiseaux visibles
+            const geometry = this.birdMesh.geometry;
+            const vertices = geometry.attributes.position.count;
+            const indices = new Uint16Array(vertices);
+            
+            // Calculer le nombre de triangles visibles basés sur la densité
+            const totalBirdVertices = 9; // 3 triangles par oiseau avec 3 sommets par triangle
+            const totalVisibleVertices = visibleBirdsCount * totalBirdVertices;
+            
+            // Rendre visible seulement les oiseaux que nous voulons afficher
+            for (let i = 0; i < vertices; i++) {
+                if (i < totalVisibleVertices) {
+                    indices[i] = i;
+                } else {
+                    // Masquer les autres oiseaux en utilisant un indice hors limites (0)
+                    indices[i] = 0;
+                }
+            }
+            
+            // Mettre à jour la géométrie
+            if (!geometry.index) {
+                geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+            } else {
+                geometry.index.set(indices);
+                geometry.index.needsUpdate = true;
+            }
+            
+            console.log(`Densité d'oiseaux mise à jour: ${this._birdDensity.toFixed(2)}, ${visibleBirdsCount} oiseaux visibles`);
         }
     }
     
