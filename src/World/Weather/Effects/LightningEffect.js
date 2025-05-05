@@ -133,7 +133,9 @@ export default class LightningEffect {
             color: 0xeeeeff,
             transparent: true,
             opacity: 0,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            fog: false, // Désactive l'effet du brouillard
+            blending: THREE.AdditiveBlending // Rend les éclairs plus visibles
         });
         
         // Géométrie plus simple pour les éclairs (moins de segments)
@@ -269,16 +271,7 @@ export default class LightningEffect {
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
         geometry.computeVertexNormals();
         
-        // Créer un matériau avec un effet de lueur
-        const material = new THREE.MeshBasicMaterial({
-            color: 0xeeeeff,
-            transparent: true,
-            opacity: 0,
-            side: THREE.DoubleSide,
-            blending: THREE.AdditiveBlending
-        });
-        
-        const lightningMesh = new THREE.Mesh(geometry, material);
+        const lightningMesh = new THREE.Mesh(geometry, this.lightningMaterial);
         
         // Positionner l'éclair dans le ciel
         lightningMesh.position.set(
