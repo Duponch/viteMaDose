@@ -196,16 +196,16 @@ export default class PlotGroundGenerator {
         canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
-        // Couleur de base du béton
-        const baseColor = new THREE.Color(0xC0C0C0);
+        // Couleur de base du béton (plus foncée)
+        const baseColor = new THREE.Color(0x909090);
         ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         // Ajouter des motifs géométriques
-        const patternSize = 64; // Taille de base pour les motifs
+        const patternSize = 64;
         for (let y = 0; y < canvas.height; y += patternSize) {
             for (let x = 0; x < canvas.width; x += patternSize) {
-                // Variation de couleur pour chaque motif
+                // Variation de couleur pour chaque motif (plus foncée)
                 const variation = Math.random() * 30 - 15;
                 const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
                 const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
@@ -261,8 +261,8 @@ export default class PlotGroundGenerator {
             }
         }
 
-        // Ajouter des lignes de jointure
-        ctx.strokeStyle = '#A0A0A0';
+        // Ajouter des lignes de jointure (plus foncées)
+        ctx.strokeStyle = '#707070';
         ctx.lineWidth = 2;
         for (let y = patternSize; y < canvas.height; y += patternSize) {
             ctx.beginPath();
@@ -277,8 +277,8 @@ export default class PlotGroundGenerator {
             ctx.stroke();
         }
 
-        // Ajouter des fissures aléatoires
-        ctx.strokeStyle = '#808080';
+        // Ajouter des fissures aléatoires (plus foncées)
+        ctx.strokeStyle = '#606060';
         ctx.lineWidth = 1;
         for (let i = 0; i < 20; i++) {
             const startX = Math.random() * canvas.width;
@@ -455,10 +455,10 @@ export default class PlotGroundGenerator {
                     });
                     break;
                 case 'building':
-                    // Utiliser la texture de béton pour les immeubles
+                    // Utiliser la texture de béton plus foncée pour les immeubles
                     groundMaterial = new THREE.MeshStandardMaterial({
                         map: this.concreteTexture,
-                        color: 0xC0C0C0,
+                        color: 0x909090,
                         roughness: 0.9,
                         metalness: 0.0
                     });
