@@ -59,7 +59,7 @@ export default class PlotGroundGenerator {
             const size = Math.random() * 20 + 10;
             
             // Variation de couleur (plus claire ou plus foncée)
-            const variation = Math.random() * 40 - 20;
+            const variation = Math.random() * 20 - 10;
             const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
             const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
             const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
@@ -119,35 +119,57 @@ export default class PlotGroundGenerator {
         canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
-        // Couleur de base du gazon (vert plus clair et plus vif)
-        const baseColor = new THREE.Color(0x4CAF50);
+        // Couleur de base de l'herbe (même que les parcs)
+        const baseColor = new THREE.Color(0x61874c);
         ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Ajouter des motifs de tonte (lignes alternées plus claires et plus foncées)
-        const stripeWidth = 20;
-        for (let y = 0; y < canvas.height; y += stripeWidth) {
-            const isLightStripe = Math.floor(y / stripeWidth) % 2 === 0;
-            const variation = isLightStripe ? 20 : -20;
+        // Ajouter des variations de couleur pour simuler des touffes d'herbe
+        for (let i = 0; i < 200; i++) {
+            // Position aléatoire
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
             
+            // Taille aléatoire
+            const size = Math.random() * 20 + 10;
+            
+            // Variation de couleur (plus claire ou plus foncée)
+            const variation = Math.random() * 40 - 20;
             const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
             const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
             const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
             
             ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-            ctx.fillRect(0, y, canvas.width, stripeWidth);
+            
+            // Dessiner une touffe d'herbe
+            ctx.beginPath();
+            const numBlades = 5 + Math.floor(Math.random() * 5);
+            for (let j = 0; j < numBlades; j++) {
+                const angle = (j / numBlades) * Math.PI * 2;
+                const radius = size * (0.7 + Math.random() * 0.6);
+                const px = x + Math.cos(angle) * radius;
+                const py = y + Math.sin(angle) * radius;
+                
+                if (j === 0) {
+                    ctx.moveTo(px, py);
+                } else {
+                    ctx.lineTo(px, py);
+                }
+            }
+            ctx.closePath();
+            ctx.fill();
         }
 
-        // Ajouter des petites variations pour un aspect plus naturel
-        for (let i = 0; i < 100; i++) {
+        // Ajouter des taches plus foncées pour plus de variété
+        for (let i = 0; i < 50; i++) {
             const x = Math.random() * canvas.width;
             const y = Math.random() * canvas.height;
-            const size = Math.random() * 15 + 5;
+            const size = Math.random() * 30 + 20;
             
-            const variation = Math.random() * 30 - 15;
-            const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
-            const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
-            const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
+            const darkVariation = -30;
+            const r = Math.max(0, Math.min(255, baseColor.r * 255 + darkVariation));
+            const g = Math.max(0, Math.min(255, baseColor.g * 255 + darkVariation));
+            const b = Math.max(0, Math.min(255, baseColor.b * 255 + darkVariation));
             
             ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
             ctx.beginPath();
@@ -158,7 +180,7 @@ export default class PlotGroundGenerator {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(2, 2); // Répétition plus faible pour un aspect plus uniforme
+        texture.repeat.set(4, 4); // Même répétition que les parcs
         return texture;
     }
 
@@ -189,7 +211,6 @@ export default class PlotGroundGenerator {
             let groundMaterial;
             switch (plot.zoneType) {
                 case 'park':
-                    // Créer un nouveau matériau avec la texture d'herbe pour les parcs
                     groundMaterial = new THREE.MeshStandardMaterial({
                         map: this.grassTexture,
                         color: 0x61874c,
@@ -198,11 +219,11 @@ export default class PlotGroundGenerator {
                     });
                     break;
                 case 'house':
-                    // Créer un nouveau matériau avec la texture de gazon pour les maisons
+                    // Utiliser la même texture que les parcs mais avec une légère variation de couleur
                     groundMaterial = new THREE.MeshStandardMaterial({
                         map: this.lawnTexture,
-                        color: 0x4CAF50,
-                        roughness: 0.7,
+                        color: 0x61874c,
+                        roughness: 0.8,
                         metalness: 0.0
                     });
                     break;
