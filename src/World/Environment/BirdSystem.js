@@ -22,7 +22,7 @@ export default class BirdSystem {
         
         // Configuration
         this.totalNumberOfBirds = 80;    // Nombre maximum d'oiseaux
-        this.birdAnimationSpeed = 0.0003; // Vitesse de base de l'animation
+        this.birdAnimationSpeed = 0.07;  // Vitesse de base de l'animation (augmentée)
         this.birdDensity = 0.5;          // Densité initiale des oiseaux (0-1)
         this.updateThreshold = 0.05;     // Seuil pour déclenchement d'une mise à jour complète
         this.lastDensity = this.birdDensity; // Mémoriser la dernière densité appliquée
@@ -30,10 +30,39 @@ export default class BirdSystem {
         this.lastFullUpdateTime = 0;      // Éviter les mises à jour trop fréquentes
         this.wingFlapSpeed = 0.02;        // Vitesse de battement des ailes
         this.wingRotationMax = 0.4;       // Rotation maximale des ailes (en radians)
-        this.bobAmplitude = 0.2;          // Amplitude du mouvement de rebond
-        this.bobFrequency = 0.005;        // Fréquence du mouvement de rebond
+        this.bobAmplitude = 7;          // Amplitude du mouvement de rebond
+        this.bobFrequency = 0.001;        // Fréquence du mouvement de rebond
         this.currentWingRotation = 0;     // Rotation actuelle des ailes
         this.wingDirection = 1;           // Direction du battement des ailes
+        
+        // Nouveaux paramètres pour le mouvement directionnel et le comportement de groupe
+        this.globalDirection = new THREE.Vector3(1, 0, 0); // Direction générale de vol
+        this.directionChangeInterval = 5000; // Changement de direction toutes les 10 secondes
+        this.lastDirectionChange = 0;
+        this.directionVariation = 0.1; // Variation maximale autour de la direction globale
+        this.groupInfluenceRadius = 30; // Rayon d'influence pour le comportement de groupe
+        this.groupAlignmentFactor = 0.1; // Force d'alignement avec les voisins
+        this.groupCohesionFactor = 0.05; // Force de cohésion avec les voisins
+        this.groupSeparationFactor = 0.2; // Force de séparation avec les voisins
+        
+        // Nouveaux paramètres de vitesse
+        this.speedVariation = 0.3;        // Variation de vitesse (0-1)
+        this.speedChangeInterval = 2000;  // Intervalle de changement de vitesse (ms)
+        this.lastSpeedChange = 0;         // Dernier changement de vitesse
+        this.baseSpeed = this.birdAnimationSpeed; // Vitesse de base
+        
+        // Pool d'oiseaux actifs
+        this.activeBirds = [];
+        this.birdStates = new Array(this.totalNumberOfBirds).fill(null).map(() => ({
+            position: new THREE.Vector3(),
+            velocity: new THREE.Vector3(),
+            targetDirection: new THREE.Vector3(),
+            currentSpeed: this.baseSpeed,
+            targetSpeed: this.baseSpeed,
+            isActive: false,
+            spawnTime: 0,
+            lifeTime: 0
+        }));
         
         // Groupes et références
         this.birdGroup = new THREE.Group();
@@ -176,7 +205,7 @@ export default class BirdSystem {
         
         // Générer des positions et rotations aléatoires pour chaque oiseau
         for (let i = 0; i < this.totalNumberOfBirds; i++) {
-            // Déterminer si cet oiseau doit être visible ou caché
+            const birdState = this.birdStates[i];
             const isVisible = i < actualBirdCount;
             
             if (isVisible) {
@@ -187,44 +216,36 @@ export default class BirdSystem {
                 const z = Math.sin(angle) * radius;
                 const y = skyHeight + (Math.random() - 0.5) * heightVariation;
                 
-                // Direction de vol (angle aléatoire)
-                const flightAngle = Math.random() * Math.PI * 2;
-                const flightDirection = new THREE.Vector3(
-                    Math.cos(flightAngle),
-                    0,
-                    Math.sin(flightAngle)
-                ).normalize();
+                // Initialiser l'état de l'oiseau
+                birdState.position.set(x, y, z);
+                birdState.velocity.copy(this.globalDirection).normalize()
+                    .multiplyScalar(this.birdAnimationSpeed);
+                birdState.targetDirection.copy(birdState.velocity);
+                birdState.isActive = true;
+                
+                // Taille aléatoire
+                const randomScale = THREE.MathUtils.randFloat(scaleMin, scaleMax);
+                _tempScale.set(randomScale, randomScale, randomScale);
                 
                 // Créer une rotation pour que l'oiseau regarde dans la direction de vol
                 const birdRotation = new THREE.Quaternion();
                 const upVector = new THREE.Vector3(0, 1, 0);
-                const rotationAxis = new THREE.Vector3().crossVectors(upVector, flightDirection).normalize();
-                const rotationAngle = Math.acos(upVector.dot(flightDirection));
+                const rotationAxis = new THREE.Vector3().crossVectors(upVector, birdState.velocity).normalize();
+                const rotationAngle = Math.acos(upVector.dot(birdState.velocity));
                 birdRotation.setFromAxisAngle(rotationAxis, rotationAngle);
                 
                 // Rotation supplémentaire pour orienter l'oiseau horizontalement
                 const horizontalRotation = new THREE.Quaternion().setFromAxisAngle(
                     new THREE.Vector3(0, 1, 0),
-                    flightAngle + Math.PI / 2
+                    Math.atan2(birdState.velocity.x, birdState.velocity.z) + Math.PI / 2
                 );
                 birdRotation.multiply(horizontalRotation);
                 
-                // Taille aléatoire
-                const randomScale = THREE.MathUtils.randFloat(scaleMin, scaleMax);
-                const scaleVector = new THREE.Vector3(randomScale, randomScale, randomScale);
-                
                 // Appliquer au corps
-                _tempPosition.set(x, y, z);
-                _tempQuaternion.copy(birdRotation);
-                _tempScale.copy(scaleVector);
-                _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+                _tempMatrix.compose(birdState.position, birdRotation, _tempScale);
                 this.birdInstancedMeshes.body.setMatrixAt(i, _tempMatrix);
                 
                 // Positionner l'aile gauche
-                _tempPosition.set(x, y, z);
-                _tempQuaternion.copy(birdRotation);
-                _tempScale.copy(scaleVector);
-                // Décaler l'aile sur la gauche du corps et appliquer une rotation initiale
                 const leftWingMatrix = new THREE.Matrix4()
                     .makeTranslation(-0.7, 0, 0)
                     .multiply(new THREE.Matrix4().makeRotationZ(0))
@@ -232,18 +253,17 @@ export default class BirdSystem {
                 this.birdInstancedMeshes.leftWing.setMatrixAt(i, leftWingMatrix);
                 
                 // Positionner l'aile droite (miroir de la gauche)
-                _tempPosition.set(x, y, z);
-                _tempQuaternion.copy(birdRotation);
-                _tempScale.copy(scaleVector);
-                // Décaler l'aile sur la droite du corps et appliquer une rotation initiale
                 const rightWingMatrix = new THREE.Matrix4()
                     .makeTranslation(0.7, 0, 0)
                     .multiply(new THREE.Matrix4().makeRotationZ(0))
-                    .multiply(new THREE.Matrix4().makeScale(-1, 1, 1)) // Inverser en X pour le miroir
+                    .multiply(new THREE.Matrix4().makeScale(-1, 1, 1))
                     .premultiply(_tempMatrix);
                 this.birdInstancedMeshes.rightWing.setMatrixAt(i, rightWingMatrix);
             } else {
-                // Pour les oiseaux invisibles, les placer sous le terrain
+                // Désactiver les oiseaux non visibles
+                birdState.isActive = false;
+                
+                // Les placer sous le terrain
                 _tempPosition.set(0, -1000, 0);
                 _tempQuaternion.identity();
                 _tempScale.set(0.001, 0.001, 0.001);
@@ -274,10 +294,22 @@ export default class BirdSystem {
         // Vérifier si on doit effectuer une mise à jour complète du placement
         if (this.pendingFullUpdate) {
             const currentTime = this.environmentSystem.experience.time.elapsed;
-            // Éviter les mises à jour trop fréquentes (max 1x par seconde)
             if (currentTime - this.lastFullUpdateTime > 1000) {
                 this.placeBirds();
             }
+        }
+        
+        // Mettre à jour la direction globale périodiquement
+        const currentTime = this.environmentSystem.experience.time.elapsed;
+        if (currentTime - this.lastDirectionChange > this.directionChangeInterval) {
+            this.updateGlobalDirection();
+            this.lastDirectionChange = currentTime;
+        }
+        
+        // Mettre à jour les vitesses périodiquement
+        if (currentTime - this.lastSpeedChange > this.speedChangeInterval) {
+            this.updateBirdSpeeds();
+            this.lastSpeedChange = currentTime;
         }
         
         // Si pas de meshes, rien à faire
@@ -298,100 +330,209 @@ export default class BirdSystem {
         // Obtenir le nombre actuel d'oiseaux visibles
         const actualBirdCount = Math.floor(this.totalNumberOfBirds * this.birdDensity);
         
-        // Matrice temporaire pour décomposer/recomposer
-        let needsMatrixUpdate = false;
-        
         // Mettre à jour chaque oiseau
         for (let i = 0; i < this.totalNumberOfBirds; i++) {
-            // Ignorer les oiseaux hors densité actuelle
-            if (i >= actualBirdCount) {
-                continue;
-            }
+            const birdState = this.birdStates[i];
             
-            // Récupérer la matrice du corps
-            this.birdInstancedMeshes.body.getMatrixAt(i, _tempMatrix);
-            _tempMatrix.decompose(_tempPosition, _tempQuaternion, _tempScale);
+            // Ignorer les oiseaux inactifs
+            if (!birdState.isActive) continue;
             
-            // Ignorer les oiseaux "cachés" (sous le terrain)
-            if (_tempPosition.y < -500) {
-                continue;
-            }
+            // Mettre à jour la direction cible en fonction du comportement de groupe
+            this.updateBirdDirection(i, actualBirdCount);
             
-            // Calculer l'angle de vol actuel (direction de l'oiseau)
-            const direction = new THREE.Vector3(0, 0, 1).applyQuaternion(_tempQuaternion).normalize();
+            // Mettre à jour la vitesse actuelle vers la vitesse cible
+            birdState.currentSpeed = THREE.MathUtils.lerp(
+                birdState.currentSpeed,
+                birdState.targetSpeed,
+                0.01
+            );
             
-            // Vitesse adaptée à la taille de l'oiseau
-            const speed = this.birdAnimationSpeed * deltaTime * (1.0 + _tempScale.x * 0.5);
-            
-            // Déplacer l'oiseau dans sa direction
-            _tempPosition.add(direction.multiplyScalar(speed));
+            // Mettre à jour la vitesse et la position
+            const speed = birdState.currentSpeed * deltaTime;
+            birdState.velocity.lerp(birdState.targetDirection, 0.1).normalize().multiplyScalar(speed);
+            birdState.position.add(birdState.velocity);
             
             // Ajouter un effet de rebond pour plus de naturel
-            const bobOffset = Math.sin(this.environmentSystem.experience.time.elapsed * this.bobFrequency + i) * this.bobAmplitude;
-            _tempPosition.y += bobOffset * deltaTime * 0.01;
+            const bobOffset = Math.sin(currentTime * this.bobFrequency + i) * this.bobAmplitude;
+            birdState.position.y += bobOffset * deltaTime * 0.01;
             
-            // Si l'oiseau sort des limites, le replacer de l'autre côté
-            if (_tempPosition.x > limit || _tempPosition.x < -limit || 
-                _tempPosition.z > limit || _tempPosition.z < -limit) {
+            // Vérifier si l'oiseau est sorti des limites
+            if (Math.abs(birdState.position.x) > limit || 
+                Math.abs(birdState.position.z) > limit ||
+                birdState.position.y < skyHeight - heightVariation ||
+                birdState.position.y > skyHeight + heightVariation) {
                 
-                // Paramètres aléatoires pour repositionner l'oiseau
-                const angle = Math.random() * Math.PI * 2;
-                const radius = mapSize * 0.8 * Math.random();
-                _tempPosition.x = Math.cos(angle) * radius;
-                _tempPosition.z = Math.sin(angle) * radius;
-                _tempPosition.y = skyHeight + (Math.random() - 0.5) * heightVariation;
-                
-                // Nouvelle direction de vol
-                const flightAngle = Math.random() * Math.PI * 2;
-                const flightDirection = new THREE.Vector3(
-                    Math.cos(flightAngle),
-                    0,
-                    Math.sin(flightAngle)
-                ).normalize();
-                
-                // Créer une rotation pour que l'oiseau regarde dans la direction de vol
-                const upVector = new THREE.Vector3(0, 1, 0);
-                const rotationAxis = new THREE.Vector3().crossVectors(upVector, flightDirection).normalize();
-                const rotationAngle = Math.acos(upVector.dot(flightDirection));
-                _tempQuaternion.setFromAxisAngle(rotationAxis, rotationAngle);
-                
-                // Rotation supplémentaire pour orienter l'oiseau horizontalement
-                const horizontalRotation = new THREE.Quaternion().setFromAxisAngle(
-                    new THREE.Vector3(0, 1, 0),
-                    flightAngle + Math.PI / 2
-                );
-                _tempQuaternion.multiply(horizontalRotation);
+                // Réinitialiser l'oiseau de l'autre côté
+                this.resetBird(i);
+                continue;
             }
             
-            // Recomposer et appliquer la matrice pour le corps
-            _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+            // Mettre à jour la rotation pour suivre la direction
+            const birdRotation = new THREE.Quaternion();
+            const upVector = new THREE.Vector3(0, 1, 0);
+            const rotationAxis = new THREE.Vector3().crossVectors(upVector, birdState.velocity).normalize();
+            const rotationAngle = Math.acos(upVector.dot(birdState.velocity));
+            birdRotation.setFromAxisAngle(rotationAxis, rotationAngle);
+            
+            // Rotation supplémentaire pour orienter l'oiseau horizontalement
+            const horizontalRotation = new THREE.Quaternion().setFromAxisAngle(
+                new THREE.Vector3(0, 1, 0),
+                Math.atan2(birdState.velocity.x, birdState.velocity.z) + Math.PI / 2
+            );
+            birdRotation.multiply(horizontalRotation);
+            
+            // Mettre à jour la matrice du corps
+            _tempMatrix.compose(birdState.position, birdRotation, _tempScale);
             this.birdInstancedMeshes.body.setMatrixAt(i, _tempMatrix);
-            needsMatrixUpdate = true;
             
-            // Mettre à jour les ailes avec battement
-            
-            // Aile gauche
+            // Mettre à jour les matrices des ailes
             const leftWingMatrix = new THREE.Matrix4()
                 .makeTranslation(-0.7, 0, 0)
                 .multiply(new THREE.Matrix4().makeRotationZ(this.currentWingRotation))
                 .premultiply(_tempMatrix);
             this.birdInstancedMeshes.leftWing.setMatrixAt(i, leftWingMatrix);
             
-            // Aile droite (miroir)
             const rightWingMatrix = new THREE.Matrix4()
                 .makeTranslation(0.7, 0, 0)
                 .multiply(new THREE.Matrix4().makeRotationZ(-this.currentWingRotation))
-                .multiply(new THREE.Matrix4().makeScale(-1, 1, 1)) // Inverser en X pour le miroir
+                .multiply(new THREE.Matrix4().makeScale(-1, 1, 1))
                 .premultiply(_tempMatrix);
             this.birdInstancedMeshes.rightWing.setMatrixAt(i, rightWingMatrix);
         }
         
-        // Mettre à jour les matrices si nécessaire
-        if (needsMatrixUpdate) {
-            this.birdInstancedMeshes.body.instanceMatrix.needsUpdate = true;
-            this.birdInstancedMeshes.leftWing.instanceMatrix.needsUpdate = true;
-            this.birdInstancedMeshes.rightWing.instanceMatrix.needsUpdate = true;
+        // Mettre à jour les matrices
+        this.birdInstancedMeshes.body.instanceMatrix.needsUpdate = true;
+        this.birdInstancedMeshes.leftWing.instanceMatrix.needsUpdate = true;
+        this.birdInstancedMeshes.rightWing.instanceMatrix.needsUpdate = true;
+    }
+    
+    /**
+     * Met à jour la direction globale des oiseaux
+     */
+    updateGlobalDirection() {
+        // Choisir une nouvelle direction globale avec une variation aléatoire
+        const angle = Math.random() * Math.PI * 2;
+        const variation = (Math.random() - 0.5) * this.directionVariation;
+        this.globalDirection.set(
+            Math.cos(angle + variation),
+            0,
+            Math.sin(angle + variation)
+        ).normalize();
+    }
+    
+    /**
+     * Met à jour la direction d'un oiseau en fonction du comportement de groupe
+     * @param {number} birdIndex - Index de l'oiseau
+     * @param {number} totalBirds - Nombre total d'oiseaux actifs
+     */
+    updateBirdDirection(birdIndex, totalBirds) {
+        const birdState = this.birdStates[birdIndex];
+        const neighbors = [];
+        
+        // Trouver les voisins proches
+        for (let i = 0; i < totalBirds; i++) {
+            if (i === birdIndex) continue;
+            const otherState = this.birdStates[i];
+            if (!otherState.isActive) continue;
+            
+            const distance = birdState.position.distanceTo(otherState.position);
+            if (distance < this.groupInfluenceRadius) {
+                neighbors.push(otherState);
+            }
         }
+        
+        // Calculer les forces de groupe
+        const alignment = new THREE.Vector3();
+        const cohesion = new THREE.Vector3();
+        const separation = new THREE.Vector3();
+        
+        if (neighbors.length > 0) {
+            // Alignement : moyenne des directions des voisins
+            neighbors.forEach(neighbor => {
+                alignment.add(neighbor.velocity);
+            });
+            alignment.divideScalar(neighbors.length).normalize();
+            
+            // Cohésion : direction vers le centre du groupe
+            const center = new THREE.Vector3();
+            neighbors.forEach(neighbor => {
+                center.add(neighbor.position);
+            });
+            center.divideScalar(neighbors.length);
+            cohesion.subVectors(center, birdState.position).normalize();
+            
+            // Séparation : éviter les collisions
+            neighbors.forEach(neighbor => {
+                const diff = new THREE.Vector3().subVectors(birdState.position, neighbor.position);
+                const distance = diff.length();
+                diff.normalize().divideScalar(distance);
+                separation.add(diff);
+            });
+            separation.divideScalar(neighbors.length).normalize();
+        }
+        
+        // Combiner les forces avec la direction globale
+        const targetDirection = new THREE.Vector3()
+            .add(this.globalDirection.clone().multiplyScalar(0.5))
+            .add(alignment.multiplyScalar(this.groupAlignmentFactor))
+            .add(cohesion.multiplyScalar(this.groupCohesionFactor))
+            .add(separation.multiplyScalar(this.groupSeparationFactor))
+            .normalize();
+        
+        // Ajouter une petite variation aléatoire
+        targetDirection.add(new THREE.Vector3(
+            (Math.random() - 0.5) * 0.1,
+            (Math.random() - 0.5) * 0.1,
+            (Math.random() - 0.5) * 0.1
+        )).normalize();
+        
+        birdState.targetDirection.copy(targetDirection);
+    }
+    
+    /**
+     * Réinitialise un oiseau qui est sorti des limites
+     * @param {number} birdIndex - Index de l'oiseau à réinitialiser
+     */
+    resetBird(birdIndex) {
+        const birdState = this.birdStates[birdIndex];
+        const mapSize = this.environmentSystem.experience.world.cityManager.config.mapSize;
+        const skyHeight = 200;
+        const heightVariation = 80;
+        
+        // Choisir un bord aléatoire pour réapparition
+        const side = Math.floor(Math.random() * 4);
+        let x, z;
+        
+        switch (side) {
+            case 0: // Bord gauche
+                x = -mapSize * 0.8;
+                z = (Math.random() - 0.5) * mapSize * 1.6;
+                break;
+            case 1: // Bord droit
+                x = mapSize * 0.8;
+                z = (Math.random() - 0.5) * mapSize * 1.6;
+                break;
+            case 2: // Bord avant
+                x = (Math.random() - 0.5) * mapSize * 1.6;
+                z = -mapSize * 0.8;
+                break;
+            case 3: // Bord arrière
+                x = (Math.random() - 0.5) * mapSize * 1.6;
+                z = mapSize * 0.8;
+                break;
+        }
+        
+        // Positionner l'oiseau
+        birdState.position.set(
+            x,
+            skyHeight + (Math.random() - 0.5) * heightVariation,
+            z
+        );
+        
+        // Initialiser la vitesse dans la direction globale
+        birdState.velocity.copy(this.globalDirection).normalize()
+            .multiplyScalar(this.birdAnimationSpeed);
+        birdState.targetDirection.copy(birdState.velocity);
     }
     
     /**
@@ -427,6 +568,22 @@ export default class BirdSystem {
      */
     get birdDensity() {
         return this._birdDensity ?? 0.5;
+    }
+    
+    /**
+     * Met à jour les vitesses des oiseaux
+     */
+    updateBirdSpeeds() {
+        const actualBirdCount = Math.floor(this.totalNumberOfBirds * this.birdDensity);
+        
+        for (let i = 0; i < actualBirdCount; i++) {
+            const birdState = this.birdStates[i];
+            if (!birdState.isActive) continue;
+            
+            // Calculer une nouvelle vitesse cible avec variation
+            const variation = (Math.random() - 0.5) * this.speedVariation;
+            birdState.targetSpeed = this.baseSpeed * (1 + variation);
+        }
     }
     
     /**
