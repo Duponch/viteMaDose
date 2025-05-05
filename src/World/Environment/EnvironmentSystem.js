@@ -118,4 +118,45 @@ export default class EnvironmentSystem {
         
         console.log("Système d'environnement nettoyé");
     }
+    
+    /**
+     * Calcule l'intensité de la lumière ambiante en fonction des lumières présentes dans la scène
+     * @returns {number} Intensité de la lumière ambiante (0-1)
+     */
+    getAmbientLightIntensity() {
+        let totalIntensity = 0;
+        let lightCount = 0;
+
+        // Parcourir tous les objets de la scène
+        this.scene.traverse((object) => {
+            if (object.isLight && object.visible) { // Vérifier si la lumière est visible
+                if (object.isAmbientLight) {
+                    totalIntensity += object.intensity;
+                } else if (object.isDirectionalLight || object.isPointLight || object.isSpotLight) {
+                    totalIntensity += object.intensity * 0.5;
+                }
+                lightCount++;
+            }
+        });
+
+        // Si aucune lumière n'est présente ou visible, retourner 0
+        if (lightCount === 0) return 0;
+
+        // Normaliser l'intensité entre 0 et 1
+        return Math.min(totalIntensity / lightCount, 1.0);
+    }
+    
+    /**
+     * Récupère la lumière directionnelle du soleil
+     * @returns {THREE.DirectionalLight|null} La lumière du soleil ou null si non trouvée
+     */
+    getSunLight() {
+        let sunLight = null;
+        this.scene.traverse((object) => {
+            if (object.isDirectionalLight && object.name === 'sunLight') {
+                sunLight = object;
+            }
+        });
+        return sunLight;
+    }
 } 

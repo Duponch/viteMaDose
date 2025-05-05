@@ -178,6 +178,7 @@ uniform sampler2D textureVelocity;
 varying vec4 vColor;
 varying float z;
 varying vec3 vNormal;
+varying vec3 vViewPosition;
 
 uniform float time;
 uniform float birdSize;
@@ -188,6 +189,20 @@ void main() {
   vec3 velocity = normalize(texture2D(textureVelocity, reference).xyz);
 
   vec3 newPosition = position;
+  
+  // Calculer une normale approximative basée sur la position du vertex dans l'oiseau
+  vec3 normal = vec3(0.0, 1.0, 0.0); // Normal par défaut
+  
+  if (birdVertex == 0.0 || birdVertex == 1.0 || birdVertex == 2.0) {
+    // Corps - normal vers le haut
+    normal = vec3(0.0, 1.0, 0.0);
+  } else if (birdVertex == 3.0 || birdVertex == 4.0 || birdVertex == 5.0) {
+    // Aile gauche - normal incliné
+    normal = vec3(0.5, 0.7, 0.0);
+  } else {
+    // Aile droite - normal incliné dans l'autre sens
+    normal = vec3(-0.5, 0.7, 0.0);
+  }
 
   if (birdVertex == 4.0 || birdVertex == 7.0) {
     // flap wings
@@ -219,40 +234,55 @@ void main() {
     0, 0, 1
   );
   
+  // Appliquer les mêmes transformations à la normale
+  normal = normalize(maty * matz * normal);
+  vNormal = normalize(normalMatrix * normal);
+  
   newPosition = maty * matz * newPosition;
   newPosition += pos;
   z = newPosition.z;
 
-  // Calculer la normale pour l'éclairage
-  vNormal = normalize(maty * matz * normal);
-
   vColor = vec4(birdColor, 1.0);
-  gl_Position = projectionMatrix * viewMatrix * vec4(newPosition, 1.0);
+  
+  vec4 mvPosition = modelViewMatrix * vec4(newPosition, 1.0);
+  vViewPosition = -mvPosition.xyz;
+  gl_Position = projectionMatrix * mvPosition;
 }`;
 
 const birdFS = `
 varying vec4 vColor;
 varying float z;
 varying vec3 vNormal;
+varying vec3 vViewPosition;
+
 uniform vec3 color;
-uniform float ambientLightIntensity;
-uniform vec3 sunDirection;
-uniform float sunIntensity;
+uniform vec3 lightDirection;
+uniform vec3 lightColor;
+uniform float ambientStrength;
+uniform float sceneLightIntensity;
 
 void main() {
-  // Si l'intensité de la lumière est 0, rendre l'oiseau complètement noir
-  if (ambientLightIntensity <= 0.0 && sunIntensity <= 0.0) {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-  } else {
-    // Calculer l'éclairage directionnel du soleil
-    float sunLight = max(dot(normalize(vNormal), normalize(sunDirection)), 0.0) * sunIntensity;
-    
-    // Combiner l'éclairage ambiant et directionnel
-    float totalLight = ambientLightIntensity + sunLight;
-    
-    vec3 finalColor = vColor.rgb * totalLight;
-    gl_FragColor = vec4(finalColor, 1.0);
+  // Normaliser la direction de la lumière et la normale
+  vec3 normal = normalize(vNormal);
+  vec3 lightDir = normalize(lightDirection);
+  
+  // Calcul de la lumière ambiante (dépendante de l'intensité globale)
+  vec3 ambient = ambientStrength * lightColor * sceneLightIntensity;
+  
+  // Calcul de la lumière diffuse (modèle de Lambert)
+  float diff = max(dot(normal, lightDir), 0.0);
+  vec3 diffuse = diff * lightColor * sceneLightIntensity;
+  
+  // Combiner les éclairages
+  vec3 result = (ambient + diffuse) * vColor.rgb;
+  
+  // Si l'intensité est presque 0, on rend l'oiseau invisible
+  float alpha = 1.0;
+  if (sceneLightIntensity < 0.01) {
+    alpha = 0.0;
   }
+  
+  gl_FragColor = vec4(result, alpha);
 }`;
 
 export default class BirdSystem {
@@ -394,7 +424,7 @@ export default class BirdSystem {
     initBirds() {
         const geometry = this.createBirdGeometry();
         
-        // Matériel avec les shaders
+        // Matu00e9riel avec les shaders
         const material = new THREE.ShaderMaterial({
             uniforms: {
                 birdSize: { value: this.config.birdSize },
@@ -402,16 +432,18 @@ export default class BirdSystem {
                 textureVelocity: { value: null },
                 time: { value: 1.0 },
                 delta: { value: 0.0 },
-                ambientLightIntensity: { value: 0.5 },
-                sunDirection: { value: new THREE.Vector3(0, 1, 0) },
-                sunIntensity: { value: 0.0 }
+                // Uniforms pour l'u00e9clairage
+                lightDirection: { value: new THREE.Vector3(0.5, 1.0, 0.25).normalize() },
+                lightColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) }, // Lumiu00e8re blanche
+                ambientStrength: { value: 0.3 }, // Force de la lumiu00e8re ambiante
+                sceneLightIntensity: { value: 1.0 } // Intensitu00e9 globale des lumiu00e8res de la scu00e8ne
             },
             vertexShader: birdVS,
             fragmentShader: birdFS,
             side: THREE.DoubleSide
         });
         
-        // Créer le mesh
+        // Cru00e9er le mesh
         this.birdMesh = new THREE.Mesh(geometry, material);
         this.birdMesh.rotation.y = Math.PI / 2;
         this.birdMesh.matrixAutoUpdate = false;
@@ -557,56 +589,21 @@ export default class BirdSystem {
                 color = colorsMap[key];
             }
         }
-        
-        return color;
-    }
-    
-    /**
-     * Met à jour le système d'oiseaux
-     * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
-     */
-    update(deltaTime) {
-        if (!this.birdMesh) return;
-
-        // Mise à jour de l'intensité de la lumière ambiante
-        const ambientLightIntensity = this.environmentSystem.getAmbientLightIntensity();
-        this.birdMesh.material.uniforms.ambientLightIntensity.value = ambientLightIntensity;
-
-        // Mise à jour de la lumière du soleil
-        const sunLight = this.environmentSystem.getSunLight();
-        if (sunLight) {
-            this.birdMesh.material.uniforms.sunDirection.value.copy(sunLight.position).normalize();
-            this.birdMesh.material.uniforms.sunIntensity.value = sunLight.visible ? sunLight.intensity : 0.0;
-        }
-
-        // Convertir deltaTime en secondes
-        const delta = deltaTime / 1000;
-        
-        // Mettre à jour le prédateur (position de la souris)
-        this.velocityUniforms["predator"].value.set(
-            this.predatorPosition.x,
-            this.predatorPosition.y,
-            this.predatorPosition.z
-        );
-        
-        // Mettre à jour les paramètres de temps
-        this.positionUniforms["time"].value = performance.now() / 1000;
-        this.positionUniforms["delta"].value = delta;
-        this.velocityUniforms["time"].value = performance.now() / 1000;
-        this.velocityUniforms["delta"].value = delta;
-        
-        // Exécuter le calcul GPU
-        this.gpuCompute.compute();
-        
-        // Mettre à jour les textures dans le matériau
-        this.birdMesh.material.uniforms.texturePosition.value = 
-            this.gpuCompute.getCurrentRenderTarget(this.positionVariable).texture;
-        this.birdMesh.material.uniforms.textureVelocity.value = 
-            this.gpuCompute.getCurrentRenderTarget(this.velocityVariable).texture;
-    }
-    
-    /**
-     * Met à jour les paramètres du prédateur en fonction des coordonnées de la souris
+            
+            // Détecter les lumières actives dans la scène
+            let sceneLightIntensity = 0.0;
+            
+            if (this.scene) {
+                // Parcourir toutes les lumières de la scène
+                this.scene.traverse((object) => {
+                    if (object.isLight && object.visible) {
+                        sceneLightIntensity += object.intensity;
+                    }
+                });
+                
+                // Normaliser l'intensité (pour éviter des valeurs trop élevées)
+                sceneLightIntensity = Math.min(1.0, sceneLightIntensity);
+            }
      * @param {number} x - Coordonnée X de la souris
      * @param {number} y - Coordonnée Y de la souris
      */
