@@ -24,7 +24,8 @@ export default class WeatherControlUI {
                     rainIntensity: 0,
                     cloudDensity: 0.3, // Valeur par défaut dans CloudSystem
                     cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
-                    fogDensity: 0      // Pas de brouillard par défaut
+                    fogDensity: 0,     // Pas de brouillard par défaut
+                    lightningIntensity: 0 // Pas d'éclairs par défaut
                 };
                 
                 this.init();
@@ -66,6 +67,7 @@ export default class WeatherControlUI {
         this.createSlider('Nuages', 'cloud-density', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudDensity);
         this.createSlider('Opacité Nuages', 'cloud-opacity', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudOpacity);
         this.createSlider('Brouillard', 'fog', 0, 1, 0.01, this.weatherSystem.fogEffect.fogDensity);
+        this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
         
         // Bouton pour réinitialiser les valeurs par défaut
         const resetButton = document.createElement('button');
@@ -93,14 +95,16 @@ export default class WeatherControlUI {
             rain: this.container.querySelector('#slider-rain'),
             cloudDensity: this.container.querySelector('#slider-cloud-density'),
             cloudOpacity: this.container.querySelector('#slider-cloud-opacity'),
-            fog: this.container.querySelector('#slider-fog')
+            fog: this.container.querySelector('#slider-fog'),
+            lightning: this.container.querySelector('#slider-lightning')
         };
         
         this.valueDisplays = {
             rain: this.container.querySelector('#value-rain'),
             cloudDensity: this.container.querySelector('#value-cloud-density'),
             cloudOpacity: this.container.querySelector('#value-cloud-opacity'),
-            fog: this.container.querySelector('#value-fog')
+            fog: this.container.querySelector('#value-fog'),
+            lightning: this.container.querySelector('#value-lightning')
         };
         
         console.log("Interface de contrôle météo avec curseurs initialisée");
@@ -165,7 +169,7 @@ export default class WeatherControlUI {
     
     /**
      * Met à jour un paramètre spécifique dans le système météo
-     * @param {string} param - Nom du paramètre (rain, cloud-density, cloud-opacity, fog)
+     * @param {string} param - Nom du paramètre (rain, cloud-density, cloud-opacity, fog, lightning)
      * @param {number} value - Nouvelle valeur (0-1)
      */
     updateWeatherParameter(param, value) {
@@ -186,6 +190,10 @@ export default class WeatherControlUI {
                 
             case 'fog':
                 this.weatherSystem.fogEffect.fogDensity = value;
+                break;
+                
+            case 'lightning':
+                this.weatherSystem.lightningEffect.intensity = value;
                 break;
         }
     }
@@ -221,6 +229,12 @@ export default class WeatherControlUI {
                     this.sliders.fog.value = value;
                     this.valueDisplays.fog.textContent = value.toFixed(2);
                     this.weatherSystem.fogEffect.fogDensity = value;
+                    break;
+                    
+                case 'lightningIntensity':
+                    this.sliders.lightning.value = value;
+                    this.valueDisplays.lightning.textContent = value.toFixed(2);
+                    this.weatherSystem.lightningEffect.intensity = value;
                     break;
             }
         }

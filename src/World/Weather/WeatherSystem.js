@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import RainEffect from './Effects/RainEffect.js';
 import FogEffect from './Effects/FogEffect.js';
 import CloudSystem from './Effects/CloudSystem.js';
+import LightningEffect from './Effects/LightningEffect.js';
 import WeatherState from './WeatherState.js';
 
 export default class WeatherSystem {
@@ -39,13 +40,16 @@ export default class WeatherSystem {
         this.fogEffect = new FogEffect(this);
         // Ensuite les nuages qui peuvent être référencés par le brouillard
         this.cloudSystem = new CloudSystem(this);
-        // Enfin la pluie qui peut dépendre des deux précédents
+        // Puis l'effet d'éclairs qui peut dépendre des nuages
+        this.lightningEffect = new LightningEffect(this);
+        // Enfin la pluie qui peut dépendre des précédents
         this.rainEffect = new RainEffect(this);
         
         // Liste de tous les effets pour itération facile dans l'ordre d'importance visuelle
         this.effects = [
             this.fogEffect,
             this.cloudSystem,
+            this.lightningEffect,
             this.rainEffect
         ];
         
@@ -57,6 +61,7 @@ export default class WeatherSystem {
                 cloudOpacity: 0.3,
                 rainIntensity: 0,
                 fogDensity: 0,
+                lightningIntensity: 0,
                 sunBrightness: 1.0
             },
             partlyCloudy: {
@@ -65,6 +70,7 @@ export default class WeatherSystem {
                 cloudOpacity: 0.6,
                 rainIntensity: 0,
                 fogDensity: 0,
+                lightningIntensity: 0,
                 sunBrightness: 0.8
             },
             cloudy: {
@@ -73,6 +79,7 @@ export default class WeatherSystem {
                 cloudOpacity: 0.9,
                 rainIntensity: 0,
                 fogDensity: 0.1,
+                lightningIntensity: 0,
                 sunBrightness: 0.6
             },
             lightRain: {
@@ -81,6 +88,7 @@ export default class WeatherSystem {
                 cloudOpacity: 0.9,
                 rainIntensity: 0.3,
                 fogDensity: 0.2,
+                lightningIntensity: 0.1,
                 sunBrightness: 0.5
             },
             heavyRain: {
@@ -89,7 +97,17 @@ export default class WeatherSystem {
                 cloudOpacity: 1.0,
                 rainIntensity: 0.8,
                 fogDensity: 0.3,
+                lightningIntensity: 0.4,
                 sunBrightness: 0.3
+            },
+            storm: {
+                name: 'Orage',
+                cloudDensity: 1.0,
+                cloudOpacity: 1.0,
+                rainIntensity: 0.7,
+                fogDensity: 0.2,
+                lightningIntensity: 0.8,
+                sunBrightness: 0.2
             },
             foggy: {
                 name: 'Brouillard',
@@ -97,6 +115,7 @@ export default class WeatherSystem {
                 cloudOpacity: 0.5,
                 rainIntensity: 0,
                 fogDensity: 0.8,
+                lightningIntensity: 0,
                 sunBrightness: 0.4
             }
         };
@@ -131,7 +150,8 @@ export default class WeatherSystem {
             this.cloudSystem.cloudOpacity,
             this.rainEffect.intensity,
             this.fogEffect.fogDensity,
-            this.environment.sunLight.intensity / 3.0 // Normaliser par rapport à l'intensité max (3.0)
+            this.environment.sunLight.intensity / 3.0, // Normaliser par rapport à l'intensité max (3.0)
+            this.lightningEffect.intensity
         );
         
         // Configurer l'état cible avec le nouveau préréglage
@@ -142,7 +162,8 @@ export default class WeatherSystem {
             preset.cloudOpacity,
             preset.rainIntensity, 
             preset.fogDensity,
-            preset.sunBrightness
+            preset.sunBrightness,
+            preset.lightningIntensity
         );
         
         // Démarrer la transition
@@ -215,6 +236,13 @@ export default class WeatherSystem {
                 t
             );
             
+            // Transition des éclairs
+            this.lightningEffect.intensity = THREE.MathUtils.lerp(
+                this.currentWeatherState.lightningIntensity, 
+                this.targetWeatherState.lightningIntensity, 
+                t
+            );
+            
             // Transition de la luminosité du soleil
             // Multiplier par 3.0 car c'est l'intensité max du soleil dans Environment
             const targetSunIntensity = this.targetWeatherState.sunBrightness * 3.0;
@@ -249,6 +277,7 @@ export default class WeatherSystem {
             this.currentWeatherState.cloudOpacity = this.cloudSystem.cloudOpacity;
             this.currentWeatherState.rainIntensity = this.rainEffect.intensity; 
             this.currentWeatherState.fogDensity = this.fogEffect.fogDensity;
+            this.currentWeatherState.lightningIntensity = this.lightningEffect.intensity;
             this.currentWeatherState.sunBrightness = this.environment.sunLight ? 
                 (this.environment.sunLight.intensity / 3.0) : 1.0;
             this.currentWeatherState.type = 'custom';
@@ -274,6 +303,7 @@ export default class WeatherSystem {
         this.rainEffect = null;
         this.fogEffect = null;
         this.cloudSystem = null;
+        this.lightningEffect = null;
         
         console.log("Système météorologique nettoyé");
     }
