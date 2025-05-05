@@ -34,6 +34,11 @@ export default class CloudSystem {
         this.updateDebounceTime = 100;
         this.lastUpdateTime = 0;
         
+        // Configuration de la zone de couverture
+        this.mapSize = this.weatherSystem.experience.world.cityManager.config.mapSize;
+        this.cloudCoverageWidth = this.mapSize * 2; // Largeur de la zone de couverture
+        this.cloudCoverageHeight = 100; // Hauteur de la zone de couverture
+        
         // Groupes et références
         this.cloudGroup = new THREE.Group();
         this.cloudGroup.name = "WeatherCloudSystem";
@@ -173,8 +178,7 @@ export default class CloudSystem {
     placeClouds() {
         // Configuration du placement
         const skyHeight = 230;
-        const mapSize = this.weatherSystem.experience.world.cityManager.config.mapSize;
-        const spreadRadius = mapSize * 0.9;
+        const spreadRadius = this.cloudCoverageWidth / 2;
         const scaleMin = 0.8;
         const scaleMax = 15.0;
         
@@ -188,6 +192,10 @@ export default class CloudSystem {
         let currentInstanceIndex = 0;
         const instanceCounters = new Array(this.numberOfCloudBaseShapes).fill(0);
         
+        // Calculer la distribution des nuages
+        const cloudSpacing = this.cloudCoverageWidth / actualCloudCount;
+        let currentX = -this.cloudCoverageWidth / 2;
+        
         while (currentInstanceIndex < this.totalNumberOfClouds) {
             const meshIndex = currentInstanceIndex % this.numberOfCloudBaseShapes;
             const targetInstancedMesh = this.cloudInstancedMeshes[meshIndex];
@@ -197,12 +205,10 @@ export default class CloudSystem {
                 const isVisible = currentInstanceIndex < actualCloudCount;
                 
                 if (isVisible) {
-                    // Paramètres aléatoires pour cette instance
-                    const angle = Math.random() * Math.PI * 2;
-                    const radius = Math.random() * spreadRadius;
-                    const x = Math.cos(angle) * radius;
-                    const z = Math.sin(angle) * radius;
-                    const y = skyHeight + (Math.random() - 0.5) * 100;
+                    // Position avec espacement uniforme
+                    const x = currentX;
+                    const z = (Math.random() - 0.5) * this.cloudCoverageWidth;
+                    const y = skyHeight + (Math.random() - 0.5) * this.cloudCoverageHeight;
                     const randomYRotation = Math.random() * Math.PI * 2;
                     
                     // Échelle variable selon la position
@@ -219,6 +225,9 @@ export default class CloudSystem {
                     
                     // Ajouter aux nuages actifs
                     this.activeClouds.add(currentInstanceIndex);
+                    
+                    // Avancer pour le prochain nuage
+                    currentX += cloudSpacing;
                 } else {
                     // Placer les nuages invisibles sous le terrain
                     _tempPosition.set(0, -1000, 0);
@@ -302,9 +311,6 @@ export default class CloudSystem {
             this.updateCloudSystem();
         }
 
-        // Obtenir la position de la caméra
-        const cameraPosition = this.weatherSystem.camera.instance.position;
-        
         // Calculer la vitesse de déplacement
         const speed = this.cloudAnimationSpeed * deltaTime;
         
@@ -323,9 +329,9 @@ export default class CloudSystem {
                 _tempPosition.x += speed;
                 
                 // Vérifier les limites et réinitialiser si nécessaire
-                if (_tempPosition.x > 1000) {
-                    _tempPosition.x = -1000;
-                    _tempPosition.z = (Math.random() - 0.5) * 2000;
+                if (_tempPosition.x > this.cloudCoverageWidth / 2) {
+                    _tempPosition.x = -this.cloudCoverageWidth / 2;
+                    _tempPosition.z = (Math.random() - 0.5) * this.cloudCoverageWidth;
                 }
                 
                 // Recomposer la matrice
