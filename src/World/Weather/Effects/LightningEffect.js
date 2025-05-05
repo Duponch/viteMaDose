@@ -181,6 +181,9 @@ export default class LightningEffect {
     triggerLightning() {
         if (!this.enabled || this.intensity <= 0) return;
         
+        // Vérifier si le jeu est en pause
+        if (this.time.isPaused) return;
+        
         // Vérifier si un éclair est déjà actif
         if (this.isLightningActive) return;
         
