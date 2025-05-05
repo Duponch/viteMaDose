@@ -41,19 +41,6 @@ export default class WeatherControlUI {
         this.container = document.createElement('div');
         this.container.className = 'weather-control-ui';
         
-        // Style de l'interface
-        this.container.style.position = 'absolute';
-        this.container.style.top = '10px';
-        this.container.style.left = '10px';
-        this.container.style.zIndex = '1000';
-        this.container.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-        this.container.style.padding = '15px';
-        this.container.style.borderRadius = '5px';
-        this.container.style.color = 'white';
-        this.container.style.fontFamily = 'Arial, sans-serif';
-        this.container.style.fontSize = '14px';
-        this.container.style.width = '250px';
-        
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
         this.createSlider('Nuages', 'cloud-density', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudDensity);
@@ -63,25 +50,7 @@ export default class WeatherControlUI {
         
         // Bouton pour réinitialiser les valeurs par défaut
         const resetButton = document.createElement('button');
-        resetButton.textContent = 'Réinitialiser par défaut';
-        resetButton.style.width = '100%';
-        resetButton.style.padding = '8px';
-        resetButton.style.marginTop = '15px';
-        resetButton.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-        resetButton.style.color = 'white';
-        resetButton.style.border = 'none';
-        resetButton.style.borderRadius = '4px';
-        resetButton.style.cursor = 'pointer';
-        resetButton.style.transition = 'background-color 0.2s';
-        
-        resetButton.addEventListener('mouseover', () => {
-            resetButton.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-        });
-        
-        resetButton.addEventListener('mouseout', () => {
-            resetButton.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-        });
-        
+        resetButton.textContent = '↻ Défaut';
         resetButton.addEventListener('click', () => {
             this.resetToDefaults();
         });
@@ -122,17 +91,14 @@ export default class WeatherControlUI {
      */
     createSlider(label, id, min, max, step, initialValue) {
         const sliderContainer = document.createElement('div');
-        sliderContainer.style.marginBottom = '15px';
+        sliderContainer.className = 'slider-container';
         
         // Ligne d'étiquette et valeur
         const labelRow = document.createElement('div');
-        labelRow.style.display = 'flex';
-        labelRow.style.justifyContent = 'space-between';
-        labelRow.style.marginBottom = '5px';
+        labelRow.className = 'label-row';
         
         const labelEl = document.createElement('span');
         labelEl.textContent = label;
-        labelEl.style.fontWeight = 'bold';
         
         const valueEl = document.createElement('span');
         valueEl.id = `value-${id}`;
@@ -150,59 +116,6 @@ export default class WeatherControlUI {
         slider.max = max;
         slider.step = step;
         slider.value = initialValue;
-        slider.style.width = '100%';
-        slider.style.height = '8px';
-        slider.style.borderRadius = '4px';
-        slider.style.backgroundColor = 'black';
-        slider.style.border = 'none';
-        slider.style.outline = 'none';
-        
-        // Ajouter des styles CSS pour le curseur
-        const style = document.createElement('style');
-        style.textContent = `
-            input[type="range"] {
-                -webkit-appearance: none;
-                background: black;
-                height: 8px;
-                border-radius: 4px;
-            }
-            input[type="range"]::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                width: 16px;
-                height: 16px;
-                background: white;
-                border-radius: 50%;
-                cursor: pointer;
-                margin-top: -4px;
-            }
-            input[type="range"]::-moz-range-thumb {
-                width: 16px;
-                height: 16px;
-                background: white;
-                border: none;
-                border-radius: 50%;
-                cursor: pointer;
-            }
-            input[type="range"]::-webkit-slider-runnable-track {
-                background: black;
-                height: 8px;
-                border-radius: 4px;
-            }
-            input[type="range"]::-moz-range-track {
-                background: black;
-                height: 8px;
-                border-radius: 4px;
-            }
-            input[type="range"]::-webkit-slider-runnable-track {
-                background: linear-gradient(to right, white 0%, white var(--value), black var(--value), black 100%);
-            }
-            input[type="range"]::-moz-range-progress {
-                background: white;
-                height: 8px;
-                border-radius: 4px;
-            }
-        `;
-        document.head.appendChild(style);
         
         // Mettre à jour la valeur CSS lors du changement
         slider.addEventListener('input', (e) => {

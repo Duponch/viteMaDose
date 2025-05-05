@@ -11,6 +11,7 @@ import TimeUI from './UI/TimeUI.js';
 import TimeControlUI from './UI/TimeControlUI.js';
 import AgentStatsUI from './UI/AgentStatsUI.js';
 import WeatherControlUI from './UI/WeatherControlUI.js';
+import './UI/WeatherUI.css';
 // Import nécessaire pour la recherche de mesh par position
 import { Matrix4, Vector3 } from 'three';
 import * as DebugTools from './World/Rendering/DebugTools.js';
