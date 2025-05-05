@@ -18,7 +18,7 @@ export default class LightningEffect {
         // Configuration
         this.enabled = true;
         this.intensity = 0; // 0 = pas d'éclairs, 1 = éclairs maximum
-        this.lastLightningTime = 0;
+        this.lastLightningTime = performance.now(); // Utiliser le temps réel
         this.lightningDuration = 150; // durée d'un éclair en ms
         this.currentLightningAlpha = 0; // pour l'animation de flash
         this.isLightningActive = false;
@@ -181,7 +181,8 @@ export default class LightningEffect {
         if (this.isLightningActive) return;
         
         // Performance: limiter la fréquence des éclairs
-        const timeSinceLastLightning = this.time.elapsed - this.lastLightningTime;
+        const currentTime = performance.now(); // Utiliser le temps réel
+        const timeSinceLastLightning = currentTime - this.lastLightningTime;
         if (timeSinceLastLightning < this.minTimeBetweenLightnings) return;
         
         // Probabilité basée sur l'intensité
@@ -190,7 +191,7 @@ export default class LightningEffect {
         if (Math.random() < probability) {
             this.isLightningActive = true;
             this.currentLightningAlpha = 1.0;
-            this.lastLightningTime = this.time.elapsed;
+            this.lastLightningTime = currentTime; // Utiliser le temps réel
             
             // Optimisation: activer moins d'éclairs en même temps
             const numBolts = Math.ceil(Math.random() * 2 * this.intensity);
@@ -301,7 +302,8 @@ export default class LightningEffect {
         
         // Gérer l'animation des éclairs actifs
         if (this.isLightningActive) {
-            const timeSinceLightning = this.time.elapsed - this.lastLightningTime;
+            const currentTime = performance.now(); // Utiliser le temps réel
+            const timeSinceLightning = currentTime - this.lastLightningTime;
             
             if (timeSinceLightning < this.lightningDuration) {
                 // Temps normalisé (0-1)
