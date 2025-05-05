@@ -17,6 +17,8 @@ export default class PlotGroundGenerator {
     constructor(config, materials) {
         this.config = config;
         this.materials = materials;
+        this.grassTexture = this.createGrassTexture();
+        this.lawnTexture = this.createLawnTexture();
 
         // Vérifier si les matériaux nécessaires existent (optionnel mais recommandé)
         const requiredMaterials = [
@@ -30,6 +32,134 @@ export default class PlotGroundGenerator {
                 // this.materials[matName] = new THREE.MeshStandardMaterial({ color: 0x888888 });
             }
         });
+    }
+
+    /**
+     * Crée une texture procédurale pour simuler l'herbe
+     * @returns {THREE.CanvasTexture} La texture générée
+     */
+    createGrassTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base de l'herbe
+        const baseColor = new THREE.Color(0x61874c);
+        ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ajouter des variations de couleur pour simuler des touffes d'herbe
+        for (let i = 0; i < 200; i++) {
+            // Position aléatoire
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            
+            // Taille aléatoire
+            const size = Math.random() * 20 + 10;
+            
+            // Variation de couleur (plus claire ou plus foncée)
+            const variation = Math.random() * 40 - 20;
+            const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
+            const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
+            const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
+            
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            
+            // Dessiner une touffe d'herbe
+            ctx.beginPath();
+            const numBlades = 5 + Math.floor(Math.random() * 5);
+            for (let j = 0; j < numBlades; j++) {
+                const angle = (j / numBlades) * Math.PI * 2;
+                const radius = size * (0.7 + Math.random() * 0.6);
+                const px = x + Math.cos(angle) * radius;
+                const py = y + Math.sin(angle) * radius;
+                
+                if (j === 0) {
+                    ctx.moveTo(px, py);
+                } else {
+                    ctx.lineTo(px, py);
+                }
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Ajouter des taches plus foncées pour plus de variété
+        for (let i = 0; i < 50; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 30 + 20;
+            
+            const darkVariation = -30;
+            const r = Math.max(0, Math.min(255, baseColor.r * 255 + darkVariation));
+            const g = Math.max(0, Math.min(255, baseColor.g * 255 + darkVariation));
+            const b = Math.max(0, Math.min(255, baseColor.b * 255 + darkVariation));
+            
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(4, 4); // Répéter la texture pour couvrir une plus grande surface
+        return texture;
+    }
+
+    /**
+     * Crée une texture procédurale pour simuler un gazon résidentiel
+     * @returns {THREE.CanvasTexture} La texture générée
+     */
+    createLawnTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base du gazon (vert plus clair et plus vif)
+        const baseColor = new THREE.Color(0x4CAF50);
+        ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ajouter des motifs de tonte (lignes alternées plus claires et plus foncées)
+        const stripeWidth = 20;
+        for (let y = 0; y < canvas.height; y += stripeWidth) {
+            const isLightStripe = Math.floor(y / stripeWidth) % 2 === 0;
+            const variation = isLightStripe ? 20 : -20;
+            
+            const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
+            const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
+            const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
+            
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            ctx.fillRect(0, y, canvas.width, stripeWidth);
+        }
+
+        // Ajouter des petites variations pour un aspect plus naturel
+        for (let i = 0; i < 100; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 15 + 5;
+            
+            const variation = Math.random() * 30 - 15;
+            const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
+            const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
+            const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
+            
+            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 2); // Répétition plus faible pour un aspect plus uniforme
+        return texture;
     }
 
     /**
@@ -59,10 +189,22 @@ export default class PlotGroundGenerator {
             let groundMaterial;
             switch (plot.zoneType) {
                 case 'park':
-                    groundMaterial = this.materials.parkMaterial;
+                    // Créer un nouveau matériau avec la texture d'herbe pour les parcs
+                    groundMaterial = new THREE.MeshStandardMaterial({
+                        map: this.grassTexture,
+                        color: 0x61874c,
+                        roughness: 0.8,
+                        metalness: 0.0
+                    });
                     break;
                 case 'house':
-                    groundMaterial = this.materials.houseGroundMaterial;
+                    // Créer un nouveau matériau avec la texture de gazon pour les maisons
+                    groundMaterial = new THREE.MeshStandardMaterial({
+                        map: this.lawnTexture,
+                        color: 0x4CAF50,
+                        roughness: 0.7,
+                        metalness: 0.0
+                    });
                     break;
                 case 'building':
                     groundMaterial = this.materials.buildingGroundMaterial;
