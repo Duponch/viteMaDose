@@ -123,6 +123,7 @@ export default class CloudSystem {
             // Nettoyer les instances existantes
             this.cloudInstancedMeshes.forEach(mesh => {
                 this.cloudGroup.remove(mesh);
+                mesh.dispose();
             });
             this.cloudInstancedMeshes = [];
         }
@@ -140,6 +141,16 @@ export default class CloudSystem {
             instancedMesh.castShadow = true;
             instancedMesh.receiveShadow = false;
             instancedMesh.name = `CloudMesh_${index}`;
+            
+            // Initialiser toutes les instances sous le terrain
+            for (let i = 0; i < instancesPerMesh; i++) {
+                _tempPosition.set(0, -1000, 0);
+                _tempQuaternion.identity();
+                _tempScale.set(0.001, 0.001, 0.001);
+                _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+                instancedMesh.setMatrixAt(i, _tempMatrix);
+            }
+            instancedMesh.instanceMatrix.needsUpdate = true;
             
             this.cloudInstancedMeshes.push(instancedMesh);
             this.cloudGroup.add(instancedMesh);
@@ -255,7 +266,6 @@ export default class CloudSystem {
      */
     update(deltaTime) {
         // Vérifier si on doit effectuer une mise à jour complète du placement
-        // (Ce code pourrait être déplacé dans la méthode spécifique updateCloudSystem)
         if (this.pendingFullUpdate) {
             const currentTime = this.weatherSystem.time.elapsed;
             // Éviter les mises à jour trop fréquentes (max 1x par seconde)
@@ -285,7 +295,14 @@ export default class CloudSystem {
                 _tempMatrix.decompose(_tempPosition, _tempQuaternion, _tempScale);
                 
                 // Ignorer les instances "cachées" (sous le terrain)
-                if (_tempPosition.y < -500) continue;
+                if (_tempPosition.y < -500) {
+                    // S'assurer que les nuages cachés restent sous le terrain
+                    _tempPosition.set(0, -1000, 0);
+                    _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
+                    instancedMesh.setMatrixAt(i, _tempMatrix);
+                    needsMatrixUpdate = true;
+                    continue;
+                }
                 
                 // Déplacer le nuage (vitesse variable selon la taille)
                 const speed = actualCloudSpeed * (1.0 + (_tempScale.x - 5.0) * 0.02);
@@ -295,7 +312,7 @@ export default class CloudSystem {
                 if (_tempPosition.x > limit) {
                     _tempPosition.x = -limit;
                     _tempPosition.z = (Math.random() - 0.5) * limit * 1.5;
-                    _tempPosition.y = 230 + (Math.random() - 0.5) * 100;
+                    _tempPosition.y = skyHeight + (Math.random() - 0.5) * 100;
                     
                     // Ajuster la taille en fonction de la distance au centre
                     const distanceFromCenter = Math.abs(_tempPosition.z) / (limit * 1.5);
