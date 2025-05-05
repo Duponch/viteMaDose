@@ -7,6 +7,13 @@ void main() {
     // Passer les coordonnées UV au fragment shader
     vUv = uv;
     
-    // Position standard
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    // Calculer la matrice de billboarding
+    vec3 cameraRight = vec3(modelViewMatrix[0][0], modelViewMatrix[1][0], modelViewMatrix[2][0]);
+    vec3 cameraUp = vec3(modelViewMatrix[0][1], modelViewMatrix[1][1], modelViewMatrix[2][1]);
+    
+    // Appliquer la rotation pour faire face à la caméra et inverser l'orientation
+    vec3 billboardedPosition = position.x * cameraRight + (-position.y) * cameraUp;
+    
+    // Position finale avec billboarding
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(billboardedPosition, 1.0);
 } 
