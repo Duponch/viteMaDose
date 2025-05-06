@@ -19,7 +19,7 @@ export default class WaterSystem {
         this.waterHeight = this.environment.mapSize * 2;
         this.waterSegments = 500;
         this.waterColor = 0x68c3c0;
-        this.waterOpacity = 0.4;
+        this.waterOpacity = 0.1;
         this.waterPosition = {
             x: 0,
             y: -10,
@@ -27,9 +27,9 @@ export default class WaterSystem {
         };
         
         // Paramètres d'optimisation
-        this.maxWaveHeight = 5.0;
-        this.waveSpeed = 0.016;
-        this.waveVariation = 0.032;
+        this.maxWaveHeight = 8;
+        this.waveSpeed = 3;
+        this.waveVariation = 30;
         
         // Paramètres LOD
         this.lodLevels = [
@@ -41,7 +41,7 @@ export default class WaterSystem {
         
         // Paramètres d'animation de la texture
         this.textureOffset = 0;
-        this.textureSpeed = 0.0005;
+        this.textureSpeed = 0.001;
         
         // Initialiser les shaders
         this.initShaders();
