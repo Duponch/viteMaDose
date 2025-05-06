@@ -29,9 +29,13 @@ export default class BirdCameraUI {
         // Mettre à jour l'apparence initiale
         this.updateButtonAppearance(false);
         
-        // Ajouter l'écouteur d'événement
+        // Ajouter l'écouteur d'événement pour le clic
         this._boundClickHandler = this._handleClick.bind(this);
         this.button.addEventListener('click', this._boundClickHandler);
+
+        // Ajouter l'écouteur d'événement pour la touche Échap
+        this._boundKeyDownHandler = this._handleKeyDown.bind(this);
+        document.addEventListener('keydown', this._boundKeyDownHandler);
     }
     
     // Gérer le clic sur le bouton
@@ -65,6 +69,21 @@ export default class BirdCameraUI {
         // Enlever le focus du bouton
         this.button.blur();
     }
+
+    // Gérer la touche Échap
+    _handleKeyDown(event) {
+        if (event.key === 'Escape' && this.button.classList.contains('active')) {
+            // Arrêter le suivi de l'oiseau
+            this.experience.camera.stopFollowing();
+            // Réactiver les contrôles classiques
+            if (this.experience.controlManager) {
+                this.experience.controlManager.setMode('classic');
+                this.experience.controlManager.classicControls.enable();
+            }
+            // Mettre à jour l'apparence du bouton
+            this.updateButtonAppearance(false);
+        }
+    }
     
     // Mettre à jour l'apparence du bouton
     updateButtonAppearance(isFollowing) {
@@ -80,5 +99,7 @@ export default class BirdCameraUI {
             this.button.removeEventListener('click', this._boundClickHandler);
             this.button.remove();
         }
+        // Retirer l'écouteur de la touche Échap
+        document.removeEventListener('keydown', this._boundKeyDownHandler);
     }
 } 
