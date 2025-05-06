@@ -6,12 +6,13 @@ import Time from './Utils/Time.js';
 import Camera from './Core/Camera.js';
 import Renderer from './Core/Renderer.js';
 import World from './Core/World.js';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import TimeUI from './UI/TimeUI.js';
 import TimeControlUI from './UI/TimeControlUI.js';
 import AgentStatsUI from './UI/AgentStatsUI.js';
 import WeatherControlUI from './UI/WeatherControlUI.js';
 import EnvironmentControlUI from './UI/EnvironmentControlUI.js';
+import FpsControlUI from './UI/FpsControlUI.js';
+import ControlManager from './Core/Controls/ControlManager.js';
 import './UI/WeatherUI.css';
 import './UI/EnvironmentUI.css';
 // Import nécessaire pour la recherche de mesh par position
@@ -45,8 +46,11 @@ export default class Experience extends EventTarget {
         this.agentStatsUI = new AgentStatsUI(this);
         this.weatherControlUI = new WeatherControlUI(this);
         this.environmentControlUI = new EnvironmentControlUI(this);
-        this.controls = new OrbitControls(this.camera.instance, this.canvas);
-        this.controls.enableDamping = true;
+        
+        // Remplacer OrbitControls par ControlManager
+        this.controlManager = new ControlManager(this);
+        this.fpsControlUI = new FpsControlUI(this);
+        
         this.stats = new Stats();
         this.stats.showPanel(0);
         document.body.appendChild(this.stats.dom);
@@ -562,84 +566,27 @@ export default class Experience extends EventTarget {
 
     // Sélectionne un agent et active le suivi caméra/tooltip
     selectAgent(agent) {
-        if (!agent) {
-            console.log("Experience: Deselecting agent.");
-            this.selectedAgent = null;
-            this.camera.stopFollowing(); // Arrête le suivi et réactive OrbitControls
-            // Mettre à jour l'UI pour désélectionner
-            if (this.ui) {
-                this.ui.setSelectedAgentInfo(null);
-            } else {
-                console.warn("Experience.selectAgent: this.ui is not defined when trying to deselect.");
-            }
-            return;
-        }
+        if (!agent) return;
+        if (this.selectedAgent === agent) return; // Déjà sélectionné
 
-        console.log(`Experience: Selecting agent ${agent.id}`);
+        this.deselectAgent(); // Désélectionne l'agent précédent, s'il y en a un
+        this.deselectBuilding(); // Désélectionne le bâtiment, s'il y en a un
+
         this.selectedAgent = agent;
-        if (this.ui) {
-            this.ui.setSelectedAgentInfo(agent); // Mettre à jour l'UI
-        } else {
-            console.warn("Experience.selectAgent: this.ui is not defined when trying to select.");
+        if (this.tooltipElement) {
+            this.tooltipElement.style.display = 'block';
+            this.updateTooltipContent(agent);
+            this.tooltipTargetPosition.copy(agent.position).add(new THREE.Vector3(0, agent.scale * 8, 0));
         }
 
-        // --- MODIFIÉ: Handle Agent in Car ---
-        let agentPosition, agentOrientation;
-        let lookAtHeightOffset = 1.0; // Default for pedestrians
-        let followDistance = 8.0; // Default follow distance
-        let isDriving = agent.isDriving; // Check if agent is driving
-        let car = null; // Garder une référence à la voiture si trouvée
-
-        if (isDriving && this.world.carManager) {
-            car = this.world.carManager.getCarByAgentId(agent.id);
-            if (car) {
-                agentPosition = car.position.clone(); // Use car's position
-                agentOrientation = car.orientation.clone(); // Use car's orientation
-                lookAtHeightOffset = 1.2; // Légèrement plus bas qu'avant (1.5)
-                followDistance = 9.0;    // Légèrement plus proche qu'avant (10.0)
-                console.log(`Selecting agent in car ${car.id}. Using car position and orientation.`);
-            } else {
-                // Fallback if car not found
-                console.warn(`Agent ${agent.id} isDriving=true but no car found! Falling back to agent pos/ori.`);
-                isDriving = false; // Traiter comme piéton si la voiture est introuvable
-                agentPosition = agent.position.clone();
-                agentOrientation = agent.orientation ? agent.orientation.clone() : new THREE.Quaternion();
-            }
-        } else {
-            // Standard pedestrian selection
-            isDriving = false;
-            agentPosition = agent.position.clone();
-            agentOrientation = agent.orientation ? agent.orientation.clone() : new THREE.Quaternion();
+        // Si un panneau de stats existe, l'attacher à l'agent sélectionné
+        if (this.agentStatsUI) {
+            this.agentStatsUI.attachToAgent(agent);
         }
-        // --- FIN MODIFICATION ---
 
-        // Le point que la caméra regarde (centre de l'agent/voiture + offset vertical)
-        const lookAtPoint = agentPosition.clone().add(new THREE.Vector3(0, lookAtHeightOffset, 0));
-
-        // Calcul de la position cible de la caméra
-        const backward = new THREE.Vector3(0, 0, 1); // Z positif est "derrière" dans le repère local
-        backward.applyQuaternion(agentOrientation);
-        backward.normalize();
-
-        // Positionner la caméra derrière et légèrement en hauteur
-        const cameraOffsetDirection = backward.clone(); // Direction derrière l'agent/voiture
-        const verticalOffsetRatio = isDriving ? 0.20 : 0.2; // Ajuster ratio hauteur/distance si besoin (gardons 0.2 pour l'instant)
-        cameraOffsetDirection.add(new THREE.Vector3(0, verticalOffsetRatio, 0));
-        cameraOffsetDirection.normalize(); // Normaliser la direction finale de l'offset
-
-        const cameraOffset = cameraOffsetDirection.multiplyScalar(followDistance);
-
-        // --- MODIFICATION CLÉ : Calculer depuis agentPosition --- 
-        // Calculer la position par rapport à la position DE BASE de l'agent/voiture
-        const targetCamPos = agentPosition.clone().add(cameraOffset);
-        // --- FIN MODIFICATION CLÉ ---
-
-        // Démarrer l'animation de la caméra
-        // Elle visera lookAtPoint depuis targetCamPos
-        this.camera.moveToTarget(targetCamPos, lookAtPoint, 1000, agent);
-
-        console.log(`Camera target position: ${targetCamPos.x.toFixed(2)}, ${targetCamPos.y.toFixed(2)}, ${targetCamPos.z.toFixed(2)}`);
-        console.log(`Camera lookAt point: ${lookAtPoint.x.toFixed(2)}, ${lookAtPoint.y.toFixed(2)}, ${lookAtPoint.z.toFixed(2)}`);
+        // Prêt pour le suivi par clic ultérieur sur le bouton
+        agent.isSelected = true;
+        console.log(`Agent ${agent.id} sélectionné. Cliquez sur le bouton 'Suivre' pour le suivre.`);
     }
 
     // Désélectionne l'agent et désactive le suivi
@@ -709,7 +656,7 @@ export default class Experience extends EventTarget {
 
         // --- MODIFIÉ: Calculer la position cible en conservant l'orientation horizontale ---
         const currentCamPos = this.camera.instance.position;
-        const currentTarget = this.controls.target; // Ou this.camera.targetLookAtPosition si controls désactivé
+        const currentTarget = this.controlManager.target; // Ou this.camera.targetLookAtPosition si controls désactivé
 
         // 1. Vecteur direction horizontal actuel (Caméra -> Cible)
         const direction = new THREE.Vector3().subVectors(currentTarget, currentCamPos);
@@ -1275,51 +1222,47 @@ export default class Experience extends EventTarget {
     }
 
     update() {
+        // Start stats measurement
         this.stats.begin();
+        
         const deltaTime = this.time.delta; // Delta temps JEU (scaled) en ms
         const currentGameTime = this.time.elapsed; // Temps JEU total (scaled) en ms
         const currentHour = this.world?.environment?.getCurrentHour() ?? 12; // Heure JEU actuelle
 
-        // --- ORDRE MODIFIÉ ---
+        // Update controls (remplacer OrbitControls.update par ControlManager.update)
+        this.controlManager.update();
 
-        // --- 1. Mettre à jour le Monde (MAINTENANT EN PREMIER) ---
+        // Update camera (garde la compatibilité avec le code original)
+        if (!this.isFollowingAgent) {
+            this.camera.update(deltaTime);
+        }
+
+        // Update world
         if (this.world) {
-            // Appel unique à la méthode update du monde (met à jour les voitures, etc.)
             this.world.update();
         }
 
-        // --- 2. Mettre à jour la logique de Contrôles/Caméra (MAINTENANT APRES LE MONDE) ---
-        if (!this.isFollowingAgent && this.controls?.enabled) {
-            this.controls.update(); // Pour les contrôles Orbit standard
-        }
-        // La caméra gère son propre update pour le suivi ou moveToTarget.
-        // Elle lira maintenant la position mise à jour par world.update()
-        if (this.camera) this.camera.update(deltaTime);
+        // Update UI
+        if (this.timeUI) this.timeUI.update();
 
-        // --- FIN ORDRE MODIFIÉ ---
-
-        // --- 3. Mettre à jour les UI ---
-        if (this.timeUI) this.timeUI.update(); // Utilise environment.cycleTime qui est MAJ par env.update()
-        // AgentStatsUI est mis à jour par son propre intervalle
-
-        // --- 4. Tooltips : rafraîchir CONTENU + position tant que la bulle reste ouverte ---
-        if (this.selectedAgent && this.tooltipElement && !this.selectedBuildingInfo) {
-            // 4a. mettre à jour le HTML de la bulle
+        // Update tooltips if they are active
+        if (this.selectedAgent && this.tooltipElement) {
+            // Mettre à jour le contenu
             this.updateTooltipContent(this.selectedAgent);
-            // 4b. positionner la bulle
+            // Positionner la bulle
             this.tooltipTargetPosition
                 .copy(this.selectedAgent.position)
                 .add(new THREE.Vector3(0, this.selectedAgent.scale * 8, 0));
             this._updateTooltipPosition(this.tooltipElement, this.tooltipTargetPosition);
         } else if (this.tooltipElement && this.tooltipElement.style.display !== 'none') {
-            // plus d'agent sélectionné → masquer la bulle
+            // Plus d'agent sélectionné -> masquer la bulle
             this.tooltipElement.style.display = 'none';
         }
-
+        
         if (this.selectedBuildingInfo && this.buildingTooltipElement && this.highlightMesh?.visible) {
-            // 4c. mettre à jour le HTML de la bulle bâtiment
+            // Mettre à jour le contenu
             this.updateBuildingTooltipContent();
-            // 4d. positionner la bulle bâtiment
+            // Positionner la bulle
             this.buildingTooltipTargetPosition
                 .copy(this.highlightMesh.position)
                 .add(new THREE.Vector3(0, this.highlightMesh.scale.y / 2 + 2, 0));
@@ -1328,9 +1271,12 @@ export default class Experience extends EventTarget {
             this.buildingTooltipElement.style.display = 'none';
         }
 
-        // --- 5. Rendu ---
-        if (this.renderer) this.renderer.update();
+        // Update renderer
+        if (this.renderer) {
+            this.renderer.update();
+        }
 
+        // End stats measurement
         this.stats.end();
     }
 
@@ -1344,6 +1290,7 @@ export default class Experience extends EventTarget {
         this.agentStatsUI.destroy();
         this.weatherControlUI.destroy();
         this.environmentControlUI.destroy();
+        this.fpsControlUI.destroy();
         
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
@@ -1370,19 +1317,56 @@ export default class Experience extends EventTarget {
         }
         // --- FIN NOUVEAU ---
 
-        // ... (reste du code destroy existant) ...
+        // --- Nettoyer les objets Three.js ---
+        this.scene.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+                child.geometry.dispose();
+                if (child.material.isMaterial) {
+                    this._disposeMaterial(child.material);
+                } else {
+                    // Array of materials
+                    for (const material of child.material) {
+                        this._disposeMaterial(material);
+                    }
+                }
+            }
+        });
+
+        // Nettoyer le mesh de surbrillance
         if (this.highlightMesh) {
             this.scene.remove(this.highlightMesh);
             this.highlightMesh.geometry?.dispose();
             this.highlightMesh.material?.dispose();
+            this.highlightMesh = null;
         }
-        this.highlightMesh = null;
+
+        // --- Nettoyer les composants propres ---
+        if (this.controlManager) this.controlManager.destroy();
+        if (this.renderer) this.renderer.destroy();
+        if (this.camera) this.camera.destroy();
+        if (this.world) this.world.destroy();
+        if (this.timeUI) this.timeUI.destroy();
+        if (this.timeControlUI) this.timeControlUI.destroy();
+        if (this.agentStatsUI) this.agentStatsUI.destroy();
+        if (this.weatherControlUI) this.weatherControlUI.destroy();
+        if (this.environmentControlUI) this.environmentControlUI.destroy();
+        if (this.fpsControlUI) this.fpsControlUI.destroy();
+
+        // --- Supprimer les références ---
+        this.scene = null;
+        this.canvas = null;
+        this.sizes = null;
+        this.time = null;
+        this.camera = null;
+        this.renderer = null;
+        this.controlManager = null;
+        this.raycaster = null;
+        this.tooltipElement = null;
         this.buildingTooltipElement = null;
+        this.tooltipTargetPosition = null;
         this.buildingTooltipTargetPosition = null;
         this.selectedBuildingInfo = null;
         this.selectedBuildingMesh = null;
-        this.tooltipElement = null;
-        this.tooltipTargetPosition = null;
         this.selectedAgent = null;
 
         this.agentStatsUI?.destroy(); this.agentStatsUI = null;
@@ -1390,17 +1374,10 @@ export default class Experience extends EventTarget {
         this.timeControlUI?.destroy(); this.timeControlUI = null;
         this.weatherControlUI?.destroy(); this.weatherControlUI = null;
         this.environmentControlUI?.destroy(); this.environmentControlUI = null;
-        this.camera?.destroy(); this.camera = null;
-        this.world?.destroy(); this.world = null;
-        this.controls?.dispose(); this.controls = null;
-        this.renderer?.instance?.dispose(); this.renderer = null;
+        this.fpsControlUI?.destroy(); this.fpsControlUI = null;
+
         if (this.stats?.dom.parentNode) { document.body.removeChild(this.stats.dom); }
         this.stats = null;
-
-        this.scene = null;
-        this.originalFog = null;
-        this.sizes = null; this.time = null; this.canvas = null;
-        this.raycaster = null; this.mouse = null;
 
         instance = null;
         console.log("Experience détruite.");
@@ -1425,5 +1402,76 @@ export default class Experience extends EventTarget {
         if (this.world?.environment?.environmentSystem?.birdSystem) {
             this.world.environment.environmentSystem.birdSystem.updatePredator(x, y);
         }
+    }
+
+    // ... (reste des méthodes existantes) ...
+
+    followAgent(agent) {
+        if (agent) {
+            // Désactiver tous les contrôles avant de suivre un agent
+            if (this.controlManager) {
+                this.controlManager.setMode('classic');
+                this.controlManager.classicControls.disable();
+            }
+            this.isFollowingAgent = true;
+            this.selectedAgent = agent;
+            this.camera.followAgent(agent);
+        }
+    }
+
+    stopFollowingAgent() {
+        this.isFollowingAgent = false;
+        this.camera.stopFollowing();
+        
+        // Réactiver les contrôles classiques
+        if (this.controlManager && this.controlManager.getActiveMode() === 'classic') {
+            this.controlManager.classicControls.enable();
+        }
+    }
+
+    // Méthode utilitaire pour nettoyer les matériaux
+    _disposeMaterial(material) {
+        if (material.map) material.map.dispose();
+        if (material.lightMap) material.lightMap.dispose();
+        if (material.bumpMap) material.bumpMap.dispose();
+        if (material.normalMap) material.normalMap.dispose();
+        if (material.specularMap) material.specularMap.dispose();
+        if (material.envMap) material.envMap.dispose();
+        material.dispose();
+    }
+
+    _zoomToSelectedBuilding(duration = 1500) {
+        if (!this.selectedBuildingInfo || !this.highlightMesh) return;
+
+        const buildingPos = this.highlightMesh.position;
+        const buildingHeight = this.highlightMesh.scale.y;
+        const cameraDistance = Math.max(10, buildingHeight * 4);
+        const cameraHeight = buildingHeight * 1.5;
+
+        const cameraTargetPos = new THREE.Vector3(
+            buildingPos.x - cameraDistance * 0.7,
+            buildingPos.y + cameraHeight,
+            buildingPos.z - cameraDistance * 0.7
+        );
+
+        // Laisser la caméra regarder vers le bâtiment
+        const targetLookAt = new THREE.Vector3(
+            buildingPos.x,
+            buildingPos.y + buildingHeight * 0.3,
+            buildingPos.z
+        );
+
+        // S'assurer que les contrôles sont en mode classique
+        if (this.controlManager) {
+            this.controlManager.setMode('classic');
+        }
+
+        // Si on suivait un agent, arrêter
+        if (this.isFollowingAgent) {
+            this.stopFollowingAgent();
+        }
+
+        // Utiliser la méthode de transition existante
+        this.camera.moveToTarget(cameraTargetPos, targetLookAt, duration);
     }
 }
