@@ -17,7 +17,7 @@ export default class FpsControls {
         
         // Configuration
         this.moveSpeed = 200; // vitesse de déplacement
-        this.sprintMultiplier = 2.0; // multiplicateur de vitesse en sprint
+        this.sprintMultiplier = 5.0; // multiplicateur de vitesse en sprint
         this.lookSpeed = 0.002; // sensibilité de la souris
         
         // Propriétés pour le mouvement de la caméra
@@ -141,6 +141,12 @@ export default class FpsControls {
             case 'ShiftRight':
                 this.isSprinting = true;
                 break;
+            case 'Escape':
+                // Basculer vers le mode classique
+                if (this.experience.controlManager) {
+                    this.experience.controlManager.setMode('classic');
+                }
+                break;
         }
     }
     
@@ -192,8 +198,11 @@ export default class FpsControls {
     
     _onPointerLockChange() {
         if (document.pointerLockElement !== this.canvas && this.isActive) {
-            // Si le verrouillage du pointeur est perdu mais que les contrôles sont toujours actifs,
-            // tenter de le récupérer (optionnel)
+            // Si le pointeur est libéré et que nous sommes en mode FPS actif,
+            // basculer vers le mode classique
+            if (this.experience.controlManager) {
+                this.experience.controlManager.setMode('classic');
+            }
         }
     }
     
