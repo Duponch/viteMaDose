@@ -10,13 +10,16 @@ export default class FpsControlUI {
         this.button.classList.add('control-button');
         this.button.dataset.uiInteractive = 'true';
         
-        // Ajouter le bouton au container des contrôles (à côté des autres boutons)
-        const controlsContainer = document.querySelector('.time-controls');
-        if (controlsContainer) {
-            controlsContainer.appendChild(this.button);
-        } else {
-            console.error("Impossible de trouver le conteneur des contrôles");
+        // Créer ou récupérer le container des contrôles
+        let controlsContainer = document.querySelector('.control-buttons');
+        if (!controlsContainer) {
+            controlsContainer = document.createElement('div');
+            controlsContainer.className = 'control-buttons';
+            document.body.appendChild(controlsContainer);
         }
+        
+        // Ajouter le bouton au container
+        controlsContainer.appendChild(this.button);
         
         // Mettre à jour l'apparence initiale
         this.updateButtonAppearance(false);

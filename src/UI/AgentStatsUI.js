@@ -66,7 +66,17 @@ export default class AgentStatsUI {
 		this.elements.toggleButton.textContent = '🗠';
 		this.elements.toggleButton.title = 'Afficher/Masquer les statistiques des agents';
 		this.elements.toggleButton.dataset.uiInteractive = 'true'; // Garder pour la logique de clic
-		this.container.appendChild(this.elements.toggleButton);
+		
+		// Créer ou récupérer le container des contrôles
+		let controlsContainer = document.querySelector('.control-buttons');
+		if (!controlsContainer) {
+			controlsContainer = document.createElement('div');
+			controlsContainer.className = 'control-buttons';
+			document.body.appendChild(controlsContainer);
+		}
+		
+		// Ajouter le bouton au container
+		controlsContainer.appendChild(this.elements.toggleButton);
 	
 		// --- Panneau des statistiques ---
 		this.elements.statsPanel = document.createElement('div');

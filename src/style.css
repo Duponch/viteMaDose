@@ -387,25 +387,38 @@ button {
   }
 
 #agent-stats-toggle {
-    position: absolute;
-    bottom: 20px;
-    left: 20px; /* Position en bas à gauche */
-    z-index: 101;
     cursor: pointer;
-    font-family: inherit; /* Hérite de body/root */
-    transition: background-color 0.2s ease; /* Effet au survol */
-	border-radius: 100px;
-	background-color: rgba(0, 0, 0, 0.6);
-	color: white;
-	width: 40px;
-	height: 40px;
-	font-size: 1.2em;
-	padding: 0;
+    font-family: inherit;
+    transition: background-color 0.2s ease;
+    border-radius: 100px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    width: 40px;
+    height: 40px;
+    font-size: 1.2em;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #agent-stats-toggle:hover {
     background-color: #eee;
-	color: #000000;
+    color: #000000;
+}
+
+#fps-control-button {
+    transition: all 0.2s ease;
+}
+
+#fps-control-button:hover {
+    background-color: rgba(0, 100, 180, 0.7);
+    border-color: #00aaff;
+}
+
+#fps-control-button.active {
+    background-color: rgba(0, 120, 150, 0.7);
+    border-color: #00aaff;
 }
 
 /* Panneau Principal des Statistiques */
@@ -625,22 +638,48 @@ button {
 
 /* Styles pour le bouton de contrôle FPS */
 #fps-control-button {
-  background-color: rgba(0, 0, 0, 0.6);
-  border: 1px solid transparent;
-  color: white;
-  padding: 8px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 1.2em;
+    transition: all 0.2s ease;
 }
 
 #fps-control-button:hover {
-  background-color: rgba(0, 100, 180, 0.7);
-  border-color: #00aaff;
+    background-color: rgba(0, 100, 180, 0.7);
+    border-color: #00aaff;
 }
 
 #fps-control-button.active {
-  background-color: rgba(0, 120, 150, 0.7);
-  border-color: #00aaff;
+    background-color: rgba(0, 120, 150, 0.7);
+    border-color: #00aaff;
+}
+
+/* Container pour les boutons de contrôle */
+.control-buttons {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 101;
+    color: white;
+    font-family: sans-serif;
+}
+
+.control-buttons button {
+    border-radius: 100px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    width: 40px;
+    height: 40px;
+    font-size: 1.2em;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+}
+
+.control-buttons button:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.6);
+    color: #000000;
 }
