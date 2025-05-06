@@ -36,6 +36,8 @@ export default class FpsControlUI {
     _handleClick() {
         if (this.experience.controlManager) {
             this.experience.controlManager.toggleMode();
+            // Enlever le focus du bouton
+            this.button.blur();
         }
     }
     

@@ -13,9 +13,11 @@ export default class FpsControls {
         this.moveBackward = false;
         this.moveLeft = false;
         this.moveRight = false;
+        this.isSprinting = false;
         
         // Configuration
         this.moveSpeed = 200; // vitesse de déplacement
+        this.sprintMultiplier = 2.0; // multiplicateur de vitesse en sprint
         this.lookSpeed = 0.002; // sensibilité de la souris
         
         // Propriétés pour le mouvement de la caméra
@@ -93,13 +95,16 @@ export default class FpsControls {
         this.direction.x = Number(this.moveRight) - Number(this.moveLeft);
         this.direction.normalize(); // Normaliser pour que la diagonale ne soit pas plus rapide
         
+        // Calculer la vitesse actuelle (avec sprint si nécessaire)
+        const currentSpeed = this.moveSpeed * (this.isSprinting ? this.sprintMultiplier : 1.0);
+        
         // Appliquer le mouvement dans la direction de la caméra
         if (this.moveForward || this.moveBackward) {
-            this.velocity.z += this.direction.z * this.moveSpeed * delta;
+            this.velocity.z += this.direction.z * currentSpeed * delta;
         }
         
         if (this.moveLeft || this.moveRight) {
-            this.velocity.x += this.direction.x * this.moveSpeed * delta;
+            this.velocity.x += this.direction.x * currentSpeed * delta;
         }
         
         // Appliquer la vélocité à la position de la caméra
@@ -132,6 +137,10 @@ export default class FpsControls {
             case 'ArrowRight':
                 this.moveRight = true;
                 break;
+            case 'ShiftLeft':
+            case 'ShiftRight':
+                this.isSprinting = true;
+                break;
         }
     }
     
@@ -156,6 +165,10 @@ export default class FpsControls {
             case 'KeyD':
             case 'ArrowRight':
                 this.moveRight = false;
+                break;
+            case 'ShiftLeft':
+            case 'ShiftRight':
+                this.isSprinting = false;
                 break;
         }
     }
