@@ -149,4 +149,34 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+}
+
+/* Masquer les curseurs non désirés du menu Eau */
+.environment-control-ui #slider-waterPosX,
+.environment-control-ui #slider-waterPosZ,
+.environment-control-ui #slider-waterWidth,
+.environment-control-ui #slider-waterHeight {
+    display: none;
+}
+
+/* Masquer les étiquettes et valeurs des curseurs masqués */
+.environment-control-ui #value-waterPosX,
+.environment-control-ui #value-waterPosZ,
+.environment-control-ui #value-waterWidth,
+.environment-control-ui #value-waterHeight {
+    display: none;
+}
+
+/* Masquer les conteneurs des curseurs masqués */
+.environment-control-ui .slider-container:has(#slider-waterPosX),
+.environment-control-ui .slider-container:has(#slider-waterPosZ),
+.environment-control-ui .slider-container:has(#slider-waterWidth),
+.environment-control-ui .slider-container:has(#slider-waterHeight) {
+    display: none;
+}
+
+/* Masquer la checkbox "Visible" et son conteneur */
+.environment-control-ui #checkbox-waterVisible,
+.environment-control-ui .checkbox-container:has(#checkbox-waterVisible) {
+    display: none;
 } 

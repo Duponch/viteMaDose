@@ -47,27 +47,22 @@ export default class EnvironmentControlUI {
         this.container.appendChild(title);
         
         // Créer les curseurs pour chaque paramètre
-        this.createSlider('Oiseaux', 'birds', 0, 1, 0.01, this.environmentSystem.getBirdDensity());
+        this.createSlider('Nombre d\'oiseaux', 'birds', 0, 1, 0.01, this.environmentSystem.getBirdDensity());
         
         // Séparateur pour section eau
         const waterSeparator = document.createElement('div');
         waterSeparator.className = 'ui-separator';
         this.container.appendChild(waterSeparator);
         
-        // Sous-titre pour la section eau
-        const waterTitle = document.createElement('h4');
-        waterTitle.textContent = 'Eau';
-        this.container.appendChild(waterTitle);
-        
         // Checkbox pour activer/désactiver l'eau
         this.createCheckbox('Visible', 'waterVisible', this.defaultValues.waterVisible);
         
-        // Curseurs pour la position de l'eau
+        // Curseurs pour la position de l'eau (seulement la hauteur est visible)
         this.createSlider('Position X', 'waterPosX', -500, 500, 5, this.defaultValues.waterPositionX);
         this.createSlider('Position Z', 'waterPosZ', -500, 500, 5, this.defaultValues.waterPositionZ);
-        this.createSlider('Hauteur', 'waterPosY', -50, 50, 0.1, this.defaultValues.waterPositionY);
+        this.createSlider('Hauteur de l\'eau', 'waterPosY', -50, 50, 0.1, this.defaultValues.waterPositionY);
         
-        // Curseurs pour les dimensions de l'eau
+        // Curseurs pour les dimensions de l'eau (masqués)
         this.createSlider('Largeur', 'waterWidth', 50, 1000, 10, this.defaultValues.waterWidth);
         this.createSlider('Longueur', 'waterHeight', 50, 1000, 10, this.defaultValues.waterHeight);
         
