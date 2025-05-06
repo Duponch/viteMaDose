@@ -22,7 +22,7 @@ export default class WaterSystem {
         this.waterOpacity = 0.8;
         this.waterPosition = {
             x: 0,
-            y: 0.5,
+            y: -10, // Position beaucoup plus basse par défaut
             z: 0
         };
         

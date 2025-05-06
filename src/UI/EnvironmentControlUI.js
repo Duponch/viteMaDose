@@ -65,7 +65,7 @@ export default class EnvironmentControlUI {
         // Curseurs pour la position de l'eau
         this.createSlider('Position X', 'waterPosX', -500, 500, 5, this.defaultValues.waterPositionX);
         this.createSlider('Position Z', 'waterPosZ', -500, 500, 5, this.defaultValues.waterPositionZ);
-        this.createSlider('Hauteur', 'waterPosY', 0, 10, 0.1, this.defaultValues.waterPositionY);
+        this.createSlider('Hauteur', 'waterPosY', -50, 50, 0.1, this.defaultValues.waterPositionY);
         
         // Curseurs pour les dimensions de l'eau
         this.createSlider('Largeur', 'waterWidth', 50, 1000, 10, this.defaultValues.waterWidth);
@@ -267,7 +267,7 @@ export default class EnvironmentControlUI {
                 case 'waterPositionY':
                     this.sliders.waterPosY.value = value;
                     this.valueDisplays.waterPosY.textContent = value.toFixed(2);
-                    this.sliders.waterPosY.style.setProperty('--value', `${(value - 0) / (10 - 0) * 100}%`);
+                    this.sliders.waterPosY.style.setProperty('--value', `${(value - -50) / (50 - -50) * 100}%`);
                     break;
                 case 'waterPositionZ':
                     this.sliders.waterPosZ.value = value;
