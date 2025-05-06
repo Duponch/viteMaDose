@@ -18,6 +18,7 @@ export default class FpsControls {
         this.isJetpackActive = false;
         this.isGrounded = false;
         this.isGravityEnabled = true;
+        this.isDescending = false;
         
         // Configuration
         this.moveSpeed = 200; // vitesse de déplacement
@@ -27,6 +28,7 @@ export default class FpsControls {
         // Configuration du jetpack
         this.gravity = 150.81; // gravité en m/s²
         this.jetpackForce = 300.0; // force de poussée du jetpack
+        this.descendSpeed = 200.0; // vitesse de descente
         this.maxVerticalSpeed = 20.0; // vitesse verticale maximale
         this.verticalVelocity = 0.0; // vélocité verticale actuelle
         this.verticalDamping = 0.95; // amortissement de la vélocité verticale
@@ -135,6 +137,11 @@ export default class FpsControls {
             this.verticalVelocity += this.jetpackForce * delta;
         }
         
+        // Appliquer la descente si CTRL est pressé
+        if (this.isDescending) {
+            this.verticalVelocity -= this.descendSpeed * delta;
+        }
+        
         // Limiter la vitesse verticale
         this.verticalVelocity = Math.max(-this.maxVerticalSpeed, Math.min(this.maxVerticalSpeed, this.verticalVelocity));
         
@@ -194,6 +201,10 @@ export default class FpsControls {
             case 'Space':
                 this.isJetpackActive = true;
                 break;
+            case 'ControlLeft':
+            case 'ControlRight':
+                this.isDescending = true;
+                break;
             case 'KeyQ': // A en AZERTY
                 this.isGravityEnabled = !this.isGravityEnabled;
                 if (!this.isGravityEnabled) {
@@ -230,6 +241,10 @@ export default class FpsControls {
                 break;
             case 'Space':
                 this.isJetpackActive = false;
+                break;
+            case 'ControlLeft':
+            case 'ControlRight':
+                this.isDescending = false;
                 break;
         }
     }
