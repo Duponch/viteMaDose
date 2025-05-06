@@ -20,6 +20,9 @@ export default class FpsControls {
         this.isGravityEnabled = true;
         this.isDescending = false;
         
+        // État des touches
+        this.pressedKeys = new Set();
+        
         // Configuration
         this.moveSpeed = 200; // vitesse de déplacement
         this.sprintMultiplier = 5.0; // multiplicateur de vitesse en sprint
@@ -66,8 +69,9 @@ export default class FpsControls {
     
     enable() {
         if (!this.isActive) {
-            document.addEventListener('keydown', this._boundKeyDown);
-            document.addEventListener('keyup', this._boundKeyUp);
+            // Ajouter les écouteurs d'événements au document
+            document.addEventListener('keydown', this._boundKeyDown, true);
+            document.addEventListener('keyup', this._boundKeyUp, true);
             document.addEventListener('mousemove', this._boundMouseMove);
             document.addEventListener('pointerlockchange', this._boundPointerLockChange);
             document.addEventListener('keydown', this._boundPreventShortcuts, true);
@@ -82,8 +86,9 @@ export default class FpsControls {
     
     disable() {
         if (this.isActive) {
-            document.removeEventListener('keydown', this._boundKeyDown);
-            document.removeEventListener('keyup', this._boundKeyUp);
+            // Retirer les écouteurs d'événements du document
+            document.removeEventListener('keydown', this._boundKeyDown, true);
+            document.removeEventListener('keyup', this._boundKeyUp, true);
             document.removeEventListener('mousemove', this._boundMouseMove);
             document.removeEventListener('pointerlockchange', this._boundPointerLockChange);
             document.removeEventListener('keydown', this._boundPreventShortcuts, true);
@@ -98,6 +103,10 @@ export default class FpsControls {
             this.moveBackward = false;
             this.moveLeft = false;
             this.moveRight = false;
+            this.isSprinting = false;
+            this.isJetpackActive = false;
+            this.isDescending = false;
+            this.pressedKeys.clear();
             
             this.isActive = false;
             console.log("FpsControls désactivés");
@@ -145,13 +154,14 @@ export default class FpsControls {
             this.jetpackVelocity += this.jetpackAcceleration;
             // Limiter la vitesse du jetpack
             this.jetpackVelocity = Math.min(this.jetpackVelocity, 1.0);
+            
+            // Augmenter la force du jetpack si on sprint
+            const jetpackForce = this.jetpackForce * (this.isSprinting ? 1.5 : 1.0);
+            this.verticalVelocity += jetpackForce * this.jetpackVelocity * delta;
         } else {
             // Décélération progressive
             this.jetpackVelocity *= this.jetpackDamping;
         }
-        
-        // Appliquer la poussée du jetpack
-        this.verticalVelocity += this.jetpackForce * this.jetpackVelocity * delta;
         
         // Appliquer la descente si CTRL est pressé
         if (this.isDescending) {
@@ -199,73 +209,58 @@ export default class FpsControls {
     _onKeyDown(event) {
         if (!this.isActive) return;
         
-        switch (event.code) {
-            case 'KeyW': // Z en AZERTY
-                this.moveForward = true;
-                break;
-            case 'KeyS': // S en AZERTY
-                this.moveBackward = true;
-                break;
-            case 'KeyA': // Q en AZERTY
-                this.moveLeft = true;
-                break;
-            case 'KeyD': // D en AZERTY
-                this.moveRight = true;
-                break;
-            case 'ShiftLeft':
-            case 'ShiftRight':
-                this.isSprinting = true;
-                break;
-            case 'Space':
-                this.isJetpackActive = true;
-                break;
-            case 'ControlLeft':
-            case 'ControlRight':
-                this.isDescending = true;
-                break;
-            case 'KeyQ': // A en AZERTY
-                this.isGravityEnabled = !this.isGravityEnabled;
-                if (!this.isGravityEnabled) {
-                    this.verticalVelocity = 0;
-                    this.jetpackVelocity = 0;
-                }
-                break;
-            case 'Escape':
-                if (this.experience.controlManager) {
-                    this.experience.controlManager.setMode('classic');
-                }
-                break;
+        // Empêcher le comportement par défaut pour les touches de contrôle
+        if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyZ', 'KeyQ', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight'].includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        
+        // Ajouter la touche à l'ensemble des touches pressées
+        this.pressedKeys.add(event.code);
+        
+        // Mettre à jour les états de mouvement
+        this.moveForward = this.pressedKeys.has('KeyW'); // Z en AZERTY
+        this.moveBackward = this.pressedKeys.has('KeyS');
+        this.moveLeft = this.pressedKeys.has('KeyA'); // Q en AZERTY
+        this.moveRight = this.pressedKeys.has('KeyD');
+        this.isSprinting = this.pressedKeys.has('ShiftLeft') || this.pressedKeys.has('ShiftRight');
+        this.isJetpackActive = this.pressedKeys.has('Space');
+        this.isDescending = this.pressedKeys.has('ControlLeft') || this.pressedKeys.has('ControlRight');
+        
+        // Gérer les touches spéciales
+        if (event.code === 'KeyQ') { // A en AZERTY
+            this.isGravityEnabled = !this.isGravityEnabled;
+            if (!this.isGravityEnabled) {
+                this.verticalVelocity = 0;
+                this.jetpackVelocity = 0;
+            }
+        } else if (event.code === 'Escape') {
+            if (this.experience.controlManager) {
+                this.experience.controlManager.setMode('classic');
+            }
         }
     }
     
     _onKeyUp(event) {
         if (!this.isActive) return;
         
-        switch (event.code) {
-            case 'KeyW': // Z en AZERTY
-                this.moveForward = false;
-                break;
-            case 'KeyS': // S en AZERTY
-                this.moveBackward = false;
-                break;
-            case 'KeyA': // Q en AZERTY
-                this.moveLeft = false;
-                break;
-            case 'KeyD': // D en AZERTY
-                this.moveRight = false;
-                break;
-            case 'ShiftLeft':
-            case 'ShiftRight':
-                this.isSprinting = false;
-                break;
-            case 'Space':
-                this.isJetpackActive = false;
-                break;
-            case 'ControlLeft':
-            case 'ControlRight':
-                this.isDescending = false;
-                break;
+        // Empêcher le comportement par défaut pour les touches de contrôle
+        if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyZ', 'KeyQ', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight'].includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
         }
+        
+        // Retirer la touche de l'ensemble des touches pressées
+        this.pressedKeys.delete(event.code);
+        
+        // Mettre à jour les états de mouvement
+        this.moveForward = this.pressedKeys.has('KeyW'); // Z en AZERTY
+        this.moveBackward = this.pressedKeys.has('KeyS');
+        this.moveLeft = this.pressedKeys.has('KeyA'); // Q en AZERTY
+        this.moveRight = this.pressedKeys.has('KeyD');
+        this.isSprinting = this.pressedKeys.has('ShiftLeft') || this.pressedKeys.has('ShiftRight');
+        this.isJetpackActive = this.pressedKeys.has('Space');
+        this.isDescending = this.pressedKeys.has('ControlLeft') || this.pressedKeys.has('ControlRight');
     }
     
     _onMouseMove(event) {
