@@ -61,7 +61,7 @@ export default class Camera {
             45,
             this.sizes.width / this.sizes.height,
             0.1,
-            3000
+            5000
         );
         this.instance.position.set(80, 80, 80);
         this.scene.add(this.instance);
