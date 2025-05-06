@@ -15,16 +15,21 @@ export default class WaterSystem {
         this.time = this.experience.time;
         
         // Configuration de l'eau
-        this.waterWidth = 350;
-        this.waterHeight = 250;
-        this.waterSegments = 10;
+        this.waterWidth = this.environment.mapSize * 2; // Couvre toute la carte
+        this.waterHeight = this.environment.mapSize * 2;
+        this.waterSegments = 50; // Réduit pour les performances
         this.waterColor = 0x68c3c0;
         this.waterOpacity = 0.8;
         this.waterPosition = {
             x: 0,
-            y: 0.5, // Légèrement au-dessus du sol
+            y: 0.5,
             z: 0
         };
+        
+        // Paramètres d'optimisation
+        this.maxWaveHeight = 2.0; // Hauteur maximale des vagues
+        this.waveSpeed = 0.016; // Vitesse de base des vagues
+        this.waveVariation = 0.032; // Variation de vitesse
         
         // Initialiser le système d'eau
         this.initWater();
@@ -45,7 +50,7 @@ export default class WaterSystem {
         // Appliquer une rotation pour que l'eau soit horizontale
         geom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
         
-        // Fusionner les vertices identiques (simplifie la géométrie)
+        // Fusionner les vertices identiques
         geom.attributes.position.needsUpdate = true;
         
         // Stocker le nombre de vertices
@@ -62,12 +67,21 @@ export default class WaterSystem {
                 geom.attributes.position.getZ(i)
             );
             
+            // Calculer la distance du centre
+            const distanceFromCenter = Math.sqrt(vertex.x * vertex.x + vertex.z * vertex.z);
+            const normalizedDistance = distanceFromCenter / (this.waterWidth / 2);
+            
+            // Ajuster les paramètres en fonction de la distance
+            const waveHeight = this.maxWaveHeight * (1 - normalizedDistance * 0.5);
+            const waveSpeed = this.waveSpeed * (1 + normalizedDistance * 0.5);
+            
             this.waves.push({
                 y: vertex.y,
                 x: vertex.x,
                 z: vertex.z,
-                ang: Math.random() * Math.PI * 2, // Angle aléatoire
-                speed: 0.016 + Math.random() * 0.032 // Vitesse aléatoire
+                ang: Math.random() * Math.PI * 2,
+                speed: waveSpeed + Math.random() * this.waveVariation,
+                height: waveHeight
             });
         }
         
@@ -110,7 +124,7 @@ export default class WaterSystem {
             
             // Calculer les nouvelles coordonnées avec un mouvement sinusoïdal
             const x = vprops.x + Math.cos(vprops.ang);
-            const y = vprops.y + Math.sin(vprops.ang) * 2;
+            const y = vprops.y + Math.sin(vprops.ang) * vprops.height;
             
             // Mettre à jour la position du vertex
             positions.setXYZ(i, x, y, vprops.z);
