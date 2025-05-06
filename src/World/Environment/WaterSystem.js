@@ -31,6 +31,10 @@ export default class WaterSystem {
         this.waveSpeed = 0.016; // Vitesse de base des vagues
         this.waveVariation = 0.032; // Variation de vitesse
         
+        // Paramètres d'animation de la texture
+        this.textureOffset = 0;
+        this.textureSpeed = 0.0005;
+        
         // Initialiser le système d'eau
         this.initWater();
     }
@@ -91,7 +95,20 @@ export default class WaterSystem {
             transparent: true,
             opacity: this.waterOpacity,
             flatShading: true,
+            shininess: 100,
+            specular: new THREE.Color(0xffffff),
+            envMap: this.experience.scene.environment,
+            reflectivity: 0.5,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending
         });
+        
+        // Créer une texture procédurale pour l'eau
+        const waterTexture = this.createWaterTexture();
+        mat.map = waterTexture;
+        mat.bumpMap = waterTexture;
+        mat.bumpScale = 0.5;
         
         // Créer le mesh final
         this.waterMesh = new THREE.Mesh(geom, mat);
@@ -175,6 +192,25 @@ export default class WaterSystem {
      */
     update(deltaTime) {
         this.moveWaves();
+        this.animateTexture(deltaTime);
+    }
+    
+    /**
+     * Anime la texture de l'eau
+     * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
+     */
+    animateTexture(deltaTime) {
+        if (this.waterMesh && this.waterMesh.material.map) {
+            this.textureOffset += this.textureSpeed * deltaTime;
+            this.waterMesh.material.map.offset.set(
+                this.textureOffset,
+                this.textureOffset * 0.5
+            );
+            this.waterMesh.material.bumpMap.offset.set(
+                this.textureOffset * 0.7,
+                this.textureOffset * 0.3
+            );
+        }
     }
     
     /**
@@ -189,5 +225,46 @@ export default class WaterSystem {
         }
         
         this.waves = [];
+    }
+    
+    /**
+     * Crée une texture procédurale pour l'eau
+     * @returns {THREE.Texture} La texture générée
+     */
+    createWaterTexture() {
+        const canvas = document.createElement('canvas');
+        const size = 512;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // Fond bleu transparent
+        ctx.fillStyle = 'rgba(104, 195, 192, 0.8)';
+        ctx.fillRect(0, 0, size, size);
+
+        // Ajouter des motifs de vagues
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+
+        // Dessiner des cercles concentriques pour les vagues
+        for (let i = 0; i < 5; i++) {
+            const radius = (i + 1) * size / 6;
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, radius, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // Ajouter des motifs de lumière
+        const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(4, 4);
+        return texture;
     }
 } 
