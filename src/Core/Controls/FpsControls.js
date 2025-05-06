@@ -59,6 +59,7 @@ export default class FpsControls {
         this._boundKeyUp = this._onKeyUp.bind(this);
         this._boundMouseMove = this._onMouseMove.bind(this);
         this._boundPointerLockChange = this._onPointerLockChange.bind(this);
+        this._boundPreventShortcuts = this._preventShortcuts.bind(this);
         
         console.log("FpsControls initialisés");
     }
@@ -69,6 +70,7 @@ export default class FpsControls {
             document.addEventListener('keyup', this._boundKeyUp);
             document.addEventListener('mousemove', this._boundMouseMove);
             document.addEventListener('pointerlockchange', this._boundPointerLockChange);
+            document.addEventListener('keydown', this._boundPreventShortcuts, true);
             
             // Capturer le pointeur lors de l'activation
             this.canvas.requestPointerLock();
@@ -84,6 +86,7 @@ export default class FpsControls {
             document.removeEventListener('keyup', this._boundKeyUp);
             document.removeEventListener('mousemove', this._boundMouseMove);
             document.removeEventListener('pointerlockchange', this._boundPointerLockChange);
+            document.removeEventListener('keydown', this._boundPreventShortcuts, true);
             
             // Libérer le pointeur
             if (document.pointerLockElement === this.canvas) {
@@ -289,6 +292,125 @@ export default class FpsControls {
             if (this.experience.controlManager) {
                 this.experience.controlManager.setMode('classic');
             }
+        }
+    }
+    
+    _preventShortcuts(event) {
+        // Liste des touches à bloquer
+        const blockedKeys = [
+            'KeyS', // Ctrl + S
+            'KeyD', // Ctrl + D
+            'KeyP', // Ctrl + P
+            'KeyR', // Ctrl + R
+            'KeyU', // Ctrl + U
+            'KeyI', // Ctrl + I
+            'KeyJ', // Ctrl + J
+            'KeyK', // Ctrl + K
+            'KeyL', // Ctrl + L
+            'KeyO', // Ctrl + O
+            'KeyF', // Ctrl + F
+            'KeyH', // Ctrl + H
+            'KeyG', // Ctrl + G
+            'KeyB', // Ctrl + B
+            'KeyN', // Ctrl + N
+            'KeyM', // Ctrl + M
+            'KeyW', // Ctrl + W
+            'KeyQ', // Ctrl + Q
+            'KeyE', // Ctrl + E
+            'KeyT', // Ctrl + T
+            'KeyY', // Ctrl + Y
+            'KeyX', // Ctrl + X
+            'KeyC', // Ctrl + C
+            'KeyV', // Ctrl + V
+            'KeyZ', // Ctrl + Z
+            'KeyA', // Ctrl + A
+            'Digit1', // Ctrl + 1
+            'Digit2', // Ctrl + 2
+            'Digit3', // Ctrl + 3
+            'Digit4', // Ctrl + 4
+            'Digit5', // Ctrl + 5
+            'Digit6', // Ctrl + 6
+            'Digit7', // Ctrl + 7
+            'Digit8', // Ctrl + 8
+            'Digit9', // Ctrl + 9
+            'Digit0', // Ctrl + 0
+            'Minus', // Ctrl + -
+            'Equal', // Ctrl + =
+            'BracketLeft', // Ctrl + [
+            'BracketRight', // Ctrl + ]
+            'Backslash', // Ctrl + \
+            'Semicolon', // Ctrl + ;
+            'Quote', // Ctrl + '
+            'Comma', // Ctrl + ,
+            'Period', // Ctrl + .
+            'Slash', // Ctrl + /
+            'Space', // Ctrl + Space
+            'Tab', // Ctrl + Tab
+            'Backspace', // Ctrl + Backspace
+            'Delete', // Ctrl + Delete
+            'Insert', // Ctrl + Insert
+            'Home', // Ctrl + Home
+            'End', // Ctrl + End
+            'PageUp', // Ctrl + PageUp
+            'PageDown', // Ctrl + PageDown
+            'ArrowUp', // Ctrl + ↑
+            'ArrowDown', // Ctrl + ↓
+            'ArrowLeft', // Ctrl + ←
+            'ArrowRight', // Ctrl + →
+            'F1', // Ctrl + F1
+            'F2', // Ctrl + F2
+            'F3', // Ctrl + F3
+            'F4', // Ctrl + F4
+            'F5', // Ctrl + F5
+            'F6', // Ctrl + F6
+            'F7', // Ctrl + F7
+            'F8', // Ctrl + F8
+            'F9', // Ctrl + F9
+            'F10', // Ctrl + F10
+            'F11', // Ctrl + F11
+            'F12', // Ctrl + F12
+        ];
+
+        // Bloquer les raccourcis Ctrl + touche
+        if (event.ctrlKey && blockedKeys.includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        // Bloquer les raccourcis Alt + touche
+        if (event.altKey && blockedKeys.includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        // Bloquer les raccourcis Shift + touche
+        if (event.shiftKey && blockedKeys.includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        // Bloquer les raccourcis Ctrl + Alt + touche
+        if (event.ctrlKey && event.altKey && blockedKeys.includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        // Bloquer les raccourcis Ctrl + Shift + touche
+        if (event.ctrlKey && event.shiftKey && blockedKeys.includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        // Bloquer les raccourcis Alt + Shift + touche
+        if (event.altKey && event.shiftKey && blockedKeys.includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        // Bloquer les raccourcis Ctrl + Alt + Shift + touche
+        if (event.ctrlKey && event.altKey && event.shiftKey && blockedKeys.includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
         }
     }
     
