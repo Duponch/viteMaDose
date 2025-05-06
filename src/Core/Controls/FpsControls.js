@@ -31,7 +31,10 @@ export default class FpsControls {
         this.descendSpeed = 200.0; // vitesse de descente
         this.maxVerticalSpeed = 20.0; // vitesse verticale maximale
         this.verticalVelocity = 0.0; // vélocité verticale actuelle
-        this.verticalDamping = 0.95; // amortissement de la vélocité verticale
+        this.jetpackVelocity = 0.0; // vélocité du jetpack
+        this.jetpackAcceleration = 0.1; // accélération du jetpack
+        this.jetpackDamping = 0.3; // amortissement du jetpack
+        this.gravityDamping = 0.95; // amortissement de la gravité
         
         // Configuration du sol
         this.groundOffset = 1.8; // hauteur du joueur
@@ -127,15 +130,25 @@ export default class FpsControls {
             this.velocity.x += this.direction.x * currentSpeed * delta;
         }
         
-        // Gestion du jetpack et de la gravité
+        // Gestion de la gravité
         if (this.isGravityEnabled && !this.isGrounded) {
             this.verticalVelocity -= this.gravity * delta;
+            this.verticalVelocity *= this.gravityDamping;
         }
         
-        // Appliquer la poussée du jetpack si actif
+        // Gestion du jetpack avec accélération progressive
         if (this.isJetpackActive) {
-            this.verticalVelocity += this.jetpackForce * delta;
+            // Accélération progressive
+            this.jetpackVelocity += this.jetpackAcceleration;
+            // Limiter la vitesse du jetpack
+            this.jetpackVelocity = Math.min(this.jetpackVelocity, 1.0);
+        } else {
+            // Décélération progressive
+            this.jetpackVelocity *= this.jetpackDamping;
         }
+        
+        // Appliquer la poussée du jetpack
+        this.verticalVelocity += this.jetpackForce * this.jetpackVelocity * delta;
         
         // Appliquer la descente si CTRL est pressé
         if (this.isDescending) {
@@ -144,9 +157,6 @@ export default class FpsControls {
         
         // Limiter la vitesse verticale
         this.verticalVelocity = Math.max(-this.maxVerticalSpeed, Math.min(this.maxVerticalSpeed, this.verticalVelocity));
-        
-        // Appliquer l'amortissement
-        this.verticalVelocity *= this.verticalDamping;
         
         // Appliquer la vélocité à la position de la caméra
         const cameraDirection = this.camera.instance.getWorldDirection(new THREE.Vector3());
