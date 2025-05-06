@@ -442,7 +442,7 @@ export default class Environment {
         const width = this.outerGroundDisplayRadius * 2.5;
         const depth = this.outerGroundDisplayRadius * 2.5;
         const segments = 150;
-		const flatRadius = this.mapSize * 0.4;
+		const flatRadius = this.mapSize * 0.5;
 		const transitionWidth = this.mapSize * 0.4;
 		const noiseScale1 = 0.002;
 		const noiseScale2 = 0.005;
