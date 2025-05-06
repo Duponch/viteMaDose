@@ -155,6 +155,11 @@ export default class FpsControls {
             this.verticalVelocity -= this.descendSpeed * delta;
         }
         
+        // Si la gravité est désactivée, réinitialiser la vélocité verticale quand aucune touche n'est pressée
+        if (!this.isGravityEnabled && !this.isJetpackActive && !this.isDescending) {
+            this.verticalVelocity = 0;
+        }
+        
         // Limiter la vitesse verticale
         this.verticalVelocity = Math.max(-this.maxVerticalSpeed, Math.min(this.maxVerticalSpeed, this.verticalVelocity));
         
@@ -219,6 +224,7 @@ export default class FpsControls {
                 this.isGravityEnabled = !this.isGravityEnabled;
                 if (!this.isGravityEnabled) {
                     this.verticalVelocity = 0;
+                    this.jetpackVelocity = 0;
                 }
                 break;
             case 'Escape':
