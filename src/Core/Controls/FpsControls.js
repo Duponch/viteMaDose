@@ -84,7 +84,7 @@ export default class FpsControls {
     update() {
         if (!this.isActive || !this.camera || !this.time) return;
         
-        const delta = this.time.delta / 1000; // conversion en secondes
+        const delta = this.time.unscaledDelta / 1000; // Utiliser unscaledDelta pour être indépendant de la vitesse du jeu
         
         // Ralentir le mouvement avec le temps
         this.velocity.x -= this.velocity.x * 10.0 * delta;
