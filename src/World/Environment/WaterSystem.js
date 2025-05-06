@@ -15,35 +15,149 @@ export default class WaterSystem {
         this.time = this.experience.time;
         
         // Configuration de l'eau
-        this.waterWidth = this.environment.mapSize * 2; // Couvre toute la carte
+        this.waterWidth = this.environment.mapSize * 2;
         this.waterHeight = this.environment.mapSize * 2;
-        this.waterSegments = 50; // Réduit pour les performances
+        this.waterSegments = 500;
         this.waterColor = 0x68c3c0;
-        this.waterOpacity = 0.8;
+        this.waterOpacity = 0.4;
         this.waterPosition = {
             x: 0,
-            y: -10, // Position beaucoup plus basse par défaut
+            y: -10,
             z: 0
         };
         
         // Paramètres d'optimisation
-        this.maxWaveHeight = 2.0; // Hauteur maximale des vagues
-        this.waveSpeed = 0.016; // Vitesse de base des vagues
-        this.waveVariation = 0.032; // Variation de vitesse
+        this.maxWaveHeight = 5.0;
+        this.waveSpeed = 0.016;
+        this.waveVariation = 0.032;
+        
+        // Paramètres LOD
+        this.lodLevels = [
+            { segments: 10, distance: 100 },
+            { segments: 20, distance: 50 },
+            { segments: 500, distance: 0 }
+        ];
+        this.currentLodLevel = 0;
         
         // Paramètres d'animation de la texture
         this.textureOffset = 0;
         this.textureSpeed = 0.0005;
+        
+        // Initialiser les shaders
+        this.initShaders();
         
         // Initialiser le système d'eau
         this.initWater();
     }
     
     /**
+     * Initialise les shaders pour l'eau
+     */
+    initShaders() {
+        // Vertex Shader
+        this.vertexShader = `
+            uniform float time;
+            uniform float maxWaveHeight;
+            uniform float waveSpeed;
+            uniform float waveVariation;
+            
+            varying vec2 vUv;
+            varying float vWave;
+            varying vec3 vNormal;
+            varying vec3 vViewPosition;
+            varying vec3 vWorldPosition;
+            
+            void main() {
+                vUv = uv;
+                
+                // Calcul de la position de base
+                vec3 pos = position;
+                
+                // Calcul de la distance du centre
+                float distanceFromCenter = length(pos.xz);
+                float normalizedDistance = distanceFromCenter / (${this.waterWidth / 2}.0);
+                
+                // Ajustement de la hauteur des vagues en fonction de la distance
+                float waveHeight = maxWaveHeight * (1.0 - normalizedDistance * 0.3);
+                
+                // Calcul de la hauteur de la vague avec plusieurs fréquences pour éviter la répétition
+                float wave = 0.0;
+                wave += sin(pos.x * 0.1 + time * waveSpeed) * cos(pos.z * 0.1 + time * waveSpeed);
+                wave += sin(pos.x * 0.05 + time * waveSpeed * 0.7) * cos(pos.z * 0.05 + time * waveSpeed * 0.7) * 0.5;
+                wave += sin(pos.x * 0.02 + time * waveSpeed * 0.3) * cos(pos.z * 0.02 + time * waveSpeed * 0.3) * 0.25;
+                wave *= waveHeight;
+                
+                // Calcul de la normale pour les réflexions
+                float dx = cos(pos.x * 0.1 + time * waveSpeed) * sin(pos.z * 0.1 + time * waveSpeed) * 0.2;
+                float dz = sin(pos.x * 0.1 + time * waveSpeed) * cos(pos.z * 0.1 + time * waveSpeed) * 0.2;
+                vNormal = normalize(vec3(-dx, 1.0, -dz));
+                
+                // Application de la hauteur de la vague
+                pos.y += wave;
+                
+                vWave = wave;
+                vViewPosition = (modelViewMatrix * vec4(pos, 1.0)).xyz;
+                vWorldPosition = (modelMatrix * vec4(pos, 1.0)).xyz;
+                
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+            }
+        `;
+        
+        // Fragment Shader
+        this.fragmentShader = `
+            uniform vec3 waterColor;
+            uniform float waterOpacity;
+            uniform float time;
+            uniform vec3 ambientLightColor;
+            uniform vec3 directionalLightColor;
+            uniform vec3 directionalLightDirection;
+            
+            varying vec2 vUv;
+            varying float vWave;
+            varying vec3 vNormal;
+            varying vec3 vViewPosition;
+            varying vec3 vWorldPosition;
+            
+            void main() {
+                // Couleur de base
+                vec3 color = waterColor;
+                
+                // Calcul de la réflexion
+                vec3 normal = normalize(vNormal);
+                vec3 viewDir = normalize(vViewPosition);
+                vec3 reflectDir = reflect(viewDir, normal);
+                
+                // Effet de Fresnel pour la transparence
+                float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 2.0);
+                
+                // Calcul de l'éclairage
+                vec3 lighting = ambientLightColor;
+                
+                // Éclairage directionnel
+                float diffuse = max(dot(normal, directionalLightDirection), 0.0);
+                lighting += directionalLightColor * diffuse;
+                
+                // Combinaison des effets
+                color = mix(color, vec3(1.0), fresnel * 0.3);
+                color *= lighting;
+                
+                // Ajout d'un effet de profondeur
+                float depth = 1.0 - smoothstep(0.0, 1.0, length(vViewPosition) / 100.0);
+                color = mix(color, waterColor * 0.5, depth);
+                
+                // Ajustement de l'opacité en fonction de l'éclairage et de la profondeur
+                float finalOpacity = waterOpacity * (0.5 + fresnel * 0.2) * max(lighting.r, max(lighting.g, lighting.b)) * (0.7 + depth * 0.3);
+                
+                gl_FragColor = vec4(color, finalOpacity);
+            }
+        `;
+    }
+    
+    /**
      * Initialise le système d'eau
      */
     initWater() {
-        // Créer la géométrie de l'eau avec une grille de vertices
+        // Créer la géométrie de l'eau
         let geom = new THREE.PlaneGeometry(
             this.waterWidth, 
             this.waterHeight, 
@@ -54,61 +168,26 @@ export default class WaterSystem {
         // Appliquer une rotation pour que l'eau soit horizontale
         geom.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2));
         
-        // Fusionner les vertices identiques
-        geom.attributes.position.needsUpdate = true;
-        
-        // Stocker le nombre de vertices
-        this.verticesCount = geom.attributes.position.count;
-        
-        // Création des données pour chaque vague (vertex)
-        this.waves = [];
-        
-        // Pour chaque vertex, créer des paramètres de vague
-        for (let i = 0; i < this.verticesCount; i++) {
-            const vertex = new THREE.Vector3(
-                geom.attributes.position.getX(i),
-                geom.attributes.position.getY(i),
-                geom.attributes.position.getZ(i)
-            );
-            
-            // Calculer la distance du centre
-            const distanceFromCenter = Math.sqrt(vertex.x * vertex.x + vertex.z * vertex.z);
-            const normalizedDistance = distanceFromCenter / (this.waterWidth / 2);
-            
-            // Ajuster les paramètres en fonction de la distance
-            const waveHeight = this.maxWaveHeight * (1 - normalizedDistance * 0.5);
-            const waveSpeed = this.waveSpeed * (1 + normalizedDistance * 0.5);
-            
-            this.waves.push({
-                y: vertex.y,
-                x: vertex.x,
-                z: vertex.z,
-                ang: Math.random() * Math.PI * 2,
-                speed: waveSpeed + Math.random() * this.waveVariation,
-                height: waveHeight
-            });
-        }
-        
-        // Créer le matériau pour l'eau
-        let mat = new THREE.MeshPhongMaterial({
-            color: this.waterColor,
+        // Créer le matériau avec les shaders
+        let mat = new THREE.ShaderMaterial({
+            uniforms: {
+                time: { value: 0 },
+                maxWaveHeight: { value: this.maxWaveHeight },
+                waveSpeed: { value: this.waveSpeed },
+                waveVariation: { value: this.waveVariation },
+                waterColor: { value: new THREE.Color(this.waterColor) },
+                waterOpacity: { value: this.waterOpacity },
+                ambientLightColor: { value: new THREE.Color(0x111111) },
+                directionalLightColor: { value: new THREE.Color(0xffffff) },
+                directionalLightDirection: { value: new THREE.Vector3(0, 1, 0) }
+            },
+            vertexShader: this.vertexShader,
+            fragmentShader: this.fragmentShader,
             transparent: true,
-            opacity: this.waterOpacity,
-            flatShading: true,
-            shininess: 100,
-            specular: new THREE.Color(0xffffff),
-            envMap: this.experience.scene.environment,
-            reflectivity: 0.5,
             side: THREE.DoubleSide,
             depthWrite: false,
-            blending: THREE.AdditiveBlending
+            blending: THREE.NormalBlending
         });
-        
-        // Créer une texture procédurale pour l'eau
-        const waterTexture = this.createWaterTexture();
-        mat.map = waterTexture;
-        mat.bumpMap = waterTexture;
-        mat.bumpScale = 0.5;
         
         // Créer le mesh final
         this.waterMesh = new THREE.Mesh(geom, mat);
@@ -190,11 +269,66 @@ export default class WaterSystem {
     }
     
     /**
+     * Met à jour le niveau de détail en fonction de la distance
+     */
+    updateLod() {
+        if (!this.waterMesh) return;
+        
+        const camera = this.experience.camera.instance;
+        const distance = camera.position.distanceTo(this.waterMesh.position);
+
+        // Trouver le niveau LOD approprié
+        let newLodLevel = this.lodLevels.length - 1;
+        for (let i = 0; i < this.lodLevels.length; i++) {
+            if (distance > this.lodLevels[i].distance) {
+                newLodLevel = i;
+                break;
+            }
+        }
+        
+        // Si le niveau LOD a changé, recréer la géométrie
+        if (newLodLevel !== this.currentLodLevel) {
+            this.currentLodLevel = newLodLevel;
+            this.waterSegments = this.lodLevels[newLodLevel].segments;
+            
+            // Sauvegarder la position actuelle
+            const currentPosition = this.waterMesh.position.clone();
+            
+            // Recréer l'eau avec le nouveau niveau de détail
+            this.scene.remove(this.waterMesh);
+            this.initWater();
+            
+            // Restaurer la position
+            this.waterMesh.position.copy(currentPosition);
+        }
+    }
+    
+    /**
      * Mise à jour du système d'eau
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
      */
     update(deltaTime) {
-        this.moveWaves();
+        this.updateLod();
+        
+        if (this.waterMesh && this.waterMesh.material.uniforms) {
+            // Mettre à jour le temps dans le shader
+            this.waterMesh.material.uniforms.time.value += deltaTime * 0.001;
+            
+            // Mettre à jour les lumières
+            const scene = this.experience.scene;
+            const ambientLight = scene.children.find(child => child instanceof THREE.AmbientLight);
+            const directionalLight = scene.children.find(child => child instanceof THREE.DirectionalLight);
+            
+            if (ambientLight) {
+                this.waterMesh.material.uniforms.ambientLightColor.value.copy(ambientLight.color);
+            }
+            
+            if (directionalLight) {
+                this.waterMesh.material.uniforms.directionalLightColor.value.copy(directionalLight.color);
+                this.waterMesh.material.uniforms.directionalLightDirection.value.copy(directionalLight.position).normalize();
+            }
+        }
+        
         this.animateTexture(deltaTime);
     }
     
@@ -204,18 +338,12 @@ export default class WaterSystem {
      */
     animateTexture(deltaTime) {
         if (this.waterMesh && this.waterMesh.material.map) {
-            // Si le jeu est en pause, ne pas animer la texture
             if (this.time.isPaused) return;
             
-            // Ajuster la vitesse de défilement en fonction de la vitesse du jeu
             this.textureOffset += this.textureSpeed * deltaTime * this.time.timeScale;
             this.waterMesh.material.map.offset.set(
                 this.textureOffset,
                 this.textureOffset * 0.5
-            );
-            this.waterMesh.material.bumpMap.offset.set(
-                this.textureOffset * 0.7,
-                this.textureOffset * 0.3
             );
         }
     }
