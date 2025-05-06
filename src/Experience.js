@@ -12,6 +12,7 @@ import AgentStatsUI from './UI/AgentStatsUI.js';
 import WeatherControlUI from './UI/WeatherControlUI.js';
 import EnvironmentControlUI from './UI/EnvironmentControlUI.js';
 import FpsControlUI from './UI/FpsControlUI.js';
+import BirdCameraUI from './UI/BirdCameraUI.js';
 import ControlManager from './Core/Controls/ControlManager.js';
 import './UI/WeatherUI.css';
 import './UI/EnvironmentUI.css';
@@ -50,6 +51,7 @@ export default class Experience extends EventTarget {
         // Remplacer OrbitControls par ControlManager
         this.controlManager = new ControlManager(this);
         this.fpsControlUI = new FpsControlUI(this);
+        this.birdCameraUI = new BirdCameraUI(this);
         
         this.stats = new Stats();
         this.stats.showPanel(0);
@@ -1295,6 +1297,7 @@ export default class Experience extends EventTarget {
         this.weatherControlUI.destroy();
         this.environmentControlUI.destroy();
         this.fpsControlUI.destroy();
+        this.birdCameraUI.destroy();
         
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
@@ -1355,6 +1358,7 @@ export default class Experience extends EventTarget {
         if (this.weatherControlUI) this.weatherControlUI.destroy();
         if (this.environmentControlUI) this.environmentControlUI.destroy();
         if (this.fpsControlUI) this.fpsControlUI.destroy();
+        if (this.birdCameraUI) this.birdCameraUI.destroy();
 
         // --- Supprimer les références ---
         this.scene = null;
@@ -1379,6 +1383,7 @@ export default class Experience extends EventTarget {
         this.weatherControlUI?.destroy(); this.weatherControlUI = null;
         this.environmentControlUI?.destroy(); this.environmentControlUI = null;
         this.fpsControlUI?.destroy(); this.fpsControlUI = null;
+        this.birdCameraUI?.destroy(); this.birdCameraUI = null;
 
         if (this.stats?.dom.parentNode) { document.body.removeChild(this.stats.dom); }
         this.stats = null;

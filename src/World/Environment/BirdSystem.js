@@ -398,12 +398,24 @@ export default class BirdSystem {
         
         // Exécuter le calcul GPU
         this.gpuCompute.compute();
-        
+
         // Mettre à jour les textures dans le matériau
         this.birdMesh.material.uniforms.texturePosition.value = 
             this.gpuCompute.getCurrentRenderTarget(this.positionVariable).texture;
         this.birdMesh.material.uniforms.textureVelocity.value = 
             this.gpuCompute.getCurrentRenderTarget(this.velocityVariable).texture;
+
+        // Mettre à jour la position de l'oiseau suivi si nécessaire
+        if (this.environmentSystem.experience.camera && 
+            this.environmentSystem.experience.camera.targetAgent && 
+            this.environmentSystem.experience.camera.targetAgent.id && 
+            this.environmentSystem.experience.camera.targetAgent.id.startsWith('bird_')) {
+            const birdIndex = parseInt(this.environmentSystem.experience.camera.targetAgent.id.split('_')[1]);
+            const newPosition = this.getBirdPosition(birdIndex);
+            if (newPosition) {
+                this.environmentSystem.experience.camera.targetAgent.position.copy(newPosition);
+            }
+        }
     }
     
     /**
@@ -489,5 +501,40 @@ export default class BirdSystem {
         if (this.gpuCompute) {
             this.gpuCompute = null;
         }
+    }
+    
+    /**
+     * Obtient la position d'un oiseau spécifique
+     * @param {number} birdIndex - Index de l'oiseau
+     * @returns {THREE.Vector3|null} Position de l'oiseau ou null si non trouvé
+     */
+    getBirdPosition(birdIndex) {
+        if (!this.gpuCompute || !this.positionVariable) return null;
+
+        // Lire la texture de position
+        const positionTexture = this.gpuCompute.getCurrentRenderTarget(this.positionVariable).texture;
+        const positionArray = new Float32Array(4); // x, y, z, w
+
+        // Calculer les coordonnées dans la texture
+        const x = (birdIndex % WIDTH) / WIDTH;
+        const y = Math.floor(birdIndex / WIDTH) / WIDTH;
+
+        // Lire la position depuis la texture
+        const renderer = this.environmentSystem.experience.renderer.instance;
+        renderer.readRenderTargetPixels(
+            this.gpuCompute.getCurrentRenderTarget(this.positionVariable),
+            x * WIDTH,
+            y * WIDTH,
+            1,
+            1,
+            positionArray
+        );
+
+        // Créer un vecteur avec la position
+        return new THREE.Vector3(
+            positionArray[0],
+            positionArray[1],
+            positionArray[2]
+        );
     }
 } 
