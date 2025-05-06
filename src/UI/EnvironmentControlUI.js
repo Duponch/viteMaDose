@@ -50,9 +50,9 @@ export default class EnvironmentControlUI {
         this.createSlider('Nombre d\'oiseaux', 'birds', 0, 1, 0.01, this.environmentSystem.getBirdDensity());
         
         // Séparateur pour section eau
-        const waterSeparator = document.createElement('div');
+        /* const waterSeparator = document.createElement('div');
         waterSeparator.className = 'ui-separator';
-        this.container.appendChild(waterSeparator);
+        this.container.appendChild(waterSeparator); */
         
         // Checkbox pour activer/désactiver l'eau
         this.createCheckbox('Visible', 'waterVisible', this.defaultValues.waterVisible);
