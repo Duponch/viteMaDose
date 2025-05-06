@@ -162,6 +162,10 @@ export default class Experience extends EventTarget {
         // --- NOUVEAU : Gestionnaire pour les clics DANS le panneau de statistiques agent ---
         this._boundHandleStatsPanelClick = this._handleStatsPanelClick.bind(this);
 
+        // --- Gestionnaire pour les contrôles de temps globaux ---
+        this._boundHandleTimeControls = this._handleTimeControls.bind(this);
+        document.addEventListener('keydown', this._boundHandleTimeControls);
+
         this.createHighlightMesh(); // Créer le mesh de surbrillance
         console.log("Experience initialisée. Mode debug:", this.isDebugMode);
 
@@ -1379,6 +1383,9 @@ export default class Experience extends EventTarget {
         if (this.stats?.dom.parentNode) { document.body.removeChild(this.stats.dom); }
         this.stats = null;
 
+        // --- Gestionnaire pour les contrôles de temps globaux ---
+        document.removeEventListener('keydown', this._boundHandleTimeControls);
+
         instance = null;
         console.log("Experience détruite.");
     }
@@ -1473,5 +1480,23 @@ export default class Experience extends EventTarget {
 
         // Utiliser la méthode de transition existante
         this.camera.moveToTarget(cameraTargetPos, targetLookAt, duration);
+    }
+
+    // --- Gestionnaire pour les contrôles de temps globaux ---
+    _handleTimeControls(event) {
+        // Empêcher le comportement par défaut pour les touches de contrôle du temps
+        if (['KeyE', 'KeyR', 'KeyF'].includes(event.code)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        // Gérer les touches de contrôle du temps
+        if (event.code === 'KeyE') {
+            this.time.decreaseSpeed();
+        } else if (event.code === 'KeyR') {
+            this.time.increaseSpeed();
+        } else if (event.code === 'KeyF') {
+            this.time.togglePause();
+        }
     }
 }

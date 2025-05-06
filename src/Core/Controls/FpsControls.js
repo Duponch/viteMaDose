@@ -209,6 +209,14 @@ export default class FpsControls {
     _onKeyDown(event) {
         if (!this.isActive) return;
         
+        // Gérer la touche F pour play/pause en premier
+        if (event.code === 'KeyF') {
+            event.preventDefault();
+            event.stopPropagation();
+            this.experience.time.togglePause();
+            return;
+        }
+        
         // Empêcher le comportement par défaut pour les touches de contrôle
         if (['KeyW', 'KeyS', 'KeyA', 'KeyD', 'KeyZ', 'KeyQ', 'Space', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight'].includes(event.code)) {
             event.preventDefault();
