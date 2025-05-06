@@ -14,11 +14,19 @@ export default class FpsControls {
         this.moveLeft = false;
         this.moveRight = false;
         this.isSprinting = false;
+        this.isJetpackActive = false;
         
         // Configuration
         this.moveSpeed = 200; // vitesse de déplacement
         this.sprintMultiplier = 5.0; // multiplicateur de vitesse en sprint
-        this.lookSpeed = 0.002; // sensibilité de la souris
+        this.lookSpeed = 0.0015; // sensibilité de la souris
+        
+        // Configuration du jetpack
+        this.gravity = 150.81; // gravité en m/s²
+        this.jetpackForce = 300.0; // force de poussée du jetpack
+        this.maxVerticalSpeed = 20.0; // vitesse verticale maximale
+        this.verticalVelocity = 0.0; // vélocité verticale actuelle
+        this.verticalDamping = 0.95; // amortissement de la vélocité verticale
         
         // Propriétés pour le mouvement de la caméra
         this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -107,12 +115,28 @@ export default class FpsControls {
             this.velocity.x += this.direction.x * currentSpeed * delta;
         }
         
+        // Gestion du jetpack
+        // Appliquer la gravité
+        this.verticalVelocity -= this.gravity * delta;
+        
+        // Appliquer la poussée du jetpack si actif
+        if (this.isJetpackActive) {
+            this.verticalVelocity += this.jetpackForce * delta;
+        }
+        
+        // Limiter la vitesse verticale
+        this.verticalVelocity = Math.max(-this.maxVerticalSpeed, Math.min(this.maxVerticalSpeed, this.verticalVelocity));
+        
+        // Appliquer l'amortissement
+        this.verticalVelocity *= this.verticalDamping;
+        
         // Appliquer la vélocité à la position de la caméra
         const cameraDirection = this.camera.instance.getWorldDirection(new THREE.Vector3());
         const right = new THREE.Vector3().crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0)).normalize();
         
         this.camera.instance.position.addScaledVector(cameraDirection, this.velocity.z * delta);
         this.camera.instance.position.addScaledVector(right, this.velocity.x * delta);
+        this.camera.instance.position.y += this.verticalVelocity * delta;
     }
     
     _onKeyDown(event) {
@@ -141,8 +165,10 @@ export default class FpsControls {
             case 'ShiftRight':
                 this.isSprinting = true;
                 break;
+            case 'Space':
+                this.isJetpackActive = true;
+                break;
             case 'Escape':
-                // Basculer vers le mode classique
                 if (this.experience.controlManager) {
                     this.experience.controlManager.setMode('classic');
                 }
@@ -175,6 +201,9 @@ export default class FpsControls {
             case 'ShiftLeft':
             case 'ShiftRight':
                 this.isSprinting = false;
+                break;
+            case 'Space':
+                this.isJetpackActive = false;
                 break;
         }
     }
