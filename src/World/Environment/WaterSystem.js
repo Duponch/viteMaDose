@@ -27,7 +27,7 @@ export default class WaterSystem {
         };
         
         // Paramètres d'optimisation
-        this.maxWaveHeight = 8;
+        this.maxWaveHeight = 6;
         this.waveSpeed = 3;
         this.waveVariation = 30;
         
