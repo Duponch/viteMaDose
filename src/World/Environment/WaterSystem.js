@@ -133,6 +133,9 @@ export default class WaterSystem {
     moveWaves() {
         if (!this.waterMesh) return;
         
+        // Si le jeu est en pause, ne pas animer les vagues
+        if (this.time.isPaused) return;
+        
         const positions = this.waterMesh.geometry.attributes.position;
         
         // Pour chaque vertex, mettre à jour sa position
@@ -146,8 +149,8 @@ export default class WaterSystem {
             // Mettre à jour la position du vertex
             positions.setXYZ(i, x, y, vprops.z);
             
-            // Mettre à jour l'angle pour la prochaine frame
-            vprops.ang += vprops.speed;
+            // Mettre à jour l'angle pour la prochaine frame en tenant compte de la vitesse du jeu
+            vprops.ang += vprops.speed * this.time.timeScale;
         }
         
         // Indiquer que les positions ont changé
@@ -201,7 +204,11 @@ export default class WaterSystem {
      */
     animateTexture(deltaTime) {
         if (this.waterMesh && this.waterMesh.material.map) {
-            this.textureOffset += this.textureSpeed * deltaTime;
+            // Si le jeu est en pause, ne pas animer la texture
+            if (this.time.isPaused) return;
+            
+            // Ajuster la vitesse de défilement en fonction de la vitesse du jeu
+            this.textureOffset += this.textureSpeed * deltaTime * this.time.timeScale;
             this.waterMesh.material.map.offset.set(
                 this.textureOffset,
                 this.textureOffset * 0.5
