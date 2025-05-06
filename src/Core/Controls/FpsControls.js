@@ -15,7 +15,7 @@ export default class FpsControls {
         this.moveRight = false;
         
         // Configuration
-        this.moveSpeed = 20; // vitesse de déplacement
+        this.moveSpeed = 200; // vitesse de déplacement
         this.lookSpeed = 0.002; // sensibilité de la souris
         
         // Propriétés pour le mouvement de la caméra
@@ -95,19 +95,19 @@ export default class FpsControls {
         
         // Appliquer le mouvement dans la direction de la caméra
         if (this.moveForward || this.moveBackward) {
-            this.velocity.z -= this.direction.z * this.moveSpeed * delta;
+            this.velocity.z += this.direction.z * this.moveSpeed * delta;
         }
         
         if (this.moveLeft || this.moveRight) {
-            this.velocity.x -= this.direction.x * this.moveSpeed * delta;
+            this.velocity.x += this.direction.x * this.moveSpeed * delta;
         }
         
         // Appliquer la vélocité à la position de la caméra
         const cameraDirection = this.camera.instance.getWorldDirection(new THREE.Vector3());
         const right = new THREE.Vector3().crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0)).normalize();
         
-        this.camera.instance.position.addScaledVector(cameraDirection, -this.velocity.z * delta);
-        this.camera.instance.position.addScaledVector(right, -this.velocity.x * delta);
+        this.camera.instance.position.addScaledVector(cameraDirection, this.velocity.z * delta);
+        this.camera.instance.position.addScaledVector(right, this.velocity.x * delta);
     }
     
     _onKeyDown(event) {
