@@ -6,6 +6,7 @@ export default class FpsControls {
         this.camera = this.experience.camera;
         this.canvas = this.experience.canvas;
         this.time = this.experience.time;
+        this.scene = this.experience.scene;
         
         // État
         this.isActive = false;
@@ -15,6 +16,7 @@ export default class FpsControls {
         this.moveRight = false;
         this.isSprinting = false;
         this.isJetpackActive = false;
+        this.isGrounded = false;
         
         // Configuration
         this.moveSpeed = 200; // vitesse de déplacement
@@ -27,6 +29,10 @@ export default class FpsControls {
         this.maxVerticalSpeed = 20.0; // vitesse verticale maximale
         this.verticalVelocity = 0.0; // vélocité verticale actuelle
         this.verticalDamping = 0.95; // amortissement de la vélocité verticale
+        
+        // Configuration du sol
+        this.groundOffset = 1.8; // hauteur du joueur
+        this.groundY = 0; // hauteur du sol
         
         // Propriétés pour le mouvement de la caméra
         this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -92,7 +98,10 @@ export default class FpsControls {
     update() {
         if (!this.isActive || !this.camera || !this.time) return;
         
-        const delta = this.time.unscaledDelta / 1000; // Utiliser unscaledDelta pour être indépendant de la vitesse du jeu
+        const delta = this.time.unscaledDelta / 1000;
+        
+        // Vérifier si on est au sol
+        this._checkGround();
         
         // Ralentir le mouvement avec le temps
         this.velocity.x -= this.velocity.x * 10.0 * delta;
@@ -101,7 +110,7 @@ export default class FpsControls {
         // Déterminer la direction du mouvement
         this.direction.z = Number(this.moveForward) - Number(this.moveBackward);
         this.direction.x = Number(this.moveRight) - Number(this.moveLeft);
-        this.direction.normalize(); // Normaliser pour que la diagonale ne soit pas plus rapide
+        this.direction.normalize();
         
         // Calculer la vitesse actuelle (avec sprint si nécessaire)
         const currentSpeed = this.moveSpeed * (this.isSprinting ? this.sprintMultiplier : 1.0);
@@ -116,8 +125,10 @@ export default class FpsControls {
         }
         
         // Gestion du jetpack
-        // Appliquer la gravité
-        this.verticalVelocity -= this.gravity * delta;
+        if (!this.isGrounded) {
+            // Appliquer la gravité seulement si on n'est pas au sol
+            this.verticalVelocity -= this.gravity * delta;
+        }
         
         // Appliquer la poussée du jetpack si actif
         if (this.isJetpackActive) {
@@ -136,7 +147,28 @@ export default class FpsControls {
         
         this.camera.instance.position.addScaledVector(cameraDirection, this.velocity.z * delta);
         this.camera.instance.position.addScaledVector(right, this.velocity.x * delta);
-        this.camera.instance.position.y += this.verticalVelocity * delta;
+        
+        // Appliquer le mouvement vertical
+        const newY = this.camera.instance.position.y + this.verticalVelocity * delta;
+        
+        // Empêcher de passer sous le sol
+        if (newY < this.groundY + this.groundOffset) {
+            this.camera.instance.position.y = this.groundY + this.groundOffset;
+            this.verticalVelocity = 0;
+            this.isGrounded = true;
+        } else {
+            this.camera.instance.position.y = newY;
+        }
+    }
+    
+    _checkGround() {
+        // Vérification simple de la hauteur
+        this.isGrounded = this.camera.instance.position.y <= this.groundY + this.groundOffset;
+        
+        // Si on est au sol, réinitialiser la vélocité verticale
+        if (this.isGrounded && this.verticalVelocity < 0) {
+            this.verticalVelocity = 0;
+        }
     }
     
     _onKeyDown(event) {
