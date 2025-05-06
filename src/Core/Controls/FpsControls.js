@@ -175,27 +175,16 @@ export default class FpsControls {
         if (!this.isActive) return;
         
         switch (event.code) {
-            case 'ArrowUp':
-            case 'KeyZ': // Disposition AZERTY 
+            case 'KeyW': // Z en AZERTY
                 this.moveForward = true;
                 break;
-            case 'KeyS':
-            case 'ArrowDown':
+            case 'KeyS': // S en AZERTY
                 this.moveBackward = true;
                 break;
-            case 'KeyA': 
-                // Basculer la gravité
-                this.isGravityEnabled = !this.isGravityEnabled;
-                if (!this.isGravityEnabled) {
-                    this.verticalVelocity = 0;
-                }
-                break;
-            case 'ArrowLeft':
-            case 'KeyQ': // Disposition AZERTY
+            case 'KeyA': // Q en AZERTY
                 this.moveLeft = true;
                 break;
-            case 'KeyD':
-            case 'ArrowRight':
+            case 'KeyD': // D en AZERTY
                 this.moveRight = true;
                 break;
             case 'ShiftLeft':
@@ -204,6 +193,12 @@ export default class FpsControls {
                 break;
             case 'Space':
                 this.isJetpackActive = true;
+                break;
+            case 'KeyQ': // A en AZERTY
+                this.isGravityEnabled = !this.isGravityEnabled;
+                if (!this.isGravityEnabled) {
+                    this.verticalVelocity = 0;
+                }
                 break;
             case 'Escape':
                 if (this.experience.controlManager) {
@@ -217,20 +212,16 @@ export default class FpsControls {
         if (!this.isActive) return;
         
         switch (event.code) {
-            case 'ArrowUp':
-            case 'KeyZ': // Disposition AZERTY
+            case 'KeyW': // Z en AZERTY
                 this.moveForward = false;
                 break;
-            case 'KeyS':
-            case 'ArrowDown':
+            case 'KeyS': // S en AZERTY
                 this.moveBackward = false;
                 break;
-            case 'ArrowLeft':
-            case 'KeyQ': // Disposition AZERTY
+            case 'KeyA': // Q en AZERTY
                 this.moveLeft = false;
                 break;
-            case 'KeyD':
-            case 'ArrowRight':
+            case 'KeyD': // D en AZERTY
                 this.moveRight = false;
                 break;
             case 'ShiftLeft':
