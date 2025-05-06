@@ -5,7 +5,7 @@ export default class FpsControlUI {
         // Créer le bouton
         this.button = document.createElement('button');
         this.button.id = 'fps-control-button';
-        this.button.textContent = '👁️';
+        this.button.textContent = '🎮';
         this.button.title = 'Basculer en mode FPS (ZQSD + Souris)';
         this.button.classList.add('control-button');
         this.button.dataset.uiInteractive = 'true';
@@ -54,10 +54,8 @@ export default class FpsControlUI {
     updateButtonAppearance(isFpsMode) {
         if (isFpsMode) {
             this.button.classList.add('active');
-            this.button.style.backgroundColor = 'rgba(0, 120, 150, 0.7)';
         } else {
             this.button.classList.remove('active');
-            this.button.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
         }
     }
     
