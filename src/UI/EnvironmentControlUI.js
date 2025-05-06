@@ -14,10 +14,17 @@ export default class EnvironmentControlUI {
             if (this.environment && this.environment.environmentSystem) {
                 clearInterval(this.checkEnvironmentSystemInterval);
                 this.environmentSystem = this.environment.environmentSystem;
+                this.waterSystem = this.environment.waterSystem; // Référence au système d'eau
                 
                 // Sauvegarder les valeurs initiales du système
                 this.defaultValues = {
-                    birdDensity: 0.5
+                    birdDensity: 0.5,
+                    waterVisible: true,
+                    waterPositionX: 0,
+                    waterPositionY: 0.5,
+                    waterPositionZ: 0,
+                    waterWidth: 350,
+                    waterHeight: 250
                 };
                 
                 this.init();
@@ -42,6 +49,28 @@ export default class EnvironmentControlUI {
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Oiseaux', 'birds', 0, 1, 0.01, this.environmentSystem.getBirdDensity());
         
+        // Séparateur pour section eau
+        const waterSeparator = document.createElement('div');
+        waterSeparator.className = 'ui-separator';
+        this.container.appendChild(waterSeparator);
+        
+        // Sous-titre pour la section eau
+        const waterTitle = document.createElement('h4');
+        waterTitle.textContent = 'Eau';
+        this.container.appendChild(waterTitle);
+        
+        // Checkbox pour activer/désactiver l'eau
+        this.createCheckbox('Visible', 'waterVisible', this.defaultValues.waterVisible);
+        
+        // Curseurs pour la position de l'eau
+        this.createSlider('Position X', 'waterPosX', -500, 500, 5, this.defaultValues.waterPositionX);
+        this.createSlider('Position Z', 'waterPosZ', -500, 500, 5, this.defaultValues.waterPositionZ);
+        this.createSlider('Hauteur', 'waterPosY', 0, 10, 0.1, this.defaultValues.waterPositionY);
+        
+        // Curseurs pour les dimensions de l'eau
+        this.createSlider('Largeur', 'waterWidth', 50, 1000, 10, this.defaultValues.waterWidth);
+        this.createSlider('Longueur', 'waterHeight', 50, 1000, 10, this.defaultValues.waterHeight);
+        
         // Bouton pour réinitialiser les valeurs par défaut
         const resetButton = document.createElement('button');
         resetButton.textContent = '↻ Défaut';
@@ -64,11 +93,25 @@ export default class EnvironmentControlUI {
         
         // Sauvegarder les références des sliders pour y accéder plus tard
         this.sliders = {
-            birds: this.container.querySelector('#slider-birds')
+            birds: this.container.querySelector('#slider-birds'),
+            waterPosX: this.container.querySelector('#slider-waterPosX'),
+            waterPosY: this.container.querySelector('#slider-waterPosY'),
+            waterPosZ: this.container.querySelector('#slider-waterPosZ'),
+            waterWidth: this.container.querySelector('#slider-waterWidth'),
+            waterHeight: this.container.querySelector('#slider-waterHeight')
         };
         
         this.valueDisplays = {
-            birds: this.container.querySelector('#value-birds')
+            birds: this.container.querySelector('#value-birds'),
+            waterPosX: this.container.querySelector('#value-waterPosX'),
+            waterPosY: this.container.querySelector('#value-waterPosY'),
+            waterPosZ: this.container.querySelector('#value-waterPosZ'),
+            waterWidth: this.container.querySelector('#value-waterWidth'),
+            waterHeight: this.container.querySelector('#value-waterHeight')
+        };
+        
+        this.checkboxes = {
+            waterVisible: this.container.querySelector('#checkbox-waterVisible')
         };
         
         console.log("Interface de contrôle d'environnement initialisée");
@@ -130,16 +173,67 @@ export default class EnvironmentControlUI {
     }
     
     /**
+     * Crée une case à cocher avec étiquette
+     * @param {string} label - Étiquette de la case à cocher
+     * @param {string} id - Identifiant unique
+     * @param {boolean} initialValue - État initial (coché/non coché)
+     */
+    createCheckbox(label, id, initialValue) {
+        const checkboxContainer = document.createElement('div');
+        checkboxContainer.className = 'checkbox-container';
+        checkboxContainer.dataset.uiInteractive = 'true';
+        
+        // Checkbox
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `checkbox-${id}`;
+        checkbox.checked = initialValue;
+        
+        // Étiquette
+        const labelEl = document.createElement('label');
+        labelEl.htmlFor = `checkbox-${id}`;
+        labelEl.textContent = label;
+        
+        checkbox.addEventListener('change', (e) => {
+            this.updateEnvironmentParameter(id, e.target.checked);
+        });
+        
+        checkboxContainer.appendChild(checkbox);
+        checkboxContainer.appendChild(labelEl);
+        this.container.appendChild(checkboxContainer);
+    }
+    
+    /**
      * Met à jour un paramètre spécifique dans le système d'environnement
-     * @param {string} param - Nom du paramètre (birds)
-     * @param {number} value - Nouvelle valeur (0-1)
+     * @param {string} param - Nom du paramètre
+     * @param {any} value - Nouvelle valeur
      */
     updateEnvironmentParameter(param, value) {
-        if (!this.environmentSystem) return;
+        if (!this.environmentSystem || !this.waterSystem) return;
         
         switch (param) {
             case 'birds':
                 this.environment.setBirdDensity(value);
+                break;
+            case 'waterVisible':
+                if (this.waterSystem.waterMesh) {
+                    this.waterSystem.waterMesh.visible = value;
+                }
+                break;
+            case 'waterPosX':
+                this.environment.setWaterPosition({ x: value });
+                break;
+            case 'waterPosY':
+                this.environment.setWaterPosition({ y: value });
+                break;
+            case 'waterPosZ':
+                this.environment.setWaterPosition({ z: value });
+                break;
+            case 'waterWidth':
+                this.environment.setWaterDimensions(value, this.sliders.waterHeight.value);
+                break;
+            case 'waterHeight':
+                this.environment.setWaterDimensions(this.sliders.waterWidth.value, value);
                 break;
         }
     }
@@ -159,8 +253,51 @@ export default class EnvironmentControlUI {
                     this.environment.setBirdDensity(value);
                     this.sliders.birds.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
+                case 'waterVisible':
+                    this.checkboxes.waterVisible.checked = value;
+                    if (this.waterSystem && this.waterSystem.waterMesh) {
+                        this.waterSystem.waterMesh.visible = value;
+                    }
+                    break;
+                case 'waterPositionX':
+                    this.sliders.waterPosX.value = value;
+                    this.valueDisplays.waterPosX.textContent = value.toFixed(2);
+                    this.sliders.waterPosX.style.setProperty('--value', `${(value - -500) / (500 - -500) * 100}%`);
+                    break;
+                case 'waterPositionY':
+                    this.sliders.waterPosY.value = value;
+                    this.valueDisplays.waterPosY.textContent = value.toFixed(2);
+                    this.sliders.waterPosY.style.setProperty('--value', `${(value - 0) / (10 - 0) * 100}%`);
+                    break;
+                case 'waterPositionZ':
+                    this.sliders.waterPosZ.value = value;
+                    this.valueDisplays.waterPosZ.textContent = value.toFixed(2);
+                    this.sliders.waterPosZ.style.setProperty('--value', `${(value - -500) / (500 - -500) * 100}%`);
+                    break;
+                case 'waterWidth':
+                    this.sliders.waterWidth.value = value;
+                    this.valueDisplays.waterWidth.textContent = value.toFixed(2);
+                    this.sliders.waterWidth.style.setProperty('--value', `${(value - 50) / (1000 - 50) * 100}%`);
+                    break;
+                case 'waterHeight':
+                    this.sliders.waterHeight.value = value;
+                    this.valueDisplays.waterHeight.textContent = value.toFixed(2);
+                    this.sliders.waterHeight.style.setProperty('--value', `${(value - 50) / (1000 - 50) * 100}%`);
+                    break;
             }
         }
+        
+        // Mettre à jour la position et les dimensions de l'eau
+        this.environment.setWaterPosition({
+            x: this.defaultValues.waterPositionX,
+            y: this.defaultValues.waterPositionY,
+            z: this.defaultValues.waterPositionZ
+        });
+        
+        this.environment.setWaterDimensions(
+            this.defaultValues.waterWidth,
+            this.defaultValues.waterHeight
+        );
     }
     
     /**
@@ -177,5 +314,6 @@ export default class EnvironmentControlUI {
         
         this.sliders = null;
         this.valueDisplays = null;
+        this.checkboxes = null;
     }
 } 

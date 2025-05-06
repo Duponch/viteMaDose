@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import Calendar from '../../Utils/Calendar.js';
 import WeatherSystem from '../Weather/WeatherSystem.js';
 import EnvironmentSystem from './EnvironmentSystem.js';
+import WaterSystem from './WaterSystem.js';
 
 // --- Objets temporaires pour l'update (performance) ---
 const _tempMatrix = new THREE.Matrix4();
@@ -78,6 +79,7 @@ export default class Environment {
         // --- Système météorologique et environnemental ---
         this.weatherSystem = null; // Sera initialisé après le chargement complet de l'environnement
         this.environmentSystem = null; // Système d'environnement (oiseaux, etc.)
+        this.waterSystem = null; // Système de gestion de l'eau
         // --------------------------------------
 
         // Créer la texture procédurale pour le sol
@@ -206,6 +208,7 @@ export default class Environment {
             // --- Initialiser les systèmes météorologiques et d'environnement ---
             this.weatherSystem = new WeatherSystem(this.experience, this);
             this.environmentSystem = new EnvironmentSystem(this.experience, this);
+            this.waterSystem = new WaterSystem(this.experience, this);
             // ------------------------------------------------------
             
             console.log("Environment: Initialisation terminée.");
@@ -499,27 +502,18 @@ export default class Environment {
         if (this.outerGroundMesh) { this.scene.remove(this.outerGroundMesh); this.outerGroundMesh.geometry?.dispose(); this.outerGroundMesh.material?.dispose(); this.outerGroundMesh = null; }
         if (this.moonMesh) { this.scene.remove(this.moonMesh); this.moonMesh.geometry?.dispose(); this.moonMesh.material?.dispose(); this.moonMesh = null; }
         
-        // --- NOUVEAU : Nettoyer les systèmes météorologiques et d'environnement ---
-        if (this.weatherSystem) {
-            this.weatherSystem.destroy();
-            this.weatherSystem = null;
-            console.log("Système météorologique nettoyé.");
-        }
+        // Nettoyer les systèmes
+        if (this.weatherSystem && this.weatherSystem.destroy) this.weatherSystem.destroy();
+        if (this.environmentSystem && this.environmentSystem.destroy) this.environmentSystem.destroy();
+        if (this.waterSystem && this.waterSystem.destroy) this.waterSystem.destroy();
         
-        if (this.environmentSystem) {
-            this.environmentSystem.destroy();
-            this.environmentSystem = null;
-            console.log("Système d'environnement nettoyé.");
-        }
-        // ---------------------------------------------------
-
-        // Nullification des références (INCHANGÉ)
-        this.sunLight = null; this.ambientLight = null; this.moonLight = null;
-        console.log("Environnement nettoyé.");
+        this.weatherSystem = null;
+        this.environmentSystem = null;
+        this.waterSystem = null;
     }
     // ------------------------------------
 
-    // --- MÉTHODE UPDATE MODIFIÉE ---
+    // --- MÉTHODE UPDATE MODIFIÉE --- (mise à jour pour inclure le système d'eau)
     update(deltaTime) {
         // Mettre à jour seulement si l'environnement est initialisé
         if (this.isInitialized) {
@@ -535,6 +529,10 @@ export default class Environment {
             
             if (this.environmentSystem) {
                 this.environmentSystem.update(deltaTime);
+            }
+            
+            if (this.waterSystem) {
+                this.waterSystem.update(deltaTime);
             }
             // ---------------------------------------------------------
         }
@@ -560,13 +558,23 @@ export default class Environment {
     }
     
     /**
-     * Obtient la densité actuelle des oiseaux
-     * @returns {number} Densité des oiseaux entre 0 et 1
+     * Configure la position de l'eau
+     * @param {Object} position - Nouvelles coordonnées {x, y, z}
      */
-    getBirdDensity() {
-        if (this.environmentSystem) {
-            return this.environmentSystem.getBirdDensity();
+    setWaterPosition(position) {
+        if (this.waterSystem) {
+            this.waterSystem.setPosition(position);
         }
-        return 0;
+    }
+    
+    /**
+     * Configure les dimensions de l'eau
+     * @param {number} width - Largeur de l'eau
+     * @param {number} height - Hauteur de l'eau
+     */
+    setWaterDimensions(width, height) {
+        if (this.waterSystem) {
+            this.waterSystem.setDimensions(width, height);
+        }
     }
 }
