@@ -35,7 +35,7 @@ export default class BirdSystem {
             alignment: 20,
             cohesion: 20,
             freedom: 0.75,
-            speedLimit: 10,
+            speedLimit: 7,
             birdSize: 0.3,
             wingSpan: 20
         };
