@@ -17,6 +17,7 @@ export default class FpsControls {
         this.isSprinting = false;
         this.isJetpackActive = false;
         this.isGrounded = false;
+        this.isGravityEnabled = true;
         
         // Configuration
         this.moveSpeed = 200; // vitesse de déplacement
@@ -124,9 +125,8 @@ export default class FpsControls {
             this.velocity.x += this.direction.x * currentSpeed * delta;
         }
         
-        // Gestion du jetpack
-        if (!this.isGrounded) {
-            // Appliquer la gravité seulement si on n'est pas au sol
+        // Gestion du jetpack et de la gravité
+        if (this.isGravityEnabled && !this.isGrounded) {
             this.verticalVelocity -= this.gravity * delta;
         }
         
@@ -151,8 +151,8 @@ export default class FpsControls {
         // Appliquer le mouvement vertical
         const newY = this.camera.instance.position.y + this.verticalVelocity * delta;
         
-        // Empêcher de passer sous le sol
-        if (newY < this.groundY + this.groundOffset) {
+        // Empêcher de passer sous le sol seulement si la gravité est activée
+        if (this.isGravityEnabled && newY < this.groundY + this.groundOffset) {
             this.camera.instance.position.y = this.groundY + this.groundOffset;
             this.verticalVelocity = 0;
             this.isGrounded = true;
@@ -175,7 +175,6 @@ export default class FpsControls {
         if (!this.isActive) return;
         
         switch (event.code) {
-            case 'KeyW': 
             case 'ArrowUp':
             case 'KeyZ': // Disposition AZERTY 
                 this.moveForward = true;
@@ -185,6 +184,12 @@ export default class FpsControls {
                 this.moveBackward = true;
                 break;
             case 'KeyA': 
+                // Basculer la gravité
+                this.isGravityEnabled = !this.isGravityEnabled;
+                if (!this.isGravityEnabled) {
+                    this.verticalVelocity = 0;
+                }
+                break;
             case 'ArrowLeft':
             case 'KeyQ': // Disposition AZERTY
                 this.moveLeft = true;
@@ -212,7 +217,6 @@ export default class FpsControls {
         if (!this.isActive) return;
         
         switch (event.code) {
-            case 'KeyW':
             case 'ArrowUp':
             case 'KeyZ': // Disposition AZERTY
                 this.moveForward = false;
@@ -221,7 +225,6 @@ export default class FpsControls {
             case 'ArrowDown':
                 this.moveBackward = false;
                 break;
-            case 'KeyA':
             case 'ArrowLeft':
             case 'KeyQ': // Disposition AZERTY
                 this.moveLeft = false;
