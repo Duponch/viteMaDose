@@ -1,4 +1,4 @@
-// src/World/PlotContentGenerator.js
+// src/World/City/PlotContentGenerator.js
 import * as THREE from 'three';
 import InstanceDataManager from '../Rendering/InstanceDataManager.js';
 import InstancedMeshManager from '../Rendering/InstancedMeshManager.js';
@@ -6,6 +6,7 @@ import SidewalkGenerator from './SidewalkGenerator.js'; // Placeholder import
 import PlotGroundGenerator from './PlotGroundGenerator.js'; // Placeholder import
 import CrosswalkInstancer from './CrosswalkInstancer.js'; // Placeholder import
 import GrassInstancer from '../Vegetation/GrassInstancer.js';
+import CommercialManager from './CommercialManager.js'; // Import du nouveau gestionnaire
 
 // Stratégies de placement
 import HousePlacementStrategy from '../Strategies/HousePlacementStrategy.js';
@@ -46,6 +47,7 @@ export default class PlotContentGenerator {
         this.instanceDataManager = new InstanceDataManager();
         // InstancedMeshManager a besoin de beaucoup de dépendances
         this.instancedMeshManager = null; // Sera créé dans generateContent une fois les renderers disponibles
+        this.commercialManager = new CommercialManager(config); // Nouveau gestionnaire de commerces
 
         // --- Générateurs Spécifiques ---
         this.sidewalkGenerator = new SidewalkGenerator(config, materials);
@@ -117,9 +119,19 @@ export default class PlotContentGenerator {
          if (generatedSidewalkMesh) {
              this.sidewalkGroup.add(generatedSidewalkMesh); // Ajouter le mesh retourné
          }
+         
+        // --- Sélection des parcelles qui auront des commerces (1 par quartier) ---
+        try {
+            const districts = cityManager.getDistricts();
+            this.commercialManager.selectPlotsForCommercial(districts);
+        } catch (error) {
+            console.error(`Error during commercial plots selection:`, error);
+        }
 
         // --- Placement du Contenu Principal (via Stratégies) ---
         const plotGroundY = this.config.plotGroundY ?? 0.005; // Hauteur du sol des parcelles
+        const commercialPositions = new Map(); // Pour stocker les positions commerciales par parcelle
+        
         leafPlots.forEach((plot) => {
             // Réinitialiser les données spécifiques à la parcelle si nécessaire
              plot.buildingInstances = [];
@@ -128,7 +140,39 @@ export default class PlotContentGenerator {
             const strategy = this.zoneStrategies[plot.zoneType];
             if (strategy) {
                 try {
-                    strategy.populatePlot(plot, this.instanceDataManager, cityManager, plotGroundY);
+                    // Vérifier si cette parcelle doit avoir un commerce
+                    const shouldHaveCommercial = this.commercialManager.shouldPlotHaveCommercial(plot);
+                    
+                    if (shouldHaveCommercial && (plot.zoneType === 'house' || plot.zoneType === 'building')) {
+                        // Calculer la grille de disposition selon le type de parcelle
+                        const gridPlacement = this._calculateGridForPlotType(plot, strategy);
+                        
+                        if (gridPlacement) {
+                            // Placer les commerces selon la grille
+                            const commercialPositionsOnPlot = this._placeCommercialsOnPlot(
+                                plot, 
+                                strategy, 
+                                gridPlacement, 
+                                this.instanceDataManager, 
+                                cityManager, 
+                                plotGroundY
+                            );
+                            
+                            // Stocker les positions commerciales pour éviter la duplication
+                            commercialPositions.set(plot.id, commercialPositionsOnPlot);
+                        }
+                    }
+                    
+                    // Utiliser la stratégie normale pour placer le reste des bâtiments
+                    // Si c'est une parcelle avec des commerces, on les ignorera aux positions déjà occupées
+                    this._populatePlotWithStrategy(
+                        plot, 
+                        strategy, 
+                        commercialPositions.get(plot.id) || [], 
+                        this.instanceDataManager, 
+                        cityManager, 
+                        plotGroundY
+                    );
                 } catch (error) {
                      console.error(`Error executing placement strategy '${plot.zoneType}' for plot ${plot.id}:`, error);
                 }
@@ -172,6 +216,115 @@ export default class PlotContentGenerator {
 
         console.log("PlotContentGenerator: Content generation finished.");
         return this.getGroups();
+    }
+    
+    /**
+     * Calcule la grille de disposition pour un type de parcelle donné.
+     * @param {Plot} plot - La parcelle.
+     * @param {IZonePlacementStrategy} strategy - La stratégie de placement.
+     * @returns {object} Informations sur la grille (numItemsX, numItemsY, gapX, gapZ).
+     * @private
+     */
+    _calculateGridForPlotType(plot, strategy) {
+        let targetWidth, targetDepth, minSpacing;
+        
+        if (plot.zoneType === 'house') {
+            const baseScaleFactor = this.config.gridHouseBaseScale ?? 1.5;
+            targetWidth = 2.0 * baseScaleFactor;
+            targetDepth = 2.0 * baseScaleFactor;
+            minSpacing = this.config.minHouseSpacing ?? 0;
+        } else if (plot.zoneType === 'building') {
+            const baseScaleFactor = this.config.gridBuildingBaseScale ?? 1.0;
+            // Utiliser un asset représentatif pour la taille
+            const assetLoader = strategy.assetLoader;
+            const representativeAsset = assetLoader.getAssetDataById(assetLoader.assets.building[0]?.id);
+            if (!representativeAsset || !representativeAsset.sizeAfterFitting) {
+                return null;
+            }
+            targetWidth = representativeAsset.sizeAfterFitting.x * baseScaleFactor;
+            targetDepth = representativeAsset.sizeAfterFitting.z * baseScaleFactor;
+            minSpacing = this.config.minBuildingSpacing ?? 0;
+        } else {
+            return null; // Type non pris en charge
+        }
+        
+        // Calculer la grille en utilisant la méthode de la stratégie
+        return strategy.calculateGridPlacement(plot, targetWidth, targetDepth, minSpacing);
+    }
+    
+    /**
+     * Place des commerces sur une parcelle selon la grille.
+     * @param {Plot} plot - La parcelle.
+     * @param {IZonePlacementStrategy} strategy - La stratégie de placement.
+     * @param {object} gridPlacement - Informations sur la grille.
+     * @param {InstanceDataManager} instanceDataManager - Gestionnaire des données d'instance.
+     * @param {CityManager} cityManager - Gestionnaire de la ville.
+     * @param {number} groundLevel - Hauteur du sol.
+     * @returns {Array<{x: number, y: number}>} - Positions des commerces placés.
+     * @private
+     */
+    _placeCommercialsOnPlot(plot, strategy, gridPlacement, instanceDataManager, cityManager, groundLevel) {
+        // Déterminer la taille des bâtiments selon le type de parcelle
+        let targetWidth, targetDepth, minSpacing;
+        
+        if (plot.zoneType === 'house') {
+            const baseScaleFactor = this.config.gridHouseBaseScale ?? 1.5;
+            targetWidth = 2.0 * baseScaleFactor;
+            targetDepth = 2.0 * baseScaleFactor;
+            minSpacing = this.config.minHouseSpacing ?? 0;
+        } else if (plot.zoneType === 'building') {
+            const baseScaleFactor = this.config.gridBuildingBaseScale ?? 1.0;
+            const assetLoader = strategy.assetLoader;
+            const representativeAsset = assetLoader.getAssetDataById(assetLoader.assets.building[0]?.id);
+            if (!representativeAsset || !representativeAsset.sizeAfterFitting) {
+                return [];
+            }
+            targetWidth = representativeAsset.sizeAfterFitting.x * baseScaleFactor;
+            targetDepth = representativeAsset.sizeAfterFitting.z * baseScaleFactor;
+            minSpacing = this.config.minBuildingSpacing ?? 0;
+        } else {
+            return []; // Type non pris en charge
+        }
+        
+        // Utiliser CommercialManager pour placer les commerces
+        return this.commercialManager.placeCommercialsOnGrid(
+            plot,
+            gridPlacement,
+            targetWidth,
+            targetDepth,
+            minSpacing,
+            instanceDataManager,
+            cityManager,
+            groundLevel
+        );
+    }
+    
+    /**
+     * Peuple une parcelle en utilisant une stratégie, en évitant les positions occupées par des commerces.
+     * @param {Plot} plot - La parcelle à peupler.
+     * @param {IZonePlacementStrategy} strategy - La stratégie de placement.
+     * @param {Array<{x: number, y: number}>} commercialPositions - Positions occupées par des commerces.
+     * @param {InstanceDataManager} instanceDataManager - Gestionnaire des données d'instance.
+     * @param {CityManager} cityManager - Gestionnaire de la ville.
+     * @param {number} groundLevel - Hauteur du sol.
+     * @private
+     */
+    _populatePlotWithStrategy(plot, strategy, commercialPositions, instanceDataManager, cityManager, groundLevel) {
+        // Si aucun commerce n'a été placé, utiliser la stratégie normalement
+        if (commercialPositions.length === 0) {
+            strategy.populatePlot(plot, instanceDataManager, cityManager, groundLevel);
+            return;
+        }
+        
+        // On simule le comportement de la stratégie originale, mais en évitant les positions occupées
+        // Note: Cette implémentation utilise une approche différente qui dépend du type de la stratégie
+        // On pourrait avoir une implémentation plus générique si nécessaire
+        
+        // Pour l'instant, on passe les positions commerciales à la stratégie (qui les ignorera)
+        // Cette partie devrait être adaptée selon les besoins exacts
+        plot.commercialPositions = commercialPositions;
+        strategy.populatePlot(plot, instanceDataManager, cityManager, groundLevel);
+        delete plot.commercialPositions;
     }
 
     /**
