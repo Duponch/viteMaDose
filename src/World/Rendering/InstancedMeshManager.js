@@ -19,7 +19,7 @@ export default class InstancedMeshManager {
      * @param {object} config - Configuration globale.
      * @param {object} materials - Collection de matériaux partagés (ex: crosswalkMaterial).
      * @param {CityAssetLoader} assetLoader - Pour accéder aux données des assets chargés.
-     * @param {object} specificRenderers - Contient les instances des renderers spécialisés { houseRenderer, buildingRenderer, skyscraperRenderer }.
+     * @param {object} specificRenderers - Contient les instances des renderers spécialisés { houseRenderer, buildingRenderer, skyscraperRenderer, commercialRenderer }.
      * @param {THREE.Group} parentGroup - Le groupe de scène auquel ajouter les InstancedMesh créés.
      * @param {Experience} experience - Référence à l'instance Experience (pour envMap, etc.).
      */
@@ -27,7 +27,7 @@ export default class InstancedMeshManager {
         this.config = config;
         this.materials = materials;
         this.assetLoader = assetLoader;
-        this.renderers = specificRenderers; // { houseRenderer, buildingRenderer, skyscraperRenderer }
+        this.renderers = specificRenderers; // { houseRenderer, buildingRenderer, skyscraperRenderer, commercialRenderer }
         this.parentGroup = parentGroup;
         this.experience = experience;
 
@@ -46,17 +46,9 @@ export default class InstancedMeshManager {
                 1.0 // Profondeur de base, sera écrasée par la matrice
             );
         }
-        
-        // Création des géométries et matériaux de base pour les bâtiments commerciaux
-        this.commercialGeometry = new THREE.BoxGeometry(1, 1, 1);
-        this.commercialMaterial = new THREE.MeshStandardMaterial({
-            color: 0x80d0ff,  // Bleu clair
-            emissive: 0x2080c0, // Émission bleutée
-            emissiveIntensity: 0.5,
-            roughness: 0.3,
-            metalness: 0.4
-        });
-        this.commercialMaterial.name = "CommercialBuildingMat";
+
+        // On n'initialise plus de géométrie et matériau basiques pour les commerces
+        // puisque ceux-ci utiliseront désormais le renderer procédural
 
         console.log("InstancedMeshManager initialized.");
     }
@@ -94,10 +86,87 @@ export default class InstancedMeshManager {
                     // --- Déterminer Géométrie et Matériau (sans déterminer isWindow ici) ---
                     switch (type) {
                         case 'commercial': {
-                            // Utiliser la géométrie et le matériau commerciaux prédéfinis
-                            geometry = this.commercialGeometry;
-                            material = this.commercialMaterial;
-                            break;
+                            // Au lieu d'utiliser un cube simple, on génère un bâtiment commercial procédural
+                            if (!this.renderers.commercialRenderer) {
+                                console.warn(`[IMM] Commercial renderer not found, falling back to basic cube`);
+                                // Fallback au cube de base si le renderer n'est pas disponible
+                                geometry = new THREE.BoxGeometry(1, 1, 1);
+                                material = new THREE.MeshStandardMaterial({
+                                    color: 0x80d0ff,  // Bleu clair
+                                    emissive: 0x2080c0, // Émission bleutée
+                                    emissiveIntensity: 0.5,
+                                    name: "CommercialBuildingFallbackMat"
+                                });
+                                break;
+                            }
+                            
+                            // Utiliser un identifiant de clé pour le commerce
+                            const commercialKey = 'commercial_proc_0';
+                            // Vérifier si l'asset existe déjà dans l'assetLoader
+                            let assetData = this.assetLoader.getAssetDataById(commercialKey);
+                            
+                            if (!assetData) {
+                                // Générer l'asset commercial s'il n'existe pas encore
+                                const commercialAsset = this.renderers.commercialRenderer.generateProceduralBuilding(1, 1, 1);
+                                if (commercialAsset) {
+                                    // Enregistrer l'asset généré
+                                    this.assetLoader.registerAssetData(commercialKey, commercialAsset);
+                                    assetData = commercialAsset;
+                                } else {
+                                    console.error(`[IMM] Failed to generate commercial building asset`);
+                                    continue;
+                                }
+                            }
+                            
+                            // Gérer les parties (comme pour les autres assets procéduraux)
+                            if (assetData.parts && assetData.parts.length > 0) {
+                                assetData.parts.forEach((part, index) => {
+                                    if (!part.geometry || !part.material) {
+                                        console.warn(`[IMM] Invalid part data for commercial asset, part index: ${index}`);
+                                        return;
+                                    }
+
+                                    // Déterminer si cette partie est une fenêtre
+                                    const isPartWindow = (
+                                        part.material.name === "CommercialWindowMat" || 
+                                        part.material.name === "CommercialBalconyWindowMat" 
+                                    );
+
+                                    const count = matrices.length;
+                                    // Cloner le matériau pour éviter les modifications partagées
+                                    const partMaterialClone = part.material.clone();
+                                    partMaterialClone.name = `Inst_${commercialKey}_part${index}`;
+
+                                    const instancedMesh = new THREE.InstancedMesh(part.geometry, partMaterialClone, count);
+                                    instancedMesh.castShadow = castShadow;
+                                    instancedMesh.receiveShadow = !isPartWindow;
+                                    instancedMesh.name = `${commercialKey}_part${index}`;
+
+                                    matrices.forEach((matrix, mIndex) => {
+                                        instancedMesh.setMatrixAt(mIndex, matrix);
+                                    });
+                                    instancedMesh.instanceMatrix.needsUpdate = true;
+
+                                    this.parentGroup.add(instancedMesh);
+                                    this.instancedMeshes[`commercial_${commercialKey}_part${index}`] = instancedMesh;
+                                    totalMeshesCreated++;
+                                    totalInstancesCreated += count;
+
+                                    // Ajouter aux fenêtres si applicable
+                                    if (isPartWindow) {
+                                        this.windowMeshes.push(instancedMesh);
+                                        // Appliquer envMap si nécessaire
+                                        if (this.experience?.scene?.environment) {
+                                            if (!partMaterialClone.envMap) partMaterialClone.envMap = this.experience.scene.environment;
+                                        }
+                                    }
+                                });
+                                // Important : continuer à la prochaine clé car les meshes ont déjà été créés
+                                continue; // Passe à l'itération suivante de la boucle idOrKey
+                            } else {
+                                console.warn(`[IMM] Commercial asset has no parts, unexpected state`);
+                                continue;
+                            }
                         }
                         
                         case 'house': {

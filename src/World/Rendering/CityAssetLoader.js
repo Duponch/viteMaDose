@@ -11,6 +11,7 @@ import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
 import NewSkyscraperRenderer from '../Buildings/NewSkyscraperRenderer.js';
 import IndustrialRenderer, { generateProceduralIndustrial } from '../Buildings/IndustrialRenderer.js'; // Ajustez le chemin si nécessaire
 import TreeRenderer from '../Vegetation/TreeRenderer.js';
+import CommercialRenderer from '../Buildings/CommercialRenderer.js';
 
 export default class CityAssetLoader {
     // ----- CONSTRUCTEUR -----
@@ -27,7 +28,8 @@ export default class CityAssetLoader {
             park: [],
             tree: [],
             skyscraper: [],
-            crosswalk: []
+            crosswalk: [],
+            commercial: []
         };
         this.assetIdCounter = 0;
         this.loadedAssets = new Map();
@@ -39,7 +41,8 @@ export default class CityAssetLoader {
         this.skyscraperRenderer = new SkyscraperRenderer(config, {});
         this.newSkyscraperRenderer = new NewSkyscraperRenderer(config, {});
         this.treeRenderer = new TreeRenderer(config, materials);
-        console.log("CityAssetLoader initialisé. Utilisation de HouseRenderer pour les maisons, BuildingRenderer pour les immeubles et SkyscraperRenderer pour les gratte-ciels.");
+        this.commercialRenderer = new CommercialRenderer(config, materials);
+        console.log("CityAssetLoader initialisé. Utilisation de HouseRenderer pour les maisons, BuildingRenderer pour les immeubles, SkyscraperRenderer pour les gratte-ciels et CommercialRenderer pour les commerces.");
     }
 
     // ----- getRandomAssetData -----
@@ -232,7 +235,16 @@ export default class CityAssetLoader {
     // ----- reset -----
     reset() {
         this.disposeAssets();
-        this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [], crosswalk: [] };
+        this.assets = { 
+            house: [], 
+            building: [], 
+            industrial: [], 
+            park: [], 
+            tree: [], 
+            skyscraper: [], 
+            crosswalk: [],
+            commercial: []
+        };
         this.assetIdCounter = 0;
     }
 
@@ -567,6 +579,42 @@ export default class CityAssetLoader {
         if (disposedGeometries > 0 || disposedMaterials > 0) {
             console.log(`  - ${disposedGeometries} géométries et ${disposedMaterials} matériaux disposés.`);
         }
-        this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [], crosswalk: [] };
+        this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [], crosswalk: [], commercial: [] };
+    }
+
+    /**
+     * Enregistre un asset avec l'ID spécifié
+     * @param {string} id - L'identifiant pour l'asset
+     * @param {object} assetData - Les données de l'asset
+     * @returns {object} - Les données de l'asset enregistré
+     */
+    registerAssetData(id, assetData) {
+        if (!id || !assetData) {
+            console.error("registerAssetData: ID ou assetData invalide");
+            return null;
+        }
+        
+        // Déterminer le type à partir de l'ID
+        let type = 'unknown';
+        if (id.startsWith('house_')) type = 'house';
+        else if (id.startsWith('building_')) type = 'building';
+        else if (id.startsWith('industrial_')) type = 'industrial';
+        else if (id.startsWith('park_')) type = 'park';
+        else if (id.startsWith('tree_')) type = 'tree';
+        else if (id.startsWith('skyscraper_')) type = 'skyscraper';
+        else if (id.startsWith('commercial_')) type = 'commercial';
+        
+        // S'assurer que l'ID est attribué à l'asset
+        assetData.id = id;
+        
+        // Enregistrer dans la map des assets chargés
+        this.loadedAssets.set(id, assetData);
+        
+        // Ajouter au tableau du type correspondant (sauf si déjà présent)
+        if (type !== 'unknown' && !this.assets[type].some(asset => asset.id === id)) {
+            this.assets[type].push(assetData);
+        }
+        
+        return assetData;
     }
 }

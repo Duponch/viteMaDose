@@ -24,6 +24,7 @@ import CommercialPlacementStrategy from '../Strategies/CommercialPlacementStrate
  * @typedef {import('../Buildings/HouseRenderer.js').default} HouseRenderer
  * @typedef {import('../Buildings/BuildingRenderer.js').default} BuildingRenderer
  * @typedef {import('../Buildings/SkyscraperRenderer.js').default} SkyscraperRenderer
+ * @typedef {import('../Buildings/CommercialRenderer.js').default} CommercialRenderer
  * @typedef {import('../../Experience.js').default} Experience
  */
 
@@ -79,7 +80,7 @@ export default class PlotContentGenerator {
      * @param {CityAssetLoader} assetLoader - Le chargeur d'assets.
      * @param {Array<object>} crosswalkInfos - Informations sur les passages piétons.
      * @param {CityManager} cityManager - Le gestionnaire de la ville.
-     * @param {{houseRenderer: HouseRenderer, buildingRenderer: BuildingRenderer, skyscraperRenderer: SkyscraperRenderer}} renderers - Les renderers spécialisés.
+     * @param {{houseRenderer: HouseRenderer, buildingRenderer: BuildingRenderer, skyscraperRenderer: SkyscraperRenderer, commercialRenderer: CommercialRenderer}} renderers - Les renderers spécialisés.
      */
     generateContent(leafPlots, assetLoader, crosswalkInfos, cityManager, renderers) {
         console.log("PlotContentGenerator: Starting content generation (refactored)...");

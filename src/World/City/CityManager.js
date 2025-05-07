@@ -14,6 +14,7 @@ import DebugVisualManager from '../Rendering/DebugVisualManager.js';
 import HouseRenderer from '../Buildings/HouseRenderer.js';
 import BuildingRenderer from '../Buildings/BuildingRenderer.js';
 import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
+import CommercialRenderer from '../Buildings/CommercialRenderer.js';
 import CityMapVisualizer from '../Rendering/CityMapVisualizer.js';
 
 
@@ -217,10 +218,12 @@ export default class CityManager {
         this.houseRenderer = new HouseRenderer(this.config, this.materials);
         this.buildingRenderer = new BuildingRenderer(this.config, this.materials);
         this.skyscraperRenderer = new SkyscraperRenderer(this.config, this.materials);
+        this.commercialRenderer = new CommercialRenderer(this.config, this.materials);
         this.renderers = {
             houseRenderer: this.houseRenderer,
             buildingRenderer: this.buildingRenderer,
-            skyscraperRenderer: this.skyscraperRenderer
+            skyscraperRenderer: this.skyscraperRenderer,
+            commercialRenderer: this.commercialRenderer
         };
 
         // --- Navigation via NavigationManager ---
@@ -529,6 +532,7 @@ export default class CityManager {
         this.houseRenderer?.reset(); // Utiliser reset ou une méthode destroy si ajoutée
         this.buildingRenderer?.reset();
         this.skyscraperRenderer?.reset();
+        this.commercialRenderer?.reset();
         // Idéalement, les renderers devraient avoir une méthode destroy qui dispose leurs géométries/matériaux de base
 
          // Dispose LampPostManager (qui devrait disposer ses propres géométries)
@@ -562,6 +566,7 @@ export default class CityManager {
         this.houseRenderer = null;
         this.buildingRenderer = null;
         this.skyscraperRenderer = null;
+        this.commercialRenderer = null;
         this.renderers = null;
 
 
