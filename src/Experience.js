@@ -575,9 +575,10 @@ export default class Experience extends EventTarget {
         if (!agent) return;
         if (this.selectedAgent === agent) return; // Déjà sélectionné
 
-        this.deselectAgent(); // Désélectionne l'agent précédent, s'il y en a un
-        this.deselectBuilding(); // Désélectionne le bâtiment, s'il y en a un
-
+        // Sauvegarder l'ancien agent pour la désélection propre
+        const oldAgent = this.selectedAgent;
+        
+        // Mettre à jour la sélection
         this.selectedAgent = agent;
         if (this.tooltipElement) {
             this.tooltipElement.style.display = 'block';
@@ -585,14 +586,26 @@ export default class Experience extends EventTarget {
             this.tooltipTargetPosition.copy(agent.position).add(new THREE.Vector3(0, agent.scale * 8, 0));
         }
 
-        // Si un panneau de stats existe, l'attacher à l'agent sélectionné
-        if (this.agentStatsUI) {
-            this.agentStatsUI.attachToAgent(agent);
+        // Marquer l'agent comme sélectionné
+        agent.isSelected = true;
+
+        // Désélectionner l'ancien agent si nécessaire
+        if (oldAgent) {
+            oldAgent.isSelected = false;
+            if (this.isFollowingAgent) {
+                this.stopFollowingAgent();
+            }
         }
 
-        // Prêt pour le suivi par clic ultérieur sur le bouton
-        agent.isSelected = true;
-        console.log(`Agent ${agent.id} sélectionné. Cliquez sur le bouton 'Suivre' pour le suivre.`);
+        // Calculer une position cible pour la caméra
+        const agentPos = agent.position.clone();
+        const cameraOffset = new THREE.Vector3(0, 10, 15); // Position relative à l'agent
+        const targetCamPos = agentPos.clone().add(cameraOffset);
+        const targetLookAt = agentPos.clone().add(new THREE.Vector3(0, 1, 0));
+
+        // Lancer une transition douce vers l'agent
+        this.camera.moveToTarget(targetCamPos, targetLookAt, 500, agent);
+        console.log(`Agent ${agent.id} sélectionné, transition vers l'agent en cours...`);
     }
 
     // Désélectionne l'agent et désactive le suivi

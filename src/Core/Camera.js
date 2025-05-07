@@ -104,8 +104,8 @@ export default class Camera {
         this.moveToTargetPosition.copy(targetCamPos);
         this.moveLookAtTargetPosition.copy(targetLookAt);
 
-        if (this.experience.controls) {
-            this.experience.controls.enabled = false;
+        if (this.experience.controlManager) {
+            this.experience.controlManager.classicControls.enabled = false;
         }
     }
 
@@ -166,9 +166,9 @@ export default class Camera {
                     console.log(`Camera: Follow initialized from transition end. Yaw: ${this.mouseYaw.toFixed(2)}, Pitch: ${this.mousePitch.toFixed(2)}, Dist: ${this.followDistance.toFixed(2)}`);
 
                 } else {
-                    if (this.experience.controls) {
-                        this.experience.controls.enabled = true;
-                        this.experience.controls.target.copy(this.moveLookAtTargetPosition);
+                    if (this.experience.controlManager) {
+                        this.experience.controlManager.classicControls.enabled = true;
+                        this.experience.controlManager.classicControls.target.copy(this.moveLookAtTargetPosition);
                         console.log("Camera: OrbitControls re-enabled.");
                     }
                 }
@@ -214,8 +214,8 @@ export default class Camera {
         this.instance.position.copy(this.currentPosition);
         this.instance.lookAt(this.targetLookAtPosition);
 
-        if (this.experience.controls) {
-            this.experience.controls.target.copy(this.targetLookAtPosition);
+        if (this.experience.controlManager) {
+            this.experience.controlManager.classicControls.target.copy(this.targetLookAtPosition);
         }
     }
 
@@ -236,8 +236,8 @@ export default class Camera {
         this.isMouseLookingActive = true;
         this.isLeftMouseDown = false;
 
-        if (this.experience.controls) {
-            this.experience.controls.enabled = false;
+        if (this.experience.controlManager) {
+            this.experience.controlManager.classicControls.enabled = false;
         }
 
         this.worldAgentPosition.copy(this.targetAgent.position);
@@ -257,8 +257,8 @@ export default class Camera {
         this.instance.position.copy(this.currentPosition);
         this.instance.lookAt(this.targetLookAtPosition);
 
-        if (this.experience.controls) {
-            this.experience.controls.target.copy(this.targetLookAtPosition);
+        if (this.experience.controlManager) {
+            this.experience.controlManager.classicControls.target.copy(this.targetLookAtPosition);
         }
 
         this._addEventListeners();
@@ -270,8 +270,8 @@ export default class Camera {
         const wasMoving = this.isMovingToTarget;
 
         if (!wasFollowing && !wasMoving) {
-            if (this.experience.controls && !this.experience.controls.enabled) {
-                this.experience.controls.enabled = true;
+            if (this.experience.controlManager && !this.experience.controlManager.classicControls.enabled) {
+                this.experience.controlManager.classicControls.enabled = true;
             }
             return;
         }
@@ -285,8 +285,8 @@ export default class Camera {
         this._removeEventListeners();
 
         if (wasFollowing || (wasMoving && !this.agentToFollowAfterMove)) {
-            if (this.experience.controls) {
-                this.experience.controls.enabled = true;
+            if (this.experience.controlManager) {
+                this.experience.controlManager.classicControls.enabled = true;
             }
         }
     }
