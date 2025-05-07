@@ -85,6 +85,18 @@ export default class CommercialRenderer {
                 name: "CommercialTrimMat",
                 roughness: 0.8,
                 metalness: 0.1
+            }),
+            awning: new THREE.MeshStandardMaterial({ 
+                color: 0x008080, 
+                name: "CommercialAwningMat",
+                roughness: 0.8,
+                metalness: 0.1
+            }),
+            awningSupport: new THREE.MeshStandardMaterial({ 
+                color: 0xffffff, 
+                name: "CommercialAwningSupportMat",
+                roughness: 0.8,
+                metalness: 0.1
             })
         };
 
@@ -424,6 +436,94 @@ export default class CommercialRenderer {
             doorX + doorWidth/2 + frameThickness/2, doorY, doorZ
         );
 
+        // 10. Auvent
+        const awningGroup = new THREE.Group();
+
+        // Calcul de la largeur et du centre de l'auvent basé sur les bords extérieurs de la porte et de la vitrine
+        const awningLeftEdge = doorX - doorWidth / 2 - frameThickness; // Bord extérieur gauche (incluant cadre)
+        const awningRightEdge = shopWindowX + shopWindowWidth / 2 + frameThickness; // Bord extérieur droit (incluant cadre)
+        const awningEffectiveWidth = awningRightEdge - awningLeftEdge; // Largeur totale à couvrir
+        const awningCenterX = awningLeftEdge + awningEffectiveWidth / 2; // Centre recalculé
+
+        const numStripes = Math.ceil(awningEffectiveWidth / awningStripeWidth); // Calcul dynamique des bandes
+        const actualAwningWidth = numStripes * awningStripeWidth; // Largeur réelle basée sur les bandes
+
+        // Calcul de la position Y de l'auvent
+        const wallTopY = baseHeight + groundFloorHeight; // Sommet du mur
+        const awningY = wallTopY - 0.1; // Légèrement en dessous du sommet du mur
+        const awningPivotZ = groundFloorDepth / 2 - 0.05; // Position Z du pivot (légèrement en avant du mur)
+        const awningAngle = Math.PI / 7; // Angle d'inclinaison
+
+        console.log("[CommercialRenderer] Positions de l'auvent:", {
+            baseHeight,
+            groundFloorHeight,
+            wallTopY,
+            awningY,
+            awningPivotZ,
+            awningAngle
+        });
+
+        // Création des bandes de l'auvent
+        for (let i = 0; i < numStripes; i++) {
+            const stripeColor = i % 2 === 0 ? 0x008080 : 0xffffff; // Alternance Teal / Blanc
+            const stripe = createBox(
+                awningStripeWidth, awningHeight, awningDepth,
+                new THREE.MeshStandardMaterial({ 
+                    color: stripeColor,
+                    name: `CommercialAwningStripeMat_${i}`,
+                    roughness: 0.8,
+                    metalness: 0.1
+                }),
+                -actualAwningWidth / 2 + awningStripeWidth / 2 + i * awningStripeWidth, 
+                awningY,
+                awningDepth / 2 + 2 // Décalage vers l'avant des bandes
+            );
+            stripe.castShadow = false;
+            stripe.receiveShadow = false;
+            awningGroup.add(stripe);
+        }
+
+        // Positionner l'auvent au centre recalculé et au pivot Z
+        awningGroup.position.set(awningCenterX, 0, awningPivotZ); // Y à 0 car déjà positionné dans les bandes
+        awningGroup.rotation.x = awningAngle; // Incliner le groupe
+        awningGroup.castShadow = true; // Le groupe projette l'ombre
+        buildingGroup.add(awningGroup);
+
+        // Supports latéraux de l'auvent (ajustés : horizontaux et légèrement plus bas)
+        const supportThickness = 0.08; // Épaisseur du support
+        const supportHeight = 0.08; // Hauteur du support (identique à épaisseur pour carré)
+        const supportWallAttachY = awningY - 0.35; // Point d'attache Y sur le mur (LÉGÈREMENT PLUS BAS)
+        const supportWallAttachZ = groundFloorDepth / 2 + supportThickness / 2; // Point d'attache Z sur le mur
+
+        // Calcul du point d'attache sous l'auvent
+        const awningEdgeZ = awningPivotZ + awningDepth * Math.cos(awningAngle);
+
+        // Longueur nécessaire pour le support horizontal
+        const supportLength = awningEdgeZ - supportWallAttachZ;
+
+        const supportGeo = new THREE.BoxGeometry(supportThickness, supportHeight, supportLength);
+        const supportL = new THREE.Mesh(supportGeo, this.localMaterials.awningSupport);
+        const supportR = new THREE.Mesh(supportGeo, this.localMaterials.awningSupport);
+
+        // Positionner les supports
+        const awningActualLeftEdgePos = awningCenterX - actualAwningWidth / 2;
+        const awningActualRightEdgePos = awningCenterX + actualAwningWidth / 2;
+
+        // Positionner le *centre* des supports horizontalement
+        const supportCenterZ = supportWallAttachZ + supportLength / 2;
+
+        supportL.position.set(awningActualLeftEdgePos - supportThickness, supportWallAttachY, supportCenterZ);
+        supportR.position.set(awningActualRightEdgePos + supportThickness, supportWallAttachY, supportCenterZ);
+
+        // Rotation: Aucune rotation nécessaire car on aligne la longueur sur l'axe Z
+        supportL.rotation.set(0, 0, 0);
+        supportR.rotation.set(0, 0, 0);
+        supportL.castShadow = true;
+        supportR.castShadow = true;
+
+        buildingGroup.add(supportL);
+        buildingGroup.add(supportR);
+
         // ----- Regroupement par matériau pour l'asset final -----
         const allGeometries = []; // Pour calculer la BBox globale
         const materialMap = new Map();
@@ -433,6 +533,12 @@ export default class CommercialRenderer {
             if (mat) {
                 materialMap.set(mat.name, { material: mat, geoms: [] });
             }
+        });
+
+        // Ajouter les matériaux des bandes de l'auvent
+        awningGroup.children.forEach((stripe, index) => {
+            const matName = `CommercialAwningStripeMat_${index}`;
+            materialMap.set(matName, { material: stripe.material, geoms: [] });
         });
 
         buildingGroup.traverse((child) => {
