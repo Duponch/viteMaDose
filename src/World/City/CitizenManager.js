@@ -34,7 +34,7 @@ export default class CitizenManager {
             case 'house':
                 capacity = capacityOverride ?? this.config.maxCitizensPerHouse ?? 5;
                 break;
-            case 'building': // Immeuble résidentiel ou commercial générique
+            case 'building':
                 capacity = capacityOverride ?? this.config.maxCitizensPerBuilding ?? 10;
                 break;
             case 'skyscraper':
