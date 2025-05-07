@@ -37,7 +37,7 @@ export default class CommercialRenderer {
                 metalness: 0.1
             }),
             roof: new THREE.MeshStandardMaterial({ 
-                map: this.roofTexture,
+                map: this.groundFloorTexture,
                 name: "CommercialRoofMat",
                 roughness: 0.8,
                 metalness: 0.1
@@ -200,14 +200,14 @@ export default class CommercialRenderer {
      */
     generateProceduralBuilding(baseWidth, baseHeight, baseDepth, userScale = 1) {
         // Ajuster les dimensions de base
-        const defaultScaleMultiplier = 1.2;
+        const defaultScaleMultiplier = 10;
         const adjustedBaseWidth = baseWidth * defaultScaleMultiplier;
         const adjustedBaseHeight = baseHeight * defaultScaleMultiplier;
         const adjustedBaseDepth = baseDepth * defaultScaleMultiplier;
         
         const buildingGroup = new THREE.Group(); // Groupe temporaire pour l'assemblage
 
-        // Constantes de dimensions du bâtiment commercial
+        // Constantes de dimensions du bâtiment commercial (dimensions de base)
         const groundFloorHeight = 3;
         const upperFloorHeight = 2.5;
         const groundFloorWidth = 5;
@@ -241,6 +241,41 @@ export default class CommercialRenderer {
         const ventHeight = 0.4;
         const ventDepth = 0.6;
 
+        // Appliquer le multiplicateur d'échelle à toutes les dimensions
+        const scale = defaultScaleMultiplier;
+        const scaledGroundFloorHeight = groundFloorHeight * scale;
+        const scaledUpperFloorHeight = upperFloorHeight * scale;
+        const scaledGroundFloorWidth = groundFloorWidth * scale;
+        const scaledGroundFloorDepth = groundFloorDepth * scale;
+        const scaledUpperFloorWidth = upperFloorWidth * scale;
+        const scaledUpperFloorDepth = upperFloorDepth * scale;
+        const scaledRoofWidth = roofWidth * scale;
+        const scaledRoofHeight = roofHeight * scale;
+        const scaledRoofDepth = roofDepth * scale;
+        const scaledRoofLedgeHeight = roofLedgeHeight * scale;
+        const scaledRoofLedgeThickness = roofLedgeThickness * scale;
+        const scaledDoorWidth = doorWidth * scale;
+        const scaledDoorHeight = doorHeight * scale;
+        const scaledDoorDepth = doorDepth * scale;
+        const scaledWindowWidth = windowWidth * scale;
+        const scaledWindowHeight = windowHeight * scale;
+        const scaledWindowDepth = windowDepth * scale;
+        const scaledShopWindowWidth = shopWindowWidth * scale;
+        const scaledShopWindowHeight = shopWindowHeight * scale;
+        const scaledShopWindowDepth = shopWindowDepth * scale;
+        const scaledFrameThickness = frameThickness * scale;
+        const scaledFrameDepthOffset = frameDepthOffset * scale;
+        const scaledFrameDepth = frameDepth * scale;
+        const scaledDoorWindowWidth = doorWindowWidth * scale;
+        const scaledDoorWindowHeight = doorWindowHeight * scale;
+        const scaledDoorWindowDepth = doorWindowDepth * scale;
+        const scaledAwningStripeWidth = awningStripeWidth * scale;
+        const scaledAwningHeight = awningHeight * scale;
+        const scaledAwningDepth = awningDepth * scale;
+        const scaledVentWidth = ventWidth * scale;
+        const scaledVentHeight = ventHeight * scale;
+        const scaledVentDepth = ventDepth * scale;
+
         // Fonction utilitaire pour créer des boîtes
         const createBox = (width, height, depth, material, x, y, z) => {
             const geometry = new THREE.BoxGeometry(width, height, depth);
@@ -252,211 +287,211 @@ export default class CommercialRenderer {
 
         // 1. Rez-de-chaussée
         const groundFloor = createBox(
-            groundFloorWidth, groundFloorHeight, groundFloorDepth,
+            scaledGroundFloorWidth, scaledGroundFloorHeight, scaledGroundFloorDepth,
             this.localMaterials.groundFloor,
-            0, baseHeight + groundFloorHeight / 2, 0
+            0, baseHeight + scaledGroundFloorHeight / 2, 0
         );
 
         // 2. Étage supérieur
-        const upperFloorY = baseHeight + groundFloorHeight + upperFloorHeight / 2;
+        const upperFloorY = baseHeight + scaledGroundFloorHeight + scaledUpperFloorHeight / 2;
         const upperFloor = createBox(
-            upperFloorWidth, upperFloorHeight, upperFloorDepth,
+            scaledUpperFloorWidth, scaledUpperFloorHeight, scaledUpperFloorDepth,
             this.localMaterials.upperFloor,
             0, upperFloorY, 0
         );
 
         // 3. Toit
-        const roofY = baseHeight + groundFloorHeight + upperFloorHeight + roofHeight / 2;
+        const roofY = baseHeight + scaledGroundFloorHeight + scaledUpperFloorHeight + scaledRoofHeight / 2;
         const roof = createBox(
-            roofWidth, roofHeight, roofDepth,
+            scaledRoofWidth, scaledRoofHeight, scaledRoofDepth,
             this.localMaterials.roof,
             0, roofY, 0
         );
 
         // 4. Rebord du toit
-        const roofLedgeY = roofY + roofHeight / 2 + roofLedgeHeight / 2;
+        const roofLedgeY = roofY + scaledRoofHeight / 2 + scaledRoofLedgeHeight / 2;
         const roofLedgeColor = this.localMaterials.trim;
 
         // Rebord avant/arrière
         const ledgeFrontBack = createBox(
-            roofWidth, roofLedgeHeight, roofLedgeThickness, 
+            scaledRoofWidth, scaledRoofLedgeHeight, scaledRoofLedgeThickness, 
             roofLedgeColor, 
-            0, roofLedgeY, roofDepth / 2 - roofLedgeThickness / 2
+            0, roofLedgeY, scaledRoofDepth / 2 - scaledRoofLedgeThickness / 2
         );
         
         const ledgeBack = createBox(
-            roofWidth, roofLedgeHeight, roofLedgeThickness, 
+            scaledRoofWidth, scaledRoofLedgeHeight, scaledRoofLedgeThickness, 
             roofLedgeColor, 
-            0, roofLedgeY, -roofDepth / 2 + roofLedgeThickness / 2
+            0, roofLedgeY, -scaledRoofDepth / 2 + scaledRoofLedgeThickness / 2
         );
         
         // Rebord gauche/droite
-        const ledgeSideWidth = roofDepth - 2 * roofLedgeThickness;
+        const ledgeSideWidth = scaledRoofDepth - 2 * scaledRoofLedgeThickness;
         const ledgeLeft = createBox(
-            roofLedgeThickness, roofLedgeHeight, ledgeSideWidth, 
+            scaledRoofLedgeThickness, scaledRoofLedgeHeight, ledgeSideWidth, 
             roofLedgeColor, 
-            -roofWidth / 2 + roofLedgeThickness / 2, roofLedgeY, 0
+            -scaledRoofWidth / 2 + scaledRoofLedgeThickness / 2, roofLedgeY, 0
         );
         
         const ledgeRight = createBox(
-            roofLedgeThickness, roofLedgeHeight, ledgeSideWidth, 
+            scaledRoofLedgeThickness, scaledRoofLedgeHeight, ledgeSideWidth, 
             roofLedgeColor, 
-            roofWidth / 2 - roofLedgeThickness / 2, roofLedgeY, 0
+            scaledRoofWidth / 2 - scaledRoofLedgeThickness / 2, roofLedgeY, 0
         );
 
         // 5. Aération sur le toit
-        const ventY = roofY + roofHeight / 2 + ventHeight / 2;
-        const ventX = roofWidth / 4;
+        const ventY = roofY + scaledRoofHeight / 2 + scaledVentHeight / 2;
+        const ventX = scaledRoofWidth / 4;
         const ventZ = 0;
         const vent = createBox(
-            ventWidth, ventHeight, ventDepth,
+            scaledVentWidth, scaledVentHeight, scaledVentDepth,
             this.localMaterials.vent,
             ventX, ventY, ventZ
         );
 
         // 6. Fenêtres de l'étage supérieur
         const windowY = upperFloorY;
-        const windowZ = groundFloorDepth / 2 + windowDepth / 2;
-        const windowPositions = [-1.5, 0, 1.5];
+        const windowZ = scaledGroundFloorDepth / 2 + scaledWindowDepth / 2;
+        const windowPositions = [-1.5, 0, 1.5].map(pos => pos * scale); // Mettre à l'échelle les positions
 
         windowPositions.forEach(posX => {
             // Fenêtre elle-même
             const windowMesh = createBox(
-                windowWidth, windowHeight, windowDepth, 
+                scaledWindowWidth, scaledWindowHeight, scaledWindowDepth, 
                 this.localMaterials.window, 
                 posX, windowY, windowZ
             );
 
             // Cadres de la fenêtre
-            const windowFrameDepth = windowDepth + frameDepthOffset;
+            const windowFrameDepth = scaledWindowDepth + scaledFrameDepthOffset;
             const windowFrameH = createBox(
-                windowWidth + frameThickness*2, frameThickness, windowFrameDepth, 
+                scaledWindowWidth + scaledFrameThickness*2, scaledFrameThickness, windowFrameDepth, 
                 this.localMaterials.frame, 
-                posX, windowY + windowHeight/2 + frameThickness/2, windowZ
+                posX, windowY + scaledWindowHeight/2 + scaledFrameThickness/2, windowZ
             );
             
             const windowFrameB = createBox(
-                windowWidth + frameThickness*2, frameThickness, windowFrameDepth, 
+                scaledWindowWidth + scaledFrameThickness*2, scaledFrameThickness, windowFrameDepth, 
                 this.localMaterials.frame, 
-                posX, windowY - windowHeight/2 - frameThickness/2, windowZ
+                posX, windowY - scaledWindowHeight/2 - scaledFrameThickness/2, windowZ
             );
             
             const windowFrameL = createBox(
-                frameThickness, windowHeight, windowFrameDepth, 
+                scaledFrameThickness, scaledWindowHeight, windowFrameDepth, 
                 this.localMaterials.frame, 
-                posX - windowWidth/2 - frameThickness/2, windowY, windowZ
+                posX - scaledWindowWidth/2 - scaledFrameThickness/2, windowY, windowZ
             );
             
             const windowFrameR = createBox(
-                frameThickness, windowHeight, windowFrameDepth, 
+                scaledFrameThickness, scaledWindowHeight, windowFrameDepth, 
                 this.localMaterials.frame, 
-                posX + windowWidth/2 + frameThickness/2, windowY, windowZ
+                posX + scaledWindowWidth/2 + scaledFrameThickness/2, windowY, windowZ
             );
         });
 
         // 7. Calcul des marges et positions pour porte et vitrine
-        const totalFrontWidth = groundFloorWidth;
-        const sideMargin = 0.4;
+        const totalFrontWidth = scaledGroundFloorWidth;
+        const sideMargin = 0.4 * scale;
         
         // Position X de la porte (avec marge gauche)
-        const doorX = -totalFrontWidth / 2 + sideMargin + doorWidth / 2;
+        const doorX = -totalFrontWidth / 2 + sideMargin + scaledDoorWidth / 2;
         // Position X de la vitrine (avec marge droite)
-        const shopWindowX = totalFrontWidth / 2 - sideMargin - shopWindowWidth / 2;
+        const shopWindowX = totalFrontWidth / 2 - sideMargin - scaledShopWindowWidth / 2;
         
         // Positions Y et Z
-        const doorY = baseHeight + doorHeight / 2;
-        const doorZ = groundFloorDepth / 2 + doorDepth / 2;
-        const shopWindowY = baseHeight + groundFloorHeight * 0.5;
-        const shopWindowZ = groundFloorDepth / 2 + shopWindowDepth / 2;
+        const doorY = baseHeight + scaledDoorHeight / 2;
+        const doorZ = scaledGroundFloorDepth / 2 + scaledDoorDepth / 2;
+        const shopWindowY = baseHeight + scaledGroundFloorHeight * 0.5;
+        const shopWindowZ = scaledGroundFloorDepth / 2 + scaledShopWindowDepth / 2;
         
         // 8. Vitrine du rez-de-chaussée
         const shopWindow = createBox(
-            shopWindowWidth, shopWindowHeight, shopWindowDepth, 
+            scaledShopWindowWidth, scaledShopWindowHeight, scaledShopWindowDepth, 
             this.localMaterials.window, 
             shopWindowX, shopWindowY, shopWindowZ
         );
         
         // Cadre de la vitrine
-        const shopFrameDepth = shopWindowDepth + frameDepthOffset;
+        const shopFrameDepth = scaledShopWindowDepth + scaledFrameDepthOffset;
         const frameH = createBox(
-            shopWindowWidth + frameThickness*2, frameThickness, shopFrameDepth, 
+            scaledShopWindowWidth + scaledFrameThickness*2, scaledFrameThickness, shopFrameDepth, 
             this.localMaterials.frame, 
-            shopWindowX, shopWindowY + shopWindowHeight/2 + frameThickness/2, shopWindowZ
+            shopWindowX, shopWindowY + scaledShopWindowHeight/2 + scaledFrameThickness/2, shopWindowZ
         );
         
         const frameB = createBox(
-            shopWindowWidth + frameThickness*2, frameThickness, shopFrameDepth, 
+            scaledShopWindowWidth + scaledFrameThickness*2, scaledFrameThickness, shopFrameDepth, 
             this.localMaterials.frame, 
-            shopWindowX, shopWindowY - shopWindowHeight/2 - frameThickness/2, shopWindowZ
+            shopWindowX, shopWindowY - scaledShopWindowHeight/2 - scaledFrameThickness/2, shopWindowZ
         );
         
         const frameL = createBox(
-            frameThickness, shopWindowHeight, shopFrameDepth, 
+            scaledFrameThickness, scaledShopWindowHeight, shopFrameDepth, 
             this.localMaterials.frame, 
-            shopWindowX - shopWindowWidth/2 - frameThickness/2, shopWindowY, shopWindowZ
+            shopWindowX - scaledShopWindowWidth/2 - scaledFrameThickness/2, shopWindowY, shopWindowZ
         );
         
         const frameR = createBox(
-            frameThickness, shopWindowHeight, shopFrameDepth, 
+            scaledFrameThickness, scaledShopWindowHeight, shopFrameDepth, 
             this.localMaterials.frame, 
-            shopWindowX + shopWindowWidth/2 + frameThickness/2, shopWindowY, shopWindowZ
+            shopWindowX + scaledShopWindowWidth/2 + scaledFrameThickness/2, shopWindowY, shopWindowZ
         );
         
         // 9. Porte d'entrée
         const door = createBox(
-            doorWidth, doorHeight, doorDepth, 
+            scaledDoorWidth, scaledDoorHeight, scaledDoorDepth, 
             this.localMaterials.door, 
             doorX, doorY, doorZ
         );
         
         // Petite fenêtre sur la porte
         const doorWindow = createBox(
-            doorWindowWidth, doorWindowHeight, doorWindowDepth, 
+            scaledDoorWindowWidth, scaledDoorWindowHeight, scaledDoorWindowDepth, 
             this.localMaterials.window, 
-            doorX, doorY + 0.4, doorZ
+            doorX, doorY + 0.4 * scale, doorZ
         );
         
         // Cadre de la porte
-        const doorFrameDepth = doorDepth + frameDepthOffset;
+        const doorFrameDepth = scaledDoorDepth + scaledFrameDepthOffset;
         const doorFrameH = createBox(
-            doorWidth + frameThickness*2, frameThickness, doorFrameDepth, 
+            scaledDoorWidth + scaledFrameThickness*2, scaledFrameThickness, doorFrameDepth, 
             this.localMaterials.frame, 
-            doorX, doorY + doorHeight/2 + frameThickness/2, doorZ
+            doorX, doorY + scaledDoorHeight/2 + scaledFrameThickness/2, doorZ
         );
         
         const doorFrameL = createBox(
-            frameThickness, doorHeight, doorFrameDepth, 
+            scaledFrameThickness, scaledDoorHeight, doorFrameDepth, 
             this.localMaterials.frame, 
-            doorX - doorWidth/2 - frameThickness/2, doorY, doorZ
+            doorX - scaledDoorWidth/2 - scaledFrameThickness/2, doorY, doorZ
         );
         
         const doorFrameR = createBox(
-            frameThickness, doorHeight, doorFrameDepth, 
+            scaledFrameThickness, scaledDoorHeight, doorFrameDepth, 
             this.localMaterials.frame, 
-            doorX + doorWidth/2 + frameThickness/2, doorY, doorZ
+            doorX + scaledDoorWidth/2 + scaledFrameThickness/2, doorY, doorZ
         );
 
         // 10. Auvent
         const awningGroup = new THREE.Group();
 
         // Calcul de la largeur et du centre de l'auvent basé sur les bords extérieurs de la porte et de la vitrine
-        const awningLeftEdge = doorX - doorWidth / 2 - frameThickness; // Bord extérieur gauche (incluant cadre)
-        const awningRightEdge = shopWindowX + shopWindowWidth / 2 + frameThickness; // Bord extérieur droit (incluant cadre)
+        const awningLeftEdge = doorX - scaledDoorWidth / 2 - scaledFrameThickness; // Bord extérieur gauche (incluant cadre)
+        const awningRightEdge = shopWindowX + scaledShopWindowWidth / 2 + scaledFrameThickness; // Bord extérieur droit (incluant cadre)
         const awningEffectiveWidth = awningRightEdge - awningLeftEdge; // Largeur totale à couvrir
         const awningCenterX = awningLeftEdge + awningEffectiveWidth / 2; // Centre recalculé
 
-        const numStripes = Math.ceil(awningEffectiveWidth / awningStripeWidth); // Calcul dynamique des bandes
-        const actualAwningWidth = numStripes * awningStripeWidth; // Largeur réelle basée sur les bandes
+        const numStripes = Math.ceil(awningEffectiveWidth / scaledAwningStripeWidth); // Calcul dynamique des bandes
+        const actualAwningWidth = numStripes * scaledAwningStripeWidth; // Largeur réelle basée sur les bandes
 
         // Calcul de la position Y de l'auvent
-        const wallTopY = baseHeight + groundFloorHeight; // Sommet du mur
-        const awningY = wallTopY - 0.1; // Légèrement en dessous du sommet du mur
-        const awningPivotZ = groundFloorDepth / 2 - 0.05; // Position Z du pivot (légèrement en avant du mur)
-        const awningAngle = Math.PI / 7; // Angle d'inclinaison pour les supports
+        const wallTopY = baseHeight + scaledGroundFloorHeight; // Sommet du mur
+        const awningY = wallTopY - 0.1 * scale; // Légèrement en dessous du sommet du mur
+        const awningPivotZ = scaledGroundFloorDepth / 2 - 0.05 * scale; // Position Z du pivot (légèrement en avant du mur)
+        const awningAngle = Math.PI / 6; // Angle d'inclinaison
 
         console.log("[CommercialRenderer] Positions de l'auvent:", {
             baseHeight,
-            groundFloorHeight,
+            scaledGroundFloorHeight,
             wallTopY,
             awningY,
             awningPivotZ,
@@ -467,20 +502,20 @@ export default class CommercialRenderer {
         for (let i = 0; i < numStripes; i++) {
             const stripeColor = i % 2 === 0 ? 0x008080 : 0xffffff; // Alternance Teal / Blanc
             const stripe = createBox(
-                awningStripeWidth, awningHeight, awningDepth,
+                scaledAwningStripeWidth, scaledAwningHeight, scaledAwningDepth,
                 new THREE.MeshStandardMaterial({ 
                     color: stripeColor,
                     name: `CommercialAwningStripeMat_${i}`,
                     roughness: 0.8,
                     metalness: 0.1
                 }),
-                -actualAwningWidth / 2 + awningStripeWidth / 2 + i * awningStripeWidth, 
+                -actualAwningWidth / 2 + scaledAwningStripeWidth / 2 + i * scaledAwningStripeWidth, 
                 awningY,
-                awningDepth / 2 + 1.95 // Décalage vers l'avant des bandes
+                scaledAwningDepth / 2 + 1.95 * scale // Décalage vers l'avant des bandes
             );
             stripe.castShadow = false;
             stripe.receiveShadow = false;
-            stripe.rotation.x = Math.PI / 6; // Inclinaison plus prononcée des bandes
+            stripe.rotation.x = Math.PI / 6; // Inclinaison individuelle de chaque bande
             awningGroup.add(stripe);
         }
 
@@ -491,13 +526,13 @@ export default class CommercialRenderer {
         buildingGroup.add(awningGroup);
 
         // Supports latéraux de l'auvent (ajustés : horizontaux et légèrement plus bas)
-        const supportThickness = 0.08; // Épaisseur du support
-        const supportHeight = 0.08; // Hauteur du support (identique à épaisseur pour carré)
-        const supportWallAttachY = awningY - 0.22; // Point d'attache Y sur le mur (LÉGÈREMENT PLUS HAUT)
-        const supportWallAttachZ = groundFloorDepth / 2 + supportThickness / 2; // Point d'attache Z sur le mur
+        const supportThickness = 0.08 * scale; // Épaisseur du support
+        const supportHeight = 0.08 * scale; // Hauteur du support (identique à épaisseur pour carré)
+        const supportWallAttachY = awningY - 0.22 * scale; // Point d'attache Y sur le mur (LÉGÈREMENT PLUS HAUT)
+        const supportWallAttachZ = scaledGroundFloorDepth / 2 + supportThickness / 2; // Point d'attache Z sur le mur
 
         // Calcul du point d'attache sous l'auvent
-        const awningEdgeZ = awningPivotZ + awningDepth * Math.cos(awningAngle);
+        const awningEdgeZ = awningPivotZ + scaledAwningDepth * Math.cos(awningAngle);
 
         // Longueur nécessaire pour le support horizontal
         const supportLength = awningEdgeZ - supportWallAttachZ;
