@@ -452,7 +452,7 @@ export default class CommercialRenderer {
         const wallTopY = baseHeight + groundFloorHeight; // Sommet du mur
         const awningY = wallTopY - 0.1; // Légèrement en dessous du sommet du mur
         const awningPivotZ = groundFloorDepth / 2 - 0.05; // Position Z du pivot (légèrement en avant du mur)
-        const awningAngle = Math.PI / 7; // Angle d'inclinaison
+        const awningAngle = Math.PI / 7; // Angle d'inclinaison pour les supports
 
         console.log("[CommercialRenderer] Positions de l'auvent:", {
             baseHeight,
@@ -476,23 +476,24 @@ export default class CommercialRenderer {
                 }),
                 -actualAwningWidth / 2 + awningStripeWidth / 2 + i * awningStripeWidth, 
                 awningY,
-                awningDepth / 2 + 2 // Décalage vers l'avant des bandes
+                awningDepth / 2 + 1.95 // Décalage vers l'avant des bandes
             );
             stripe.castShadow = false;
             stripe.receiveShadow = false;
+            stripe.rotation.x = Math.PI / 6; // Inclinaison plus prononcée des bandes
             awningGroup.add(stripe);
         }
 
         // Positionner l'auvent au centre recalculé et au pivot Z
         awningGroup.position.set(awningCenterX, 0, awningPivotZ); // Y à 0 car déjà positionné dans les bandes
-        awningGroup.rotation.x = awningAngle; // Incliner le groupe
+        awningGroup.rotation.x = 0; // Pas de rotation sur le groupe
         awningGroup.castShadow = true; // Le groupe projette l'ombre
         buildingGroup.add(awningGroup);
 
         // Supports latéraux de l'auvent (ajustés : horizontaux et légèrement plus bas)
         const supportThickness = 0.08; // Épaisseur du support
         const supportHeight = 0.08; // Hauteur du support (identique à épaisseur pour carré)
-        const supportWallAttachY = awningY - 0.35; // Point d'attache Y sur le mur (LÉGÈREMENT PLUS BAS)
+        const supportWallAttachY = awningY - 0.22; // Point d'attache Y sur le mur (LÉGÈREMENT PLUS HAUT)
         const supportWallAttachZ = groundFloorDepth / 2 + supportThickness / 2; // Point d'attache Z sur le mur
 
         // Calcul du point d'attache sous l'auvent
