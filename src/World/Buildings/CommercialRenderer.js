@@ -3,6 +3,73 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 export default class CommercialRenderer {
     /**
+     * Crée une texture procédurale pour les façades des immeubles
+     * @param {number} width - Largeur de la texture
+     * @param {number} height - Hauteur de la texture
+     * @returns {THREE.CanvasTexture} La texture générée
+     */
+    createFacadeTexture(width = 512, height = 512) {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base
+        ctx.fillStyle = '#f0e6d2';
+        ctx.fillRect(0, 0, width, height);
+
+        // Ajout de variations de couleur pour simuler des briques
+        const brickWidth = width / 8;
+        const brickHeight = height / 16;
+        
+        for (let y = 0; y < height; y += brickHeight) {
+            for (let x = 0; x < width; x += brickWidth) {
+                // Variation aléatoire plus prononcée avec une probabilité de briques plus foncées
+                let variation;
+                if (Math.random() < 0.2) { // 20% de chance d'avoir une brique plus foncée
+                    variation = Math.random() * 40 - 60; // Variation plus forte vers le foncé
+                } else {
+                    variation = Math.random() * 30 - 15; // Variation normale
+                }
+                
+                const r = Math.min(255, Math.max(0, 240 + variation));
+                const g = Math.min(255, Math.max(0, 230 + variation));
+                const b = Math.min(255, Math.max(0, 210 + variation));
+                
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(x, y, brickWidth - 1, brickHeight - 1);
+            }
+        }
+
+        // Ajout de lignes horizontales pour simuler des joints
+        ctx.strokeStyle = '#d7c4a3';
+        ctx.lineWidth = 2;
+        for (let y = brickHeight; y < height; y += brickHeight) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
+        }
+
+        // Ajout de lignes verticales décalées
+        for (let y = 0; y < height; y += brickHeight * 2) {
+            for (let x = brickWidth; x < width; x += brickWidth * 2) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + brickHeight);
+                ctx.stroke();
+            }
+        }
+
+        // Création de la texture Three.js
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 1);
+        return texture;
+    }
+
+    /**
      * Constructeur pour le renderer de commerce.
      * @param {object} config - Configuration globale.
      * @param {object} materials - Matériaux partagés du projet (ex: materials.buildingGroundMaterial).
@@ -13,10 +80,10 @@ export default class CommercialRenderer {
         this.assetIdCounter = 0;
 
         // Création des textures partagées pour le commerce
-        this.groundFloorTexture = this.createBrickTexture(256, 256, '#575c4e', '#696969', 80, 35, 4);
+        this.groundFloorTexture = this.createFacadeTexture(512, 512);
         this.groundFloorTexture.repeat.set(3.5, 2.5);
 
-        this.upperFloorTexture = this.createBrickTexture(256, 256, '#4682B4', '#6495ED', 80, 35, 4);
+        this.upperFloorTexture = this.createFacadeTexture(512, 512);
         this.upperFloorTexture.repeat.set(3.5, 2);
 
         this.roofTexture = this.createRoofTileTexture(256, 128, '#808080', '#696969', 32, 16, 2);
@@ -101,49 +168,6 @@ export default class CommercialRenderer {
         };
 
         console.log("CommercialRenderer initialized with local materials.");
-    }
-
-    /**
-     * Crée une texture procédurale pour les briques
-     * @param {number} width - Largeur de la texture
-     * @param {number} height - Hauteur de la texture
-     * @param {string} brickColor - Couleur des briques
-     * @param {string} mortarColor - Couleur du mortier
-     * @param {number} brickWidth - Largeur des briques
-     * @param {number} brickHeight - Hauteur des briques
-     * @param {number} mortarThickness - Épaisseur du mortier
-     * @returns {THREE.CanvasTexture} La texture générée
-     */
-    createBrickTexture(width = 256, height = 256, brickColor = '#8B4513', mortarColor = '#D3D3D3', brickWidth = 80, brickHeight = 35, mortarThickness = 4) {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext('2d');
-
-        context.fillStyle = mortarColor;
-        context.fillRect(0, 0, width, height);
-
-        context.fillStyle = brickColor;
-        for (let y = 0; y < height; y += brickHeight) {
-            for (let x = 0; x < width; x += brickWidth) {
-                // Décalage d'une demi-brique pour les rangées paires
-                const offsetX = (Math.floor(y / brickHeight) % 2 === 0) ? 0 : -brickWidth / 2;
-                // Dessiner la brique principale
-                context.fillRect(x + offsetX + mortarThickness / 2, y + mortarThickness / 2, brickWidth - mortarThickness, brickHeight - mortarThickness);
-                // Ajouter la brique coupée qui dépasse à gauche/droite à cause du décalage
-                 if (offsetX !== 0) {
-                     context.fillRect(x + offsetX + width + mortarThickness / 2, y + mortarThickness / 2, brickWidth - mortarThickness, brickHeight - mortarThickness);
-                 }
-            }
-        }
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        // Ajuster le filtrage pour éviter le flou excessif avec de grandes briques
-        texture.magFilter = THREE.NearestFilter;
-        texture.minFilter = THREE.LinearMipmapLinearFilter;
-        return texture;
     }
 
     /**
