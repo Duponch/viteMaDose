@@ -3,10 +3,10 @@ import * as THREE from 'three';
 import IZonePlacementStrategy from './IZonePlacementStrategy.js';
 
 /**
- * @typedef {import('../Plot.js').default} Plot
+ * @typedef {import('../City/Plot.js').default} Plot
  * @typedef {import('../Rendering/CityAssetLoader.js').default} CityAssetLoader
  * @typedef {import('../Rendering/InstanceDataManager.js').default} InstanceDataManager
- * @typedef {import('../CityManager.js').default} CityManager
+ * @typedef {import('../City/CityManager.js').default} CityManager
  * @typedef {import('../Buildings/HouseRenderer.js').default} HouseRenderer // Assurez-vous que le chemin est correct
  */
 
@@ -27,6 +27,9 @@ export default class HousePlacementStrategy extends IZonePlacementStrategy {
         }
         // Raccourci pratique
         this.houseRenderer = this.renderers.houseRenderer;
+        
+        // Ratio de commerces à placer (1 commerce sur X bâtiments)
+        this.commercialRatio = 6; // 1 commerce pour 6 emplacements total
     }
 
     /**
@@ -59,12 +62,28 @@ export default class HousePlacementStrategy extends IZonePlacementStrategy {
         const plotGroundY = this.config.plotGroundY ?? 0.005; // Utiliser pour la position Y
         const sidewalkHeight = this.config.sidewalkHeight ?? 0.2; // Pour enregistrer la position du bâtiment
 
+        // Calculer le nombre total d'emplacements
+        const totalPositions = this._countAvailablePositions(numItemsX, numItemsY);
+        
+        // Calculer le nombre de commerces à placer
+        const commercialCount = Math.max(1, Math.floor(totalPositions / this.commercialRatio));
+        
+        // Sélectionner des positions aléatoires pour les commerces
+        const commercialPositions = this._selectRandomPositions(numItemsX, numItemsY, commercialCount);
+        
+        // Taille réduite pour les commerces
+        const commercialScaleFactor = baseScaleFactor * 0.8;
+
+        let positionCounter = 0;
         for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
             for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
 				// === ne garder que la périphérie ===
 				if (rowIndex > 0 && rowIndex < numItemsY - 1 && colIndex > 0 && colIndex < numItemsX - 1) {
 					continue;
 				}
+                
+                positionCounter++;
+                
                 // Calculer le centre de la cellule de la grille
                 const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + minSpacing)) + targetBuildingWidth / 2;
                 const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + minSpacing)) + targetBuildingDepth / 2;
@@ -72,8 +91,39 @@ export default class HousePlacementStrategy extends IZonePlacementStrategy {
 
                 // Déterminer la rotation
                 const targetRotationY = this.determineBuildingRotation(cellCenterX, cellCenterZ, plot);
+                
+                // Vérifier si cette position doit être un commerce
+                const isCommercial = commercialPositions.some(pos => 
+                    pos.x === colIndex && pos.y === rowIndex);
+                
+                if (isCommercial) {
+                    // Créer un bâtiment commercial
+                    const matrix = new THREE.Matrix4();
+                    matrix.compose(
+                        worldCellCenterPos,
+                        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, targetRotationY, 0)),
+                        new THREE.Vector3(commercialScaleFactor, commercialScaleFactor, commercialScaleFactor)
+                    );
+                    
+                    // Ajouter les données d'instance pour un commerce
+                    instanceDataManager.addData('commercial', 'default', matrix);
+                    
+                    // Enregistrer l'instance de bâtiment auprès de CityManager
+                    const buildingPosition = new THREE.Vector3(cellCenterX, sidewalkHeight, cellCenterZ);
+                    const registeredBuilding = cityManager.registerBuildingInstance(plot.id, 'commercial', buildingPosition);
+                    
+                    if (registeredBuilding) {
+                        plot.addBuildingInstance({
+                            id: registeredBuilding.id,
+                            type: 'commercial',
+                            position: buildingPosition.clone()
+                        });
+                    }
+                    
+                    continue; // Passer à la position suivante
+                }
 
-                // Générer les données d'instance pour une maison
+                // Sinon, générer les données d'instance pour une maison
                 // HouseRenderer retourne un objet { partName: [matrix, ...], ... }
                 const houseInstanceData = this.houseRenderer.generateHouseInstance(
                     worldCellCenterPos,
@@ -109,5 +159,60 @@ export default class HousePlacementStrategy extends IZonePlacementStrategy {
                 }
             } // Fin boucle colIndex
         } // Fin boucle rowIndex
+    }
+    
+    /**
+     * Compte le nombre de positions disponibles autour du périmètre
+     * @param {number} numItemsX - Nombre d'éléments en X
+     * @param {number} numItemsY - Nombre d'éléments en Y
+     * @returns {number} - Nombre de positions disponibles
+     * @private
+     */
+    _countAvailablePositions(numItemsX, numItemsY) {
+        if (numItemsX <= 2 || numItemsY <= 2) {
+            // Petites parcelles: tous les emplacements sont sur le périmètre
+            return numItemsX * numItemsY;
+        }
+        // Sinon on compte uniquement le périmètre
+        return 2 * numItemsX + 2 * (numItemsY - 2);
+    }
+    
+    /**
+     * Sélectionne aléatoirement des positions autour du périmètre
+     * @param {number} numItemsX - Nombre d'éléments en X
+     * @param {number} numItemsY - Nombre d'éléments en Y
+     * @param {number} count - Nombre de positions à sélectionner
+     * @returns {Array<{x: number, y: number}>} - Positions sélectionnées
+     * @private
+     */
+    _selectRandomPositions(numItemsX, numItemsY, count) {
+        const positions = [];
+        
+        // Générer toutes les positions de périmètre disponibles
+        const allPositions = [];
+        
+        // Bordure supérieure et inférieure
+        for (let x = 0; x < numItemsX; x++) {
+            allPositions.push({x, y: 0});
+            allPositions.push({x, y: numItemsY - 1});
+        }
+        
+        // Bordures gauche et droite (sans les coins qui sont déjà inclus)
+        for (let y = 1; y < numItemsY - 1; y++) {
+            allPositions.push({x: 0, y});
+            allPositions.push({x: numItemsX - 1, y});
+        }
+        
+        // Sélectionner aléatoirement count positions
+        const selectedCount = Math.min(count, allPositions.length);
+        
+        // Mélanger le tableau
+        for (let i = allPositions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allPositions[i], allPositions[j]] = [allPositions[j], allPositions[i]];
+        }
+        
+        // Prendre les premières count positions
+        return allPositions.slice(0, selectedCount);
     }
 }

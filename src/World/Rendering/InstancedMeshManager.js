@@ -46,6 +46,17 @@ export default class InstancedMeshManager {
                 1.0 // Profondeur de base, sera écrasée par la matrice
             );
         }
+        
+        // Création des géométries et matériaux de base pour les bâtiments commerciaux
+        this.commercialGeometry = new THREE.BoxGeometry(1, 1, 1);
+        this.commercialMaterial = new THREE.MeshStandardMaterial({
+            color: 0x80d0ff,  // Bleu clair
+            emissive: 0x2080c0, // Émission bleutée
+            emissiveIntensity: 0.5,
+            roughness: 0.3,
+            metalness: 0.4
+        });
+        this.commercialMaterial.name = "CommercialBuildingMat";
 
         console.log("InstancedMeshManager initialized.");
     }
@@ -82,6 +93,13 @@ export default class InstancedMeshManager {
                 try {
                     // --- Déterminer Géométrie et Matériau (sans déterminer isWindow ici) ---
                     switch (type) {
+                        case 'commercial': {
+                            // Utiliser la géométrie et le matériau commerciaux prédéfinis
+                            geometry = this.commercialGeometry;
+                            material = this.commercialMaterial;
+                            break;
+                        }
+                        
                         case 'house': {
                             const partName = idOrKey; // Pour 'house', idOrKey est le partName
                             geometry = this.renderers.houseRenderer?.baseHouseGeometries[partName];

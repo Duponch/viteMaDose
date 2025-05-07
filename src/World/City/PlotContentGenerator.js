@@ -14,6 +14,7 @@ import IndustrialPlacementStrategy from '../Strategies/IndustrialPlacementStrate
 import SkyscraperPlacementStrategy from '../Strategies/SkyscraperPlacementStrategy.js';
 import ParkPlacementStrategy from '../Strategies/ParkPlacementStrategy.js';
 import TreePlacementStrategy from '../Strategies/TreePlacementStrategy.js'; // Placeholder import
+import CommercialPlacementStrategy from '../Strategies/CommercialPlacementStrategy.js'; // Nouvelle stratégie
 
 /**
  * @typedef {import('./Plot.js').default} Plot
@@ -101,7 +102,8 @@ export default class PlotContentGenerator {
             'building': new BuildingPlacementStrategy(this.config, assetLoader, renderers, this.experience),
             'industrial': new IndustrialPlacementStrategy(this.config, assetLoader, renderers, this.experience),
             'skyscraper': new SkyscraperPlacementStrategy(this.config, assetLoader, renderers, this.experience),
-            'park': new ParkPlacementStrategy(this.config, assetLoader, renderers, this.experience)
+            'park': new ParkPlacementStrategy(this.config, assetLoader, renderers, this.experience),
+            'commercial': new CommercialPlacementStrategy(this.config, assetLoader, renderers, this.experience)
             // Ajouter 'unbuildable' ou une stratégie par défaut si nécessaire
         };
         this.treePlacementStrategy = new TreePlacementStrategy(this.config, assetLoader, renderers, this.experience);
