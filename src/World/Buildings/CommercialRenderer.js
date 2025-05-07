@@ -196,13 +196,14 @@ export default class CommercialRenderer {
      * @param {number} baseHeight - Hauteur cible.
      * @param {number} baseDepth - Profondeur cible.
      * @param {number} [userScale=1] - Facteur d'échelle utilisateur.
+     * @param {number} [verticalScale=1] - Facteur de scale vertical.
      * @returns {object|null} L'asset généré {id, parts, fittingScaleFactor, ...} ou null.
      */
-    generateProceduralBuilding(baseWidth, baseHeight, baseDepth, userScale = 1) {
+    generateProceduralBuilding(baseWidth, baseHeight, baseDepth, userScale = 1, verticalScale = 0.6) {
         // Ajuster les dimensions de base
-        const defaultScaleMultiplier = 10;
+        const defaultScaleMultiplier = 2;
         const adjustedBaseWidth = baseWidth * defaultScaleMultiplier;
-        const adjustedBaseHeight = baseHeight * defaultScaleMultiplier;
+        const adjustedBaseHeight = baseHeight * defaultScaleMultiplier * verticalScale; // Appliquer le scale vertical
         const adjustedBaseDepth = baseDepth * defaultScaleMultiplier;
         
         const buildingGroup = new THREE.Group(); // Groupe temporaire pour l'assemblage
@@ -243,38 +244,43 @@ export default class CommercialRenderer {
 
         // Appliquer le multiplicateur d'échelle à toutes les dimensions
         const scale = defaultScaleMultiplier;
-        const scaledGroundFloorHeight = groundFloorHeight * scale;
-        const scaledUpperFloorHeight = upperFloorHeight * scale;
+        const verticalScaleFactor = scale * verticalScale; // Facteur de scale vertical combiné
+
+        // Dimensions horizontales (largeur et profondeur)
         const scaledGroundFloorWidth = groundFloorWidth * scale;
         const scaledGroundFloorDepth = groundFloorDepth * scale;
         const scaledUpperFloorWidth = upperFloorWidth * scale;
         const scaledUpperFloorDepth = upperFloorDepth * scale;
         const scaledRoofWidth = roofWidth * scale;
-        const scaledRoofHeight = roofHeight * scale;
         const scaledRoofDepth = roofDepth * scale;
-        const scaledRoofLedgeHeight = roofLedgeHeight * scale;
         const scaledRoofLedgeThickness = roofLedgeThickness * scale;
         const scaledDoorWidth = doorWidth * scale;
-        const scaledDoorHeight = doorHeight * scale;
         const scaledDoorDepth = doorDepth * scale;
         const scaledWindowWidth = windowWidth * scale;
-        const scaledWindowHeight = windowHeight * scale;
         const scaledWindowDepth = windowDepth * scale;
         const scaledShopWindowWidth = shopWindowWidth * scale;
-        const scaledShopWindowHeight = shopWindowHeight * scale;
         const scaledShopWindowDepth = shopWindowDepth * scale;
         const scaledFrameThickness = frameThickness * scale;
         const scaledFrameDepthOffset = frameDepthOffset * scale;
         const scaledFrameDepth = frameDepth * scale;
         const scaledDoorWindowWidth = doorWindowWidth * scale;
-        const scaledDoorWindowHeight = doorWindowHeight * scale;
         const scaledDoorWindowDepth = doorWindowDepth * scale;
         const scaledAwningStripeWidth = awningStripeWidth * scale;
-        const scaledAwningHeight = awningHeight * scale;
         const scaledAwningDepth = awningDepth * scale;
         const scaledVentWidth = ventWidth * scale;
-        const scaledVentHeight = ventHeight * scale;
         const scaledVentDepth = ventDepth * scale;
+
+        // Dimensions verticales (hauteurs)
+        const scaledGroundFloorHeight = groundFloorHeight * verticalScaleFactor;
+        const scaledUpperFloorHeight = upperFloorHeight * verticalScaleFactor;
+        const scaledRoofHeight = roofHeight * verticalScaleFactor;
+        const scaledRoofLedgeHeight = roofLedgeHeight * verticalScaleFactor;
+        const scaledDoorHeight = doorHeight * verticalScaleFactor;
+        const scaledWindowHeight = windowHeight * verticalScaleFactor;
+        const scaledShopWindowHeight = shopWindowHeight * verticalScaleFactor;
+        const scaledDoorWindowHeight = doorWindowHeight * verticalScaleFactor;
+        const scaledAwningHeight = awningHeight * verticalScaleFactor;
+        const scaledVentHeight = ventHeight * verticalScaleFactor;
 
         // Fonction utilitaire pour créer des boîtes
         const createBox = (width, height, depth, material, x, y, z) => {
