@@ -6,9 +6,10 @@ export default class CommercialRenderer {
      * Crée une texture procédurale pour les façades des immeubles
      * @param {number} width - Largeur de la texture
      * @param {number} height - Hauteur de la texture
+     * @param {number} textureScale - Échelle des briques (1 = taille normale, 2 = deux fois plus grandes, etc.)
      * @returns {THREE.CanvasTexture} La texture générée
      */
-    createFacadeTexture(width = 512, height = 512) {
+    createFacadeTexture(width = 512, height = 512, textureScale = 1) {
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
@@ -19,8 +20,8 @@ export default class CommercialRenderer {
         ctx.fillRect(0, 0, width, height);
 
         // Ajout de variations de couleur pour simuler des briques
-        const brickWidth = width / 8;
-        const brickHeight = height / 16;
+        const brickWidth = width / 6; // Réduit de 12 à 6 pour des briques plus grosses
+        const brickHeight = height / 4; // Réduit de 8 à 4 pour des briques plus grosses
         
         for (let y = 0; y < height; y += brickHeight) {
             for (let x = 0; x < width; x += brickWidth) {
@@ -73,18 +74,20 @@ export default class CommercialRenderer {
      * Constructeur pour le renderer de commerce.
      * @param {object} config - Configuration globale.
      * @param {object} materials - Matériaux partagés du projet (ex: materials.buildingGroundMaterial).
+     * @param {number} textureScale - Échelle des briques (1 = taille normale, 2 = deux fois plus grandes, etc.)
      */
-    constructor(config, materials) {
+    constructor(config, materials, textureScale = 3) {
         this.config = config;
         this.materials = materials; 
         this.assetIdCounter = 0;
+        this.textureScale = textureScale;
 
         // Création des textures partagées pour le commerce
-        this.groundFloorTexture = this.createFacadeTexture(512, 512);
-        this.groundFloorTexture.repeat.set(3.5, 2.5);
+        this.groundFloorTexture = this.createFacadeTexture(512, 512, this.textureScale);
+        this.groundFloorTexture.repeat.set(2, 2);
 
-        this.upperFloorTexture = this.createFacadeTexture(512, 512);
-        this.upperFloorTexture.repeat.set(3.5, 2);
+        this.upperFloorTexture = this.createFacadeTexture(512, 512, this.textureScale);
+        this.upperFloorTexture.repeat.set(2, 2);
 
         this.roofTexture = this.createRoofTileTexture(256, 128, '#808080', '#696969', 32, 16, 2);
         this.roofTexture.repeat.set(10, 10);
