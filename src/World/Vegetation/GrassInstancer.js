@@ -27,10 +27,21 @@ export default class GrassInstancer {
         this.fovAngle = config.fovAngle || 90;
         
         // Facteur de marge pour le champ de vision (pour éviter les coupures nettes)
-        this.fovMargin = config.fovMargin || 1.5;
+        this.fovMargin = config.fovMargin || 3.0;
         
         // Distance minimale pour le champ de vision (pour éviter les parcelles trop éloignées)
         this.minFovDistance = config.minFovDistance || 50;
+        
+        // Marge supplémentaire pour les parcelles visibles à l'écran
+        this.screenMargin = 2.0;
+        
+        // Paramètres pour la détection de visibilité verticale
+        this.verticalFovMargin = 2.0;
+        this.minVerticalAngle = -60;
+        this.maxVerticalAngle = 60;
+        
+        // Nouveau : Seuil de visibilité partielle
+        this.partialVisibilityThreshold = 0.3;
         
         // Carrés des distances pour éviter les calculs de racine carrée
         this.lodDistancesSquared = {
@@ -322,15 +333,49 @@ Densité moyenne: ${(this.stats.totalGrassBlades / this.stats.visiblePlots).toFi
                 const adjustedCosHalfFov = cosHalfFov * (1 / this.fovMargin);
                 let isInFov = dotProduct > adjustedCosHalfFov;
                 
-                // Si la caméra est proche du sol, restreindre la visibilité
+                // Calculer l'angle vertical entre la direction de la caméra et le vecteur vers la parcelle
+                const verticalAngle = Math.asin(directionVector.y) * 180 / Math.PI;
+                
+                // Si la caméra est proche du sol
                 if (cameraHeight < 5) {
-                    // Calculer l'angle vertical entre la direction de la caméra et le vecteur vers la parcelle
-                    const verticalAngle = Math.asin(directionVector.y) * 180 / Math.PI;
-                    
-                    // Si on regarde vers le bas (angle négatif), restreindre la visibilité
+                    // Si on regarde vers le bas, restreindre la visibilité
                     if (verticalAngle < -10) {
                         // Ne garder que les parcelles très proches et dans le FOV
-                        isInFov = isInFov && plotInfo.distanceSquared < 100; // ~10 unités
+                        isInFov = isInFov && plotInfo.distanceSquared < 100;
+                    }
+                } else {
+                    // En vue normale, utiliser une détection plus permissive
+                    // Calculer l'angle vertical entre la caméra et la parcelle
+                    const plotVerticalAngle = Math.asin(tempVector.y / Math.sqrt(plotInfo.distanceSquared)) * 180 / Math.PI;
+                    
+                    // Vérifier si la parcelle est dans la zone de visibilité verticale
+                    const isInVerticalFov = plotVerticalAngle >= this.minVerticalAngle && 
+                                          plotVerticalAngle <= this.maxVerticalAngle;
+                    
+                    // Si la parcelle est dans le FOV vertical, la considérer comme visible
+                    if (isInVerticalFov) {
+                        // Calculer l'angle horizontal entre la direction de la caméra et le vecteur vers la parcelle
+                        const horizontalAngle = Math.atan2(
+                            tempVector.x * directionVector.z - tempVector.z * directionVector.x,
+                            tempVector.x * directionVector.x + tempVector.z * directionVector.z
+                        ) * 180 / Math.PI;
+
+                        // Utiliser une marge beaucoup plus large pour le FOV horizontal
+                        const extendedFovAngle = this.fovAngle * this.screenMargin;
+                        
+                        // Nouveau : Calculer un facteur de visibilité basé sur l'angle
+                        const angleFactor = 1.0 - (Math.abs(horizontalAngle) / (extendedFovAngle / 2));
+                        
+                        // Si l'angle est dans la zone étendue
+                        if (Math.abs(horizontalAngle) < extendedFovAngle / 2) {
+                            // Vérifier si la parcelle est à une distance raisonnable
+                            if (plotInfo.distanceSquared < this.maxVisibilityDistanceSquared * 0.5) {
+                                // Considérer comme visible si le facteur d'angle dépasse le seuil
+                                if (angleFactor > this.partialVisibilityThreshold) {
+                                    isInFov = true;
+                                }
+                            }
+                        }
                     }
                 }
                 
