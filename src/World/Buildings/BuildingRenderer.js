@@ -388,7 +388,7 @@ export default class BuildingRenderer {
         buildingMaterialMap.set(windowMaterial.name, { material: windowMaterial.clone(), geoms: [] });
         buildingMaterialMap.set(doorMaterial.name, { material: doorMaterial.clone(), geoms: [] });
         buildingMaterialMap.set(equipmentMaterial.name, { material: equipmentMaterial.clone(), geoms: [] });
-        buildingMaterialMap.set(frontMarkerMaterial.name, { material: frontMarkerMaterial.clone(), geoms: [] });
+        //buildingMaterialMap.set(frontMarkerMaterial.name, { material: frontMarkerMaterial.clone(), geoms: [] });
 
         buildingGroup.traverse(child => {
             if (child.isMesh && child.geometry && child.material) {
