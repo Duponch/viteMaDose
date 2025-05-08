@@ -108,9 +108,9 @@ export default class CommercialRenderer {
                 // Variation aléatoire plus prononcée avec une probabilité de briques plus foncées
                 let variation;
                 if (Math.random() < 0.2) { // 20% de chance d'avoir une brique plus foncée
-                    variation = Math.random() * 40 - 60; // Variation plus forte vers le foncé
+                    variation = Math.random() * 20 - 30; // Variation réduite vers le foncé
                 } else {
-                    variation = Math.random() * 30 - 15; // Variation normale
+                    variation = Math.random() * 15 - 7; // Variation normale réduite
                 }
                 
                 const r = Math.min(255, Math.max(0, 51 + variation)); // Base 51 (0x33) + variation
@@ -172,20 +172,20 @@ export default class CommercialRenderer {
                 transparent: true, 
                 opacity: 0.7, 
                 name: "CommercialWindowMat",
-                emissive: 0xfcffe0,
+                emissive: 0xFFFF99,
                 emissiveIntensity: 0.0,
-                metalness: 0.8,
-                roughness: 0.2
+                metalness: 0.4,
+                roughness: 0
             }),
             balconyWindow: new THREE.MeshStandardMaterial({ 
-                color: 0x607B8B, 
+                color: 0xadd8e6, 
                 transparent: true, 
-                opacity: 0.6, 
+                opacity: 0.7, 
                 name: "CommercialBalconyWindowMat",
-                emissive: 0xfcffe0,
+                emissive: 0xFFFF99,
                 emissiveIntensity: 0.0,
-                metalness: 0.8,
-                roughness: 0.2
+                metalness: 0.4,
+                roughness: 0
             }),
             frame: new THREE.MeshBasicMaterial({ 
                 color: 0x4d414f, 
