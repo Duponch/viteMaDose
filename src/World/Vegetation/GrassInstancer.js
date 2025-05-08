@@ -81,7 +81,16 @@ export default class GrassInstancer {
         this.cameraMovementThreshold = 5; // Seuil de mouvement de la caméra (au carré)
         
         // Désactiver temporairement la vérification du champ de vision pour le débogage
-        this.disableFovCheck = true;
+        this.disableFovCheck = false;
+
+        // Statistiques en temps réel
+        this.stats = {
+            totalPlots: 0,
+            visiblePlots: 0,
+            totalGrassBlades: 0,
+            lastLogTime: 0,
+            logInterval: 1000 // Log toutes les secondes
+        };
     }
 
     setCamera(camera) {
@@ -180,10 +189,33 @@ export default class GrassInstancer {
         // Distribuer les instances en fonction de la distance
         this.distributeInstances(totalInstances);
         
-        // Appliquer les allocations à chaque parcelle
+        // Réinitialiser les compteurs
+        this.stats.visiblePlots = 0;
+        this.stats.totalGrassBlades = 0;
+        
+        // Appliquer les allocations à chaque parcelle et compter les statistiques
         this.plotData.forEach(plotInfo => {
             this.applyAllocationToPlot(plotInfo);
+            if (plotInfo.isVisible) {
+                this.stats.visiblePlots++;
+                this.stats.totalGrassBlades += plotInfo.allocatedInstances;
+            }
         });
+        
+        // Mettre à jour le total des parcelles
+        this.stats.totalPlots = this.plotData.length;
+        
+        // Loguer les statistiques à intervalle régulier
+        if (currentTime - this.stats.lastLogTime >= this.stats.logInterval) {
+            console.log(`=== Statistiques Herbe ===
+Parcelles totales: ${this.stats.totalPlots}
+Parcelles visibles: ${this.stats.visiblePlots} (${((this.stats.visiblePlots / this.stats.totalPlots) * 100).toFixed(1)}%)
+Brins d'herbe affichés: ${this.stats.totalGrassBlades}
+Densité moyenne: ${(this.stats.totalGrassBlades / this.stats.visiblePlots).toFixed(0)} brins/parcelle
+====================`);
+            
+            this.stats.lastLogTime = currentTime;
+        }
         
         // Afficher les informations de débogage
         if (this.debugMode) {
@@ -279,7 +311,9 @@ export default class GrassInstancer {
                 const dotProduct = tempVector.dot(directionVector);
                 
                 // Vérifier si la parcelle est dans le champ de vision
-                const isInFov = dotProduct > cosHalfFov * this.fovMargin;
+                // Utiliser une marge plus permissive pour le FOV
+                const adjustedCosHalfFov = cosHalfFov * (1 / this.fovMargin);
+                const isInFov = dotProduct > adjustedCosHalfFov;
                 
                 // Mettre à jour le flag de visibilité en fonction du champ de vision
                 plotInfo.isVisible = isInFov;
