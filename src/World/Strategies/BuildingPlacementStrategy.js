@@ -91,8 +91,46 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
                 const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + minSpacing)) + targetBuildingDepth / 2;
                 const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
                 
-                // Déterminer la rotation
-                const targetRotationY = this.determineBuildingRotation(cellCenterX, cellCenterZ, plot);
+                // Déterminer la rotation en fonction de la position par rapport aux trottoirs
+                let targetRotationY = 0;
+                const sidewalkWidth = this.config.sidewalkWidth ?? 0;
+                
+                // Calculer les distances aux bords de la parcelle
+                const distToLeft = cellCenterX - plot.x;
+                const distToRight = (plot.x + plot.width) - cellCenterX;
+                const distToTop = cellCenterZ - plot.z;
+                const distToBottom = (plot.z + plot.depth) - cellCenterZ;
+                
+                // Vérifier si le bâtiment est adjacent à un trottoir
+                const isNearSidewalk = (distToLeft <= sidewalkWidth) || 
+                                     (distToRight <= sidewalkWidth) || 
+                                     (distToTop <= sidewalkWidth) || 
+                                     (distToBottom <= sidewalkWidth);
+                
+                if (isNearSidewalk) {
+                    // Si le bâtiment est près d'un trottoir, l'orienter vers ce trottoir
+                    const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+                    const tolerance = 0.1;
+                    
+                    if (Math.abs(minDist - distToLeft) < tolerance)
+                        targetRotationY = Math.PI / 2; // Face avant vers la gauche (-X)
+                    else if (Math.abs(minDist - distToRight) < tolerance)
+                        targetRotationY = -Math.PI / 2; // Face avant vers la droite (+X)
+                    else if (Math.abs(minDist - distToTop) < tolerance)
+                        targetRotationY = Math.PI; // Face avant vers le haut (-Z)
+                    else
+                        targetRotationY = 0; // Face avant vers le bas (+Z)
+                } else {
+                    // Si le bâtiment n'est pas près d'un trottoir, l'orienter vers le bord le plus proche
+                    if (rowIndex === 0)
+                        targetRotationY = Math.PI; // Face avant vers le haut (-Z)
+                    else if (rowIndex === numItemsY - 1)
+                        targetRotationY = 0; // Face avant vers le bas (+Z)
+                    else if (colIndex === 0)
+                        targetRotationY = Math.PI / 2; // Face avant vers la gauche (-X)
+                    else if (colIndex === numItemsX - 1)
+                        targetRotationY = -Math.PI / 2; // Face avant vers la droite (+X)
+                }
 
                 const assetInfo = this.assetLoader.getRandomAssetData('building');
                 if (!assetInfo) {

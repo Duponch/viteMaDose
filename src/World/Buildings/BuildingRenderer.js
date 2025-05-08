@@ -198,6 +198,20 @@ export default class BuildingRenderer {
         const doorColor = 0x8a7967;
         const equipmentColor = 0xaaaaaa;
 
+        // Ajout du cube émissif pour marquer la face avant
+        const frontMarkerGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        const frontMarkerMaterial = new THREE.MeshStandardMaterial({
+            color: 0x00ffff,
+            emissive: 0x00ffff,
+            emissiveIntensity: 0.5,
+            transparent: true,
+            opacity: 0.7,
+            name: "BuildingFrontMarkerMat"
+        });
+        const frontMarker = new THREE.Mesh(frontMarkerGeometry, frontMarkerMaterial);
+        frontMarker.position.set(0, baseHeight / 2, baseDepth / 2 + 0.1);
+        buildingGroup.add(frontMarker);
+
         const mainMaterial = new THREE.MeshStandardMaterial({ 
             color: mainColor, 
             name: "BuildingMainMat",
@@ -374,6 +388,7 @@ export default class BuildingRenderer {
         buildingMaterialMap.set(windowMaterial.name, { material: windowMaterial.clone(), geoms: [] });
         buildingMaterialMap.set(doorMaterial.name, { material: doorMaterial.clone(), geoms: [] });
         buildingMaterialMap.set(equipmentMaterial.name, { material: equipmentMaterial.clone(), geoms: [] });
+        buildingMaterialMap.set(frontMarkerMaterial.name, { material: frontMarkerMaterial.clone(), geoms: [] });
 
         buildingGroup.traverse(child => {
             if (child.isMesh && child.geometry && child.material) {

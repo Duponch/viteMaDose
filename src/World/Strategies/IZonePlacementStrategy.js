@@ -95,26 +95,42 @@ export default class IZonePlacementStrategy {
       * @returns {number} L'angle de rotation Y en radians.
       */
      determineBuildingRotation(cellCenterX, cellCenterZ, plot) {
-        const distToLeft = cellCenterX - plot.x;
-        const distToRight = (plot.x + plot.width) - cellCenterX;
-        const distToTop = cellCenterZ - plot.z; // Note: Z augmente vers le bas dans la config Three.js typique
-        const distToBottom = (plot.z + plot.depth) - cellCenterZ;
+        // Calculer la position relative du bâtiment dans la parcelle (0 à 1)
+        const relativeX = (cellCenterX - plot.x) / plot.width;
+        const relativeZ = (cellCenterZ - plot.z) / plot.depth;
 
-        const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-        let targetRotationY = 0;
-        const tolerance = 0.1; // Tolérance pour la comparaison des distances
+        // Déterminer si le bâtiment est sur un bord
+        const isOnEdge = relativeX < 0.1 || relativeX > 0.9 || relativeZ < 0.1 || relativeZ > 0.9;
+        
+        if (!isOnEdge) {
+            // Si le bâtiment n'est pas sur un bord, on le fait face au bord le plus proche
+            const distToLeft = relativeX;
+            const distToRight = 1 - relativeX;
+            const distToTop = relativeZ;
+            const distToBottom = 1 - relativeZ;
 
-        // Trouver quel bord est le plus proche
-        if (Math.abs(minDist - distToLeft) < tolerance)
-            targetRotationY = -Math.PI / 2; // Façade vers la gauche (-X)
-        else if (Math.abs(minDist - distToRight) < tolerance)
-            targetRotationY = Math.PI / 2;  // Façade vers la droite (+X)
-        else if (Math.abs(minDist - distToTop) < tolerance)
-            targetRotationY = 0; // Façade vers le haut (-Z)
-        else if (Math.abs(minDist - distToBottom) < tolerance)
-            targetRotationY = Math.PI;      // Façade vers le bas (+Z)
+            const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+            const tolerance = 0.05;
 
-        return targetRotationY;
+            if (Math.abs(minDist - distToLeft) < tolerance)
+                return Math.PI / 2; // Face avant vers la gauche (-X)
+            else if (Math.abs(minDist - distToRight) < tolerance)
+                return -Math.PI / 2; // Face avant vers la droite (+X)
+            else if (Math.abs(minDist - distToTop) < tolerance)
+                return Math.PI; // Face avant vers le haut (-Z)
+            else
+                return 0; // Face avant vers le bas (+Z)
+        } else {
+            // Si le bâtiment est sur un bord, on le fait face à l'extérieur
+            if (relativeX < 0.1)
+                return Math.PI / 2; // Face avant vers la gauche (-X)
+            else if (relativeX > 0.9)
+                return -Math.PI / 2; // Face avant vers la droite (+X)
+            else if (relativeZ < 0.1)
+                return Math.PI; // Face avant vers le haut (-Z)
+            else
+                return 0; // Face avant vers le bas (+Z)
+        }
     }
 
     /**
