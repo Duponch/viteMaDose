@@ -199,7 +199,7 @@ export default class BuildingRenderer {
         const equipmentColor = 0xaaaaaa;
 
         // Ajout du cube émissif pour marquer la face avant
-        const frontMarkerGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        /* const frontMarkerGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
         const frontMarkerMaterial = new THREE.MeshStandardMaterial({
             color: 0x00ffff,
             emissive: 0x00ffff,
@@ -210,7 +210,7 @@ export default class BuildingRenderer {
         });
         const frontMarker = new THREE.Mesh(frontMarkerGeometry, frontMarkerMaterial);
         frontMarker.position.set(0, baseHeight / 2, baseDepth / 2 + 0.1);
-        buildingGroup.add(frontMarker);
+        buildingGroup.add(frontMarker); */
 
         const mainMaterial = new THREE.MeshStandardMaterial({ 
             color: mainColor, 
