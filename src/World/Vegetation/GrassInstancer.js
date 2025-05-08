@@ -27,21 +27,24 @@ export default class GrassInstancer {
         this.fovAngle = config.fovAngle || 90;
         
         // Facteur de marge pour le champ de vision (pour éviter les coupures nettes)
-        this.fovMargin = config.fovMargin || 3.0;
+        this.fovMargin = config.fovMargin || 4.0;
         
         // Distance minimale pour le champ de vision (pour éviter les parcelles trop éloignées)
         this.minFovDistance = config.minFovDistance || 50;
         
         // Marge supplémentaire pour les parcelles visibles à l'écran
-        this.screenMargin = 2.0;
+        this.screenMargin = 3.0;
         
         // Paramètres pour la détection de visibilité verticale
-        this.verticalFovMargin = 2.0;
-        this.minVerticalAngle = -60;
-        this.maxVerticalAngle = 60;
+        this.verticalFovMargin = 3.0;
+        this.minVerticalAngle = -75;
+        this.maxVerticalAngle = 75;
         
-        // Nouveau : Seuil de visibilité partielle
-        this.partialVisibilityThreshold = 0.3;
+        // Seuil de visibilité partielle
+        this.partialVisibilityThreshold = 0.15;
+        
+        // Nouveau : Distance maximale pour la visibilité partielle
+        this.partialVisibilityDistance = 200;
         
         // Carrés des distances pour éviter les calculs de racine carrée
         this.lodDistancesSquared = {
@@ -363,15 +366,19 @@ Densité moyenne: ${(this.stats.totalGrassBlades / this.stats.visiblePlots).toFi
                         // Utiliser une marge beaucoup plus large pour le FOV horizontal
                         const extendedFovAngle = this.fovAngle * this.screenMargin;
                         
-                        // Nouveau : Calculer un facteur de visibilité basé sur l'angle
+                        // Calculer un facteur de visibilité basé sur l'angle
                         const angleFactor = 1.0 - (Math.abs(horizontalAngle) / (extendedFovAngle / 2));
+                        
+                        // Calculer un facteur de distance
+                        const distanceFactor = 1.0 - (Math.sqrt(plotInfo.distanceSquared) / this.partialVisibilityDistance);
                         
                         // Si l'angle est dans la zone étendue
                         if (Math.abs(horizontalAngle) < extendedFovAngle / 2) {
                             // Vérifier si la parcelle est à une distance raisonnable
                             if (plotInfo.distanceSquared < this.maxVisibilityDistanceSquared * 0.5) {
                                 // Considérer comme visible si le facteur d'angle dépasse le seuil
-                                if (angleFactor > this.partialVisibilityThreshold) {
+                                // ou si la parcelle est très proche
+                                if (angleFactor > this.partialVisibilityThreshold || distanceFactor > 0.8) {
                                     isInFov = true;
                                 }
                             }
