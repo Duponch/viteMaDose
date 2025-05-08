@@ -16,7 +16,7 @@ export default class CommercialRenderer {
         const ctx = canvas.getContext('2d');
 
         // Couleur de base
-        ctx.fillStyle = '#f0e6d2';
+        ctx.fillStyle = '#e6b17a';
         ctx.fillRect(0, 0, width, height);
 
         // Ajout de variations de couleur pour simuler des briques
@@ -33,9 +33,9 @@ export default class CommercialRenderer {
                     variation = Math.random() * 30 - 15; // Variation normale
                 }
                 
-                const r = Math.min(255, Math.max(0, 240 + variation));
-                const g = Math.min(255, Math.max(0, 230 + variation));
-                const b = Math.min(255, Math.max(0, 210 + variation));
+                const r = Math.min(255, Math.max(0, 230 + variation)); // Rouge dominant pour la terre
+                const g = Math.min(255, Math.max(0, 90 + variation));  // Vert très réduit pour le marron
+                const b = Math.min(255, Math.max(0, 70 + variation));  // Bleu minimisé pour éviter le rose
                 
                 ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
                 ctx.fillRect(x, y, brickWidth - 1, brickHeight - 1);
@@ -43,7 +43,7 @@ export default class CommercialRenderer {
         }
 
         // Ajout de lignes horizontales pour simuler des joints
-        ctx.strokeStyle = '#d7c4a3';
+        ctx.strokeStyle = '#c49a6c';
         ctx.lineWidth = 2;
         for (let y = brickHeight; y < height; y += brickHeight) {
             ctx.beginPath();
@@ -89,7 +89,62 @@ export default class CommercialRenderer {
         this.upperFloorTexture = this.createFacadeTexture(512, 512, this.textureScale);
         this.upperFloorTexture.repeat.set(2, 2);
 
-        this.roofTexture = this.createRoofTileTexture(256, 128, '#808080', '#696969', 32, 16, 2);
+        // Création d'une texture de briques pour le toit
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+
+        // Couleur de base gris foncé
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Dimensions des briques
+        const brickWidth = canvas.width / 6;
+        const brickHeight = canvas.height / 4;
+        
+        for (let y = 0; y < canvas.height; y += brickHeight) {
+            for (let x = 0; x < canvas.width; x += brickWidth) {
+                // Variation aléatoire plus prononcée avec une probabilité de briques plus foncées
+                let variation;
+                if (Math.random() < 0.2) { // 20% de chance d'avoir une brique plus foncée
+                    variation = Math.random() * 40 - 60; // Variation plus forte vers le foncé
+                } else {
+                    variation = Math.random() * 30 - 15; // Variation normale
+                }
+                
+                const r = Math.min(255, Math.max(0, 51 + variation)); // Base 51 (0x33) + variation
+                const g = Math.min(255, Math.max(0, 51 + variation));
+                const b = Math.min(255, Math.max(0, 51 + variation));
+                
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(x, y, brickWidth - 1, brickHeight - 1);
+            }
+        }
+
+        // Ajout de lignes horizontales pour simuler des joints
+        ctx.strokeStyle = '#222222';
+        ctx.lineWidth = 2;
+        for (let y = brickHeight; y < canvas.height; y += brickHeight) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+
+        // Ajout de lignes verticales décalées
+        for (let y = 0; y < canvas.height; y += brickHeight * 2) {
+            for (let x = brickWidth; x < canvas.width; x += brickWidth * 2) {
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x, y + brickHeight);
+                ctx.stroke();
+            }
+        }
+
+        this.roofTexture = new THREE.CanvasTexture(canvas);
+        this.roofTexture.wrapS = THREE.RepeatWrapping;
+        this.roofTexture.wrapT = THREE.RepeatWrapping;
         this.roofTexture.repeat.set(10, 10);
 
         // Définition des matériaux pour le commerce
@@ -107,7 +162,7 @@ export default class CommercialRenderer {
                 metalness: 0.1
             }),
             roof: new THREE.MeshStandardMaterial({ 
-                map: this.groundFloorTexture,
+                map: this.roofTexture,
                 name: "CommercialRoofMat",
                 roughness: 0.8,
                 metalness: 0.1
