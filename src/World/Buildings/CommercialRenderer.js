@@ -145,7 +145,7 @@ export default class CommercialRenderer {
         this.roofTexture = new THREE.CanvasTexture(canvas);
         this.roofTexture.wrapS = THREE.RepeatWrapping;
         this.roofTexture.wrapT = THREE.RepeatWrapping;
-        this.roofTexture.repeat.set(10, 10);
+        this.roofTexture.repeat.set(2, 2);
 
         // Définition des matériaux pour le commerce
         this.localMaterials = {
