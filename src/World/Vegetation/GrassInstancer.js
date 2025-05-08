@@ -91,10 +91,17 @@ export default class GrassInstancer {
             lastLogTime: 0,
             logInterval: 1000 // Log toutes les secondes
         };
+
+        // Stocker la dernière orientation de la caméra
+        this._lastCameraQuaternion = new THREE.Quaternion();
+        this._cameraOrientationChanged = false;
     }
 
     setCamera(camera) {
         this.camera = camera;
+        if (camera) {
+            this._lastCameraQuaternion.copy(camera.quaternion);
+        }
     }
 
     createGrassInstances(plot) {
@@ -172,7 +179,7 @@ export default class GrassInstancer {
         if (currentTime - this.lastUpdateTime < this.updateInterval) return;
         this.lastUpdateTime = currentTime;
         
-        // Optimisation: Vérifier si la caméra a bougé significativement
+        // Optimisation: Vérifier si la caméra a bougé significativement ou changé d'orientation
         const cameraPosition = this.camera.position;
         const cameraMoved = this._checkCameraMovement(cameraPosition);
         if (!cameraMoved && !this.debugMode) return;
@@ -223,23 +230,35 @@ Densité moyenne: ${(this.stats.totalGrassBlades / this.stats.visiblePlots).toFi
         }
     }
     
-    // Optimisation: Vérifier si la caméra a bougé significativement
+    // Optimisation: Vérifier si la caméra a bougé significativement ou changé d'orientation
     _checkCameraMovement(cameraPosition) {
-        // Si c'est la première fois, initialiser la position précédente
+        let shouldUpdate = false;
+        
+        // Vérifier le mouvement de position
         if (!this._lastCameraPosition) {
             this._lastCameraPosition = cameraPosition.clone();
-            return true;
+            shouldUpdate = true;
+        } else {
+            const tempVector = new THREE.Vector3().subVectors(cameraPosition, this._lastCameraPosition);
+            const distanceSquared = tempVector.lengthSq();
+            if (distanceSquared > this.cameraMovementThreshold) {
+                shouldUpdate = true;
+            }
+            this._lastCameraPosition.copy(cameraPosition);
         }
         
-        // Calculer la distance au carré entre la position actuelle et la position précédente
-        const tempVector = new THREE.Vector3().subVectors(cameraPosition, this._lastCameraPosition);
-        const distanceSquared = tempVector.lengthSq();
+        // Vérifier le changement d'orientation
+        if (this.camera) {
+            const currentQuaternion = this.camera.quaternion;
+            const angle = this._lastCameraQuaternion.angleTo(currentQuaternion);
+            // Mettre à jour si l'angle de rotation est significatif (plus de 5 degrés)
+            if (angle > 0.087) { // ~5 degrés en radians
+                shouldUpdate = true;
+                this._lastCameraQuaternion.copy(currentQuaternion);
+            }
+        }
         
-        // Mettre à jour la position précédente
-        this._lastCameraPosition.copy(cameraPosition);
-        
-        // Retourner true si la caméra a bougé de plus que le seuil
-        return distanceSquared > this.cameraMovementThreshold;
+        return shouldUpdate;
     }
     
     // Optimisation: Mettre à jour les distances des parcelles
@@ -254,6 +273,9 @@ Densité moyenne: ${(this.stats.totalGrassBlades / this.stats.visiblePlots).toFi
         // Calculer le cosinus de la moitié de l'angle de champ de vision
         const halfFovRadians = (this.fovAngle * Math.PI / 180) / 2;
         const cosHalfFov = Math.cos(halfFovRadians);
+        
+        // Calculer la hauteur de la caméra par rapport au sol
+        const cameraHeight = cameraPosition.y;
         
         this.plotData.forEach(plotInfo => {
             // Calculer le vecteur de la caméra vers le centre de la parcelle
@@ -270,17 +292,8 @@ Densité moyenne: ${(this.stats.totalGrassBlades / this.stats.visiblePlots).toFi
                 plotInfo.isVisible = false;
                 plotInfo.isFullyVisible = false;
                 plotInfo.visibilityFactor = 0;
-                
-                // Calculer l'angle pour le débogage
-                if (plotInfo.distanceSquared > 0) {
-                    tempVector.normalize();
-                    const dotProduct = tempVector.dot(directionVector);
-                    plotInfo.angleToCamera = Math.acos(dotProduct) * 180 / Math.PI;
-                } else {
-                    plotInfo.angleToCamera = 0;
-                }
-                
-                return; // Passer à la parcelle suivante
+                plotInfo.angleToCamera = 0;
+                return;
             }
             
             // Si la vérification du champ de vision est désactivée, toutes les parcelles sont visibles
@@ -288,16 +301,7 @@ Densité moyenne: ${(this.stats.totalGrassBlades / this.stats.visiblePlots).toFi
                 plotInfo.isVisible = true;
                 plotInfo.isFullyVisible = plotInfo.distanceSquared < this.lodDistancesSquared.high;
                 plotInfo.visibilityFactor = 1;
-                
-                // Calculer l'angle pour le débogage
-                if (plotInfo.distanceSquared > 0) {
-                    tempVector.normalize();
-                    const dotProduct = tempVector.dot(directionVector);
-                    plotInfo.angleToCamera = Math.acos(dotProduct) * 180 / Math.PI;
-                } else {
-                    plotInfo.angleToCamera = 0;
-                }
-                
+                plotInfo.angleToCamera = 0;
                 return;
             }
             
@@ -310,19 +314,31 @@ Densité moyenne: ${(this.stats.totalGrassBlades / this.stats.visiblePlots).toFi
                 // Calculer le produit scalaire (cosinus de l'angle)
                 const dotProduct = tempVector.dot(directionVector);
                 
+                // Calculer l'angle en degrés pour le débogage
+                const angle = Math.acos(dotProduct) * 180 / Math.PI;
+                plotInfo.angleToCamera = angle;
+                
                 // Vérifier si la parcelle est dans le champ de vision
-                // Utiliser une marge plus permissive pour le FOV
                 const adjustedCosHalfFov = cosHalfFov * (1 / this.fovMargin);
-                const isInFov = dotProduct > adjustedCosHalfFov;
+                let isInFov = dotProduct > adjustedCosHalfFov;
+                
+                // Si la caméra est proche du sol, restreindre la visibilité
+                if (cameraHeight < 5) {
+                    // Calculer l'angle vertical entre la direction de la caméra et le vecteur vers la parcelle
+                    const verticalAngle = Math.asin(directionVector.y) * 180 / Math.PI;
+                    
+                    // Si on regarde vers le bas (angle négatif), restreindre la visibilité
+                    if (verticalAngle < -10) {
+                        // Ne garder que les parcelles très proches et dans le FOV
+                        isInFov = isInFov && plotInfo.distanceSquared < 100; // ~10 unités
+                    }
+                }
                 
                 // Mettre à jour le flag de visibilité en fonction du champ de vision
                 plotInfo.isVisible = isInFov;
                 
                 // Mettre à jour le flag de visibilité complète
                 plotInfo.isFullyVisible = plotInfo.distanceSquared < this.lodDistancesSquared.high && isInFov;
-                
-                // Stocker l'angle pour le débogage
-                plotInfo.angleToCamera = Math.acos(dotProduct) * 180 / Math.PI;
                 
                 // Stocker le facteur de visibilité pour le débogage
                 plotInfo.visibilityFactor = isInFov ? 1 : 0;
