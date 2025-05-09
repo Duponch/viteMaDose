@@ -1,5 +1,6 @@
 // src/World/CitizenManager.js
 import * as THREE from 'three';
+import CitizenHealth from './CitizenHealth.js';
 
 export default class CitizenManager {
     /**
@@ -15,6 +16,20 @@ export default class CitizenManager {
         this.citizens = new Map();
         // Compteur pour générer des identifiants uniques pour les bâtiments.
         this.nextBuildingInstanceId = 0;
+        
+        // Instance du gestionnaire de santé des citoyens
+        this.citizenHealth = null;
+    }
+
+    /**
+     * Initialise le gestionnaire de santé des citoyens
+     * @param {object} experience - L'instance de l'expérience
+     */
+    initializeHealthSystem(experience) {
+        if (!this.citizenHealth && experience) {
+            this.citizenHealth = new CitizenHealth(experience);
+            console.log("CitizenManager: Système de santé initialisé");
+        }
     }
 
     /**
@@ -84,10 +99,28 @@ export default class CitizenManager {
             happiness: 100, // Bonheur initial
             health: 50, // Santé initiale
             maxHealth: 100, // Santé max initiale
+            healthThreshold: 100, // Seuil de santé max (diminue avec le temps)
             money: 0, // Argent initial
-            salary: 10 // Salaire quotidien initial
+            salary: 100, // Salaire quotidien initial (mis à 100€ selon les specs)
+            
+            // Nouvelles propriétés
+            status: "Humain", // Statut initial (Humain ou Argile)
+            chemicalDependency: 0, // Dépendance chimique (0-100)
+            diseases: [], // Maladies
+            needsMedication: false, // Besoin de médicament
+            lastMedicationTime: -1, // Dernier temps de prise de médicament
+            daysSinceLastMedication: 0, // Jours écoulés depuis la dernière prise
+            healthStatus: "Bonne santé", // Statut sanitaire
+            naturalTreatmentCount: 0 // Compteur pour traitement naturel
         };
+        
         this.citizens.set(citizenId, citizenInfo);
+        
+        // Initialiser les données de santé si le gestionnaire est disponible
+        if (this.citizenHealth) {
+            this.citizenHealth.initializeHealthData(citizenInfo);
+        }
+        
         return citizenInfo;
     }
 
@@ -199,14 +232,77 @@ export default class CitizenManager {
     }
 
     /**
-     * Réinitialise l'état du CitizenManager.
-     * Vide les listes de bâtiments et de citoyens et remet le compteur d'ID à zéro.
+     * Met à jour les citoyens (appelé régulièrement par le système)
+     * @param {number} deltaTime - Temps écoulé depuis la dernière mise à jour
      */
-    reset() {
-        this.buildingInstances.clear();
-        this.citizens.clear();
-        this.nextBuildingInstanceId = 0;
-        console.log("CitizenManager reset.");
+    update(deltaTime) {
+        if (!this.citizenHealth) return;
+
+        const environment = this.citizenHealth.experience.world?.environment;
+        if (!environment) return;
+
+        const currentDay = environment.currentCalendarDay || 0;
+        
+        // Mettre à jour la santé de tous les citoyens
+        this.citizens.forEach(citizen => {
+            this.citizenHealth.updateHealth(citizen, currentDay);
+            
+            // Payer le salaire quotidien (une fois par jour)
+            this._updateSalary(citizen, currentDay);
+        });
+    }
+    
+    /**
+     * Met à jour le salaire d'un citoyen (une fois par jour)
+     * @private
+     * @param {Object} citizen - L'objet citoyen
+     * @param {number} currentDay - Le jour actuel
+     */
+    _updateSalary(citizen, currentDay) {
+        if (!citizen) return;
+        
+        // Vérifier si le dernier jour de paiement est défini
+        if (citizen.lastSalaryDay === undefined) {
+            citizen.lastSalaryDay = currentDay;
+            return;
+        }
+        
+        // Vérifier si un jour s'est écoulé depuis le dernier paiement
+        const daysSinceLastSalary = currentDay - citizen.lastSalaryDay;
+        if (daysSinceLastSalary >= 1) {
+            // Payer le salaire pour chaque jour écoulé
+            citizen.money += citizen.salary * daysSinceLastSalary;
+            citizen.lastSalaryDay = currentDay;
+        }
+    }
+    
+    /**
+     * Applique un traitement médicamenteux à un citoyen
+     * @param {string} citizenId - L'identifiant du citoyen
+     * @param {boolean} isPalliative - Si true, soin palliatif; sinon traitement classique
+     * @returns {boolean} - True si le traitement a été appliqué
+     */
+    applyMedication(citizenId, isPalliative = false) {
+        if (!this.citizenHealth) return false;
+        
+        const citizen = this.citizens.get(citizenId);
+        if (!citizen) return false;
+        
+        return this.citizenHealth.applyPharmaceuticalTreatment(citizen, isPalliative);
+    }
+    
+    /**
+     * Applique un traitement naturel à un citoyen
+     * @param {string} citizenId - L'identifiant du citoyen
+     * @returns {boolean} - True si une maladie a été guérie
+     */
+    applyNaturalTreatment(citizenId) {
+        if (!this.citizenHealth) return false;
+        
+        const citizen = this.citizens.get(citizenId);
+        if (!citizen) return false;
+        
+        return this.citizenHealth.applyNaturalTreatment(citizen);
     }
 
     /**
@@ -268,5 +364,63 @@ export default class CitizenManager {
         let totalSalary = 0;
         this.citizens.forEach(citizen => totalSalary += citizen.salary);
         return totalSalary / this.citizens.size;
+    }
+    
+    /**
+     * Calcule la dépendance chimique moyenne de tous les citoyens.
+     * @returns {number} La dépendance chimique moyenne.
+     */
+    getAverageChemicalDependency() {
+        if (this.citizens.size === 0) return 0;
+        let totalDependency = 0;
+        this.citizens.forEach(citizen => totalDependency += (citizen.chemicalDependency || 0));
+        return totalDependency / this.citizens.size;
+    }
+    
+    /**
+     * Récupère le nombre total de maladies pour tous les citoyens.
+     * @returns {number} Le nombre total de maladies.
+     */
+    getTotalDiseases() {
+        if (this.citizens.size === 0) return 0;
+        let totalDiseases = 0;
+        this.citizens.forEach(citizen => {
+            if (citizen.diseases && Array.isArray(citizen.diseases)) {
+                totalDiseases += citizen.diseases.length;
+            }
+        });
+        return totalDiseases;
+    }
+    
+    /**
+     * Compte le nombre de citoyens par statut (Humain/Argile).
+     * @returns {Object} Un objet contenant le nombre pour chaque statut.
+     */
+    getStatusCounts() {
+        const counts = {
+            "Humain": 0,
+            "Argile": 0
+        };
+        
+        this.citizens.forEach(citizen => {
+            if (citizen.status === "Humain") {
+                counts.Humain++;
+            } else if (citizen.status === "Argile") {
+                counts.Argile++;
+            }
+        });
+        
+        return counts;
+    }
+    
+    /**
+     * Réinitialise l'état du CitizenManager.
+     * Vide les listes de bâtiments et de citoyens et remet le compteur d'ID à zéro.
+     */
+    reset() {
+        this.buildingInstances.clear();
+        this.citizens.clear();
+        this.nextBuildingInstanceId = 0;
+        console.log("CitizenManager reset.");
     }
 }

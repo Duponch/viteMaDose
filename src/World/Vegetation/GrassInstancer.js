@@ -228,13 +228,6 @@ export default class GrassInstancer {
         
         // Loguer les statistiques à intervalle régulier
         if (currentTime - this.stats.lastLogTime >= this.stats.logInterval) {
-            console.log(`=== Statistiques Herbe ===
-Parcelles totales: ${this.stats.totalPlots}
-Parcelles visibles: ${this.stats.visiblePlots} (${((this.stats.visiblePlots / this.stats.totalPlots) * 100).toFixed(1)}%)
-Brins d'herbe affichés: ${this.stats.totalGrassBlades}
-Densité moyenne: ${(this.stats.totalGrassBlades / this.stats.visiblePlots).toFixed(0)} brins/parcelle
-====================`);
-            
             this.stats.lastLogTime = currentTime;
         }
         

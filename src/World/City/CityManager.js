@@ -260,6 +260,9 @@ export default class CityManager {
         // Passe la config pour les capacités des bâtiments
         this.citizenManager = new CitizenManager(this.config);
 
+        // Passage de experience à CitizenManager pour initialiser le système de santé
+        this.citizenManager.initializeHealthSystem(experience);
+
         // --- LampPostManager ---
         // Passe le cityContainer où ajouter les lampadaires
         this.lampPostManager = new LampPostManager(this.config, this.materials, this.cityContainer);
@@ -608,9 +611,12 @@ export default class CityManager {
         // Cette logique est maintenant gérée dans DistrictManager
     }
 
-    update() {
+    update(deltaTime) {
         // L'appel à contentGenerator.update est maintenant dans World.js
         // L'appel à lampPostManager.update est aussi dans World.js
+        
+        // Ajouter mise à jour du gestionnaire de citoyens pour la santé/maladies
+        this.citizenManager.update(deltaTime);
     }
     toggleCityMap() {
         if (this.cityMapVisualizer) {

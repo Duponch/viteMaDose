@@ -19,6 +19,7 @@ import './UI/EnvironmentUI.css';
 // Import nécessaire pour la recherche de mesh par position
 import { Matrix4, Vector3 } from 'three';
 import * as DebugTools from './World/Rendering/DebugTools.js';
+import AgentUI from './UI/AgentUI.js';
 
 let instance = null;
 
@@ -176,6 +177,8 @@ export default class Experience extends EventTarget {
 
         // Exposer les outils de debug
         window.debugTools = DebugTools;
+
+        this.agentUI = new AgentUI(this);
     }
 
     /**
@@ -606,6 +609,9 @@ export default class Experience extends EventTarget {
         // Lancer une transition douce vers l'agent
         this.camera.moveToTarget(targetCamPos, targetLookAt, 500, agent);
         console.log(`Agent ${agent.id} sélectionné, transition vers l'agent en cours...`);
+
+        // Déclencher un événement pour que l'interface utilisateur puisse réagir
+        this.dispatchEvent(new CustomEvent('agentselected', { detail: { agent } }));
     }
 
     // Désélectionne l'agent et désactive le suivi
@@ -638,6 +644,9 @@ export default class Experience extends EventTarget {
         } else {
              console.warn("Experience.deselectAgent: this.ui is not defined.");
         }
+
+        // Déclencher un événement pour que l'interface utilisateur puisse réagir
+        this.dispatchEvent(new CustomEvent('agentdeselected'));
     }
 
     // Sélectionne un bâtiment, active le highlight et le tooltip bâtiment
@@ -732,7 +741,7 @@ export default class Experience extends EventTarget {
         // }
     }
 
-    // --- MODIFIÉ : Met à jour le contenu HTML du tooltip agent AVEC liens ---
+    // --- MODIFIÉ : Met à jour le contenu HTML du tooltip agent AVEC liens et infos santé ---
     updateTooltipContent(agent) {
         if (!agent || !this.tooltipElement) return;
 
@@ -751,6 +760,15 @@ export default class Experience extends EventTarget {
         // Récupérer les statistiques du citoyen
         const citizenManager = this.world?.cityManager?.citizenManager;
         const citizenInfo = citizenManager?.getCitizenInfo(agent.id);
+
+        // Préparer l'affichage des maladies
+        let maladiesHTML = 'Aucune';
+        if (citizenInfo?.diseases && citizenInfo.diseases.length > 0) {
+            maladiesHTML = citizenInfo.diseases.join(', ');
+        }
+
+        // Icône pour le statut Humain/Argile
+        const statusIcon = citizenInfo?.status === "Argile" ? "🧱" : "👤";
 
         const content = `
             <div class="tooltip-header">
@@ -777,11 +795,31 @@ export default class Experience extends EventTarget {
                     <span class="tooltip-value">${citizenInfo?.health?.toFixed(0) || 'N/A'}/${citizenInfo?.maxHealth?.toFixed(0) || 'N/A'}</span>
                 </div>
                 <div class="tooltip-row">
+                    <span class="tooltip-label" title="Seuil Santé Max">⭕</span>
+                    <span class="tooltip-value">${citizenInfo?.healthThreshold?.toFixed(0) || 'N/A'}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label" title="Statut">${statusIcon}</span>
+                    <span class="tooltip-value">${citizenInfo?.status || 'N/A'} (${citizenInfo?.healthStatus || 'N/A'})</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label" title="Dépendance Chimique">💊</span>
+                    <span class="tooltip-value">${citizenInfo?.chemicalDependency?.toFixed(0) || '0'}/100</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label" title="Besoin Médicament">${citizenInfo?.needsMedication ? '🏥' : '✓'}</span>
+                    <span class="tooltip-value">${citizenInfo?.needsMedication ? 'Oui' : 'Non'}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label" title="Maladies">🦠</span>
+                    <span class="tooltip-value">${maladiesHTML}</span>
+                </div>
+                <div class="tooltip-row">
                     <span class="tooltip-label" title="Argent">$</span>
                     <span class="tooltip-value">${citizenInfo?.money?.toFixed(0) || 'N/A'}</span>
                 </div>
                 <div class="tooltip-row">
-                    <span class="tooltip-label" title="Salaire moyen">✤</span>
+                    <span class="tooltip-label" title="Salaire">✤</span>
                     <span class="tooltip-value">${citizenInfo?.salary?.toFixed(0) || 'N/A'}</span>
                 </div>
             </div>
@@ -1403,6 +1441,10 @@ export default class Experience extends EventTarget {
 
         // --- Gestionnaire pour les contrôles de temps globaux ---
         document.removeEventListener('keydown', this._boundHandleTimeControls);
+
+        // Détruire l'interface utilisateur de l'agent
+        this.agentUI?.destroy();
+        this.agentUI = null;
 
         instance = null;
         console.log("Experience détruite.");
