@@ -70,32 +70,40 @@ export default class NewSkyscraperRenderer {
      */
     createWallTexture() {
         const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
+        canvas.width = 1024;
+        canvas.height = 1024;
         const context = canvas.getContext('2d');
 
-        // Fond gris plus foncé
-        context.fillStyle = '#6e6e6e';
+        // Fond gris plus clair
+        context.fillStyle = '#8a8a8a';
         context.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Ajout de motifs de briques
-        const brickWidth = 64;
-        const brickHeight = 32;
-        const mortarWidth = 4;
+        // Ajout de motifs de briques plus grands
+        const brickWidth = 1024; // Briques beaucoup plus grandes
+        const brickHeight = 512;
+        const mortarWidth = 16; // Joints légèrement plus épais
 
-        context.fillStyle = '#5a5a5a'; // Joints plus foncés
+        // Motif de briques avec décalage
         for (let y = 0; y < canvas.height; y += brickHeight + mortarWidth) {
-            for (let x = 0; x < canvas.width; x += brickWidth + mortarWidth) {
+            const offset = (y / (brickHeight + mortarWidth)) % 2 === 0 ? 0 : brickWidth / 2;
+            for (let x = -offset; x < canvas.width; x += brickWidth + mortarWidth) {
+                // Variation de couleur pour chaque brique
+                const variation = Math.random() * 0.1 - 0.05;
+                const r = Math.max(0, Math.min(255, 30 + variation * 255));
+				const g = Math.max(0, Math.min(255, 30 + variation * 255));
+				const b = Math.max(0, Math.min(255, 30 + variation * 255));
+                context.fillStyle = `rgb(${r},${g},${b})`;
+                
                 context.fillRect(x, y, brickWidth, brickHeight);
             }
         }
 
-        // Ajout de variations de texture
-        context.fillStyle = '#7e7e7e'; // Variations plus foncées
-        for (let i = 0; i < 100; i++) {
+        // Ajout de variations de texture plus subtiles
+        context.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        for (let i = 0; i < 100; i++) { // Moins de variations mais plus grandes
             const x = Math.random() * canvas.width;
             const y = Math.random() * canvas.height;
-            const size = Math.random() * 20 + 10;
+            const size = Math.random() * 80 + 40; // Variations plus grandes
             context.beginPath();
             context.arc(x, y, size, 0, Math.PI * 2);
             context.fill();
@@ -104,6 +112,7 @@ export default class NewSkyscraperRenderer {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(2, 2); // Réduction de la répétition pour des motifs plus grands
         return texture;
     }
 
