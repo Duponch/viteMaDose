@@ -1,10 +1,3 @@
-Actuellement dans mon jeu les citoyens ont simplement comme action d'aller au travail la semaine ou d'aller en promenade le weekend, cela est géré par des états de l'agent (ou citoyen).
-
-
-Je souhaite implémenter les fonctionnalités ci dessous (partiellement commencé, ne pas hésiter à refaire de 0) pour un citoyen. Il faut le faire de manière robuste et modulaire afin de permettre des ajouts plus tard.
-Toutes ces informations doivent figurer sur l'UI agent (infobulle).
-Analyse le code existant pour comprendre la structure du projet et bien implémenter le besoin.
-
 Voici les specs du citoyen :
 
 - Le citoyen peut avoir des besoins conditionnés par des évènements qui peuvent être déclenchés soit automatiquement soit par le joueur.
@@ -56,5 +49,3 @@ Voici les specs du citoyen :
 - Compte bancaire
 	- Salaire : + 100 € / jour
 	- Achat médicament : - 10€ / médicament
-
-

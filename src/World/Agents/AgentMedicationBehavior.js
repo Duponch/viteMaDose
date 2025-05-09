@@ -11,7 +11,7 @@ export default class AgentMedicationBehavior {
     constructor(agent, medicationPurchaseStrategy = null) {
         this.agent = agent;
         this.experience = agent.experience;
-        this.medicationPurchaseStrategy = medicationPurchaseStrategy || new MedicationPurchaseStrategy();
+        this.medicationPurchaseStrategy = medicationPurchaseStrategy || new MedicationPurchaseStrategy({}, this.experience);
         
         // Propriétés liées à l'achat et la prise de médicament
         this.commercialBuildingId = null;
@@ -48,8 +48,10 @@ export default class AgentMedicationBehavior {
             const shouldPurchase = this.medicationPurchaseStrategy.shouldPurchaseMedication(
                 agent.id, citizenInfo, agent, currentGameTime
             );
-            
+
+			
             if (shouldPurchase) {
+				alert('shouldPurchase : YES');
                 // Tenter de trouver le bâtiment commercial le plus proche
                 const nearestCommercial = this.medicationPurchaseStrategy.findNearestCommercialBuilding(agent, cityManager);
                 
@@ -65,7 +67,9 @@ export default class AgentMedicationBehavior {
                         
                         // Trouver le nœud le plus proche sur le graphe de navigation
                         this.commercialGridNode = navGraph.getClosestWalkableNode(commercialPos);
+						
                         if (this.commercialGridNode) {
+							alert('this.commercialGridNode : YES');
                             this.commercialPosition = navGraph.gridToWorld(this.commercialGridNode.x, this.commercialGridNode.y);
                             
                             // Enregistrer la tentative d'achat
@@ -84,7 +88,9 @@ export default class AgentMedicationBehavior {
                                 currentGameTime
                             );
                             return; // Sortir après avoir initié la demande de chemin
-                        }
+                        } else {
+							alert('this.commercialGridNode : NO');
+						}
                     }
                 } else {
                     console.warn(`Agent ${agent.id}: Besoin de médicament mais aucun bâtiment commercial trouvé.`);

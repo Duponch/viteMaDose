@@ -4,8 +4,9 @@ export default class MedicationPurchaseStrategy {
     /**
      * Stratégie pour gérer l'achat de médicaments par les agents
      * @param {Object} options - Options de configuration
+     * @param {Object} experience - L'instance Experience
      */
-    constructor(options = {}) {
+    constructor(options = {}, experience = null) {
         // Configuration
         this.cooldownTime = options.cooldownTime || 4 * 60 * 60 * 1000; // 4h de temps de jeu par défaut
         this.medicationPrice = options.medicationPrice || 10; // Prix du médicament (€)
@@ -34,9 +35,20 @@ export default class MedicationPurchaseStrategy {
         // Vérifier si l'agent a assez d'argent
         if (citizenInfo.money < this.medicationPrice) return false;
 
+        // Initialiser lastPurchaseAttempt si nécessaire
+        if (!this.lastPurchaseAttempt.has(agentId)) {
+            this.lastPurchaseAttempt.set(agentId, 0);
+        }
+
         // Vérifier le cooldown
-        const lastAttempt = this.lastPurchaseAttempt.get(agentId) || 0;
-        if (currentGameTime - lastAttempt < this.cooldownTime) return false;
+        const lastAttempt = this.lastPurchaseAttempt.get(agentId);
+
+		console.log('currentGameTime : ', currentGameTime);
+		console.log('this.cooldownTime : ', this.cooldownTime);
+
+	    if (currentGameTime - lastAttempt < this.cooldownTime) return false;
+
+		alert('TTTTTTTTTTTTTTTTTTT');
 
         return true;
     }
@@ -47,6 +59,8 @@ export default class MedicationPurchaseStrategy {
      * @param {number} currentGameTime - Temps de jeu actuel
      */
     recordPurchaseAttempt(agentId, currentGameTime) {
+		alert('recordPurchaseAttempt');
+
         this.lastPurchaseAttempt.set(agentId, currentGameTime);
     }
     

@@ -692,6 +692,7 @@ export default class AgentManager {
     }
 
 	update(deltaTime) {
+
 		if (!this.experience?.world?.environment?.isInitialized) return;
 		const environment        = this.experience.world.environment;
 		const currentGameTime    = this.experience.time.elapsed;

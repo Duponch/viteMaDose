@@ -243,9 +243,9 @@ export default class Agent {
         let isVehicle = this.vehicleBehavior?.isDriving() ?? false;
         // --------------------------------------------------
 
-        if (this.currentState === AgentState.WEEKEND_WALK_REQUESTING_PATH) {
-            if (isVehicle) console.warn(`Agent ${this.id}: Forçage mode PIÉTON pour requête WEEKEND_WALK (était ${isVehicle}).`);
-            isVehicle = false;
+        if (this.currentState === AgentState.WEEKEND_WALK_REQUESTING_PATH || nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_COMMERCIAL) {
+            if (isVehicle) console.warn(`Agent ${this.id}: Forçage mode PIÉTON pour requête WEEKEND_WALK ou COMMERCIAL (était ${isVehicle}).`);
+            isVehicle = false; // Toujours piéton pour promenade et achat médicament
         }
 
         // --- Partie inchangée ---
@@ -255,14 +255,27 @@ export default class Agent {
         this.currentPathIndexVisual = 0; this.visualInterpolationProgress = 0; this.currentPathLengthWorld = 0;
 
         let requestingState = AgentState.WAITING_FOR_PATH;
-        if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_WORK) requestingState = AgentState.REQUESTING_PATH_FOR_WORK;
-        else if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_HOME) requestingState = AgentState.REQUESTING_PATH_FOR_HOME;
-        else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_READY) requestingState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
-        else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) requestingState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
+        if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_WORK) {
+            requestingState = AgentState.REQUESTING_PATH_FOR_WORK;
+            this._currentPathRequestGoal = 'WORK';
+        } else if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_HOME) {
+            requestingState = AgentState.REQUESTING_PATH_FOR_HOME;
+            this._currentPathRequestGoal = 'HOME';
+        } else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_READY) {
+            requestingState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
+            this._currentPathRequestGoal = 'WALK';
+        } else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
+            requestingState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
+            this._currentPathRequestGoal = 'WALK_RETURN_SIDEWALK';
+        } else if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_COMMERCIAL) {
+            requestingState = AgentState.REQUESTING_PATH_FOR_COMMERCIAL;
+            this._currentPathRequestGoal = 'COMMERCIAL';
+        }
+        
         this.currentState = requestingState;
         this.isVisible = false; // Cache l'agent pendant la requête
         this._pathRequestTimeout = this.experience.time.elapsed;
-        this._currentPathRequestGoal = (requestingState === AgentState.REQUESTING_PATH_FOR_WORK) ? 'WORK' : (requestingState === AgentState.REQUESTING_PATH_FOR_HOME ? 'HOME' : 'WALK');
+        
 
         if (agentManager?.stats) {
             const dayDurationMs = this.experience.world?.environment?.dayDurationMs || (24 * 60 * 60 * 1000);
@@ -574,11 +587,12 @@ export default class Agent {
             case AgentState.IN_TRANSIT_TO_COMMERCIAL:
             case AgentState.REQUESTING_PATH_FOR_COMMERCIAL:
             case AgentState.READY_TO_LEAVE_FOR_COMMERCIAL:
-                // En route vers un commercial : récupération vers AT_HOME
+            case AgentState.AT_COMMERCIAL: // Ajout de AT_COMMERCIAL pour la récupération
+                // En route vers un commercial ou bloqué au commercial : récupération vers AT_HOME
                 if (this.homePosition) {
                     targetState = AgentState.AT_HOME;
                     teleportPosition = this.homePosition;
-                    console.log(`Agent ${this.id}: Récupération (échec achat) -> ${targetState}`);
+                    console.log(`Agent ${this.id}: Récupération (échec/blocage achat) -> ${targetState}`);
                 }
                 break;
                 
@@ -645,18 +659,24 @@ export default class Agent {
      */
     updateVisuals(deltaTime, currentGameTime) {
         const isDriving = this.vehicleBehavior?.isDriving() ?? false;
-        const isVisuallyMoving = this.currentState === AgentState.IN_TRANSIT_TO_WORK ||
-                                 this.currentState === AgentState.IN_TRANSIT_TO_HOME ||
-                                 this.currentState === AgentState.WEEKEND_WALKING ||
-                                 isDriving; // << Utilise l'état du vehicleBehavior
+        const isVisuallyMoving = 
+            this.currentState === AgentState.IN_TRANSIT_TO_WORK ||
+            this.currentState === AgentState.IN_TRANSIT_TO_HOME ||
+            this.currentState === AgentState.WEEKEND_WALKING ||
+            this.currentState === AgentState.IN_TRANSIT_TO_COMMERCIAL || // Ajout état IN_TRANSIT_TO_COMMERCIAL
+            isDriving;
 
-        // --- Réinitialisation si pas en mouvement visuel ---
-        if (!isVisuallyMoving) {
+        // --- Réinitialisation si pas en mouvement visuel --- 
+        // Ou si l'état est AT_COMMERCIAL (logiquement caché dans le magasin)
+        if (!isVisuallyMoving || this.currentState === AgentState.AT_COMMERCIAL) {
             // Positionner à l'emplacement logique (maison ou travail)
             if (this.currentState === AgentState.AT_HOME && this.homePosition) {
                 this.position.copy(this.homePosition).setY(this.yOffset);
             } else if (this.currentState === AgentState.AT_WORK && this.workPosition) {
                 this.position.copy(this.workPosition).setY(this.yOffset);
+            } else if (this.currentState === AgentState.AT_COMMERCIAL && this.medicationBehavior?.commercialPosition) {
+                // Si AT_COMMERCIAL, positionner à la position du magasin (même s'il est invisible)
+                this.position.copy(this.medicationBehavior.commercialPosition).setY(this.yOffset);
             }
             // Réinitialiser animation
             if (this.animationHandler) this.animationHandler.resetMatrices();
@@ -664,24 +684,21 @@ export default class Agent {
             return;
         }
 
-        // --- Si l'agent CONDUIT ---
+        // --- Si l'agent CONDUIT --- 
         if (isDriving) {
             const carPosition = this.vehicleBehavior.getVehiclePosition();
             const carOrientation = this.vehicleBehavior.getVehicleOrientation();
             if (carPosition && carOrientation) {
-                this.position.copy(carPosition); // L'agent logique suit la voiture
-                // L'agent est CACHÉ, donc son orientation n'est pas cruciale visuellement
-                // this.orientation.copy(carOrientation); // Optionnel: synchroniser ori logique
-                // Calculer animation (état repos/assis)
-                if (this.animationHandler) this.animationHandler.update(0, false); // walkTime=0 -> repos
+                this.position.copy(carPosition); 
+                if (this.animationHandler) this.animationHandler.update(0, false); 
                 this.currentAnimationMatrix = this.animationHandler?.animationMatrices;
             } else {
                  console.warn(`Agent ${this.id}: isDriving=true mais voiture non trouvée dans vehicleBehavior.`);
-                 this.isVisible = false; // Cacher par sécurité
+                 this.isVisible = false; 
                  if (this.animationHandler) this.animationHandler.resetMatrices();
                  this.currentAnimationMatrix = this.animationHandler?.animationMatrices;
             }
-            return; // Sortir car position/orientation dictée par voiture (et agent caché)
+            return; 
         }
 
         // --- Si l'agent est PIÉTON et en mouvement ---
@@ -744,35 +761,6 @@ export default class Agent {
             this._resetAnimationMatrices(); // Fallback
         }
         // ----------------------------------------
-    }
-
-	/**
-     * Met à jour l'agent.
-     * @param {number} deltaTime - Temps écoulé depuis la dernière frame.
-     * @param {number} currentHour - Heure actuelle du jeu.
-     */
-    update(deltaTime, currentHour) {
-        const currentGameTime = this.experience.time.elapsed;
-        
-        // Mettre à jour l'état logique
-        this.updateState(deltaTime, currentHour, currentGameTime);
-        
-        // Mettre à jour le visuel si nécessaire
-        if (this.isVisible) {
-            this.updateVisuals(deltaTime, currentGameTime);
-        }
-        
-        // Mettre à jour le comportement du weekend
-        const environment = this.experience.world?.environment;
-        const calendarDate = environment?.getCurrentCalendarDate?.();
-        
-        // 1. Mise à jour du comportement lié au temps (travail, weekend)
-        // Déjà géré dans this.stateMachine.update() dans updateState
-        
-        // 2. Mise à jour du comportement d'achat de médicament
-        if (calendarDate) {
-            this.medicationBehavior.update(calendarDate, currentHour, currentGameTime);
-        }
     }
 
 	destroy() {
