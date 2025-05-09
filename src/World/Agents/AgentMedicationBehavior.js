@@ -44,6 +44,24 @@ export default class AgentMedicationBehavior {
         
         if (!cityManager || !citizenInfo) return;
         
+        // Afficher les informations de planification de weekend si c'est le weekend
+        if (["Samedi", "Dimanche"].includes(calendarDate?.jourSemaine) && agent.weekendBehavior?.weekendWalkStrategy) {
+            const walkStrategy = agent.weekendBehavior.weekendWalkStrategy;
+            const dayKey = walkStrategy._getDayKey ? walkStrategy._getDayKey(calendarDate) : null;
+            
+            if (dayKey && walkStrategy.agentWalkMap?.has(dayKey)) {
+                const agentWalkMap = walkStrategy.agentWalkMap.get(dayKey);
+                if (agentWalkMap && agentWalkMap.has(agent.id)) {
+                    const walkInfo = agentWalkMap.get(agent.id);
+                    if (walkInfo) {
+                        const walkHour = walkInfo.startHour || walkInfo.hour || -1;
+                        const walkDuration = walkInfo.duration || 2;
+                        console.log(`Agent ${agent.id}: Info promenade weekend : départ prévu à ${walkHour}h pour ${walkDuration.toFixed(1)}h, statut démarré: ${walkInfo.hasStarted}`);
+                    }
+                }
+            }
+        }
+        
         // On vérifie si c'est vendredi soir (priorité au retour à la maison)
         // Cette condition ne s'applique qu'aux jours de travail, pas aux achats de médicaments
         const isFridayEvening = calendarDate?.jourSemaine === "Vendredi" && currentHour >= agent.departureHomeHour;

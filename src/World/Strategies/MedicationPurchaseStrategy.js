@@ -157,19 +157,26 @@ export default class MedicationPurchaseStrategy {
                 const dayKey = walkStrategy._getDayKey ? walkStrategy._getDayKey(calendarDate) : null;
                 
                 if (dayKey && walkStrategy.agentWalkMap && walkStrategy.agentWalkMap.has(dayKey)) {
-                    const agentWalkInfo = walkStrategy.agentWalkMap.get(dayKey).get(agent.id);
-                    
-                    if (agentWalkInfo) {
-                        const walkHour = agentWalkInfo.hour;
-                        const walkDuration = agentWalkInfo.duration || 2; // Durée par défaut: 2h
+                    const agentWalkMap = walkStrategy.agentWalkMap.get(dayKey);
+                    if (agentWalkMap && agentWalkMap.has(agent.id)) {
+                        const agentWalkInfo = agentWalkMap.get(agent.id);
                         
-                        // L'agent n'est pas libre pendant sa promenade
-                        return hour < walkHour || hour >= (walkHour + walkDuration);
+                        if (agentWalkInfo) {
+                            const walkHour = agentWalkInfo.startHour || agentWalkInfo.hour;
+                            const walkDuration = agentWalkInfo.duration || 2; // Durée par défaut: 2h
+                            
+                            // Vérifier si l'heure actuelle est dans la plage horaire de la promenade
+                            // L'agent n'est pas libre pendant sa promenade
+                            if (hour >= walkHour && hour < (walkHour + walkDuration)) {
+                                return false;
+                            }
+                        }
                     }
                 }
             }
             
-            // Si on ne peut pas déterminer les horaires de promenade, on considère que l'agent est libre
+            // Si on ne peut pas déterminer les horaires de promenade ou si l'heure actuelle
+            // ne coïncide pas avec une promenade, on considère que l'agent est libre
             return true;
         }
     }
@@ -191,6 +198,8 @@ export default class MedicationPurchaseStrategy {
         // Ajouter une variation aléatoire pour éviter que tous les agents y aillent en même temps
         const randomOffset = Math.floor(Math.random() * 3); // 0, 1 ou 2 heures après l'heure idéale
         
+        console.log(`Agent ${agent.id}: Recherche d'un créneau libre. Heure actuelle: ${currentHour}h, Horaires commerce: ${openingHour}h-${closingHour}h`);
+        
         // Chercher une heure libre à partir de l'heure actuelle
         for (let i = 0; i < maxIterations; i++) {
             const testHour = (currentHour + i) % 24;
@@ -201,15 +210,19 @@ export default class MedicationPurchaseStrategy {
             // Vérifier si l'agent est libre à cette heure
             const isAgentFreeAtTestHour = this._isAgentFreeAtHour(agent, calendarDate, testHour);
             
+            console.log(`Agent ${agent.id}: Test heure ${testHour}h - Commerce ouvert: ${isOpenAtTestHour}, Agent libre: ${isAgentFreeAtTestHour}`);
+            
             if (isOpenAtTestHour && isAgentFreeAtTestHour) {
                 // Ajouter l'offset aléatoire, mais rester dans les horaires d'ouverture
                 const scheduledHour = Math.min(testHour + randomOffset, closingHour - 1);
+                console.log(`Agent ${agent.id}: Créneau libre trouvé à ${testHour}h, planifié à ${scheduledHour}h (avec offset ${randomOffset})`);
                 return scheduledHour;
             }
         }
         
         // Si aucune heure n'est trouvée aujourd'hui, prendre la première heure disponible demain
         // Pour simplifier, on suppose que l'agent sera libre à l'ouverture des magasins demain
+        console.log(`Agent ${agent.id}: Aucun créneau libre aujourd'hui, planification pour demain à ${openingHour}h`);
         return openingHour;
     }
 
