@@ -776,6 +776,18 @@ export default class Experience extends EventTarget {
             ? "Oui (+1/jour)" 
             : "Non (bloquée)";
 
+        // Liste des besoins actuels
+        let besoinsHTML = 'Aucun';
+        const besoins = [];
+        
+        if (citizenInfo?.needsMedication) {
+            besoins.push('💊 Médicament');
+        }
+        
+        if (besoins.length > 0) {
+            besoinsHTML = besoins.join(', ');
+        }
+
         const content = `
             <div class="tooltip-header">
                 <span class="agent-id">${agent.id}</span>
@@ -815,8 +827,8 @@ export default class Experience extends EventTarget {
                     <span class="tooltip-value">${citizenInfo?.chemicalDependency?.toFixed(0) || '0'}/100</span>
                 </div>
                 <div class="tooltip-row">
-                    <span class="tooltip-label">${citizenInfo?.needsMedication ? '🏥' : '✓'} Médicament</span>
-                    <span class="tooltip-value">${citizenInfo?.needsMedication ? 'Oui' : 'Non'}</span>
+                    <span class="tooltip-label">📋 Besoins</span>
+                    <span class="tooltip-value">${besoinsHTML}</span>
                 </div>
                 <div class="tooltip-row">
                     <span class="tooltip-label">🦠 Maladies</span>
