@@ -147,7 +147,7 @@ export default class CityManager {
             agentHeadTiltAmplitude: 0.12,
             agentHeadBobAmplitude: 0.1,
             agentAnimationSpeedFactor: 6,
-            maxAgents: 500,
+            maxAgents: 1,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
@@ -612,11 +612,14 @@ export default class CityManager {
     }
 
     update(deltaTime) {
+
         // L'appel à contentGenerator.update est maintenant dans World.js
         // L'appel à lampPostManager.update est aussi dans World.js
         
         // Ajouter mise à jour du gestionnaire de citoyens pour la santé/maladies
-        this.citizenManager.update(deltaTime);
+        if (this.citizenManager) {
+            this.citizenManager.update(deltaTime);
+        }
     }
     toggleCityMap() {
         if (this.cityMapVisualizer) {
