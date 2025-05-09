@@ -164,13 +164,20 @@ export default class AgentStateMachine {
 
             case AgentState.AT_WORK:
                 agent.isVisible = false;
+                // Ajout d'une vérification spécifique pour le vendredi
+                const isCurrentlyFriday = calendarDate?.jourSemaine === "Vendredi";
+                const isFridayDepartureTime = isCurrentlyFriday && currentHour >= agent.departureHomeHour;
+                
+                // Pour le vendredi soir, on ignore la vérification lastDepartureDayHome pour assurer le retour à la maison
                 const homeCheckCondition = (
                     agent.homePosition &&
-                    currentDayNumber > agent.lastDepartureDayHome &&
-                    timeWithinCurrentDayCycle >= agent.prepareHomeDepartureTimeGame &&
+                    (isFridayDepartureTime || (currentDayNumber > agent.lastDepartureDayHome &&
+                    timeWithinCurrentDayCycle >= agent.prepareHomeDepartureTimeGame)) &&
                     agent.requestedPathForDepartureTime !== currentGameTime
                 );
+                
                 if (homeCheckCondition) {
+                    console.log(`Agent ${agent.id}: Préparation départ maison. [${calendarDate?.jourSemaine}] [isFridayDepartureTime: ${isFridayDepartureTime}] [Heure: ${currentHour}]`);
                     agent.requestedPathForDepartureTime = currentGameTime;
                     const shouldUseCar = agent.vehicleBehavior?.shouldUseVehicle() ?? false;
                     if (shouldUseCar) {
@@ -241,7 +248,12 @@ export default class AgentStateMachine {
             case AgentState.READY_TO_LEAVE_FOR_HOME:
                  // Permettre le départ immédiat si l'agent vient du bâtiment commercial
                  const isReturningFromCommercial = agent._currentPathRequestGoal === 'HOME' && agent.currentState === AgentState.READY_TO_LEAVE_FOR_HOME;
-                 if (isReturningFromCommercial || timeWithinCurrentDayCycle >= agent.exactHomeDepartureTimeGame) {
+                 
+                 // Si c'est vendredi (dernier jour de travail de la semaine), assurons-nous que l'agent rentre à la maison à l'heure prévue
+                 const isFridayForHome = calendarDate?.jourSemaine === "Vendredi";
+                 const isFridayEveningForHome = isFridayForHome && currentHour >= agent.departureHomeHour;
+                 
+                 if (isReturningFromCommercial || isFridayEveningForHome || timeWithinCurrentDayCycle >= agent.exactHomeDepartureTimeGame) {
                     let departureSuccessful = false;
                     const isDriving = agent.vehicleBehavior?.isDriving() ?? false;
                     if (isDriving) {
@@ -426,6 +438,14 @@ export default class AgentStateMachine {
             agent._stateStartTime = currentGameTime;
         } else if (justEnteredStableState) {
             agent._stateStartTime = null;
+        }
+
+        // Mécanisme de secours spécifique pour le vendredi soir
+        // Si l'agent est encore au travail après 20h le vendredi, forcer le retour à la maison
+        const isCurrentlyFridayLate = calendarDate?.jourSemaine === "Vendredi" && currentHour >= agent.departureHomeHour + 1;
+        if (isCurrentlyFridayLate && agent.currentState === AgentState.AT_WORK) {
+            console.warn(`Agent ${agent.id}: Toujours au travail le vendredi à ${currentHour}h. Forçage retour maison.`);
+            agent.forceReturnHome(currentGameTime);
         }
     }
 }
