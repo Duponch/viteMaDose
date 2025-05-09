@@ -74,7 +74,7 @@ export default class AgentMedicationBehavior {
             (this.lastMedicationTaken === -1 || this._canTakeMedicationAgain(currentGameTime))) {
             
             const medicationTaken = this._takeMedication(citizenInfo, currentGameTime);
-            console.log(`Agent ${agent.id}: Prise de médicament à la maison (réussie: ${medicationTaken}).`);
+            //console.log(`Agent ${agent.id}: Prise de médicament à la maison (réussie: ${medicationTaken}).`);
             
             // Si l'agent a pris un médicament, sortir de la méthode pour ne pas faire d'autres actions
             if (medicationTaken) return;
@@ -134,7 +134,7 @@ export default class AgentMedicationBehavior {
                             const isWeekend = ["Samedi", "Dimanche"].includes(calendarDate?.jourSemaine);
                             const dayTypeMsg = isWeekend ? "weekend" : "semaine";
                             
-                            console.log(`Agent ${agent.id}: Besoin de médicament détecté (${dayTypeMsg}). Direction le magasin ${this.commercialBuildingId}.`);
+                            //console.log(`Agent ${agent.id}: Besoin de médicament détecté (${dayTypeMsg}). Direction le magasin ${this.commercialBuildingId}.`);
                             
                             // Demander un chemin vers le bâtiment commercial
                             agent._currentPathRequestGoal = 'COMMERCIAL';
@@ -163,7 +163,7 @@ export default class AgentMedicationBehavior {
             );
             
             if (purchaseSuccess) {
-                console.log(`Agent ${agent.id}: Achat effectué au magasin ${this.commercialBuildingId}. Retour à la maison.`);
+                //console.log(`Agent ${agent.id}: Achat effectué au magasin ${this.commercialBuildingId}. Retour à la maison.`);
             } else {
                 console.warn(`Agent ${agent.id}: Échec de l'achat au magasin ${this.commercialBuildingId}. Retour à la maison.`);
             }
@@ -171,7 +171,7 @@ export default class AgentMedicationBehavior {
             // Si c'est vendredi soir, on utilise le chemin normal pour rentrer à la maison
             // mais on le note dans les logs pour information
             if (isFridayEvening && agent.workBuildingId) {
-                console.log(`Agent ${agent.id}: Vendredi soir, retour normal à la maison depuis le commercial.`);
+                //console.log(`Agent ${agent.id}: Vendredi soir, retour normal à la maison depuis le commercial.`);
             }
             
             // Demander un chemin pour rentrer à la maison
@@ -211,7 +211,7 @@ export default class AgentMedicationBehavior {
         if (!canTake) {
             // Calculer et afficher le temps restant en heures de jeu
             const hoursRemaining = (dayDurationMs - timeElapsed) / (dayDurationMs / 24);
-            console.log(`Agent ${this.agent.id}: Doit attendre encore ${hoursRemaining.toFixed(1)}h avant de pouvoir reprendre un médicament.`);
+            //console.log(`Agent ${this.agent.id}: Doit attendre encore ${hoursRemaining.toFixed(1)}h avant de pouvoir reprendre un médicament.`);
         }
         
         return canTake;
@@ -240,7 +240,7 @@ export default class AgentMedicationBehavior {
 			// Mettre à jour le timestamp de dernière prise
 			this.lastMedicationTaken = currentGameTime;
 
-            console.log(`Agent ${this.agent.id}: Médicament pris. Inventaire restant: ${this.agent.inventory.medications} médicament(s).`);
+            //console.log(`Agent ${this.agent.id}: Médicament pris. Inventaire restant: ${this.agent.inventory.medications} médicament(s).`);
             
             // Mettre à jour l'infobulle si l'agent est sélectionné
             if (this.experience.selectedAgent === this.agent) {

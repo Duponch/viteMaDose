@@ -179,6 +179,12 @@ export default class AgentManager {
 					}
 				}
 
+				// Ignorer les résultats pour les agents de préchauffage
+				if (agentId.toString().startsWith('preheat_')) {
+					// C'est un agent de préchauffage, le message est traité par un listener dédié
+					return;
+				}
+
 				const agent = this.getAgentById(agentId);
 
 				if (agent) {
@@ -207,7 +213,10 @@ export default class AgentManager {
 					console.log(`[AgentManager DEBUG] Appel de agent.setPath TERMINÉ pour Agent ${agentId}.`); // LOG 7
 
 				} else {
-					console.warn(`[AgentManager WARN] Agent ${agentId} non trouvé pour le résultat du chemin.`); // LOG WARN
+					// Ne pas afficher d'avertissement pour les agents de préchauffage
+					if (!agentId.toString().startsWith('preheat_')) {
+						console.warn(`[AgentManager WARN] Agent ${agentId} non trouvé pour le résultat du chemin.`); // LOG WARN
+					}
 				}
 			} else {
 				console.warn("[AgentManager WARN] Message 'pathResult' incomplet reçu:", event.data); // LOG WARN
@@ -1010,6 +1019,99 @@ export default class AgentManager {
     }
 
     /**
+     * Analyse détaillée des performances du cache de chemins après préchauffage
+     * Cette méthode est appelée après le préchauffage et permet de comprendre
+     * si le cache fonctionne correctement, avec une courte analyse des résultats.
+     */
+    async analyzePathCachePerformance() {
+        try {
+            // 1. Obtenir d'abord les statistiques actuelles
+            const stats = await this.requestCacheStats();
+            
+            // 2. Variables pour l'analyse
+            const previousHitRate = stats.hitRate;
+            const previousSize = stats.size;
+            
+            // 3. Effectuer quelques requêtes de test pour voir si le cache est utilisé
+            console.log("AgentManager: Test de performance du cache avec 5 agents...");
+            
+            const testAgents = this.agents.slice(0, 5);
+            let testHits = 0;
+            let testMisses = 0;
+            
+            // 4. Pour chaque agent de test, faire une requête aller et une requête retour
+            for (const agent of testAgents) {
+                if (!agent.homeGridNode || !agent.workGridNode) continue;
+                
+                // Créer un ID temporaire pour le test
+                const testId = `test_${agent.id}_${Date.now()}`;
+                
+                // Tester le chemin aller
+                await this._preheatSinglePath(
+                    testId,
+                    agent.homeGridNode,
+                    agent.workGridNode,
+                    false // Toujours tester sans véhicule pour simplifier
+                ).then(result => {
+                    if (result && result.fromCache) testHits++;
+                    else testMisses++;
+                }).catch(err => {
+                    testMisses++;
+                });
+                
+                // Tester le chemin retour
+                await this._preheatSinglePath(
+                    testId,
+                    agent.workGridNode,
+                    agent.homeGridNode,
+                    false
+                ).then(result => {
+                    if (result && result.fromCache) testHits++;
+                    else testMisses++;
+                }).catch(err => {
+                    testMisses++;
+                });
+            }
+            
+            // 5. Obtenir les statistiques après les tests
+            const newStats = await this.requestCacheStats();
+            const newHitRate = newStats.hitRate;
+            
+            // 6. Analyse des résultats
+            console.log("=== ANALYSE CACHE DE PATHFINDING ===");
+            console.log(`Taille actuelle du cache: ${newStats.size} chemins stockés`);
+            console.log(`Taux de succès global: ${newHitRate}`);
+            console.log(`Hits: ${newStats.hits}, NearHits: ${newStats.nearHits}, Misses: ${newStats.misses}`);
+            console.log(`Test de performance: ${testHits} hits sur ${testHits + testMisses} requêtes (${((testHits/(testHits + testMisses))*100).toFixed(2)}%)`);
+            
+            // 7. Interprétation
+            if (testHits > 0) {
+                console.log("✅ Le cache fonctionne - des chemins sont retrouvés avec succès!");
+                console.log(`   Recommandation: Continuez à surveiller le taux de succès quotidien.`);
+            } else {
+                console.log("⚠️ Le cache ne semble pas fonctionner efficacement sur les tests.");
+                console.log("   Causes possibles:");
+                console.log("   - Les chemins préchauffés ne correspondent pas aux chemins demandés");
+                console.log("   - Problème de normalisation des coordonnées pour les clés du cache");
+                console.log("   - Le seuil de proximité pourrait être trop faible");
+                console.log("   Recommandation: Augmentez le seuil de proximité et diversifiez les variantes préchauffées");
+            }
+            
+            console.log("=================================");
+            
+            return {
+                cacheSize: newStats.size,
+                hitRate: newHitRate,
+                testHitRate: testHits / (testHits + testMisses)
+            };
+            
+        } catch (error) {
+            console.error("Erreur lors de l'analyse du cache:", error);
+            return null;
+        }
+    }
+
+    /**
      * Préchauffe le cache avec les chemins entre domicile et travail des agents
      * @param {number} maxAgents - Nombre maximum d'agents à traiter pour le préchauffage
      * @returns {Promise} Promise qui sera résolue lorsque le préchauffage sera terminé
@@ -1021,9 +1123,15 @@ export default class AgentManager {
                 return;
             }
             
-            // Sélectionner un échantillon d'agents
-            const sampleAgents = this.agents.slice(0, Math.min(maxAgents, this.agents.length));
-            console.log(`AgentManager: Préchauffage du cache pour ${sampleAgents.length} agents...`);
+            // Sélectionner un échantillon d'agents qui ont des données valides
+            const validAgents = this.agents.filter(agent => 
+                agent.homeGridNode && agent.workGridNode &&
+                agent.vehicleBehavior // S'assurer que vehicleBehavior est défini
+            );
+            
+            // Limiter au nombre demandé
+            const sampleAgents = validAgents.slice(0, Math.min(maxAgents, validAgents.length));
+            console.log(`AgentManager: Préchauffage du cache pour ${sampleAgents.length} agents valides...`);
             
             let processedCount = 0;
             let errorCount = 0;
@@ -1041,38 +1149,85 @@ export default class AgentManager {
                 
                 const agent = sampleAgents[index];
                 
-                // Vérifier que l'agent a des positions valides
-                if (agent.homeGridNode && agent.workGridNode) {
-                    // Calculer le chemin aller (maison → travail)
-                    this._preheatSinglePath(
-                        agent.id, 
-                        agent.homeGridNode, 
-                        agent.workGridNode, 
-                        agent.vehicleBehavior?.shouldUseVehicle() || false
-                    ).then(() => {
-                        processedCount++;
-                        
-                        // Calculer le chemin retour (travail → maison)
-                        return this._preheatSinglePath(
-                            agent.id, 
-                            agent.workGridNode, 
-                            agent.homeGridNode, 
-                            agent.vehicleBehavior?.shouldUseVehicle() || false
-                        );
-                    }).then(() => {
-                        processedCount++;
-                        // Passer à l'agent suivant avec un délai pour ne pas saturer le worker
-                        setTimeout(() => processNextAgent(index + 1), 10);
-                    }).catch(err => {
-                        console.error(`Erreur lors du préchauffage pour l'agent ${agent.id}:`, err);
-                        errorCount++;
-                        // Passer à l'agent suivant malgré l'erreur
-                        setTimeout(() => processNextAgent(index + 1), 10);
-                    });
-                } else {
-                    // Si l'agent n'a pas de positions valides, passer au suivant
-                    setTimeout(() => processNextAgent(index + 1), 5);
+                // Récupérer les états de véhicule possibles pour cet agent
+                // Préchauffer pour les deux cas - avec et sans véhicule
+                const vehicleStates = [false, true]; // Toujours tester les deux pour maximiser la couverture
+                
+                // Créer des variantes de points de départ et d'arrivée pour augmenter la couverture du cache
+                const createVariants = (node, count = 3) => {
+                    const variants = [{ x: node.x, y: node.y }]; // Point original
+                    
+                    // Créer des variantes avec de petits décalages
+                    for (let i = 1; i < count; i++) {
+                        variants.push({
+                            x: Math.floor(node.x) + (i * 0.25),
+                            y: Math.floor(node.y) + (i * 0.25)
+                        });
+                    }
+                    return variants;
+                };
+                
+                // Générer des variantes pour les nœuds de départ et d'arrivée
+                const homeVariants = createVariants(agent.homeGridNode);
+                const workVariants = createVariants(agent.workGridNode);
+                
+                // Créer un tableau de promesses pour tous les chemins à préchauffer
+                const pathPromises = [];
+                
+                // Pour chaque état de véhicule possible et chaque variante
+                for (const useVehicle of vehicleStates) {
+                    // Pour chaque variante du point de départ
+                    for (const homeVariant of homeVariants) {
+                        // Pour chaque variante du point d'arrivée (limité pour éviter trop de calculs)
+                        for (const workVariant of workVariants.slice(0, 2)) {
+                            // Chemin aller (maison → travail)
+                            pathPromises.push(
+                                this._preheatSinglePath(
+                                    agent.id, 
+                                    homeVariant, 
+                                    workVariant, 
+                                    useVehicle
+                                ).catch(err => {
+                                    console.warn(`Erreur préchauffage variante ${agent.id} (home->work, vehicle=${useVehicle}):`, err);
+                                    errorCount++;
+                                    return null;
+                                })
+                            );
+                            
+                            // Chemin retour (travail → maison) - uniquement pour la première variante
+                            if (homeVariant === homeVariants[0] && workVariant === workVariants[0]) {
+                                pathPromises.push(
+                                    this._preheatSinglePath(
+                                        agent.id, 
+                                        workVariant, 
+                                        homeVariant, 
+                                        useVehicle
+                                    ).catch(err => {
+                                        console.warn(`Erreur préchauffage ${agent.id} (work->home, vehicle=${useVehicle}):`, err);
+                                        errorCount++;
+                                        return null;
+                                    })
+                                );
+                            }
+                        }
+                    }
                 }
+                
+                // Attendre que toutes les promesses soient résolues
+                Promise.all(pathPromises)
+                    .then(results => {
+                        // Compter les chemins réussis
+                        const successCount = results.filter(r => r !== null).length;
+                        processedCount += successCount;
+                        
+                        // Passer à l'agent suivant avec un délai pour éviter de surcharger le worker
+                        setTimeout(() => processNextAgent(index + 1), 20);
+                    })
+                    .catch(error => {
+                        console.error(`Erreur globale lors du préchauffage pour l'agent ${agent.id}:`, error);
+                        errorCount++;
+                        setTimeout(() => processNextAgent(index + 1), 20);
+                    });
             };
             
             // Démarrer le traitement

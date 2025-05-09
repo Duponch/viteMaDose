@@ -13,7 +13,7 @@ export default class PathCache {
      */
     constructor(options = {}) {
         // Configuration
-        this.maxEntries = options.maxEntries || 1000;
+        this.maxEntries = options.maxEntries || 3000;
         this.expirationTime = options.expirationTime || 5 * 60 * 1000; // 5 minutes par défaut
         this.nearbyThreshold = options.nearbyThreshold || 3; // Seuil de proximité en unités de grille
         this.enableStats = options.enableStats !== undefined ? options.enableStats : true;

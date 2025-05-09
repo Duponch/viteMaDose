@@ -1,0 +1,77 @@
+Il s'avère qu'augmenter le nombre d'agent fait baisser les performances. Je veux que tu fasses une analyse de l'existant pour trouver des pistes d'amélioration des performances (surtout côté CPU).
+
+Je vais analyser le code pour trouver des pistes d'amélioration de performances CPU, particulièrement lorsque le nombre d'agents augmente.
+Examinons d'abord le contenu du répertoire src/ où se trouve probablement le code principal :
+Le fichier Experience.js semble être un fichier majeur de l'application. Regardons également les répertoires qui pourraient contenir le code des agents :
+Parfait, regardons le contenu du répertoire Agents :
+Examinons d'abord le fichier AgentManager.js qui semble être responsable de la gestion des agents :
+Examinons maintenant le fichier Agent.js pour comprendre comment les agents sont implémentés :
+Pour compléter notre analyse, examinons le worker de pathfinding :
+Après avoir examiné le code, voici mon analyse des points d'amélioration de performances (côté CPU) lorsque le nombre d'agents augmente :
+Basé sur l'analyse du code, voici mes pistes d'amélioration des performances CPU lorsque le nombre d'agents augmente :
+Voici mon analyse des problèmes de performance CPU avec des pistes d'amélioration :
+Problèmes identifiés et solutions proposées
+1. Optimisation du pathfinding
+Problème : Le calcul de chemins consomme beaucoup de ressources CPU, surtout quand les agents demandent des chemins simultanément.
+Solutions :
+Mise en cache des chemins fréquents :
+Implémenter un cache de chemins pour les trajets couramment effectués (maison-travail, maison-commerces)
+Réutiliser les chemins similaires entre agents ayant des destinations proches
+2. Mise en cache des chemins fréquents :
+Implémenter un cache de chemins pour les trajets couramment effectués (maison-travail, maison-commerces)
+Réutiliser les chemins similaires entre agents ayant des destinations proches
+Pathfinding avec niveau de détail variable :
+Implémenter un système de chemins à plusieurs niveaux de détail
+Utiliser une grille simplifiée pour les longues distances
+Appliquer des techniques de regroupement de nœuds (node clustering)
+Limiter les calculs simultanés :
+Mettre en place une file d'attente de requêtes de pathfinding avec priorité
+Échelonner les départs des agents pour éviter les pics de calcul
+2. Optimisation des calculs d'animation
+Problème : La mise à jour des animations pour chaque agent est coûteuse, surtout dans la méthode updateVisuals().
+Solutions :
+Réduire la fréquence des calculs d'animation :
+Utiliser une fréquence de mise à jour variable selon la distance à la caméra
+Implémenter un système de LOD (Level of Detail) pour les animations
+Simplifier les animations des agents éloignés :
+Réduire le nombre de matrices d'animation pour les agents distants
+Désactiver les animations détaillées (balancement des bras, etc.) pour les agents non visibles ou éloignés
+Utiliser des matrices précalculées :
+Précalculer et mettre en cache les matrices d'animation les plus courantes
+Optimiser les opérations de matrices en évitant les créations d'objets temporaires
+3. Optimisation de la gestion des états
+Problème : La machine à états des agents consomme beaucoup de ressources pour les vérifications fréquentes.
+Solutions :
+Réduire la fréquence des mises à jour d'état :
+Implémenter un système de mise à jour échelonnée (agents différents à des frames différentes)
+Utiliser la méthode _calculateAndSetNextCheckTime() de façon plus agressive
+Simplifier les transitions d'état :
+Réduire la complexité des conditions de transition
+Regrouper certains états pour simplifier la logique
+Système d'événements plutôt que polling :
+Passer d'un système de vérification constante à un système basé sur les événements
+Utiliser des timers pour déclencher les changements d'état au lieu de vérifier à chaque frame
+4. Optimisation du rendu
+Problème : Le rendu de nombreux agents est coûteux, même avec les InstancedMesh.
+Solutions :
+Améliorer le système LOD :
+Implémenter un système plus agressif de LOD basé sur la distance
+Simplifier drastiquement la géométrie des agents lointains
+Optimiser les calculs de matrices :
+Réduire la fréquence des mises à jour des matrices pour les agents éloignés
+Éviter les appels à mesh.computeBoundingSphere() pour chaque frame dans la méthode update()
+Pool d'objets pour les matrices temporaires :
+Éviter la création excessive d'objets temporaires comme THREE.Matrix4, Vector3, etc.
+Implémenter un pool d'objets réutilisables pour les opérations matricielles
+5. Optimisation de l'interaction avec le Worker
+Problème : La communication avec le worker de pathfinding peut créer des goulots d'étranglement.
+Solutions :
+Réduire le volume de données échangées :
+Simplifier les structures de données envoyées au worker
+Implémenter une compression pour les chemins longs
+Prioritiser les requêtes de pathfinding :
+Établir un système de priorité pour les requêtes (ex: agents visibles prioritaires)
+Limiter le nombre de requêtes simultanées
+Diviser les tâches entre plusieurs workers :
+Utiliser plusieurs workers pour paralléliser les calculs (un pour les piétons, un pour les véhicules)
+Répartir la charge entre plusieurs workers avec un équilibrage dynamique

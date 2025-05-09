@@ -121,7 +121,7 @@ export default class MedicationPurchaseStrategy {
         
         if (scheduledHour !== null) {
             this.scheduledPurchaseHours.set(agentId, scheduledHour);
-            console.log(`Agent ${agentId}: Besoin de médicament mais occupation actuelle. Rendez-vous planifié à ${scheduledHour}h.`);
+            //console.log(`Agent ${agentId}: Besoin de médicament mais occupation actuelle. Rendez-vous planifié à ${scheduledHour}h.`);
         } else {
             console.warn(`Agent ${agentId}: Impossible de trouver un créneau libre pour acheter des médicaments.`);
         }

@@ -21,9 +21,9 @@ let roadGraphHeight = 0.1;       // Hauteur par défaut pour routes
 const pathCache = {
     cache: new Map(),
     cacheKeys: [],
-    maxSize: 2000, // Taille maximale du cache
-    expirationTime: 5 * 60 * 1000, // 5 minutes
-    nearbyThreshold: 3, // Seuil pour les correspondances approximatives
+    maxSize: 10000, // Augmenté de 5000 à 10000
+    expirationTime: 60 * 60 * 1000, // Augmenté à 60 minutes
+    nearbyThreshold: 10, // Augmenté de 5 à 10 pour beaucoup plus de tolérance
     stats: {
         hits: 0,
         misses: 0,
@@ -31,14 +31,20 @@ const pathCache = {
         lastCleaned: Date.now()
     },
     
-    // Générer une clé de cache
+    // Générer une clé de cache avec quantification des coordonnées
     generateKey: function(startNode, endNode, isVehicle) {
-        return `${startNode.x},${startNode.y}-${endNode.x},${endNode.y}-${isVehicle ? 'v' : 'p'}`;
+        // Quantification plus agressive des coordonnées (arrondir à l'unité près)
+        // Cela augmente les chances de hit en regroupant des positions voisines
+        const sx = Math.floor(startNode.x);
+        const sy = Math.floor(startNode.y);
+        const ex = Math.floor(endNode.x);
+        const ey = Math.floor(endNode.y);
+        return `${sx},${sy}-${ex},${ey}-${isVehicle ? 'v' : 'p'}`;
     },
     
-    // Chercher un chemin dans le cache
+    // Chercher un chemin dans le cache avec stratégie plus agressive
     findPath: function(startNode, endNode, isVehicle) {
-        // 1. Chercher dans le cache exact
+        // 1. Chercher dans le cache exact (chemin direct)
         const key = this.generateKey(startNode, endNode, isVehicle);
         const cachedEntry = this.cache.get(key);
         
@@ -47,10 +53,32 @@ const pathCache = {
             cachedEntry.uses++;
             cachedEntry.lastAccess = Date.now();
             this.refreshKey(key);
-            return cachedEntry;
+            return this.adjustPathToMatchRequest(cachedEntry, startNode, endNode, isVehicle);
         }
         
-        // 2. Chercher un chemin similaire
+        // 2. Chercher le chemin inverse (les agents font souvent l'aller-retour)
+        const reverseKey = this.generateKey(endNode, startNode, isVehicle);
+        const reverseCachedEntry = this.cache.get(reverseKey);
+        
+        if (reverseCachedEntry && !this.isExpired(reverseCachedEntry)) {
+            this.stats.nearHits++;
+            reverseCachedEntry.uses++;
+            reverseCachedEntry.lastAccess = Date.now();
+            
+            // Inverser le chemin et l'adapter à la demande actuelle
+            const reversedPath = [...reverseCachedEntry.path].reverse();
+            return {
+                path: reversedPath,
+                pathLengthWorld: reverseCachedEntry.pathLengthWorld,
+                startNode: { x: startNode.x, y: startNode.y },
+                endNode: { x: endNode.x, y: endNode.y },
+                isVehicle: isVehicle,
+                timestamp: Date.now(),
+                uses: 1
+            };
+        }
+        
+        // 3. Chercher un chemin similaire avec une tolérance élevée
         const nearbyEntry = this.findNearbyPath(startNode, endNode, isVehicle);
         if (nearbyEntry) {
             this.stats.nearHits++;
@@ -61,20 +89,60 @@ const pathCache = {
         return null;
     },
     
-    // Chercher un chemin proche
+    // Ajuster un chemin trouvé pour qu'il corresponde exactement à la demande
+    adjustPathToMatchRequest: function(entry, startNode, endNode, isVehicle) {
+        if (!entry || !entry.path || entry.path.length < 2) return entry;
+        
+        // Créer une copie pour ne pas modifier l'original
+        const adjustedPath = [...entry.path];
+        
+        // Ajuster le premier point pour correspondre exactement au point de départ demandé
+        const startWorld = gridToWorld(startNode.x, startNode.y, 
+            isVehicle ? roadGraphHeight : pedestrianGraphHeight);
+        adjustedPath[0] = startWorld;
+        
+        // Ajuster aussi le dernier point si possible
+        if (adjustedPath.length > 1) {
+            const endWorld = gridToWorld(endNode.x, endNode.y,
+                isVehicle ? roadGraphHeight : pedestrianGraphHeight);
+            adjustedPath[adjustedPath.length - 1] = endWorld;
+        }
+        
+        // Retourner l'entrée avec le chemin ajusté
+        return {
+            ...entry,
+            path: adjustedPath,
+            startNode: { x: startNode.x, y: startNode.y },
+            endNode: { x: endNode.x, y: endNode.y }
+        };
+    },
+    
+    // Chercher un chemin proche avec tolérance améliorée
     findNearbyPath: function(startNode, endNode, isVehicle) {
         let bestMatch = null;
         let bestScore = Number.MAX_VALUE;
         
+        // Essayer de trouver des chemins proches
         for (const [key, entry] of this.cache.entries()) {
             if (entry.isVehicle !== isVehicle || this.isExpired(entry)) {
                 continue;
             }
             
+            // Calculer les distances Manhattan entre les points
             const startDist = Math.abs(startNode.x - entry.startNode.x) + Math.abs(startNode.y - entry.startNode.y);
             const endDist = Math.abs(endNode.x - entry.endNode.x) + Math.abs(endNode.y - entry.endNode.y);
-            const score = startDist + endDist;
             
+            // Considérer aussi la distance entre start-end (longueur du chemin)
+            // plus les chemins sont similaires en longueur, plus ils sont compatibles
+            const startToEndDist = Math.abs(
+                Math.abs(startNode.x - endNode.x) + Math.abs(startNode.y - endNode.y) -
+                Math.abs(entry.startNode.x - entry.endNode.x) - Math.abs(entry.startNode.y - entry.endNode.y)
+            );
+            
+            // Score pondéré: la précision du point de départ est la plus importante
+            const score = startDist * 2 + endDist + startToEndDist * 0.5;
+            
+            // Accepter seulement si les deux points sont dans le seuil de tolérance
             if (score < bestScore && startDist <= this.nearbyThreshold && endDist <= this.nearbyThreshold) {
                 bestMatch = entry;
                 bestScore = score;
@@ -84,9 +152,12 @@ const pathCache = {
         if (bestMatch) {
             bestMatch.uses++;
             bestMatch.lastAccess = Date.now();
+            
+            // Toujours adapter le chemin trouvé pour correspondre à la demande actuelle
+            return this.adjustPathToMatchRequest(bestMatch, startNode, endNode, isVehicle);
         }
         
-        return bestMatch;
+        return null;
     },
     
     // Stocker un chemin
@@ -120,8 +191,8 @@ const pathCache = {
             pathLengthWorld: pathLengthWorld,
             timestamp: Date.now(),
             lastAccess: Date.now(),
-            startNode: { x: startNode.x, y: startNode.y },
-            endNode: { x: endNode.x, y: endNode.y },
+            startNode: { x: Math.round(startNode.x), y: Math.round(startNode.y) },
+            endNode: { x: Math.round(endNode.x), y: Math.round(endNode.y) },
             isVehicle: isVehicle,
             uses: 1
         };
@@ -280,9 +351,23 @@ self.onmessage = function(event) {
             const activeGraphHeight = isVehicle ? roadGraphHeight : pedestrianGraphHeight;
             // --- FIN Sélection --- 
             
-            // --- AJOUT: Vérifier le cache avant de calculer ---
+            // --- AMÉLIORÉ: Vérification du cache plus précise ---
             const startTime = performance.now();
-            const cachedResult = pathCache.findPath(startNode, endNode, isVehicle);
+            
+            // Normaliser les coordonnées des nœuds pour les clés de cache (assurer la consistance)
+            const normalizedStartNode = {
+                x: Math.round(startNode.x),
+                y: Math.round(startNode.y)
+            };
+            
+            const normalizedEndNode = {
+                x: Math.round(endNode.x),
+                y: Math.round(endNode.y)
+            };
+            
+            // Vérifier le cache avec les nœuds normalisés
+            const cachedResult = pathCache.findPath(normalizedStartNode, normalizedEndNode, isVehicle);
+            // --- FIN AMÉLIORATION ---
             
             if (cachedResult) {
                 const endTime = performance.now();
@@ -302,9 +387,9 @@ self.onmessage = function(event) {
             // --- FIN AJOUT ---
 
             // ---- AJOUT LOG: Vérifier marchabilité dans le worker ----
-            const startWalkable = isWalkable(startNode.x, startNode.y, activeGridMap);
-            const endWalkable = isWalkable(endNode.x, endNode.y, activeGridMap);
-            console.log(`[Worker Check] Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}). Start (${startNode.x},${startNode.y}) walkable: ${startWalkable}. End (${endNode.x},${endNode.y}) walkable: ${endWalkable}.`);
+            const startWalkable = isWalkable(normalizedStartNode.x, normalizedStartNode.y, activeGridMap);
+            const endWalkable = isWalkable(normalizedEndNode.x, normalizedEndNode.y, activeGridMap);
+            console.log(`[Worker Check] Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}). Start (${normalizedStartNode.x},${normalizedStartNode.y}) walkable: ${startWalkable}. End (${normalizedEndNode.x},${normalizedEndNode.y}) walkable: ${endWalkable}.`);
             if (!startWalkable || !endWalkable) {
                  console.error(`[Worker Error] Start or End node not walkable on the selected grid map for Agent ${agentId}.`);
                  // Optionnel : renvoyer échec immédiatement si non marchable
@@ -315,16 +400,16 @@ self.onmessage = function(event) {
 
             // Vérification des bornes (inchangée, utilise gridWidth/gridHeight globaux)
             const isValidCoord = (node) => node && node.x >= 0 && node.x < gridWidth && node.y >= 0 && node.y < gridHeight;
-            if (!isValidCoord(startNode) || !isValidCoord(endNode)) {
-                 console.error(`[Worker] Coordonnées invalides pour Agent ${agentId} - Start: (${startNode?.x}, ${startNode?.y}), End: (${endNode?.x}, ${endNode?.y}). Limites grille: ${gridWidth}x${gridHeight}`);
+            if (!isValidCoord(normalizedStartNode) || !isValidCoord(normalizedEndNode)) {
+                 console.error(`[Worker] Coordonnées invalides pour Agent ${agentId} - Start: (${normalizedStartNode.x}, ${normalizedStartNode.y}), End: (${normalizedEndNode.x}, ${normalizedEndNode.y}). Limites grille: ${gridWidth}x${gridHeight}`);
                  self.postMessage({ type: 'pathResult', data: { agentId: agentId, path: null, pathLengthWorld: 0 } });
                  return;
             }
 
             // Gérer le cas départ = arrivée
-            if (startNode.x === endNode.x && startNode.y === endNode.y) {
+            if (normalizedStartNode.x === normalizedEndNode.x && normalizedStartNode.y === normalizedEndNode.y) {
                  // --- Utiliser la hauteur correcte --- 
-                 const worldPathData = [gridToWorld(startNode.x, startNode.y, activeGraphHeight)];
+                 const worldPathData = [gridToWorld(normalizedStartNode.x, normalizedStartNode.y, activeGraphHeight)];
                  self.postMessage({ type: 'pathResult', data: { agentId, path: worldPathData, pathLengthWorld: 0 } });
                  return;
             }
@@ -336,7 +421,7 @@ self.onmessage = function(event) {
             try {
                 // --- Appel A* avec la bonne grille --- 
                 console.time(`[Worker] A* Path ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
-                gridPath = findPathAStar(startNode, endNode, activeGridMap); // <-- Passer la grille active
+                gridPath = findPathAStar(normalizedStartNode, normalizedEndNode, activeGridMap); // <-- Passer la grille active et les nœuds normalisés
                 console.timeEnd(`[Worker] A* Path ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
                 // --- FIN Appel A* --- 
 
@@ -353,7 +438,7 @@ self.onmessage = function(event) {
                         }
                         
                         // --- AJOUT: Stocker dans le cache ---
-                        pathCache.storePath(startNode, endNode, isVehicle, worldPathData, pathLengthWorld);
+                        pathCache.storePath(normalizedStartNode, normalizedEndNode, isVehicle, worldPathData, pathLengthWorld);
                         // --- FIN AJOUT ---
                     } else {
                          pathLengthWorld = 0;
@@ -365,7 +450,7 @@ self.onmessage = function(event) {
                 }
 
             } catch (e) {
-                console.error(`[Worker] Erreur dans findPathAStar pour Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}) (${startNode.x},${startNode.y})->(${endNode.x},${endNode.y}):`, e);
+                console.error(`[Worker] Erreur dans findPathAStar pour Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}) (${normalizedStartNode.x},${normalizedStartNode.y})->(${normalizedEndNode.x},${normalizedEndNode.y}):`, e);
                 worldPathData = null;
                 pathLengthWorld = 0;
             }

@@ -212,7 +212,7 @@ export default class Agent {
                 return false;
             }
 
-            console.log(`Agent ${this.id}: NavigationManager initialisé avec succès. Mode: ${isVehicle ? 'véhicule' : 'piéton'}`);
+            //console.log(`Agent ${this.id}: NavigationManager initialisé avec succès. Mode: ${isVehicle ? 'véhicule' : 'piéton'}`);
         }
 
         return true;
@@ -334,7 +334,7 @@ export default class Agent {
 
         // --- LOG AVANT WORKER (INCHANGÉ) ---
         // ... (log des positions/nœuds) ...
-         console.log(`[AGENT ${this.id} PATH_REQ] Mode: ${isVehicle ? 'Veh' : 'Ped'}, StartW: (${startPosWorld?.x.toFixed(1)}, ${startPosWorld?.z.toFixed(1)}), EndW: (${endPosWorld?.x.toFixed(1)}, ${endPosWorld?.z.toFixed(1)}), StartN: (${startNode.x},${startNode.y}), EndN: (${endNode.x},${endNode.y}), NextState: ${nextStateIfSuccess}`);
+         //console.log(`[AGENT ${this.id} PATH_REQ] Mode: ${isVehicle ? 'Veh' : 'Ped'}, StartW: (${startPosWorld?.x.toFixed(1)}, ${startPosWorld?.z.toFixed(1)}), EndW: (${endPosWorld?.x.toFixed(1)}, ${endPosWorld?.z.toFixed(1)}), StartN: (${startNode.x},${startNode.y}), EndN: (${endNode.x},${endNode.y}), NextState: ${nextStateIfSuccess}`);
 
         // --- Envoi de la Requête au Worker (INCHANGÉ - passe bien isVehicle) ---
         agentManager.requestPathFromWorker(this.id, startNode, endNode, isVehicle);
@@ -371,10 +371,10 @@ export default class Agent {
                 this.currentPathPoints = null; this.currentPathLengthWorld = 0; this.calculatedTravelDurationGame = 0;
                 this.departureTimeGame = -1; this.arrivalTmeGame = -1; this.hasReachedDestination = false;
                 this.isVisible = false; this._pathRequestTimeout = null;
-                console.log(`[Agent ${this.id} DEBUG] Arrivée instantanée détectée. État final : ${this.currentState}`);
+                //console.log(`[Agent ${this.id} DEBUG] Arrivée instantanée détectée. État final : ${this.currentState}`);
                 return;
             }
-            console.log(`[Agent ${this.id} DEBUG] setPath: Chemin VALIDE reçu (${pathPoints.length} points, longueur ${pathLengthWorld.toFixed(2)}).`);
+            //console.log(`[Agent ${this.id} DEBUG] setPath: Chemin VALIDE reçu (${pathPoints.length} points, longueur ${pathLengthWorld.toFixed(2)}).`);
 
             if (currentStateAtCall === AgentState.REQUESTING_PATH_FOR_HOME && this.weekendBehavior.weekendWalkEndTime > 0 && pathPoints.length > 0) {
                 const startPoint = pathPoints[0]; const distanceToStartSq = this.position.distanceToSquared(startPoint);
@@ -433,10 +433,10 @@ export default class Agent {
                 console.warn(`[Agent ${this.id} WARN] setPath: Chemin valide reçu mais état initial (${currentStateAtCall}) non géré.`);
                 nextState = this.currentState; // Garder l'état actuel
             }
-            console.log(`[Agent ${this.id} DEBUG] setPath: Changement d'état de ${currentStateAtCall} vers ${nextState}`);
+            //console.log(`[Agent ${this.id} DEBUG] setPath: Changement d'état de ${currentStateAtCall} vers ${nextState}`);
             this.currentState = nextState;
 
-            console.log(`[Agent ${this.id} DEBUG] setPath (succès): Annulation du _pathRequestTimeout.`);
+            //console.log(`[Agent ${this.id} DEBUG] setPath (succès): Annulation du _pathRequestTimeout.`);
             this._pathRequestTimeout = null; // Annuler le timer car le chemin est reçu
 
         }
@@ -479,11 +479,11 @@ export default class Agent {
                          if (this.weekendBehavior.parkSidewalkPosition) {
                              this.position.copy(this.weekendBehavior.parkSidewalkPosition).setY(this.yOffset);
                              this.weekendBehavior.isInsidePark = false; forceVisibilityFalse = false;
-                             console.log(`[Agent ${this.id}] Téléporté au trottoir. Redemande chemin maison.`);
+                             //console.log(`[Agent ${this.id}] Téléporté au trottoir. Redemande chemin maison.`);
                              fallbackState = AgentState.REQUESTING_PATH_FOR_HOME; this._pathRequestTimeout = this.experience.time.elapsed;
                              const currentGridNode = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(false)?.getClosestWalkableNode(this.position);
                              this.requestPath(this.position, this.homePosition, currentGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME, this.experience.time.elapsed);
-                             console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après requête retour maison.`); return;
+                             //console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après requête retour maison.`); return;
                          } else {
                              console.warn(`[Agent ${this.id}] Position trottoir inconnue. Forçage maison.`); this.forceReturnHome(this.experience.time.elapsed);
                              fallbackState = AgentState.AT_HOME; teleportPosition = this.homePosition;
@@ -494,7 +494,10 @@ export default class Agent {
                          if (!foundNew) {
                              console.warn(`[Agent ${this.id}] Impossible de trouver une autre destination. Retour AT_HOME.`);
                              fallbackState = AgentState.AT_HOME; teleportPosition = this.homePosition;
-                         } else { console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après nouvelle requête promenade.`); return; }
+                         } else { 
+							//console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après nouvelle requête promenade.`);
+							return; 
+						}
                     }
                 } else { // Weekend terminé
                      console.warn(`[Agent ${this.id} SYNC] Pathfinding promenade échoué ET weekend terminé.`); fallbackState = AgentState.AT_HOME;
@@ -508,13 +511,13 @@ export default class Agent {
             }
 
             // --- Appliquer l'état et la téléportation ---
-            console.log(`[Agent ${this.id} DEBUG] setPath (échec): Changement d'état vers ${fallbackState}.`); this.currentState = fallbackState;
+            //console.log(`[Agent ${this.id} DEBUG] setPath (échec): Changement d'état vers ${fallbackState}.`); this.currentState = fallbackState;
             if (teleportPosition) { console.log(`[Agent ${this.id} DEBUG] Téléportation vers ${fallbackState}.`); this.position.copy(teleportPosition).setY(this.yOffset); }
             if (forceVisibilityFalse) { this.isVisible = false; }
 
-            console.log(`[Agent ${this.id} DEBUG] setPath (échec): Annulation du _pathRequestTimeout.`); this._pathRequestTimeout = null;
+            //console.log(`[Agent ${this.id} DEBUG] setPath (échec): Annulation du _pathRequestTimeout.`); this._pathRequestTimeout = null;
         }
-        console.log(`[Agent ${this.id} DEBUG] Sortie de setPath. État final: ${this.currentState}`);
+        //console.log(`[Agent ${this.id} DEBUG] Sortie de setPath. État final: ${this.currentState}`);
     }
 
     /**
@@ -567,7 +570,7 @@ export default class Agent {
                     targetState = AgentState.AT_WORK;
                     teleportPosition = this.workPosition;
                     this.lastArrivalTimeWork = currentGameTime;
-                    console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
+                    //console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
                 }
                 break;
             
@@ -580,7 +583,7 @@ export default class Agent {
                     targetState = AgentState.AT_HOME;
                     teleportPosition = this.homePosition;
                     this.lastArrivalTimeHome = currentGameTime;
-                    console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
+                    //console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
                 }
                 break;
 
@@ -592,7 +595,7 @@ export default class Agent {
                 if (this.homePosition) {
                     targetState = AgentState.AT_HOME;
                     teleportPosition = this.homePosition;
-                    console.log(`Agent ${this.id}: Récupération (échec/blocage achat) -> ${targetState}`);
+                    //console.log(`Agent ${this.id}: Récupération (échec/blocage achat) -> ${targetState}`);
                 }
                 break;
                 
@@ -606,7 +609,7 @@ export default class Agent {
                     teleportPosition = this.homePosition;
                     // Réinitialiser l'état de weekend
                     this.weekendBehavior?.resetWeekendState();
-                    console.log(`Agent ${this.id}: Récupération (état weekend) -> ${targetState}`);
+                    //console.log(`Agent ${this.id}: Récupération (état weekend) -> ${targetState}`);
                 }
                 break;
                 
@@ -615,12 +618,12 @@ export default class Agent {
                 if (this.homePosition) {
                     targetState = AgentState.AT_HOME;
                     teleportPosition = this.homePosition;
-                    console.log(`Agent ${this.id}: Récupération (état autre) -> ${targetState}`);
+                    //console.log(`Agent ${this.id}: Récupération (état autre) -> ${targetState}`);
                 } else if (this.workPosition) {
                     // Fallback si pas de homePosition
                     targetState = AgentState.AT_WORK;
                     teleportPosition = this.workPosition;
-                    console.log(`Agent ${this.id}: Récupération (sans maison) -> ${targetState}`);
+                    //console.log(`Agent ${this.id}: Récupération (sans maison) -> ${targetState}`);
                 } else {
                     // Cas catastrophique: ni domicile ni travail. Laisser en IDLE.
                     targetState = AgentState.IDLE;
@@ -645,7 +648,7 @@ export default class Agent {
         // Réinitialiser le timer d'état
         this._stateStartTime = null;
         
-        console.log(`Agent ${this.id}: forceRecoverFromTimeout TERMINÉ (nouvel état=${this.currentState}).`);
+        //console.log(`Agent ${this.id}: forceRecoverFromTimeout TERMINÉ (nouvel état=${this.currentState}).`);
     }
 
 	/**

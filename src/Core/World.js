@@ -615,6 +615,10 @@ export default class World {
                         try {
                             const stats = await this.agentManager.requestCacheStats();
                             console.log("World: Statistiques du cache après préchauffage:", stats);
+                            
+                            // Analyse approfondie des performances du cache
+                            console.log("World: Analyse approfondie des performances du cache...");
+                            await this.agentManager.analyzePathCachePerformance();
                         } catch (statsError) {
                             console.warn("World: Impossible de récupérer les statistiques du cache:", statsError);
                         }
@@ -676,6 +680,17 @@ export default class World {
 				citizen.money += citizen.salary;
 			});
 			this.lastUpdatedDay = currentDay; // Update the last updated day
+			
+			// --- AJOUT: Vérification des statistiques du cache chaque jour ---
+			if (this.agentManager) {
+			    this.agentManager.requestCacheStats()
+			        .then(stats => {
+			            console.log(`Cache de chemins - Jour ${currentDay} - Statistiques:`, stats);
+			            console.log(`Taux de succès cache: ${stats.hitRate} (${stats.hits} hits, ${stats.nearHits} nearHits sur ${stats.size} chemins stockés)`);
+			        })
+			        .catch(err => console.warn("Impossible de récupérer les stats du cache:", err));
+			}
+			// --- FIN AJOUT ---
 		}
 
 		// Mise à jour du cityManager avec deltaTime pour la gestion de la santé des citoyens
