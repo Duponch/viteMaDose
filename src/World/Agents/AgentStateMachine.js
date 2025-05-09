@@ -239,7 +239,9 @@ export default class AgentStateMachine {
                 break;
 
             case AgentState.READY_TO_LEAVE_FOR_HOME:
-                 if (timeWithinCurrentDayCycle >= agent.exactHomeDepartureTimeGame) {
+                 // Permettre le départ immédiat si l'agent vient du bâtiment commercial
+                 const isReturningFromCommercial = agent._currentPathRequestGoal === 'HOME' && agent.currentState === AgentState.READY_TO_LEAVE_FOR_HOME;
+                 if (isReturningFromCommercial || timeWithinCurrentDayCycle >= agent.exactHomeDepartureTimeGame) {
                     let departureSuccessful = false;
                     const isDriving = agent.vehicleBehavior?.isDriving() ?? false;
                     if (isDriving) {

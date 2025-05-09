@@ -8,7 +8,7 @@ export default class MedicationPurchaseStrategy {
      */
     constructor(options = {}, experience = null) {
         // Configuration
-        this.cooldownTime = options.cooldownTime || 4 * 60 * 60 * 1000; // 4h de temps de jeu par défaut
+        this.cooldownTime = options.cooldownTime || 4 * 60 * 60 * 100; // 4h de temps de jeu par défaut
         this.medicationPrice = options.medicationPrice || 10; // Prix du médicament (€)
         
         // Stockage des timestamps de dernières tentatives d'achat par agent
