@@ -61,22 +61,36 @@ export default class MedicationPurchaseStrategy {
             
             // Si nous sommes à l'heure prévue ou plus tard, autoriser l'achat
             if (currentHour >= scheduledHour) {
-                // Supprimer le rendez-vous une fois utilisé
-                this.scheduledPurchaseHours.delete(agentId);
-                return true;
+                // Vérifier si l'heure actuelle est compatible avec le temps libre de l'agent
+                if (this._isAgentFreeAtHour(agent, calendarDate, currentHour)) {
+                    // Supprimer le rendez-vous une fois utilisé
+                    this.scheduledPurchaseHours.delete(agentId);
+                    return true;
+                } else {
+                    // L'agent n'est pas libre, reporter le rendez-vous
+                    this.scheduledPurchaseHours.delete(agentId); // Supprimer le rendez-vous actuel
+                    // Un nouveau rendez-vous sera planifié plus bas
+                }
+            } else {
+                // Sinon, attendre l'heure prévue
+                console.log(`Agent ${agentId}: Besoin de médicament. Rendez-vous prévu à ${scheduledHour}h (actuellement ${currentHour}h).`);
+                return false;
             }
-            
-            // Sinon, attendre l'heure prévue
-            console.log(`Agent ${agentId}: Besoin de médicament. Rendez-vous prévu à ${scheduledHour}h (actuellement ${currentHour}h).`);
-            return false;
         }
 
         // Vérifier si les commerces sont ouverts actuellement
         let isOpen = false;
         let openingHour = 8; // Par défaut
+        let closingHour = 21; // Par défaut
         
         if (commercialManager) {
             isOpen = commercialManager.areCommercialsOpen(calendarDate, currentHour);
+            
+            // Récupérer les horaires d'ouverture
+            if (commercialManager.openingHoursStrategy) {
+                openingHour = commercialManager.openingHoursStrategy.openingHour;
+                closingHour = commercialManager.openingHoursStrategy.closingHour;
+            }
             
             // Si fermé, récupérer l'heure d'ouverture prochaine
             if (!isOpen) {
@@ -87,6 +101,8 @@ export default class MedicationPurchaseStrategy {
             // Fallback si commercialManager n'est pas disponible
             const openingHoursStrategy = new CommercialOpeningHoursStrategy();
             isOpen = openingHoursStrategy.isOpen(calendarDate, currentHour);
+            openingHour = openingHoursStrategy.openingHour;
+            closingHour = openingHoursStrategy.closingHour;
             
             // Si fermé, récupérer l'heure d'ouverture prochaine
             if (!isOpen) {
@@ -95,20 +111,106 @@ export default class MedicationPurchaseStrategy {
             }
         }
         
-        // Si les commerces sont ouverts, on peut y aller maintenant
-        if (isOpen) {
+        // Si les commerces sont ouverts et l'agent est libre, on peut y aller maintenant
+        if (isOpen && this._isAgentFreeAtHour(agent, calendarDate, currentHour)) {
             return true;
         }
         
-        // Sinon, planifier un rendez-vous pour l'heure d'ouverture
-        // On ajoute une petite variation pour éviter que tous les agents y aillent exactement à la même heure
-        const randomOffset = Math.floor(Math.random() * 3); // 0, 1 ou 2 heures après l'ouverture
-        const scheduledHour = (openingHour + randomOffset) % 24;
+        // Sinon, planifier un rendez-vous pour une heure où les commerces sont ouverts ET l'agent est libre
+        const scheduledHour = this._findNextFreeTimeForShopping(agent, calendarDate, currentHour, openingHour, closingHour);
         
-        this.scheduledPurchaseHours.set(agentId, scheduledHour);
-        console.log(`Agent ${agentId}: Besoin de médicament mais les commerces sont fermés (${currentHour}h). Rendez-vous planifié à ${scheduledHour}h.`);
+        if (scheduledHour !== null) {
+            this.scheduledPurchaseHours.set(agentId, scheduledHour);
+            console.log(`Agent ${agentId}: Besoin de médicament mais occupation actuelle. Rendez-vous planifié à ${scheduledHour}h.`);
+        } else {
+            console.warn(`Agent ${agentId}: Impossible de trouver un créneau libre pour acheter des médicaments.`);
+        }
         
         return false;
+    }
+
+    /**
+     * Vérifie si l'agent est libre à une heure donnée (pas au travail, pas en promenade)
+     * @param {Object} agent - Instance de l'agent
+     * @param {Object} calendarDate - Date du calendrier actuel
+     * @param {number} hour - Heure à vérifier (0-23)
+     * @returns {boolean} - True si l'agent est libre à cette heure
+     * @private
+     */
+    _isAgentFreeAtHour(agent, calendarDate, hour) {
+        // Vérifier si c'est un jour de travail
+        const isWorkDay = agent.workScheduleStrategy?.shouldWorkToday(calendarDate) ?? false;
+        
+        if (isWorkDay) {
+            // En semaine, l'agent est libre avant l'heure de départ au travail ou après l'heure de retour
+            // Récupérer les heures de départ et de retour de l'agent
+            const departureWorkHour = Math.floor(agent.departureWorkHour ?? 8);  // Par défaut 8h
+            const departureHomeHour = Math.floor(agent.departureHomeHour ?? 17); // Par défaut 17h
+            
+            // En semaine, l'agent est libre s'il n'est pas dans ses heures de travail
+            return hour < departureWorkHour || hour >= departureHomeHour;
+        } else {
+            // Le weekend, l'agent est libre s'il n'est pas en promenade
+            // Vérifier si l'agent a une promenade prévue à cette heure
+            if (agent.weekendBehavior && agent.weekendBehavior.weekendWalkStrategy) {
+                const walkStrategy = agent.weekendBehavior.weekendWalkStrategy;
+                const dayKey = walkStrategy._getDayKey ? walkStrategy._getDayKey(calendarDate) : null;
+                
+                if (dayKey && walkStrategy.agentWalkMap && walkStrategy.agentWalkMap.has(dayKey)) {
+                    const agentWalkInfo = walkStrategy.agentWalkMap.get(dayKey).get(agent.id);
+                    
+                    if (agentWalkInfo) {
+                        const walkHour = agentWalkInfo.hour;
+                        const walkDuration = agentWalkInfo.duration || 2; // Durée par défaut: 2h
+                        
+                        // L'agent n'est pas libre pendant sa promenade
+                        return hour < walkHour || hour >= (walkHour + walkDuration);
+                    }
+                }
+            }
+            
+            // Si on ne peut pas déterminer les horaires de promenade, on considère que l'agent est libre
+            return true;
+        }
+    }
+
+    /**
+     * Trouve la prochaine heure libre pour faire des achats
+     * @param {Object} agent - Instance de l'agent
+     * @param {Object} calendarDate - Date du calendrier actuel
+     * @param {number} currentHour - Heure actuelle (0-23)
+     * @param {number} openingHour - Heure d'ouverture des commerces
+     * @param {number} closingHour - Heure de fermeture des commerces
+     * @returns {number|null} - L'heure planifiée ou null si aucune heure libre n'est trouvée
+     * @private
+     */
+    _findNextFreeTimeForShopping(agent, calendarDate, currentHour, openingHour, closingHour) {
+        // Pour éviter une boucle infinie en cas de problème
+        const maxIterations = 24;
+        
+        // Ajouter une variation aléatoire pour éviter que tous les agents y aillent en même temps
+        const randomOffset = Math.floor(Math.random() * 3); // 0, 1 ou 2 heures après l'heure idéale
+        
+        // Chercher une heure libre à partir de l'heure actuelle
+        for (let i = 0; i < maxIterations; i++) {
+            const testHour = (currentHour + i) % 24;
+            
+            // Vérifier si les commerces sont ouverts à cette heure
+            const isOpenAtTestHour = testHour >= openingHour && testHour < closingHour;
+            
+            // Vérifier si l'agent est libre à cette heure
+            const isAgentFreeAtTestHour = this._isAgentFreeAtHour(agent, calendarDate, testHour);
+            
+            if (isOpenAtTestHour && isAgentFreeAtTestHour) {
+                // Ajouter l'offset aléatoire, mais rester dans les horaires d'ouverture
+                const scheduledHour = Math.min(testHour + randomOffset, closingHour - 1);
+                return scheduledHour;
+            }
+        }
+        
+        // Si aucune heure n'est trouvée aujourd'hui, prendre la première heure disponible demain
+        // Pour simplifier, on suppose que l'agent sera libre à l'ouverture des magasins demain
+        return openingHour;
     }
 
     /**

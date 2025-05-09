@@ -115,15 +115,14 @@ export default class AgentMedicationBehavior {
                 console.warn(`Agent ${agent.id}: Échec de l'achat au magasin ${this.commercialBuildingId}. Retour à la maison.`);
             }
             
-            // Si c'est vendredi soir et que l'agent a un emploi (sinon cette condition ne s'applique pas)
+            // Si c'est vendredi soir, on utilise le chemin normal pour rentrer à la maison
+            // mais on le note dans les logs pour information
             if (isFridayEvening && agent.workBuildingId) {
-                console.log(`Agent ${agent.id}: Vendredi soir, retour à la maison forcé depuis le commercial.`);
-                agent.forceReturnHome(currentGameTime);
-                return;
+                console.log(`Agent ${agent.id}: Vendredi soir, retour normal à la maison depuis le commercial.`);
             }
             
             // Demander un chemin pour rentrer à la maison
-            if (agent.homePosition && agent.homeGridNode) {
+            if (agent.homePosition && agent.homeGridNode && this.commercialPosition && this.commercialGridNode) {
                 agent._currentPathRequestGoal = 'HOME';
                 agent.requestPath(
                     this.commercialPosition,
@@ -134,7 +133,7 @@ export default class AgentMedicationBehavior {
                     currentGameTime
                 );
             } else {
-                console.error(`Agent ${agent.id}: Impossible de rentrer (infos domicile manquantes). Forçage récupération.`);
+                console.error(`Agent ${agent.id}: Impossible de rentrer (infos domicile ou commercial manquantes). Forçage récupération.`);
                 agent.forceRecoverFromTimeout(currentGameTime);
             }
         }
