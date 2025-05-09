@@ -7,6 +7,7 @@ import AgentAnimation from './AgentAnimation.js';
 import AgentStateMachine from './AgentStateMachine.js';
 import AgentWeekendBehavior from './AgentWeekendBehavior.js';
 import AgentVehicleBehavior from './AgentVehicleBehavior.js';
+import AgentMedicationBehavior from './AgentMedicationBehavior.js';
 import AgentMovement from './AgentMovement.js';
 
 let nextAgentId = 0;
@@ -84,6 +85,7 @@ export default class Agent {
         const effectiveWeekendWalkStrategy = weekendWalkStrategy || new WeekendWalkStrategy();
         this.weekendBehavior = new AgentWeekendBehavior(this, effectiveWeekendWalkStrategy);
         this.vehicleBehavior = new AgentVehicleBehavior(this);
+        this.medicationBehavior = new AgentMedicationBehavior(this);
 
         // --- Animation Visuelle (Matrices) ---
         this.currentAnimationMatrix = {
@@ -338,6 +340,7 @@ export default class Agent {
         const wasRequestingWork = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_WORK;
         const wasRequestingHome = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_HOME;
         const wasRequestingWeekendWalk = currentStateAtCall === AgentState.WEEKEND_WALK_REQUESTING_PATH;
+        const wasRequestingCommercial = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_COMMERCIAL;
         const targetStateFromWeekendWalk = this.targetStateFromWeekendWalk;
 
         const environment = this.experience.world?.environment;
@@ -351,6 +354,7 @@ export default class Agent {
                 if (wasRequestingWork) { this.currentState = AgentState.AT_WORK; this.lastArrivalTimeWork = this.experience.time.elapsed; }
                 else if (wasRequestingHome) { this.currentState = AgentState.AT_HOME; this.lastArrivalTimeHome = this.experience.time.elapsed; }
                 else if (wasRequestingWeekendWalk) { this.currentState = AgentState.AT_HOME; this.weekendBehavior.resetWeekendState(); }
+                else if (wasRequestingCommercial) { this.currentState = AgentState.AT_COMMERCIAL; }
                 this.currentPathPoints = null; this.currentPathLengthWorld = 0; this.calculatedTravelDurationGame = 0;
                 this.departureTimeGame = -1; this.arrivalTmeGame = -1; this.hasReachedDestination = false;
                 this.isVisible = false; this._pathRequestTimeout = null;
@@ -400,6 +404,8 @@ export default class Agent {
                 nextState = AgentState.READY_TO_LEAVE_FOR_WORK;
             } else if (wasRequestingHome) {
                 nextState = AgentState.READY_TO_LEAVE_FOR_HOME;
+            } else if (wasRequestingCommercial) {
+                nextState = AgentState.READY_TO_LEAVE_FOR_COMMERCIAL;
             } else if (wasRequestingWeekendWalk) {
                 if (isCurrentlyWeekend) {
                      nextState = (targetStateFromWeekendWalk === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK)
@@ -445,6 +451,10 @@ export default class Agent {
                  // --- Sortir du véhicule si nécessaire ---
                  this.vehicleBehavior?.exitVehicle();
                  // ---------------------------------------
+            } else if (wasRequestingCommercial) {
+                console.warn(`[Agent ${this.id} SYNC] Pathfinding COMMERCIAL échoué. Forçage état AT_HOME et téléportation.`);
+                fallbackState = AgentState.AT_HOME; teleportPosition = this.homePosition;
+                // ---------------------------------------
             } else if (wasRequestingWeekendWalk) {
                  // --- Sortir du véhicule (même si improbable) ---
                  this.vehicleBehavior?.exitVehicle();
@@ -513,76 +523,115 @@ export default class Agent {
     }
 
     /**
-     * Récupération après un timeout de requête de chemin ou un état bloqué.
-     * Force l'agent vers un état stable basé sur le but de la requête échouée.
-     * @param {number} currentGameTime - Temps de jeu actuel.
+     * Force la récupération depuis un état bloqué.
+     * @param {number} currentGameTime - Le temps de jeu actuel en ms.
      */
     forceRecoverFromTimeout(currentGameTime) {
-        const failedGoal = this._currentPathRequestGoal;
-        const previousState = this.currentState;
-        console.warn(`Agent ${this.id}: Forcing recovery from path request timeout or stuck state (Goal: ${failedGoal || 'Unknown'}, State: ${previousState}) at game time ${currentGameTime.toFixed(0)}. Cleaning up request.`);
-
-        // Reset des propriétés communes liées au chemin et au weekend (via weekendBehavior)
-        this.weekendBehavior?.resetWeekendState(); // Utiliser la méthode de weekendBehavior
+        console.warn(`Agent ${this.id}: forceRecoverFromTimeout appelé (état=${this.currentState}).`);
+        
+        // Nettoyer les données de chemin
         this.currentPathPoints = null;
         this.calculatedTravelDurationGame = 0;
+        this.currentPathLengthWorld = 0;
         this.departureTimeGame = -1;
         this.arrivalTmeGame = -1;
         this.currentPathIndexVisual = 0;
         this.visualInterpolationProgress = 0;
-        this.currentPathLengthWorld = 0;
         this.hasReachedDestination = false;
-        this._stateStartTime = null;
         this._pathRequestTimeout = null;
-        this._currentPathRequestGoal = null;
 
-        // --- MODIFICATION: Utilisation de vehicleBehavior ---
-        // Libérer la voiture via le behavior. S'il n'y en avait pas, ne fait rien.
+        // --- Tentative de déterminer le meilleur état cible ---
+        let targetState = AgentState.AT_HOME; // État par défaut
+        let teleportPosition = this.homePosition;
+
+        switch (this.currentState) {
+            case AgentState.IN_TRANSIT_TO_WORK:
+            case AgentState.DRIVING_TO_WORK:
+            case AgentState.REQUESTING_PATH_FOR_WORK:
+            case AgentState.READY_TO_LEAVE_FOR_WORK:
+                // En route vers le travail : récupération vers AT_WORK
+                if (this.workPosition) {
+                    targetState = AgentState.AT_WORK;
+                    teleportPosition = this.workPosition;
+                    this.lastArrivalTimeWork = currentGameTime;
+                    console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
+                }
+                break;
+            
+            case AgentState.IN_TRANSIT_TO_HOME:
+            case AgentState.DRIVING_HOME:
+            case AgentState.REQUESTING_PATH_FOR_HOME:
+            case AgentState.READY_TO_LEAVE_FOR_HOME:
+                // En route vers la maison : récupération vers AT_HOME
+                if (this.homePosition) {
+                    targetState = AgentState.AT_HOME;
+                    teleportPosition = this.homePosition;
+                    this.lastArrivalTimeHome = currentGameTime;
+                    console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
+                }
+                break;
+
+            case AgentState.IN_TRANSIT_TO_COMMERCIAL:
+            case AgentState.REQUESTING_PATH_FOR_COMMERCIAL:
+            case AgentState.READY_TO_LEAVE_FOR_COMMERCIAL:
+                // En route vers un commercial : récupération vers AT_HOME
+                if (this.homePosition) {
+                    targetState = AgentState.AT_HOME;
+                    teleportPosition = this.homePosition;
+                    console.log(`Agent ${this.id}: Récupération (échec achat) -> ${targetState}`);
+                }
+                break;
+                
+            case AgentState.WEEKEND_WALK_REQUESTING_PATH:
+            case AgentState.WEEKEND_WALK_READY:
+            case AgentState.WEEKEND_WALKING:
+            case AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK:
+                // Promenade weekend : récupération vers AT_HOME et nettoyage
+                if (this.homePosition) {
+                    targetState = AgentState.AT_HOME;
+                    teleportPosition = this.homePosition;
+                    // Réinitialiser l'état de weekend
+                    this.weekendBehavior?.resetWeekendState();
+                    console.log(`Agent ${this.id}: Récupération (état weekend) -> ${targetState}`);
+                }
+                break;
+                
+            default:
+                // Autres cas : récupération par défaut vers AT_HOME
+                if (this.homePosition) {
+                    targetState = AgentState.AT_HOME;
+                    teleportPosition = this.homePosition;
+                    console.log(`Agent ${this.id}: Récupération (état autre) -> ${targetState}`);
+                } else if (this.workPosition) {
+                    // Fallback si pas de homePosition
+                    targetState = AgentState.AT_WORK;
+                    teleportPosition = this.workPosition;
+                    console.log(`Agent ${this.id}: Récupération (sans maison) -> ${targetState}`);
+                } else {
+                    // Cas catastrophique: ni domicile ni travail. Laisser en IDLE.
+                    targetState = AgentState.IDLE;
+                    teleportPosition = null;
+                    console.warn(`Agent ${this.id}: Récupération GRAVE (ni maison ni travail).`);
+                }
+                break;
+        }
+
+        // Sortir du véhicule si nécessaire
         this.vehicleBehavior?.exitVehicle();
-        console.log(` -> Utilisation de vehicleBehavior.exitVehicle() pour nettoyage voiture (si existante).`);
-        // ----------------------------------------------------
-
-        // Choisir l'état de repli basé sur le but échoué
-        let targetPosition = null;
-
-        if (failedGoal === 'WORK') {
-            console.log(` -> Forcing state to AT_WORK.`);
-            this.currentState = AgentState.AT_WORK;
-            targetPosition = this.workPosition;
-            this.lastArrivalTimeWork = currentGameTime;
-            this.requestedPathForDepartureTime = -1; // Prêt pour le prochain cycle de retour
-        } else if (failedGoal === 'HOME' || failedGoal === 'WALK') {
-             // Pour un échec de chemin de maison OU de promenade, on retourne à la maison
-             console.log(` -> Forcing state to AT_HOME.`);
-             this.currentState = AgentState.AT_HOME;
-             targetPosition = this.homePosition;
-             this.lastArrivalTimeHome = currentGameTime;
-             this.requestedPathForDepartureTime = -1; // Prêt pour le prochain cycle de travail
-             // Nettoyage spécifique au weekend (déjà fait par resetWeekendState plus haut)
-        } else {
-             // Si le but est inconnu ou null (ex: état bloqué sans requête active)
-             console.warn(` -> Unknown or null goal '${failedGoal}', forcing AT_HOME as generic fallback.`);
-             this.currentState = AgentState.AT_HOME;
-             targetPosition = this.homePosition; // Le plus sûr est de renvoyer à la maison
-             this.lastArrivalTimeHome = currentGameTime;
-             this.requestedPathForDepartureTime = -1;
+        
+        // Appliquer l'état cible
+        this.currentState = targetState;
+        this.isVisible = false; // Cacher l'agent
+        
+        // Téléporter vers la position cible si disponible
+        if (teleportPosition) {
+            this.position.copy(teleportPosition).setY(teleportPosition.y + this.yOffset);
         }
-
-        // Téléporter visuellement si une position cible est définie
-        if (targetPosition) {
-            console.log(` -> Téléportation vers ${this.currentState} à (${targetPosition.x.toFixed(1)}, ${targetPosition.y.toFixed(1)}, ${targetPosition.z.toFixed(1)})`);
-            this.position.copy(targetPosition).setY(this.yOffset); // Appliquer la position + offset Y
-            // Pas besoin de updateMatrix ici, AgentManager s'en chargera
-        } else {
-            console.warn(` -> Aucune position cible définie pour téléportation (état: ${this.currentState}). L'agent pourrait être à une position incorrecte.`);
-            // Si homePosition n'est pas défini non plus, l'agent reste où il est.
-            if(this.homePosition) {
-                 this.position.copy(this.homePosition).setY(this.yOffset);
-                 console.log(` -> Fallback téléportation vers homePosition.`);
-            }
-        }
-
-        this.isVisible = false; // Cacher l'agent après récupération
+        
+        // Réinitialiser le timer d'état
+        this._stateStartTime = null;
+        
+        console.log(`Agent ${this.id}: forceRecoverFromTimeout TERMINÉ (nouvel état=${this.currentState}).`);
     }
 
 	/**
@@ -697,121 +746,33 @@ export default class Agent {
         // ----------------------------------------
     }
 
-	update(deltaTime, currentHour) {
-        // États inactifs ou en attente (WAITING_FOR_PATH est maintenant géré passivement, l'agent attend setPath)
-        if (this.currentState === AgentState.IDLE || this.currentState === AgentState.WAITING_FOR_PATH) { // <-- Utilisation de l'import (x2)
-            // this.isVisible = (this.currentState === 'WAITING_FOR_PATH'); // Optionnel: le rendre visible en attendant ?
-            return;
+	/**
+     * Met à jour l'agent.
+     * @param {number} deltaTime - Temps écoulé depuis la dernière frame.
+     * @param {number} currentHour - Heure actuelle du jeu.
+     */
+    update(deltaTime, currentHour) {
+        const currentGameTime = this.experience.time.elapsed;
+        
+        // Mettre à jour l'état logique
+        this.updateState(deltaTime, currentHour, currentGameTime);
+        
+        // Mettre à jour le visuel si nécessaire
+        if (this.isVisible) {
+            this.updateVisuals(deltaTime, currentGameTime);
         }
-
-        // --- 1. Logique de changement d'état basée sur l'heure (Appelle requestPath si besoin) ---
-        const previousState = this.currentState;
-        switch (this.currentState) {
-            case AgentState.AT_HOME: // <-- Utilisation de l'import (x2)
-                this.isVisible = false;
-                if (currentHour >= 8 && currentHour < 19 && this.workPosition && this.homeGridNode && this.workGridNode) {
-                   // console.log(`Agent ${this.id} leaving home for work.`);
-                   this.requestPath(this.position, this.workPosition, this.homeGridNode, this.workGridNode, currentHour);
-                }
-                break;
-            case AgentState.AT_WORK: // <-- Utilisation de l'import (x2)
-                this.isVisible = false;
-                if ((currentHour >= 19 || currentHour < 8) && this.homePosition && this.workGridNode && this.homeGridNode) {
-                    // console.log(`Agent ${this.id} leaving work for home.`);
-                    this.requestPath(this.position, this.homePosition, this.workGridNode, this.homeGridNode, currentHour);
-                }
-                break;
+        
+        // Mettre à jour le comportement du weekend
+        const environment = this.experience.world?.environment;
+        const calendarDate = environment?.getCurrentCalendarDate?.();
+        
+        // 1. Mise à jour du comportement lié au temps (travail, weekend)
+        // Déjà géré dans this.stateMachine.update() dans updateState
+        
+        // 2. Mise à jour du comportement d'achat de médicament
+        if (calendarDate) {
+            this.medicationBehavior.update(calendarDate, currentHour, currentGameTime);
         }
-         // Si l'état a changé suite à requestPath (vers WAITING_FOR_PATH), on arrête l'update ici pour cette frame.
-         if(this.currentState === AgentState.WAITING_FOR_PATH) { // <-- Utilisation de l'import
-             return;
-         }
-
-
-        // --- 2. Logique de déplacement (si en mouvement : GOING_TO_WORK ou GOING_HOME) ---
-        if (this.currentState === AgentState.IN_TRANSIT_TO_WORK || this.currentState === AgentState.IN_TRANSIT_TO_HOME) { // <-- Utilisation de l'import (x2)
-
-            // Vérification si le chemin est valide (pourrait devenir null entre-temps?)
-            if (!this.path || this.currentPathIndex >= this.path.length) {
-                 // console.warn(`Agent ${this.id}: In moving state ${this.currentState} but no valid path.`);
-                 // Tenter de revenir à un état stable basé sur la destination prévue
-                 this.currentState = (this.currentState === AgentState.IN_TRANSIT_TO_WORK && this.workPosition) ? AgentState.AT_WORK : (this.homePosition ? AgentState.AT_HOME : AgentState.IDLE); // <-- Utilisation de l'import (x4)
-                 this.isVisible = false;
-                 this.path = null; // Assurer que le chemin est bien null
-                 return;
-            }
-
-            this.isVisible = true;
-
-            // --- Déplacement & Orientation (Mouvement Continu) ---
-            const targetPathPoint = this.path[this.currentPathIndex];
-            this._targetPosition.copy(targetPathPoint);
-
-            const distanceToTargetSq = this.position.distanceToSquared(this._targetPosition);
-            const moveThisFrame = this.speed * (deltaTime / 1000);
-
-            let hasArrivedAtPathPoint = false;
-
-            // --- Mouvement ---
-            if (distanceToTargetSq > 0.000001) { // 0.001 * 0.001
-                this._direction.copy(this._targetPosition).sub(this.position).normalize();
-                const actualMove = Math.min(moveThisFrame, Math.sqrt(distanceToTargetSq));
-                this.position.addScaledVector(this._direction, actualMove);
-
-                // Mettre à jour la cible d'orientation vers le point actuel
-                this._lookTarget.copy(targetPathPoint);
-                if (this.position.distanceToSquared(this._lookTarget) > 0.0001) {
-                   const lookMatrix = new THREE.Matrix4().lookAt(this.position, this._lookTarget, new THREE.Vector3(0, 1, 0));
-                   this._targetOrientation.setFromRotationMatrix(lookMatrix);
-                }
-
-                // Vérifier si on a atteint la cible (ou presque)
-                // Utiliser distance AVANT mouvement + tolerance
-                if (distanceToTargetSq <= Math.pow(actualMove + this.reachTolerance, 2)) {
-                    hasArrivedAtPathPoint = true;
-                }
-            } else {
-                 hasArrivedAtPathPoint = true; // Déjà sur la cible
-            }
-
-            // --- Logique d'Arrivée au point de chemin ---
-            if (hasArrivedAtPathPoint) {
-                this.currentPathIndex++;
-
-                // Vérifier si fin du chemin COMPLET
-                if (this.currentPathIndex >= this.path.length) {
-                    this.position.copy(targetPathPoint); // Snap final
-                    const finalState = (this.currentState === AgentState.IN_TRANSIT_TO_WORK) ? AgentState.AT_WORK : AgentState.AT_HOME; // <-- Utilisation de l'import (x3)
-                    // console.log(`Agent ${this.id} reached destination. Transition to ${finalState}`);
-                    this.currentState = finalState;
-                    this.isVisible = false;
-                    this.path = null;
-                    this.currentPathIndex = 0; // Réinitialiser
-                    return; // Fin de l'update
-                } else {
-                    // Pas la fin : viser le PROCHAIN point pour la rotation
-                    const nextTargetPathPoint = this.path[this.currentPathIndex];
-                    this._lookTarget.copy(nextTargetPathPoint);
-                    if (this.position.distanceToSquared(this._lookTarget) > 0.0001) {
-                        const lookMatrix = new THREE.Matrix4().lookAt(this.position, this._lookTarget, new THREE.Vector3(0, 1, 0));
-                        this._targetOrientation.setFromRotationMatrix(lookMatrix);
-                    }
-                }
-            }
-            // Si pas arrivé, _targetOrientation vise toujours le point courant
-
-            // --- Interpolation d'Orientation (Slerp) ---
-            if(this.isVisible) { // Appliquer seulement si visible et en mouvement
-                const deltaSeconds = deltaTime / 1000;
-                // Utiliser une constante pour le taux de Slerp pour une rotation plus fluide
-                // ou la formule basée sur l'exponentielle si vous préférez frame-rate independent
-                const slerpAlpha = Math.min(this.rotationSpeed * deltaSeconds, 1.0); // Simple, dépend du framerate
-                // const slerpAlpha = 1.0 - Math.exp(-this.rotationSpeed * deltaSeconds); // Indépendant du framerate
-                this.orientation.slerp(this._targetOrientation, slerpAlpha);
-            }
-            // ------------------------------------------
-
-        } // Fin if (en déplacement)
     }
 
 	destroy() {

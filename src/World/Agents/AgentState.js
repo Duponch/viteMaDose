@@ -19,6 +19,11 @@ const AgentState = {
     // États pour la gestion des voitures
     DRIVING_TO_WORK: 'DRIVING_TO_WORK',
     DRIVING_HOME: 'DRIVING_HOME',
+    // Nouveaux états pour la gestion de l'achat de médicament
+    REQUESTING_PATH_FOR_COMMERCIAL: 'REQUESTING_PATH_FOR_COMMERCIAL',
+    READY_TO_LEAVE_FOR_COMMERCIAL: 'READY_TO_LEAVE_FOR_COMMERCIAL',
+    IN_TRANSIT_TO_COMMERCIAL: 'IN_TRANSIT_TO_COMMERCIAL',
+    AT_COMMERCIAL: 'AT_COMMERCIAL',
 };
 
 // Exporter l'objet pour qu'il puisse être importé ailleurs

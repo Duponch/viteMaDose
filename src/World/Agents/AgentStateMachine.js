@@ -53,7 +53,9 @@ export default class AgentStateMachine {
             agent.currentState === AgentState.IN_TRANSIT_TO_HOME || agent.currentState === AgentState.DRIVING_HOME ||
             agent.currentState === AgentState.REQUESTING_PATH_FOR_WORK || agent.currentState === AgentState.REQUESTING_PATH_FOR_HOME ||
             agent.currentState === AgentState.WEEKEND_WALK_REQUESTING_PATH || agent.currentState === AgentState.WEEKEND_WALKING ||
-            agent.currentState === AgentState.WAITING_FOR_PATH || agent.currentState === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK;
+            agent.currentState === AgentState.WAITING_FOR_PATH || agent.currentState === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK ||
+            // Ajouter les nouveaux états à vérifier
+            agent.currentState === AgentState.IN_TRANSIT_TO_COMMERCIAL || agent.currentState === AgentState.REQUESTING_PATH_FOR_COMMERCIAL;
 
         if (isStuckCheckState && agent._stateStartTime && currentGameTime - agent._stateStartTime > maxTransitTime) {
             console.warn(`[AGENT ${agent.id} SAFETY] Bloqué en état ${agent.currentState} pendant > ${MAX_TRANSIT_DURATION_FACTOR} jours. Forçage récupération.`);
@@ -271,6 +273,33 @@ export default class AgentStateMachine {
                  }
                 break;
 
+            // --- NOUVEAU CAS: READY_TO_LEAVE_FOR_COMMERCIAL ---
+            case AgentState.READY_TO_LEAVE_FOR_COMMERCIAL:
+                // Départ immédiat, pas de gestion d'heure spécifique
+                let departureSuccessful = false;
+                // Toujours en mode piéton pour les achats
+                if (agent.currentPathPoints) {
+                    agent.currentState = AgentState.IN_TRANSIT_TO_COMMERCIAL;
+                    agent.isVisible = true;
+                    agent.departureTimeGame = currentGameTime;
+                    agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
+                        (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
+                    agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                    departureSuccessful = true;
+                    console.log(`Agent ${agent.id}: Départ vers le bâtiment commercial.`);
+                } else {
+                    // Pas de chemin -> retour à la maison
+                    agent.currentState = AgentState.AT_HOME;
+                    agent.isVisible = false;
+                    console.warn(`Agent ${agent.id}: Impossible d'aller au bâtiment commercial (chemin invalide). Retour à la maison.`);
+                }
+                
+                if (departureSuccessful && previousStateForTimer !== agent.currentState) {
+                    // Enregistrer le départ (optionnel)
+                }
+                agent._pathRequestTimeout = null;
+                break;
+
             // --- CAS DRIVING_* ---
             case AgentState.DRIVING_TO_WORK:
                 agent.isVisible = false;
@@ -324,16 +353,36 @@ export default class AgentStateMachine {
                     agent.hasReachedDestination = false; agent.arrivalTmeGame = -1;
                 }
                 break;
+                
+            // --- NOUVEAU CAS: IN_TRANSIT_TO_COMMERCIAL ---
+            case AgentState.IN_TRANSIT_TO_COMMERCIAL:
+                agent.isVisible = true;
+                const arrivedCommercialPed = agent.hasReachedDestination || 
+                    (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame) || 
+                    (!agent.currentPathPoints || agent.currentPathPoints.length === 0);
+                    
+                if (arrivedCommercialPed) {
+                    agent.currentState = AgentState.AT_COMMERCIAL;
+                    agent.isVisible = false; // Caché à l'arrivée au magasin
+                    agent.currentPathPoints = null;
+                    agent.currentPathLengthWorld = 0;
+                    agent.hasReachedDestination = false;
+                    agent.arrivalTmeGame = -1;
+                    console.log(`Agent ${agent.id}: Arrivé au bâtiment commercial.`);
+                }
+                break;
 
             // --- États d'attente et Weekend (passifs ici ou gérés avant) ---
             case AgentState.REQUESTING_PATH_FOR_WORK:
             case AgentState.REQUESTING_PATH_FOR_HOME:
+            case AgentState.REQUESTING_PATH_FOR_COMMERCIAL: // Nouveau cas
             case AgentState.WAITING_FOR_PATH:
             case AgentState.WEEKEND_WALK_REQUESTING_PATH:
             case AgentState.WEEKEND_WALK_READY:
             case AgentState.WEEKEND_WALKING:
             case AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK:
-                // Pas de logique active ici, géré par setPath ou weekendBehavior
+            case AgentState.AT_COMMERCIAL: // Nouveau cas (pas de logique ici, géré par MedicationBehavior)
+                // Pas de logique active ici, géré par setPath ou weekendBehavior ou medicationBehavior
                 break;
 
             // --- CAS IDLE et DEFAULT ---
@@ -363,7 +412,8 @@ export default class AgentStateMachine {
             newState !== previousStateForTimer; // <<< Utiliser l'état capturé au début
 
         const justEnteredStableState =
-            (newState === AgentState.AT_HOME || newState === AgentState.AT_WORK || newState === AgentState.IDLE) &&
+            (newState === AgentState.AT_HOME || newState === AgentState.AT_WORK || 
+             newState === AgentState.AT_COMMERCIAL || newState === AgentState.IDLE) &&
             newState !== previousStateForTimer; // <<< Utiliser l'état capturé au début
 
         if (justEnteredTransitOrRequestState) {

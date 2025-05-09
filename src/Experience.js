@@ -787,6 +787,10 @@ export default class Experience extends EventTarget {
         if (besoins.length > 0) {
             besoinsHTML = besoins.join(', ');
         }
+        
+        // Affichage de l'inventaire
+        const medicationCount = agent.inventory?.medications || 0;
+        const inventoryHTML = `💊 Médicaments: ${medicationCount}`;
 
         const content = `
             <div class="tooltip-header">
@@ -841,6 +845,10 @@ export default class Experience extends EventTarget {
                 <div class="tooltip-row">
                     <span class="tooltip-label">✤ Salaire</span>
                     <span class="tooltip-value">${citizenInfo?.salary?.toFixed(0) || 'N/A'}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">🎒 Inventaire</span>
+                    <span class="tooltip-value">${inventoryHTML}</span>
                 </div>
             </div>
         `;
