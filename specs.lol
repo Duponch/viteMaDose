@@ -49,3 +49,119 @@ Voici les specs du citoyen :
 - Compte bancaire
 	- Salaire : + 100 € / jour
 	- Achat médicament : - 10€ / médicament
+
+
+
+
+
+
+
+	MedicationPurchaseStrategy.js:152 Agent citizen_0: Arrivé au commerce mais il est maintenant fermé (22h).
+purchaseMedication @ MedicationPurchaseStrategy.js:152
+update @ AgentMedicationBehavior.js:108
+update @ AgentStateMachine.js:114
+updateState @ Agent.js:528
+(anonyme) @ AgentManager.js:705
+update @ AgentManager.js:704
+update @ World.js:672
+update @ Experience.js:1327
+Experience.updateHandler @ Experience.js:143
+tick @ Time.js:74
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79
+requestAnimationFrame
+tick @ Time.js:78
+(anonyme) @ Time.js:79Comprendre cet avertissement
+AgentMedicationBehavior.js:115 Agent citizen_0: Échec de l'achat au magasin bldg_948. Retour à la maison.

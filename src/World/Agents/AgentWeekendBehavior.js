@@ -21,6 +21,9 @@ export default class AgentWeekendBehavior {
         this.parkSidewalkPosition = null;
         this.parkSidewalkGridNode = null;
         this.nextParkMovementTime = 0;
+        
+        // Propriété pour gérer la coordination avec l'achat de médicaments
+        this.medicationPurchaseInProgress = false;
 
         // Récupération de la hauteur du trottoir (peut être utile)
         // Utilisation de l'accès via experience
@@ -42,23 +45,50 @@ export default class AgentWeekendBehavior {
         // --- ACCÈS À L'ENVIRONNEMENT CORRIGÉ ---
         const environment = this.experience.world?.environment; // Accéder via experience
         // ---------------------------------------
+        
+        // Si l'agent est en train d'acheter des médicaments, ne pas interférer
+        if (agentState === AgentState.IN_TRANSIT_TO_COMMERCIAL || 
+            agentState === AgentState.AT_COMMERCIAL || 
+            agentState === AgentState.REQUESTING_PATH_FOR_COMMERCIAL ||
+            agentState === AgentState.READY_TO_LEAVE_FOR_COMMERCIAL) {
+            this.medicationPurchaseInProgress = true;
+            return; // Laisser le comportement d'achat de médicament gérer cette situation
+        } else if (this.medicationPurchaseInProgress && agentState === AgentState.AT_HOME) {
+            // L'agent est revenu à la maison après avoir acheté des médicaments
+            this.medicationPurchaseInProgress = false;
+        }
 
         // --- Logique de DÉCLENCHEMENT (si AT_HOME et c'est le weekend) ---
         if (agentState === AgentState.AT_HOME && isWeekendNow) {
-            // Enregistrer l'agent auprès de la stratégie (si ce n'est déjà fait pour ce jour)
-            this.weekendWalkStrategy.registerAgent(agent.id, calendarDate);
-            // Vérifier s'il est temps de partir selon la stratégie
-            const shouldStartWalk = this.weekendWalkStrategy.shouldWalkNow(agent.id, calendarDate, currentHour);
-
-            if (shouldStartWalk) {
-                console.log(`Agent ${agent.id}: Déclenchement promenade weekend (Stratégie). Recherche destination...`);
-                const destinationFound = this._findRandomWalkDestination(currentGameTime);
-                if (!destinationFound) {
-                    console.warn(`Agent ${agent.id}: Impossible de trouver une destination de promenade après déclenchement.`);
-                    // L'agent restera AT_HOME, la stratégie ne le redéclenchera pas pour cette heure.
+            // Si l'agent n'est pas en train d'acheter des médicaments, permettre l'achat de médicaments
+            if (!this.medicationPurchaseInProgress && agent.medicationBehavior) {
+                // Appeler le comportement d'achat de médicaments pour vérifier s'il a besoin d'en acheter
+                agent.medicationBehavior.update(calendarDate, currentHour, currentGameTime);
+                
+                // Si l'agent a commencé à aller acheter des médicaments, sortir de cette méthode
+                if (agent.currentState !== AgentState.AT_HOME) {
+                    this.medicationPurchaseInProgress = true;
+                    return;
                 }
-                // Si destinationFound, requestPath a déjà été appelé et l'état a changé dans Agent.js.
-                return; // Sortir car l'état a changé ou la recherche a échoué.
+            }
+            
+            // Uniquement après avoir vérifié si l'agent a besoin de médicaments et qu'il est toujours à la maison
+            if (agent.currentState === AgentState.AT_HOME) {
+                // Enregistrer l'agent auprès de la stratégie (si ce n'est déjà fait pour ce jour)
+                this.weekendWalkStrategy.registerAgent(agent.id, calendarDate);
+                // Vérifier s'il est temps de partir selon la stratégie
+                const shouldStartWalk = this.weekendWalkStrategy.shouldWalkNow(agent.id, calendarDate, currentHour);
+
+                if (shouldStartWalk) {
+                    console.log(`Agent ${agent.id}: Déclenchement promenade weekend (Stratégie). Recherche destination...`);
+                    const destinationFound = this._findRandomWalkDestination(currentGameTime);
+                    if (!destinationFound) {
+                        console.warn(`Agent ${agent.id}: Impossible de trouver une destination de promenade après déclenchement.`);
+                        // L'agent restera AT_HOME, la stratégie ne le redéclenchera pas pour cette heure.
+                    }
+                    // Si destinationFound, requestPath a déjà été appelé et l'état a changé dans Agent.js.
+                    return; // Sortir car l'état a changé ou la recherche a échoué.
+                }
             }
         }
 

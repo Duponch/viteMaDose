@@ -86,6 +86,24 @@ export default class AgentStateMachine {
             return;
         }
 
+        // --- NOUVEAU: Délégation Comportement Médicament ---
+        // Ce comportement est appelé AVANT d'autres comportements pour permettre l'achat
+        // de médicaments en priorité s'il y a besoin
+        if (agent.currentState === AgentState.AT_HOME || agent.currentState === AgentState.AT_COMMERCIAL) {
+            if (agent.medicationBehavior) {
+                agent.medicationBehavior.update(calendarDate, currentHour, currentGameTime);
+                // Si medicationBehavior a changé l'état, nous sortons de cette méthode pour ce cycle
+                if (agent.currentState !== previousStateForTimer) {
+                    if (agent.currentState.startsWith('REQUESTING_')) {
+                        agent._stateStartTime = currentGameTime;
+                    }
+                    return;
+                }
+            } else {
+                console.warn(`Agent ${agent.id}: Comportement Médicament demandé mais medicationBehavior non défini.`);
+            }
+        }
+
         // --- Délégation Weekend ---
         const isWeekendNow = ["Samedi", "Dimanche"].includes(calendarDate?.jourSemaine);
         const isWeekendState = agent.currentState.startsWith('WEEKEND_');
@@ -104,29 +122,10 @@ export default class AgentStateMachine {
                 console.warn(`Agent ${agent.id}: Comportement Weekend demandé mais weekendBehavior non défini.`);
             }
         }
-        
-        // --- NOUVEAU: Délégation Comportement Médicament ---
-        // Ce comportement est appelé APRÈS le weekendBehavior pour que le weekend ait priorité
-        // et aussi AVANT la logique de travail/maison standard, pour lui permettre de changer l'état si nécessaire.
-        // Il est pertinent pour les états AT_HOME (décider d'acheter) et AT_COMMERCIAL (acheter et rentrer).
-        if (agent.currentState === AgentState.AT_HOME || agent.currentState === AgentState.AT_COMMERCIAL) {
-            if (agent.medicationBehavior) {
-                agent.medicationBehavior.update(calendarDate, currentHour, currentGameTime);
-                // Si medicationBehavior a changé l'état (par ex. vers REQUESTING_PATH_FOR_COMMERCIAL),
-                // nous devons sortir pour ce tick afin que la logique de cet état prenne effet au prochain cycle.
-                if (agent.currentState !== previousStateForTimer && agent.currentState.startsWith('REQUESTING_')) {
-                    // Mettre à jour _stateStartTime si on vient d'entrer dans un état de requête initié par medicationBehavior
-                     if (previousStateForTimer !== agent.currentState) agent._stateStartTime = currentGameTime;
-                    return;
-                }
-            } else {
-                console.warn(`Agent ${agent.id}: Comportement Médicament demandé mais medicationBehavior non défini.`);
-            }
-        }
 
 
         // --- Machine d'état (Logique travail/maison semaine) ---
-        const currentState = agent.currentState; // Ré-évaluer au cas où medicationBehavior l'aurait changé
+        const currentState = agent.currentState; // Ré-évaluer au cas où un comportement l'aurait changé
 
         switch (currentState) {
             case AgentState.AT_HOME:
