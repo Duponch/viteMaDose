@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import AgentState from './AgentState.js';
 import MedicationPurchaseStrategy from '../Strategies/MedicationPurchaseStrategy.js';
+import CommercialOpeningHoursStrategy from '../Strategies/CommercialOpeningHoursStrategy.js';
 
 export default class AgentMedicationBehavior {
     /**
@@ -50,6 +51,26 @@ export default class AgentMedicationBehavior {
         // --- Étape 1: Vérifier si l'agent doit aller acheter un médicament ---
         // L'agent peut aller acheter un médicament s'il est à la maison, que ce soit en semaine ou weekend
         if (agentState === AgentState.AT_HOME) {
+            // Vérifier si les commerces sont ouverts avant d'envisager l'achat de médicament
+            let areCommercialsOpen = false;
+            
+            if (cityManager.commercialManager) {
+                areCommercialsOpen = cityManager.commercialManager.areCommercialsOpen(calendarDate, currentHour);
+            } else {
+                // Fallback si commercialManager n'est pas disponible
+                const openingHoursStrategy = new CommercialOpeningHoursStrategy();
+                areCommercialsOpen = openingHoursStrategy.isOpen(calendarDate, currentHour);
+            }
+            
+            // Si les commerces sont fermés, ne pas partir acheter de médicament
+            if (!areCommercialsOpen) {
+                // Planifier l'achat pour plus tard via la stratégie
+                this.medicationPurchaseStrategy.shouldPurchaseMedication(
+                    agent.id, citizenInfo, agent, currentGameTime, calendarDate, currentHour
+                );
+                return;
+            }
+            
             const shouldPurchase = this.medicationPurchaseStrategy.shouldPurchaseMedication(
                 agent.id, citizenInfo, agent, currentGameTime, calendarDate, currentHour
             );

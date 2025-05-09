@@ -48,8 +48,8 @@ export default class MedicationPurchaseStrategy {
         }
 
         // Vérifier le cooldown
-        const lastAttempt = this.lastPurchaseAttempt.get(agentId);
-        if (currentGameTime - lastAttempt < this.cooldownTime) return false;
+        /* const lastAttempt = this.lastPurchaseAttempt.get(agentId);
+        if (currentGameTime - lastAttempt < this.cooldownTime) return false; */
 
         // Obtenir le gestionnaire des commerces
         const cityManager = this.experience?.world?.cityManager;
