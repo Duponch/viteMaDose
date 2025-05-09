@@ -51,7 +51,6 @@ export default class AgentMedicationBehavior {
 
 			
             if (shouldPurchase) {
-				alert('shouldPurchase : YES');
                 // Tenter de trouver le bâtiment commercial le plus proche
                 const nearestCommercial = this.medicationPurchaseStrategy.findNearestCommercialBuilding(agent, cityManager);
                 
@@ -69,7 +68,6 @@ export default class AgentMedicationBehavior {
                         this.commercialGridNode = navGraph.getClosestWalkableNode(commercialPos);
 						
                         if (this.commercialGridNode) {
-							alert('this.commercialGridNode : YES');
                             this.commercialPosition = navGraph.gridToWorld(this.commercialGridNode.x, this.commercialGridNode.y);
                             
                             // Enregistrer la tentative d'achat
@@ -88,9 +86,7 @@ export default class AgentMedicationBehavior {
                                 currentGameTime
                             );
                             return; // Sortir après avoir initié la demande de chemin
-                        } else {
-							alert('this.commercialGridNode : NO');
-						}
+                        }
                     }
                 } else {
                     console.warn(`Agent ${agent.id}: Besoin de médicament mais aucun bâtiment commercial trouvé.`);
