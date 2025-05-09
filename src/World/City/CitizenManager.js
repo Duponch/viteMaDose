@@ -236,7 +236,6 @@ export default class CitizenManager {
      * @param {number} deltaTime - Temps écoulé depuis la dernière mise à jour
      */
     update(deltaTime) {
-        console.log("CitizenManager: update appelé");
         if (!this.citizenHealth) return;
 
         const environment = this.citizenHealth.experience.world?.environment;
