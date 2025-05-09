@@ -790,14 +790,12 @@ export default class Experience extends EventTarget {
                     <span class="tooltip-label">⚒ Travail</span>
                     <span class="tooltip-value">${workLink}</span>
                 </div>
-            </div>
-            <div class="tooltip-section">
                 <div class="tooltip-row">
                     <span class="tooltip-label">☻ Bonheur</span>
                     <span class="tooltip-value">${citizenInfo?.happiness?.toFixed(0) || 'N/A'}</span>
                 </div>
                 <div class="tooltip-row">
-                    <span class="tooltip-label">♥ Santé</span>
+                    <span class="tooltip-label">♥ Santé / Santé Max</span>
                     <span class="tooltip-value">${citizenInfo?.health?.toFixed(0) || 'N/A'}/${citizenInfo?.maxHealth?.toFixed(0) || 'N/A'}</span>
                 </div>
                 <div class="tooltip-row">
@@ -805,19 +803,19 @@ export default class Experience extends EventTarget {
                     <span class="tooltip-value">${citizenInfo?.healthThreshold?.toFixed(0) || 'N/A'}</span>
                 </div>
                 <div class="tooltip-row">
-                    <span class="tooltip-label">🔄 Adaptation Physiologique</span>
+                    <span class="tooltip-label">🔄 Adaptation Phy.</span>
                     <span class="tooltip-value">${adaptationInfo}</span>
                 </div>
                 <div class="tooltip-row">
                     <span class="tooltip-label">${statusIcon} Statut</span>
-                    <span class="tooltip-value">${citizenInfo?.status || 'N/A'} (${citizenInfo?.healthStatus || 'N/A'})</span>
+                    <span class="tooltip-value">${citizenInfo?.status || 'N/A'}</span>
                 </div>
                 <div class="tooltip-row">
                     <span class="tooltip-label">💊 Dépendance</span>
                     <span class="tooltip-value">${citizenInfo?.chemicalDependency?.toFixed(0) || '0'}/100</span>
                 </div>
                 <div class="tooltip-row">
-                    <span class="tooltip-label">${citizenInfo?.needsMedication ? '🏥' : '✓'} Besoin Médicament</span>
+                    <span class="tooltip-label">${citizenInfo?.needsMedication ? '🏥' : '✓'} Médicament</span>
                     <span class="tooltip-value">${citizenInfo?.needsMedication ? 'Oui' : 'Non'}</span>
                 </div>
                 <div class="tooltip-row">
