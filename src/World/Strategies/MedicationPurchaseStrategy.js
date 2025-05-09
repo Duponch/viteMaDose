@@ -43,10 +43,10 @@ export default class MedicationPurchaseStrategy {
         // Vérifier le cooldown
         const lastAttempt = this.lastPurchaseAttempt.get(agentId);
 
+	    if (currentGameTime - lastAttempt < this.cooldownTime) return false;
+
 		console.log('currentGameTime : ', currentGameTime);
 		console.log('this.cooldownTime : ', this.cooldownTime);
-
-	    if (currentGameTime - lastAttempt < this.cooldownTime) return false;
 
         return true;
     }

@@ -144,14 +144,14 @@ export default class CitizenHealth {
         if (!citizenInfo) return false;
         
         // Vérifier si le citoyen a suffisamment d'argent
-        const medicationCost = 10;
+        /*const medicationCost = 10;
         if (citizenInfo.money < medicationCost) {
             console.log(`Citoyen ${citizenInfo.id}: Pas assez d'argent pour acheter un médicament`);
             return false;
         }
-        
+
         // Déduire le coût
-        citizenInfo.money -= medicationCost;
+        citizenInfo.money -= medicationCost;*/
         
         // Enregistrer la prise de médicament
         const environment = this.experience.world?.environment;

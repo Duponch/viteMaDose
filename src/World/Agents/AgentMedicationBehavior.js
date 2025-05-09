@@ -160,17 +160,18 @@ export default class AgentMedicationBehavior {
             return false;
         }
         
-        // Décrémenter l'inventaire
-        this.agent.inventory.medications--;
-        
-        // Mettre à jour le timestamp de dernière prise
-        this.lastMedicationTaken = currentGameTime;
-        
         // Appliquer les effets du médicament via CitizenHealth
-        const citizenHealth = this.experience.world?.cityManager?.citizenHealth;
+        const citizenHealth = this.experience.world?.cityManager?.citizenManager?.citizenHealth;
         if (citizenHealth) {
             // Application du traitement pharmaceutique (soin palliatif)
             citizenHealth.applyPharmaceuticalTreatment(citizenInfo, true);
+
+			// Décrémenter l'inventaire
+			this.agent.inventory.medications--;
+        
+			// Mettre à jour le timestamp de dernière prise
+			this.lastMedicationTaken = currentGameTime;
+
             console.log(`Agent ${this.agent.id}: Médicament pris. Inventaire restant: ${this.agent.inventory.medications} médicament(s).`);
             
             // Mettre à jour l'infobulle si l'agent est sélectionné
