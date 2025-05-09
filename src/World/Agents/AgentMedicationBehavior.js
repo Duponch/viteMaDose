@@ -43,16 +43,17 @@ export default class AgentMedicationBehavior {
         
         if (!cityManager || !citizenInfo) return;
         
-        // Vérifier si c'est vendredi soir (priorité au retour à la maison)
+        // On vérifie si c'est vendredi soir (priorité au retour à la maison)
+        // Cette condition ne s'applique qu'aux jours de travail, pas aux achats de médicaments
         const isFridayEvening = calendarDate?.jourSemaine === "Vendredi" && currentHour >= agent.departureHomeHour;
         
         // --- Étape 1: Vérifier si l'agent doit aller acheter un médicament ---
-        if (agentState === AgentState.AT_HOME && !isFridayEvening) {
+        // L'agent peut aller acheter un médicament s'il est à la maison, que ce soit en semaine ou weekend
+        if (agentState === AgentState.AT_HOME) {
             const shouldPurchase = this.medicationPurchaseStrategy.shouldPurchaseMedication(
-                agent.id, citizenInfo, agent, currentGameTime
+                agent.id, citizenInfo, agent, currentGameTime, calendarDate, currentHour
             );
 
-			
             if (shouldPurchase) {
                 // Tenter de trouver le bâtiment commercial le plus proche
                 const nearestCommercial = this.medicationPurchaseStrategy.findNearestCommercialBuilding(agent, cityManager);
@@ -76,7 +77,11 @@ export default class AgentMedicationBehavior {
                             // Enregistrer la tentative d'achat
                             this.medicationPurchaseStrategy.recordPurchaseAttempt(agent.id, currentGameTime);
                             
-                            console.log(`Agent ${agent.id}: Besoin de médicament détecté. Direction le magasin ${this.commercialBuildingId}.`);
+                            // Indiquer si c'est le weekend pour le log
+                            const isWeekend = ["Samedi", "Dimanche"].includes(calendarDate?.jourSemaine);
+                            const dayTypeMsg = isWeekend ? "weekend" : "semaine";
+                            
+                            console.log(`Agent ${agent.id}: Besoin de médicament détecté (${dayTypeMsg}). Direction le magasin ${this.commercialBuildingId}.`);
                             
                             // Demander un chemin vers le bâtiment commercial
                             agent._currentPathRequestGoal = 'COMMERCIAL';
@@ -100,7 +105,9 @@ export default class AgentMedicationBehavior {
         // --- Étape 2: Gérer l'arrivée au bâtiment commercial ---
         if (agentState === AgentState.AT_COMMERCIAL) {
             // Effectuer l'achat de médicament
-            const purchaseSuccess = this.medicationPurchaseStrategy.purchaseMedication(citizenInfo, agent);
+            const purchaseSuccess = this.medicationPurchaseStrategy.purchaseMedication(
+                citizenInfo, agent, calendarDate, currentHour
+            );
             
             if (purchaseSuccess) {
                 console.log(`Agent ${agent.id}: Achat effectué au magasin ${this.commercialBuildingId}. Retour à la maison.`);
@@ -108,8 +115,8 @@ export default class AgentMedicationBehavior {
                 console.warn(`Agent ${agent.id}: Échec de l'achat au magasin ${this.commercialBuildingId}. Retour à la maison.`);
             }
             
-            // Si vendredi soir, priorité au retour à la maison rapide
-            if (isFridayEvening) {
+            // Si c'est vendredi soir et que l'agent a un emploi (sinon cette condition ne s'applique pas)
+            if (isFridayEvening && agent.workBuildingId) {
                 console.log(`Agent ${agent.id}: Vendredi soir, retour à la maison forcé depuis le commercial.`);
                 agent.forceReturnHome(currentGameTime);
                 return;

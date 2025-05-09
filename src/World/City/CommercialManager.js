@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import CommercialOpeningHoursStrategy from '../Strategies/CommercialOpeningHoursStrategy.js';
 
 /**
  * @typedef {import('./District.js').default} District
@@ -20,6 +21,9 @@ export default class CommercialManager {
         
         // Liste des parcelles qui auront un commerce
         this.plotsWithCommercial = new Set();
+        
+        // Stratégie des horaires d'ouverture des commerces (par défaut 8h-21h 7j/7)
+        this.openingHoursStrategy = new CommercialOpeningHoursStrategy();
     }
 
     /**
@@ -187,5 +191,35 @@ export default class CommercialManager {
         });
         
         return commercialPositions;
+    }
+
+    /**
+     * Vérifie si les commerces sont ouverts à une date et heure donnée
+     * @param {Object} calendarDate - Informations du calendrier
+     * @param {number} currentHour - Heure actuelle (0-23)
+     * @returns {boolean} - True si les commerces sont ouverts
+     */
+    areCommercialsOpen(calendarDate, currentHour) {
+        return this.openingHoursStrategy.isOpen(calendarDate, currentHour);
+    }
+    
+    /**
+     * Obtient le statut actuel des commerces (ouvert/fermé)
+     * @param {Object} calendarDate - Informations du calendrier
+     * @param {number} currentHour - Heure actuelle (0-23)
+     * @returns {string} - "Ouvert" ou "Fermé"
+     */
+    getCommercialsStatus(calendarDate, currentHour) {
+        return this.openingHoursStrategy.getStatus(calendarDate, currentHour);
+    }
+    
+    /**
+     * Calcule le nombre d'heures avant la prochaine ouverture des commerces
+     * @param {Object} calendarDate - Informations du calendrier
+     * @param {number} currentHour - Heure actuelle (0-23)
+     * @returns {number} - Nombre d'heures
+     */
+    getHoursUntilCommercialOpen(calendarDate, currentHour) {
+        return this.openingHoursStrategy.hoursUntilOpen(calendarDate, currentHour);
     }
 } 

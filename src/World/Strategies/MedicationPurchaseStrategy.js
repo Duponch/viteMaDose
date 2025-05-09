@@ -1,4 +1,5 @@
 import AgentState from '../Agents/AgentState.js';
+import CommercialOpeningHoursStrategy from './CommercialOpeningHoursStrategy.js';
 
 export default class MedicationPurchaseStrategy {
     /**
@@ -10,9 +11,13 @@ export default class MedicationPurchaseStrategy {
         // Configuration
         this.cooldownTime = options.cooldownTime || 4 * 60 * 60 * 100; // 4h de temps de jeu par défaut
         this.medicationPrice = options.medicationPrice || 10; // Prix du médicament (€)
+        this.experience = experience;
         
         // Stockage des timestamps de dernières tentatives d'achat par agent
         this.lastPurchaseAttempt = new Map();
+        
+        // Stockage des heures de rendez-vous prévues par agent
+        this.scheduledPurchaseHours = new Map();
     }
 
     /**
@@ -21,9 +26,11 @@ export default class MedicationPurchaseStrategy {
      * @param {Object} citizenInfo - Informations du citoyen
      * @param {Object} agent - Instance de l'agent
      * @param {number} currentGameTime - Temps de jeu actuel
+     * @param {Object} calendarDate - Date du calendrier actuel
+     * @param {number} currentHour - Heure actuelle (0-23)
      * @returns {boolean} - True si l'agent peut acheter un médicament
      */
-    shouldPurchaseMedication(agentId, citizenInfo, agent, currentGameTime) {
+    shouldPurchaseMedication(agentId, citizenInfo, agent, currentGameTime, calendarDate, currentHour) {
         if (!citizenInfo || !agent) return false;
 
         // Vérifier si l'agent est à la maison (condition requise)
@@ -42,13 +49,66 @@ export default class MedicationPurchaseStrategy {
 
         // Vérifier le cooldown
         const lastAttempt = this.lastPurchaseAttempt.get(agentId);
+        if (currentGameTime - lastAttempt < this.cooldownTime) return false;
 
-	    if (currentGameTime - lastAttempt < this.cooldownTime) return false;
+        // Obtenir le gestionnaire des commerces
+        const cityManager = this.experience?.world?.cityManager;
+        const commercialManager = cityManager?.commercialManager;
+        
+        // Vérifier si nous avons un rendez-vous prévu
+        if (this.scheduledPurchaseHours.has(agentId)) {
+            const scheduledHour = this.scheduledPurchaseHours.get(agentId);
+            
+            // Si nous sommes à l'heure prévue ou plus tard, autoriser l'achat
+            if (currentHour >= scheduledHour) {
+                // Supprimer le rendez-vous une fois utilisé
+                this.scheduledPurchaseHours.delete(agentId);
+                return true;
+            }
+            
+            // Sinon, attendre l'heure prévue
+            console.log(`Agent ${agentId}: Besoin de médicament. Rendez-vous prévu à ${scheduledHour}h (actuellement ${currentHour}h).`);
+            return false;
+        }
 
-		console.log('currentGameTime : ', currentGameTime);
-		console.log('this.cooldownTime : ', this.cooldownTime);
-
-        return true;
+        // Vérifier si les commerces sont ouverts actuellement
+        let isOpen = false;
+        let openingHour = 8; // Par défaut
+        
+        if (commercialManager) {
+            isOpen = commercialManager.areCommercialsOpen(calendarDate, currentHour);
+            
+            // Si fermé, récupérer l'heure d'ouverture prochaine
+            if (!isOpen) {
+                const hoursUntilOpen = commercialManager.getHoursUntilCommercialOpen(calendarDate, currentHour);
+                openingHour = (currentHour + hoursUntilOpen) % 24;
+            }
+        } else {
+            // Fallback si commercialManager n'est pas disponible
+            const openingHoursStrategy = new CommercialOpeningHoursStrategy();
+            isOpen = openingHoursStrategy.isOpen(calendarDate, currentHour);
+            
+            // Si fermé, récupérer l'heure d'ouverture prochaine
+            if (!isOpen) {
+                const hoursUntilOpen = openingHoursStrategy.hoursUntilOpen(calendarDate, currentHour);
+                openingHour = (currentHour + hoursUntilOpen) % 24;
+            }
+        }
+        
+        // Si les commerces sont ouverts, on peut y aller maintenant
+        if (isOpen) {
+            return true;
+        }
+        
+        // Sinon, planifier un rendez-vous pour l'heure d'ouverture
+        // On ajoute une petite variation pour éviter que tous les agents y aillent exactement à la même heure
+        const randomOffset = Math.floor(Math.random() * 3); // 0, 1 ou 2 heures après l'ouverture
+        const scheduledHour = (openingHour + randomOffset) % 24;
+        
+        this.scheduledPurchaseHours.set(agentId, scheduledHour);
+        console.log(`Agent ${agentId}: Besoin de médicament mais les commerces sont fermés (${currentHour}h). Rendez-vous planifié à ${scheduledHour}h.`);
+        
+        return false;
     }
 
     /**
@@ -58,16 +118,40 @@ export default class MedicationPurchaseStrategy {
      */
     recordPurchaseAttempt(agentId, currentGameTime) {
         this.lastPurchaseAttempt.set(agentId, currentGameTime);
+        
+        // Supprimer tout rendez-vous prévu puisque l'achat est en cours
+        if (this.scheduledPurchaseHours.has(agentId)) {
+            this.scheduledPurchaseHours.delete(agentId);
+        }
     }
     
     /**
      * Effectue l'achat de médicament
      * @param {Object} citizenInfo - Informations du citoyen
      * @param {Object} agent - Instance de l'agent
+     * @param {Object} calendarDate - Date du calendrier actuel 
+     * @param {number} currentHour - Heure actuelle (0-23)
      * @returns {boolean} - True si l'achat a réussi
      */
-    purchaseMedication(citizenInfo, agent) {
+    purchaseMedication(citizenInfo, agent, calendarDate, currentHour) {
         if (!citizenInfo || !agent) return false;
+        
+        // Vérifier si les commerces sont toujours ouverts (sécurité au cas où l'agent arrive après la fermeture)
+        const cityManager = this.experience?.world?.cityManager;
+        let areCommercialsStillOpen = true;
+        
+        if (cityManager && cityManager.commercialManager) {
+            areCommercialsStillOpen = cityManager.commercialManager.areCommercialsOpen(calendarDate, currentHour);
+        } else {
+            // Fallback si commercialManager n'est pas disponible
+            const openingHoursStrategy = new CommercialOpeningHoursStrategy();
+            areCommercialsStillOpen = openingHoursStrategy.isOpen(calendarDate, currentHour);
+        }
+        
+        if (!areCommercialsStillOpen) {
+            console.warn(`Agent ${agent.id}: Arrivé au commerce mais il est maintenant fermé (${currentHour}h).`);
+            return false;
+        }
         
         // Vérifier si l'agent a assez d'argent
         if (citizenInfo.money < this.medicationPrice) return false;
