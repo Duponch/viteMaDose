@@ -66,7 +66,21 @@ export default class AgentMedicationBehavior {
         // Cette condition ne s'applique qu'aux jours de travail, pas aux achats de médicaments
         const isFridayEvening = calendarDate?.jourSemaine === "Vendredi" && currentHour >= agent.departureHomeHour;
         
-        // --- Étape 1: Vérifier si l'agent doit aller acheter un médicament ---
+        // --- Étape 1: Vérifier si l'agent doit prendre un médicament s'il est à la maison ---
+        if (agentState === AgentState.AT_HOME && 
+            citizenInfo.needsMedication && 
+            agent.inventory && 
+            agent.inventory.medications > 0 &&
+            (this.lastMedicationTaken === -1 || this._canTakeMedicationAgain(currentGameTime))) {
+            
+            const medicationTaken = this._takeMedication(citizenInfo, currentGameTime);
+            console.log(`Agent ${agent.id}: Prise de médicament à la maison (réussie: ${medicationTaken}).`);
+            
+            // Si l'agent a pris un médicament, sortir de la méthode pour ne pas faire d'autres actions
+            if (medicationTaken) return;
+        }
+        
+        // --- Étape 2: Vérifier si l'agent doit aller acheter un médicament ---
         // L'agent peut aller acheter un médicament s'il est à la maison, que ce soit en semaine ou weekend
         if (agentState === AgentState.AT_HOME) {
             // Vérifier si les commerces sont ouverts avant d'envisager l'achat de médicament
@@ -141,7 +155,7 @@ export default class AgentMedicationBehavior {
             }
         }
         
-        // --- Étape 2: Gérer l'arrivée au bâtiment commercial ---
+        // --- Étape 3: Gérer l'arrivée au bâtiment commercial ---
         if (agentState === AgentState.AT_COMMERCIAL) {
             // Effectuer l'achat de médicament
             const purchaseSuccess = this.medicationPurchaseStrategy.purchaseMedication(
@@ -176,16 +190,6 @@ export default class AgentMedicationBehavior {
                 agent.forceRecoverFromTimeout(currentGameTime);
             }
         }
-        
-        // --- Étape 3: Vérifier si l'agent doit prendre un médicament ---
-        if (agentState === AgentState.AT_HOME && 
-            citizenInfo.needsMedication && 
-            agent.inventory && 
-            agent.inventory.medications > 0 &&
-            (this.lastMedicationTaken === -1 || this._canTakeMedicationAgain(currentGameTime))) {
-            
-            this._takeMedication(citizenInfo, currentGameTime);
-        }
     }
     
     /**
@@ -201,7 +205,16 @@ export default class AgentMedicationBehavior {
         const dayDurationMs = environment?.dayDurationMs || 24 * 60 * 60 * 1000;
         
         // Vérifier si au moins un jour s'est écoulé depuis la dernière prise
-        return (currentGameTime - this.lastMedicationTaken) >= dayDurationMs;
+        const timeElapsed = currentGameTime - this.lastMedicationTaken;
+        const canTake = timeElapsed >= dayDurationMs;
+        
+        if (!canTake) {
+            // Calculer et afficher le temps restant en heures de jeu
+            const hoursRemaining = (dayDurationMs - timeElapsed) / (dayDurationMs / 24);
+            console.log(`Agent ${this.agent.id}: Doit attendre encore ${hoursRemaining.toFixed(1)}h avant de pouvoir reprendre un médicament.`);
+        }
+        
+        return canTake;
     }
     
     /**

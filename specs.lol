@@ -55,6 +55,4 @@ Voici les specs du citoyen :
 
 
 
-
-MedicationPurchaseStrategy.js:152 Agent citizen_0: Arrivé au commerce mais il est maintenant fermé (22h).
-AgentMedicationBehavior.js:115 Agent citizen_0: Échec de l'achat au magasin bldg_948. Retour à la maison.
+(Quand agent a besoin medoc + est sur son temps libre (cad à la maison) + en horaire d'ouverture : l'agent fait des allers retours en boucle au magasin jusuqu'à sa fermeture (pourrait acheter plusieurs par plusieurs ou alors max 1 aller retour par jour... à voir...))
