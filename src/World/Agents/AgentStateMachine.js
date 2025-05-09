@@ -176,7 +176,7 @@ export default class AgentStateMachine {
                 );
                 
                 if (homeCheckCondition) {
-                    console.log(`Agent ${agent.id}: Préparation départ maison. [${calendarDate?.jourSemaine}] [isFridayDepartureTime: ${isFridayDepartureTime}] [Heure: ${currentHour}]`);
+                    //console.log(`Agent ${agent.id}: Préparation départ maison. [${calendarDate?.jourSemaine}] [isFridayDepartureTime: ${isFridayDepartureTime}] [Heure: ${currentHour}]`);
                     agent.requestedPathForDepartureTime = currentGameTime;
                     const shouldUseCar = agent.vehicleBehavior?.shouldUseVehicle() ?? false;
                     if (shouldUseCar) {
@@ -308,7 +308,7 @@ export default class AgentStateMachine {
                         (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
                     agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
                     departureCommSuccessful = true;
-                    console.log(`Agent ${agent.id}: Départ vers le bâtiment commercial.`);
+                    //console.log(`Agent ${agent.id}: Départ vers le bâtiment commercial.`);
                 } else {
                     agent.currentState = AgentState.AT_HOME;
                     agent.isVisible = false;
@@ -385,7 +385,7 @@ export default class AgentStateMachine {
                     agent.currentPathLengthWorld = 0;
                     agent.hasReachedDestination = false;
                     agent.arrivalTmeGame = -1;
-                    console.log(`Agent ${agent.id}: Arrivé au bâtiment commercial.`);
+                    //console.log(`Agent ${agent.id}: Arrivé au bâtiment commercial.`);
                 }
                 break;
 
