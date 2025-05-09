@@ -599,6 +599,31 @@ export default class World {
 
             this.createAgents(maxAgents);
 
+            // Préchauffer le cache de chemins pour les trajets fréquents
+            const preheatEnabled = this.cityManager.config.preheatPathCache !== false;
+            const preheatCount = this.cityManager.config.preheatPathCount || Math.min(50, Math.floor(maxAgents * 0.1));
+            
+            if (preheatEnabled && this.agentManager) {
+                console.log(`World: Démarrage du préchauffage du cache pour ${preheatCount} agents...`);
+                // Attendre un peu que le worker se stabilise avant de démarrer le préchauffage
+                setTimeout(async () => {
+                    try {
+                        const result = await this.agentManager.preheatCommonPaths(preheatCount);
+                        console.log(`World: Préchauffage du cache terminé. ${result.processedCount} chemins calculés.`);
+                        
+                        // Afficher les statistiques du cache
+                        try {
+                            const stats = await this.agentManager.requestCacheStats();
+                            console.log("World: Statistiques du cache après préchauffage:", stats);
+                        } catch (statsError) {
+                            console.warn("World: Impossible de récupérer les statistiques du cache:", statsError);
+                        }
+                    } catch (preheatError) {
+                        console.warn("World: Erreur lors du préchauffage du cache:", preheatError);
+                    }
+                }, 1000);
+            }
+
             // Si le mode debug est actif AU DEMARRAGE, générer les visuels
             if (this.experience.isDebugMode) {
                 this.setDebugMode(true); // Applique les visibilités initiales des catégories/sous-types

@@ -17,6 +17,178 @@ let offsetZ = 0;
 let pedestrianGraphHeight = 0.2; // Hauteur par défaut pour piétons
 let roadGraphHeight = 0.1;       // Hauteur par défaut pour routes
 
+// --- Cache de chemins ---
+const pathCache = {
+    cache: new Map(),
+    cacheKeys: [],
+    maxSize: 2000, // Taille maximale du cache
+    expirationTime: 5 * 60 * 1000, // 5 minutes
+    nearbyThreshold: 3, // Seuil pour les correspondances approximatives
+    stats: {
+        hits: 0,
+        misses: 0,
+        nearHits: 0,
+        lastCleaned: Date.now()
+    },
+    
+    // Générer une clé de cache
+    generateKey: function(startNode, endNode, isVehicle) {
+        return `${startNode.x},${startNode.y}-${endNode.x},${endNode.y}-${isVehicle ? 'v' : 'p'}`;
+    },
+    
+    // Chercher un chemin dans le cache
+    findPath: function(startNode, endNode, isVehicle) {
+        // 1. Chercher dans le cache exact
+        const key = this.generateKey(startNode, endNode, isVehicle);
+        const cachedEntry = this.cache.get(key);
+        
+        if (cachedEntry && !this.isExpired(cachedEntry)) {
+            this.stats.hits++;
+            cachedEntry.uses++;
+            cachedEntry.lastAccess = Date.now();
+            this.refreshKey(key);
+            return cachedEntry;
+        }
+        
+        // 2. Chercher un chemin similaire
+        const nearbyEntry = this.findNearbyPath(startNode, endNode, isVehicle);
+        if (nearbyEntry) {
+            this.stats.nearHits++;
+            return nearbyEntry;
+        }
+        
+        this.stats.misses++;
+        return null;
+    },
+    
+    // Chercher un chemin proche
+    findNearbyPath: function(startNode, endNode, isVehicle) {
+        let bestMatch = null;
+        let bestScore = Number.MAX_VALUE;
+        
+        for (const [key, entry] of this.cache.entries()) {
+            if (entry.isVehicle !== isVehicle || this.isExpired(entry)) {
+                continue;
+            }
+            
+            const startDist = Math.abs(startNode.x - entry.startNode.x) + Math.abs(startNode.y - entry.startNode.y);
+            const endDist = Math.abs(endNode.x - entry.endNode.x) + Math.abs(endNode.y - entry.endNode.y);
+            const score = startDist + endDist;
+            
+            if (score < bestScore && startDist <= this.nearbyThreshold && endDist <= this.nearbyThreshold) {
+                bestMatch = entry;
+                bestScore = score;
+            }
+        }
+        
+        if (bestMatch) {
+            bestMatch.uses++;
+            bestMatch.lastAccess = Date.now();
+        }
+        
+        return bestMatch;
+    },
+    
+    // Stocker un chemin
+    storePath: function(startNode, endNode, isVehicle, path, pathLengthWorld) {
+        // Nettoyer le cache si nécessaire
+        if (Date.now() - this.stats.lastCleaned > 60000) { // 1 minute
+            this.cleanCache();
+        }
+        
+        const key = this.generateKey(startNode, endNode, isVehicle);
+        
+        // Mettre à jour si la clé existe déjà
+        if (this.cache.has(key)) {
+            const entry = this.cache.get(key);
+            entry.path = path;
+            entry.pathLengthWorld = pathLengthWorld;
+            entry.timestamp = Date.now();
+            entry.uses++;
+            this.refreshKey(key);
+            return;
+        }
+        
+        // Éviction si le cache est plein
+        if (this.cache.size >= this.maxSize) {
+            this.evictOldest();
+        }
+        
+        // Créer une nouvelle entrée
+        const entry = {
+            path: path,
+            pathLengthWorld: pathLengthWorld,
+            timestamp: Date.now(),
+            lastAccess: Date.now(),
+            startNode: { x: startNode.x, y: startNode.y },
+            endNode: { x: endNode.x, y: endNode.y },
+            isVehicle: isVehicle,
+            uses: 1
+        };
+        
+        this.cache.set(key, entry);
+        this.cacheKeys.push(key);
+    },
+    
+    // Vérifier si une entrée est expirée
+    isExpired: function(entry) {
+        return Date.now() - entry.timestamp > this.expirationTime;
+    },
+    
+    // Nettoyer le cache
+    cleanCache: function() {
+        const keysToRemove = [];
+        
+        for (const [key, entry] of this.cache.entries()) {
+            if (this.isExpired(entry)) {
+                keysToRemove.push(key);
+            }
+        }
+        
+        keysToRemove.forEach(key => {
+            this.cache.delete(key);
+            const index = this.cacheKeys.indexOf(key);
+            if (index !== -1) {
+                this.cacheKeys.splice(index, 1);
+            }
+        });
+        
+        this.stats.lastCleaned = Date.now();
+    },
+    
+    // Supprimer l'entrée la plus ancienne
+    evictOldest: function() {
+        if (this.cacheKeys.length === 0) {
+            return;
+        }
+        
+        const oldestKey = this.cacheKeys.shift();
+        this.cache.delete(oldestKey);
+    },
+    
+    // Rafraîchir l'ordre d'une clé
+    refreshKey: function(key) {
+        const index = this.cacheKeys.indexOf(key);
+        if (index !== -1) {
+            this.cacheKeys.splice(index, 1);
+            this.cacheKeys.push(key);
+        }
+    },
+    
+    // Obtenir les statistiques du cache
+    getStats: function() {
+        return {
+            size: this.cache.size,
+            hits: this.stats.hits,
+            misses: this.stats.misses,
+            nearHits: this.stats.nearHits,
+            hitRate: this.stats.hits + this.stats.nearHits > 0 
+                ? ((this.stats.hits + this.stats.nearHits) / (this.stats.hits + this.stats.nearHits + this.stats.misses) * 100).toFixed(2) + '%'
+                : '0%'
+        };
+    }
+};
+
 // --- Fonction helper pour calculer la distance (inchangée) ---
 function calculateWorldDistance(p1, p2) {
     const dx = p2.x - p1.x;
@@ -73,7 +245,7 @@ self.onmessage = function(event) {
                 console.log(`[Worker] Vues Uint8Array créées sur SharedArrayBuffers (${gridWidth}x${gridHeight}).`);
                 console.log(`[Worker] Hauteurs: Piéton=${pedestrianGraphHeight.toFixed(2)}, Route=${roadGraphHeight.toFixed(2)}`);
 
-                console.log('[Worker] Prêt pour les requêtes A* (double grille).');
+                console.log('[Worker] Prêt pour les requêtes A* (double grille avec cache).');
                 self.postMessage({ type: 'initComplete' });
             } else {
                  throw new Error("Données manquantes ou invalides pour l'initialisation combinée.");
@@ -107,6 +279,27 @@ self.onmessage = function(event) {
             const activeGridMap = isVehicle ? roadGridWalkableMap : pedestrianGridWalkableMap;
             const activeGraphHeight = isVehicle ? roadGraphHeight : pedestrianGraphHeight;
             // --- FIN Sélection --- 
+            
+            // --- AJOUT: Vérifier le cache avant de calculer ---
+            const startTime = performance.now();
+            const cachedResult = pathCache.findPath(startNode, endNode, isVehicle);
+            
+            if (cachedResult) {
+                const endTime = performance.now();
+                console.log(`[Worker] Cache HIT pour Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}) en ${(endTime - startTime).toFixed(2)}ms`);
+                
+                self.postMessage({
+                    type: 'pathResult',
+                    data: { 
+                        agentId, 
+                        path: cachedResult.path, 
+                        pathLengthWorld: cachedResult.pathLengthWorld,
+                        fromCache: true
+                    }
+                });
+                return;
+            }
+            // --- FIN AJOUT ---
 
             // ---- AJOUT LOG: Vérifier marchabilité dans le worker ----
             const startWalkable = isWalkable(startNode.x, startNode.y, activeGridMap);
@@ -158,6 +351,10 @@ self.onmessage = function(event) {
                         for (let i = 0; i < worldPathData.length - 1; i++) {
                             pathLengthWorld += calculateWorldDistance(worldPathData[i], worldPathData[i+1]);
                         }
+                        
+                        // --- AJOUT: Stocker dans le cache ---
+                        pathCache.storePath(startNode, endNode, isVehicle, worldPathData, pathLengthWorld);
+                        // --- FIN AJOUT ---
                     } else {
                          pathLengthWorld = 0;
                     }
@@ -173,13 +370,35 @@ self.onmessage = function(event) {
                 pathLengthWorld = 0;
             }
 
-            // Envoyer le résultat (inchangé)
+            // Envoyer le résultat
             self.postMessage({
                 type: 'pathResult',
-                data: { agentId, path: worldPathData, pathLengthWorld: pathLengthWorld }
+                data: { 
+                    agentId, 
+                    path: worldPathData, 
+                    pathLengthWorld: pathLengthWorld,
+                    fromCache: false
+                }
             });
 
-        } else {
+        } 
+        // --- AJOUT: Demander les statistiques du cache ---
+        else if (type === 'getCacheStats') {
+            self.postMessage({
+                type: 'cacheStats',
+                data: pathCache.getStats()
+            });
+        }
+        // --- FIN AJOUT ---
+        else if (type === 'clearCache') {
+            pathCache.cache.clear();
+            pathCache.cacheKeys = [];
+            pathCache.stats.lastCleaned = Date.now();
+            self.postMessage({
+                type: 'cacheCleared'
+            });
+        }
+        else {
             console.warn('[Worker] Type de message inconnu reçu:', type);
         }
     } catch (error) {

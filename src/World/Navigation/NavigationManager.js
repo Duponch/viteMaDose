@@ -3,6 +3,7 @@ import NavigationGraph from './NavigationGraph.js';
 import RoadNavigationGraph from './RoadNavigationGraph.js';
 import PedestrianNavigationGraph from './PedestrianNavigationGraph.js';
 import Pathfinder from './Pathfinder.js';
+import PathCache from './PathCache.js';
 
 /**
  * NavigationManager centralise la gestion des graphes de navigation et des services de pathfinding.
@@ -19,6 +20,14 @@ export default class NavigationManager {
         this.roadNavigationGraph = null;
         this.pedestrianPathfinder = null;
         this.roadPathfinder = null;
+        
+        // Initialisation du cache de chemins
+        this.pathCache = new PathCache({
+            maxEntries: config.pathCacheMaxEntries || 5000,
+            expirationTime: config.pathCacheExpirationTime || 10 * 60 * 1000, // 10 minutes par défaut
+            nearbyThreshold: config.pathCacheNearbyThreshold || 3,
+            enableStats: true
+        });
     }
 
     /**
@@ -99,6 +108,107 @@ export default class NavigationManager {
         return pathfinder;
     }
 
+    /**
+     * Recherche un chemin dans le cache ou le calcule si nécessaire
+     * @param {Object} startNode - Nœud de départ {x, y}
+     * @param {Object} endNode - Nœud d'arrivée {x, y}
+     * @param {boolean} isVehicle - Indique si le pathfinding est pour une voiture (true) ou pour un piéton (false)
+     * @param {boolean} useCache - Utiliser le cache (true par défaut)
+     * @returns {Object|null} Résultat contenant le chemin et sa longueur, ou null si échec
+     */
+    findPath(startNode, endNode, isVehicle = false, useCache = true) {
+        if (!startNode || !endNode) {
+            console.error("NavigationManager: Nœuds de départ ou d'arrivée invalides dans findPath");
+            return null;
+        }
+
+        // 1. Vérifier le cache si autorisé
+        if (useCache) {
+            const cachedResult = this.pathCache.findPath(startNode, endNode, isVehicle);
+            if (cachedResult) {
+                // Formater le résultat du cache pour l'API externe
+                return this.pathCache.formatCachedPath(cachedResult);
+            }
+        }
+
+        // 2. Si pas dans le cache, calculer le chemin
+        const pathfinder = this.getPathfinder(isVehicle);
+        if (!pathfinder) {
+            return null;
+        }
+
+        // Obtenir le graphe correct
+        const graph = this.getNavigationGraph(isVehicle);
+        if (!graph) {
+            return null;
+        }
+
+        // Calculer le chemin
+        const path = pathfinder.findPath(startNode, endNode);
+        if (!path || path.length === 0) {
+            return null;
+        }
+
+        // Convertir le chemin en coordonnées monde
+        const worldPath = path.map(node => graph.gridToWorld(node.x, node.y));
+        
+        // Calculer la longueur du chemin
+        let pathLengthWorld = 0;
+        for (let i = 0; i < worldPath.length - 1; i++) {
+            pathLengthWorld += worldPath[i].distanceTo(worldPath[i + 1]);
+        }
+
+        // 3. Stocker dans le cache si autorisé
+        if (useCache) {
+            this.pathCache.storePath(startNode, endNode, isVehicle, worldPath, pathLengthWorld);
+        }
+
+        return {
+            path: worldPath,
+            pathLengthWorld,
+            fromCache: false
+        };
+    }
+
+    /**
+     * Préchauffe le cache de chemins avec des trajets communs
+     * @param {Array} commonRoutes - Liste des trajets communs au format [{startNode, endNode, isVehicle}]
+     */
+    preheatPathCache(commonRoutes) {
+        if (!Array.isArray(commonRoutes) || commonRoutes.length === 0) {
+            return;
+        }
+
+        console.log(`NavigationManager: Préchauffage du cache avec ${commonRoutes.length} trajets communs...`);
+        const preloadData = [];
+
+        for (const route of commonRoutes) {
+            const { startNode, endNode, isVehicle } = route;
+            const pathResult = this.findPath(startNode, endNode, isVehicle, false); // Calculer sans utiliser le cache
+            
+            if (pathResult) {
+                preloadData.push({
+                    startNode,
+                    endNode,
+                    isVehicle,
+                    path: pathResult.path,
+                    pathLengthWorld: pathResult.pathLengthWorld
+                });
+            }
+        }
+
+        this.pathCache.preloadPaths(preloadData);
+        console.log(`NavigationManager: Cache préchauffé avec ${preloadData.length} trajets`);
+    }
+
+    /**
+     * Retourne les statistiques du cache de chemins
+     * @returns {Object} Statistiques du cache
+     */
+    getPathCacheStats() {
+        return this.pathCache.getStats();
+    }
+
     // --- AJOUT: Méthode pour obtenir les données des DEUX grilles pour le worker ---
     getAllGridDataForWorker() {
         const pedestrianData = this.pedestrianNavigationGraph?.getGridDataForWorker();
@@ -161,5 +271,9 @@ export default class NavigationManager {
         this.roadNavigationGraph = null;
         this.pedestrianPathfinder = null;
         this.roadPathfinder = null;
+        
+        // Vider le cache de chemins
+        this.pathCache.clear();
+        this.pathCache = null;
     }
 }

@@ -167,8 +167,17 @@ export default class AgentManager {
 
 		} else if (type === 'pathResult') {
 			if (data && data.agentId && data.path !== undefined && data.pathLengthWorld !== undefined) {
-				const { agentId, path: worldPathData, pathLengthWorld } = data;
+				const { agentId, path: worldPathData, pathLengthWorld, fromCache } = data;
 				console.log(`[AgentManager DEBUG] pathResult reçu pour Agent ${agentId}. Longueur Monde: ${pathLengthWorld}`); // LOG 2
+
+				// Mettre à jour les statistiques du cache
+				if (this.pathRequestStats) {
+					if (fromCache === true) {
+						this.pathRequestStats.cacheHits++;
+					} else {
+						this.pathRequestStats.cacheMisses++;
+					}
+				}
 
 				const agent = this.getAgentById(agentId);
 
@@ -203,6 +212,14 @@ export default class AgentManager {
 			} else {
 				console.warn("[AgentManager WARN] Message 'pathResult' incomplet reçu:", event.data); // LOG WARN
 			}
+		} else if (type === 'cacheStats') {
+			// Stocker les statistiques du cache
+			this.workerCacheStats = data;
+			console.log("AgentManager: Statistiques du cache reçues:", data);
+
+		} else if (type === 'cacheCleared') {
+			console.log("AgentManager: Cache vidé avec succès");
+
 		} else if (type === 'workerError') {
 			console.error("[AgentManager ERREUR Worker]:", error, "Data:", data); // LOG ERREUR Worker
 			// ... (gestion erreur)
@@ -281,7 +298,32 @@ export default class AgentManager {
              return;
         }
 
-        console.log(`AgentManager: Envoi requête path au worker pour Agent ${agentId} (${isVehicle ? 'véhicule' : 'piéton'}): (${startNode.x},${startNode.y}) -> (${endNode.x},${endNode.y})`);
+        // Mettre à jour les statistiques de requêtes
+        if (!this.pathRequestStats) {
+            this.pathRequestStats = {
+                totalRequests: 0,
+                vehicleRequests: 0,
+                pedestrianRequests: 0,
+                cacheHits: 0,
+                cacheMisses: 0,
+                nearCacheHits: 0,
+                lastStatsReset: Date.now()
+            };
+        }
+        
+        this.pathRequestStats.totalRequests++;
+        if (isVehicle) {
+            this.pathRequestStats.vehicleRequests++;
+        } else {
+            this.pathRequestStats.pedestrianRequests++;
+        }
+
+        // Journaliser la requête avec moins de détails si elle n'est pas la première
+        const verbose = this.pathRequestStats.totalRequests % 100 === 1;
+        if (verbose) {
+            console.log(`AgentManager: Envoi requête path #${this.pathRequestStats.totalRequests} au worker pour Agent ${agentId} (${isVehicle ? 'véhicule' : 'piéton'}): (${startNode.x},${startNode.y}) -> (${endNode.x},${endNode.y})`);
+        }
+        
         this.pathfindingWorker.postMessage({
             type: 'findPath',
             data: { agentId, startNode, endNode, isVehicle }
@@ -864,4 +906,233 @@ export default class AgentManager {
 		this.scene = null; this.experience = null; this.config = null;
 		console.log("AgentManager: Détruit.");
 	}
+
+    /**
+     * Demande les statistiques du cache au worker
+     * @returns {Promise} Promise qui sera résolue avec les statistiques
+     */
+    requestCacheStats() {
+        return new Promise((resolve, reject) => {
+            if (!this.pathfindingWorker || !this.isWorkerInitialized) {
+                reject(new Error("Worker non initialisé"));
+                return;
+            }
+            
+            // Fonction qui sera appelée lorsque le message sera reçu
+            const onStatsReceived = (event) => {
+                if (event.data.type === 'cacheStats') {
+                    this.pathfindingWorker.removeEventListener('message', onStatsReceived);
+                    resolve(event.data.data);
+                }
+            };
+            
+            // Ajouter le listener temporaire
+            this.pathfindingWorker.addEventListener('message', onStatsReceived);
+            
+            // Envoyer la requête
+            this.pathfindingWorker.postMessage({ type: 'getCacheStats' });
+            
+            // Timeout de sécurité
+            setTimeout(() => {
+                this.pathfindingWorker.removeEventListener('message', onStatsReceived);
+                reject(new Error("Timeout lors de la récupération des statistiques du cache"));
+            }, 2000);
+        });
+    }
+    
+    /**
+     * Vide le cache de chemins
+     * @returns {Promise} Promise qui sera résolue lorsque le cache sera vidé
+     */
+    clearPathCache() {
+        return new Promise((resolve, reject) => {
+            if (!this.pathfindingWorker || !this.isWorkerInitialized) {
+                reject(new Error("Worker non initialisé"));
+                return;
+            }
+            
+            // Fonction qui sera appelée lorsque le message sera reçu
+            const onCacheCleared = (event) => {
+                if (event.data.type === 'cacheCleared') {
+                    this.pathfindingWorker.removeEventListener('message', onCacheCleared);
+                    
+                    // Réinitialiser les statistiques
+                    if (this.pathRequestStats) {
+                        this.pathRequestStats.cacheHits = 0;
+                        this.pathRequestStats.cacheMisses = 0;
+                        this.pathRequestStats.nearCacheHits = 0;
+                        this.pathRequestStats.lastStatsReset = Date.now();
+                    }
+                    
+                    resolve();
+                }
+            };
+            
+            // Ajouter le listener temporaire
+            this.pathfindingWorker.addEventListener('message', onCacheCleared);
+            
+            // Envoyer la requête
+            this.pathfindingWorker.postMessage({ type: 'clearCache' });
+            
+            // Timeout de sécurité
+            setTimeout(() => {
+                this.pathfindingWorker.removeEventListener('message', onCacheCleared);
+                reject(new Error("Timeout lors du vidage du cache"));
+            }, 2000);
+        });
+    }
+    
+    /**
+     * Retourne les statistiques actuelles du pathfinding
+     * @returns {Object} Statistiques de requêtes de chemins et du cache
+     */
+    getPathfindingStats() {
+        const stats = {
+            requests: this.pathRequestStats || {
+                totalRequests: 0,
+                vehicleRequests: 0,
+                pedestrianRequests: 0,
+                cacheHits: 0,
+                cacheMisses: 0,
+                nearCacheHits: 0
+            },
+            workerCache: this.workerCacheStats || {}
+        };
+        
+        // Calculer le taux de hit du cache
+        if (stats.requests.totalRequests > 0) {
+            stats.requests.cacheHitRate = ((stats.requests.cacheHits / stats.requests.totalRequests) * 100).toFixed(2) + '%';
+        } else {
+            stats.requests.cacheHitRate = '0%';
+        }
+        
+        return stats;
+    }
+
+    /**
+     * Préchauffe le cache avec les chemins entre domicile et travail des agents
+     * @param {number} maxAgents - Nombre maximum d'agents à traiter pour le préchauffage
+     * @returns {Promise} Promise qui sera résolue lorsque le préchauffage sera terminé
+     */
+    preheatCommonPaths(maxAgents = 50) {
+        return new Promise((resolve, reject) => {
+            if (!this.pathfindingWorker || !this.isWorkerInitialized) {
+                reject(new Error("Worker non initialisé"));
+                return;
+            }
+            
+            // Sélectionner un échantillon d'agents
+            const sampleAgents = this.agents.slice(0, Math.min(maxAgents, this.agents.length));
+            console.log(`AgentManager: Préchauffage du cache pour ${sampleAgents.length} agents...`);
+            
+            let processedCount = 0;
+            let errorCount = 0;
+            
+            // Traiter chaque agent de l'échantillon
+            const processNextAgent = (index) => {
+                if (index >= sampleAgents.length) {
+                    console.log(`AgentManager: Préchauffage terminé - ${processedCount} chemins calculés, ${errorCount} erreurs`);
+                    resolve({
+                        processedCount,
+                        errorCount
+                    });
+                    return;
+                }
+                
+                const agent = sampleAgents[index];
+                
+                // Vérifier que l'agent a des positions valides
+                if (agent.homeGridNode && agent.workGridNode) {
+                    // Calculer le chemin aller (maison → travail)
+                    this._preheatSinglePath(
+                        agent.id, 
+                        agent.homeGridNode, 
+                        agent.workGridNode, 
+                        agent.vehicleBehavior?.canUseCar() || false
+                    ).then(() => {
+                        processedCount++;
+                        
+                        // Calculer le chemin retour (travail → maison)
+                        return this._preheatSinglePath(
+                            agent.id, 
+                            agent.workGridNode, 
+                            agent.homeGridNode, 
+                            agent.vehicleBehavior?.canUseCar() || false
+                        );
+                    }).then(() => {
+                        processedCount++;
+                        // Passer à l'agent suivant avec un délai pour ne pas saturer le worker
+                        setTimeout(() => processNextAgent(index + 1), 10);
+                    }).catch(err => {
+                        console.error(`Erreur lors du préchauffage pour l'agent ${agent.id}:`, err);
+                        errorCount++;
+                        // Passer à l'agent suivant malgré l'erreur
+                        setTimeout(() => processNextAgent(index + 1), 10);
+                    });
+                } else {
+                    // Si l'agent n'a pas de positions valides, passer au suivant
+                    setTimeout(() => processNextAgent(index + 1), 5);
+                }
+            };
+            
+            // Démarrer le traitement
+            processNextAgent(0);
+        });
+    }
+    
+    /**
+     * Préchauffe un chemin spécifique
+     * @private
+     * @param {string} agentId - ID de l'agent
+     * @param {Object} startNode - Nœud de départ
+     * @param {Object} endNode - Nœud d'arrivée
+     * @param {boolean} useVehicle - Si l'agent utilise un véhicule
+     * @returns {Promise} Promise qui sera résolue lorsque le calcul sera terminé
+     */
+    _preheatSinglePath(agentId, startNode, endNode, useVehicle) {
+        return new Promise((resolve, reject) => {
+            // Générer un ID unique pour ce préchauffage
+            const preheatId = `preheat_${agentId}_${Date.now()}`;
+            
+            // Fonction qui sera appelée lorsque le résultat sera reçu
+            const onPathResult = (event) => {
+                if (event.data.type === 'pathResult' && 
+                    event.data.data && 
+                    event.data.data.agentId === preheatId) {
+                    
+                    this.pathfindingWorker.removeEventListener('message', onPathResult);
+                    
+                    const result = event.data.data;
+                    if (result.path && result.pathLengthWorld > 0) {
+                        resolve({
+                            success: true,
+                            fromCache: result.fromCache || false
+                        });
+                    } else {
+                        reject(new Error("Échec du calcul de chemin"));
+                    }
+                }
+            };
+            
+            // Ajouter le listener temporaire
+            this.pathfindingWorker.addEventListener('message', onPathResult);
+            
+            // Envoyer la requête avec l'ID spécial
+            this.pathfindingWorker.postMessage({
+                type: 'findPath',
+                data: { 
+                    agentId: preheatId, 
+                    startNode, 
+                    endNode, 
+                    isVehicle: useVehicle 
+                }
+            });
+            
+            // Timeout de sécurité
+            setTimeout(() => {
+                this.pathfindingWorker.removeEventListener('message', onPathResult);
+                reject(new Error("Timeout lors du préchauffage de chemin"));
+            }, 3000);
+        });
+    }
 }
