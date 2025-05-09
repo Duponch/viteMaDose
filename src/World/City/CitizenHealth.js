@@ -60,11 +60,15 @@ export default class CitizenHealth {
         // Dates du dernier calcul pour le vieillissement/adaptation
         if (citizenInfo.lastWeeklyAgingUpdate === undefined) {
             const environment = this.experience.world?.environment;
-            citizenInfo.lastWeeklyAgingUpdate = environment?.currentCalendarDay || 0;
+            // Utiliser getCurrentCalendarDate pour obtenir le jour actuel
+            const calendarDate = environment?.getCurrentCalendarDate();
+            citizenInfo.lastWeeklyAgingUpdate = calendarDate?.jour || 0;
         }
         if (citizenInfo.lastDailyAdaptationUpdate === undefined) {
             const environment = this.experience.world?.environment;
-            citizenInfo.lastDailyAdaptationUpdate = environment?.currentCalendarDay || 0;
+            // Utiliser getCurrentCalendarDate pour obtenir le jour actuel
+            const calendarDate = environment?.getCurrentCalendarDate();
+            citizenInfo.lastDailyAdaptationUpdate = calendarDate?.jour || 0;
         }
         
         return citizenInfo;
@@ -230,22 +234,42 @@ export default class CitizenHealth {
     _updateAging(citizenInfo, currentDay) {
         if (!citizenInfo || citizenInfo.lastWeeklyAgingUpdate === undefined) return;
         
+        // Accéder directement au jour actuel du calendrier
+        const environment = this.experience.world?.environment;
+        // Si currentDay est invalide, utiliser le jour du calendrier ou 0 par défaut
+        if (!currentDay || currentDay <= 0) {
+            const calendarData = environment?.getCurrentCalendarDate();
+            currentDay = calendarData?.jour || 0;
+        }
+        
         // Vérifier si une semaine s'est écoulée
         const daysSinceLastUpdate = currentDay - citizenInfo.lastWeeklyAgingUpdate;
+        
+        // Log de débogage
+        console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Jour actuel=${currentDay}, dernier update=${citizenInfo.lastWeeklyAgingUpdate}, jours écoulés=${daysSinceLastUpdate}`);
+        
         if (daysSinceLastUpdate >= 7) {
             // Calculer le nombre de semaines écoulées
             const weeksElapsed = Math.floor(daysSinceLastUpdate / 7);
             
+            // Log avant changement
+            console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Vieillissement - Ancien seuil=${citizenInfo.healthThreshold}, réduction=${weeksElapsed * this.VIEILLISSEMENT_HEBDO}`);
+            
             // Appliquer le vieillissement
             citizenInfo.healthThreshold = Math.max(0, citizenInfo.healthThreshold - (weeksElapsed * this.VIEILLISSEMENT_HEBDO));
+            
+            // Log après changement
+            console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Vieillissement - Nouveau seuil=${citizenInfo.healthThreshold}`);
             
             // Si le seuil diminue en dessous de la santé max actuelle, ajuster la santé max
             if (citizenInfo.maxHealth > citizenInfo.healthThreshold) {
                 citizenInfo.maxHealth = citizenInfo.healthThreshold;
+                console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Ajustement maxHealth=${citizenInfo.maxHealth}`);
             }
             
             // Mettre à jour la date du dernier calcul
             citizenInfo.lastWeeklyAgingUpdate = currentDay;
+            console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Mise à jour lastWeeklyAgingUpdate=${currentDay}`);
         }
     }
     

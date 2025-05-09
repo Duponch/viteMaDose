@@ -33,9 +33,6 @@ export default class World {
                // Increase health by 1 (max maxHealth)
                citizen.health = Math.min(citizen.maxHealth, citizen.health + 1);
 
-               // Decrease maxHealth by 1 (min 0)
-               citizen.maxHealth = Math.max(0, citizen.maxHealth - 1);
-
                // Increase money by their salary
                citizen.money += citizen.salary;
            });

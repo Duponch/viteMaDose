@@ -241,7 +241,15 @@ export default class CitizenManager {
         const environment = this.citizenHealth.experience.world?.environment;
         if (!environment) return;
 
-        const currentDay = environment.currentCalendarDay || 0;
+        // Obtenir le jour actuel à partir de getCurrentCalendarDate()
+        const calendarDate = environment.getCurrentCalendarDate();
+        const currentDay = calendarDate?.jour || 0;
+        
+        // Pour le débogage
+        if (currentDay > 0 && (this._lastLoggedDay === undefined || currentDay !== this._lastLoggedDay)) {
+            console.log(`CitizenManager: Jour actuel du calendrier = ${currentDay}`);
+            this._lastLoggedDay = currentDay;
+        }
         
         // Mettre à jour la santé de tous les citoyens
         this.citizens.forEach(citizen => {
