@@ -253,35 +253,24 @@ export default class CitizenHealth {
             
             // Recalculer les jours écoulés en tenant compte du changement de mois
             daysSinceLastUpdate = (prevMonthDays - citizenInfo.lastWeeklyAgingUpdate) + currentDay;
-            
-            console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Changement de mois détecté - jours écoulés recalculés = ${daysSinceLastUpdate}`);
         }
         
-        // Log de débogage
-        console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Jour actuel=${currentDay}, dernier update=${citizenInfo.lastWeeklyAgingUpdate}, jours écoulés=${daysSinceLastUpdate}`);
         
         if (daysSinceLastUpdate >= 7) {
             // Calculer le nombre de semaines écoulées
             const weeksElapsed = Math.floor(daysSinceLastUpdate / 7);
-            
-            // Log avant changement
-            console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Vieillissement - Ancien seuil=${citizenInfo.healthThreshold}, réduction=${weeksElapsed * this.VIEILLISSEMENT_HEBDO}`);
-            
+                        
             // Appliquer le vieillissement
             citizenInfo.healthThreshold = Math.max(0, citizenInfo.healthThreshold - (weeksElapsed * this.VIEILLISSEMENT_HEBDO));
             
-            // Log après changement
-            console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Vieillissement - Nouveau seuil=${citizenInfo.healthThreshold}`);
             
             // Si le seuil diminue en dessous de la santé max actuelle, ajuster la santé max
             if (citizenInfo.maxHealth > citizenInfo.healthThreshold) {
                 citizenInfo.maxHealth = citizenInfo.healthThreshold;
-                console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Ajustement maxHealth=${citizenInfo.maxHealth}`);
             }
             
             // Mettre à jour la date du dernier calcul
             citizenInfo.lastWeeklyAgingUpdate = currentDay;
-            console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Mise à jour lastWeeklyAgingUpdate=${currentDay}`);
         }
     }
     
