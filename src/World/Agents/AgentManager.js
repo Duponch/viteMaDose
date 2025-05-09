@@ -1048,7 +1048,7 @@ export default class AgentManager {
                         agent.id, 
                         agent.homeGridNode, 
                         agent.workGridNode, 
-                        agent.vehicleBehavior?.canUseCar() || false
+                        agent.vehicleBehavior?.shouldUseVehicle() || false
                     ).then(() => {
                         processedCount++;
                         
@@ -1057,7 +1057,7 @@ export default class AgentManager {
                             agent.id, 
                             agent.workGridNode, 
                             agent.homeGridNode, 
-                            agent.vehicleBehavior?.canUseCar() || false
+                            agent.vehicleBehavior?.shouldUseVehicle() || false
                         );
                     }).then(() => {
                         processedCount++;
