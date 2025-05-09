@@ -56,7 +56,7 @@ export default class AgentMedicationBehavior {
                     if (walkInfo) {
                         const walkHour = walkInfo.startHour || walkInfo.hour || -1;
                         const walkDuration = walkInfo.duration || 2;
-                        console.log(`Agent ${agent.id}: Info promenade weekend : départ prévu à ${walkHour}h pour ${walkDuration.toFixed(1)}h, statut démarré: ${walkInfo.hasStarted}`);
+                        //console.log(`Agent ${agent.id}: Info promenade weekend : départ prévu à ${walkHour}h pour ${walkDuration.toFixed(1)}h, statut démarré: ${walkInfo.hasStarted}`);
                     }
                 }
             }

@@ -73,7 +73,7 @@ export default class MedicationPurchaseStrategy {
                 }
             } else {
                 // Sinon, attendre l'heure prévue
-                console.log(`Agent ${agentId}: Besoin de médicament. Rendez-vous prévu à ${scheduledHour}h (actuellement ${currentHour}h).`);
+                //console.log(`Agent ${agentId}: Besoin de médicament. Rendez-vous prévu à ${scheduledHour}h (actuellement ${currentHour}h).`);
                 return false;
             }
         }
@@ -198,7 +198,7 @@ export default class MedicationPurchaseStrategy {
         // Ajouter une variation aléatoire pour éviter que tous les agents y aillent en même temps
         const randomOffset = Math.floor(Math.random() * 3); // 0, 1 ou 2 heures après l'heure idéale
         
-        console.log(`Agent ${agent.id}: Recherche d'un créneau libre. Heure actuelle: ${currentHour}h, Horaires commerce: ${openingHour}h-${closingHour}h`);
+        //console.log(`Agent ${agent.id}: Recherche d'un créneau libre. Heure actuelle: ${currentHour}h, Horaires commerce: ${openingHour}h-${closingHour}h`);
         
         // Chercher une heure libre à partir de l'heure actuelle
         for (let i = 0; i < maxIterations; i++) {
@@ -210,19 +210,19 @@ export default class MedicationPurchaseStrategy {
             // Vérifier si l'agent est libre à cette heure
             const isAgentFreeAtTestHour = this._isAgentFreeAtHour(agent, calendarDate, testHour);
             
-            console.log(`Agent ${agent.id}: Test heure ${testHour}h - Commerce ouvert: ${isOpenAtTestHour}, Agent libre: ${isAgentFreeAtTestHour}`);
+            //console.log(`Agent ${agent.id}: Test heure ${testHour}h - Commerce ouvert: ${isOpenAtTestHour}, Agent libre: ${isAgentFreeAtTestHour}`);
             
             if (isOpenAtTestHour && isAgentFreeAtTestHour) {
                 // Ajouter l'offset aléatoire, mais rester dans les horaires d'ouverture
                 const scheduledHour = Math.min(testHour + randomOffset, closingHour - 1);
-                console.log(`Agent ${agent.id}: Créneau libre trouvé à ${testHour}h, planifié à ${scheduledHour}h (avec offset ${randomOffset})`);
+                //console.log(`Agent ${agent.id}: Créneau libre trouvé à ${testHour}h, planifié à ${scheduledHour}h (avec offset ${randomOffset})`);
                 return scheduledHour;
             }
         }
         
         // Si aucune heure n'est trouvée aujourd'hui, prendre la première heure disponible demain
         // Pour simplifier, on suppose que l'agent sera libre à l'ouverture des magasins demain
-        console.log(`Agent ${agent.id}: Aucun créneau libre aujourd'hui, planification pour demain à ${openingHour}h`);
+        //console.log(`Agent ${agent.id}: Aucun créneau libre aujourd'hui, planification pour demain à ${openingHour}h`);
         return openingHour;
     }
 
