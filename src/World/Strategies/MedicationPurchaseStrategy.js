@@ -48,8 +48,6 @@ export default class MedicationPurchaseStrategy {
 
 	    if (currentGameTime - lastAttempt < this.cooldownTime) return false;
 
-		alert('TTTTTTTTTTTTTTTTTTT');
-
         return true;
     }
 
@@ -59,8 +57,6 @@ export default class MedicationPurchaseStrategy {
      * @param {number} currentGameTime - Temps de jeu actuel
      */
     recordPurchaseAttempt(agentId, currentGameTime) {
-		alert('recordPurchaseAttempt');
-
         this.lastPurchaseAttempt.set(agentId, currentGameTime);
     }
     
