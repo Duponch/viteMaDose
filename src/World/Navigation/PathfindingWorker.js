@@ -289,7 +289,7 @@ self.onmessage = function(event) {
 
     try {
         if (type === 'init') {
-            console.log('[Worker] Initialisation reçue (mode SharedArrayBuffer + A* interne double grille).');
+            //console.log('[Worker] Initialisation reçue (mode SharedArrayBuffer + A* interne double grille).');
             // --- MODIFICATION: Accepter les données combinées ---
             if (data && data.pedestrian && data.road && 
                 data.pedestrian.gridBuffer && data.road.gridBuffer &&
@@ -313,10 +313,10 @@ self.onmessage = function(event) {
                 // Créer les vues sur les buffers partagés
                 pedestrianGridWalkableMap = new Uint8Array(data.pedestrian.gridBuffer);
                 roadGridWalkableMap = new Uint8Array(data.road.gridBuffer);
-                console.log(`[Worker] Vues Uint8Array créées sur SharedArrayBuffers (${gridWidth}x${gridHeight}).`);
-                console.log(`[Worker] Hauteurs: Piéton=${pedestrianGraphHeight.toFixed(2)}, Route=${roadGraphHeight.toFixed(2)}`);
+                //console.log(`[Worker] Vues Uint8Array créées sur SharedArrayBuffers (${gridWidth}x${gridHeight}).`);
+                //console.log(`[Worker] Hauteurs: Piéton=${pedestrianGraphHeight.toFixed(2)}, Route=${roadGraphHeight.toFixed(2)}`);
 
-                console.log('[Worker] Prêt pour les requêtes A* (double grille avec cache).');
+                //console.log('[Worker] Prêt pour les requêtes A* (double grille avec cache).');
                 self.postMessage({ type: 'initComplete' });
             } else {
                  throw new Error("Données manquantes ou invalides pour l'initialisation combinée.");
@@ -389,7 +389,7 @@ self.onmessage = function(event) {
             // ---- AJOUT LOG: Vérifier marchabilité dans le worker ----
             const startWalkable = isWalkable(normalizedStartNode.x, normalizedStartNode.y, activeGridMap);
             const endWalkable = isWalkable(normalizedEndNode.x, normalizedEndNode.y, activeGridMap);
-            console.log(`[Worker Check] Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}). Start (${normalizedStartNode.x},${normalizedStartNode.y}) walkable: ${startWalkable}. End (${normalizedEndNode.x},${normalizedEndNode.y}) walkable: ${endWalkable}.`);
+            //console.log(`[Worker Check] Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}). Start (${normalizedStartNode.x},${normalizedStartNode.y}) walkable: ${startWalkable}. End (${normalizedEndNode.x},${normalizedEndNode.y}) walkable: ${endWalkable}.`);
             if (!startWalkable || !endWalkable) {
                  console.error(`[Worker Error] Start or End node not walkable on the selected grid map for Agent ${agentId}.`);
                  // Optionnel : renvoyer échec immédiatement si non marchable
@@ -420,9 +420,9 @@ self.onmessage = function(event) {
 
             try {
                 // --- Appel A* avec la bonne grille --- 
-                console.time(`[Worker] A* Path ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
+                //console.time(`[Worker] A* Path ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
                 gridPath = findPathAStar(normalizedStartNode, normalizedEndNode, activeGridMap); // <-- Passer la grille active et les nœuds normalisés
-                console.timeEnd(`[Worker] A* Path ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
+                //console.timeEnd(`[Worker] A* Path ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
                 // --- FIN Appel A* --- 
 
                 if (gridPath && gridPath.length > 0) {

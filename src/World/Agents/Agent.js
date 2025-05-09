@@ -347,7 +347,7 @@ export default class Agent {
      * @param {number} pathLengthWorld - Longueur calculée du chemin en unités monde.
      */
     setPath(pathPoints, pathLengthWorld) {
-        console.log(`[Agent ${this.id} DEBUG] Entrée dans setPath. État actuel: ${this.currentState}. Longueur reçue: ${pathLengthWorld}`);
+        //console.log(`[Agent ${this.id} DEBUG] Entrée dans setPath. État actuel: ${this.currentState}. Longueur reçue: ${pathLengthWorld}`);
 
         const currentStateAtCall = this.currentState;
         const wasRequestingWork = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_WORK;

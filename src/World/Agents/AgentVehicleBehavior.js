@@ -84,7 +84,7 @@ export default class AgentVehicleBehavior {
         if (car) {
             this.currentVehicle = car;
             this.isUsingVehicle = true; // Marquer comme utilisant activement
-            console.log(`Agent ${this.agent.id}: Voiture ${car.instanceId} obtenue.`);
+            //console.log(`Agent ${this.agent.id}: Voiture ${car.instanceId} obtenue.`);
             return true;
         } else {
             console.warn(`Agent ${this.agent.id}: Échec de l'obtention d'une voiture (pool plein ?).`);
@@ -99,7 +99,7 @@ export default class AgentVehicleBehavior {
      */
     releaseCar() {
         if (this.currentVehicle && this.carManager) {
-            console.log(`Agent ${this.agent.id}: Libération de la voiture ${this.currentVehicle.instanceId}.`);
+            //console.log(`Agent ${this.agent.id}: Libération de la voiture ${this.currentVehicle.instanceId}.`);
             this.carManager.releaseCarForAgent(this.agent.id);
         } else {
             // S'assurer que même si currentVehicle est null, on essaie de libérer via l'ID

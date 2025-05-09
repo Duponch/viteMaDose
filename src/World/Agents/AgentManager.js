@@ -90,7 +90,7 @@ export default class AgentManager {
 		this._initializeStats();
 
 		this._initializeMeshes();
-		console.log("AgentManager initialisé (Worker non démarré).");
+		//console.log("AgentManager initialisé (Worker non démarré).");
 	}
 
 	_initializeStats() {
@@ -120,7 +120,7 @@ export default class AgentManager {
         // --- FIN MODIFICATION ---
 
         try {
-            console.log("AgentManager: Initialisation du Pathfinding Worker (mode SharedArrayBuffer)... HORS LIGNE");
+            //console.log("AgentManager: Initialisation du Pathfinding Worker (mode SharedArrayBuffer)... HORS LIGNE");
             this.pathfindingWorker = new Worker(new URL('../Navigation/PathfindingWorker.js', import.meta.url), { type: 'module' });
             this.pathfindingWorker.onmessage = (event) => this._handleWorkerMessage(event);
             this.pathfindingWorker.onerror = (error) => { 
@@ -147,7 +147,7 @@ export default class AgentManager {
                 type: 'init',
                 data: workerInitData // <-- Envoyer les données combinées
             });
-            console.log("AgentManager: Message d'initialisation combiné (SharedArrayBuffers + params) envoyé au worker.");
+            //console.log("AgentManager: Message d'initialisation combiné (SharedArrayBuffers + params) envoyé au worker.");
 
         } catch (error) {
             console.error("AgentManager: Échec de la création du Pathfinding Worker:", error);
@@ -159,16 +159,16 @@ export default class AgentManager {
 
 	_handleWorkerMessage(event) {
 		const { type, data, error } = event.data;
-		console.log(`[AgentManager DEBUG] Message reçu du worker: type=<span class="math-inline">\{type\}, agentId\=</span>{data?.agentId}`); // LOG 1
+		////console.log(`[AgentManager DEBUG] Message reçu du worker: type=<span class="math-inline">\{type\}, agentId\=</span>{data?.agentId}`); // LOG 1
 
 		if (type === 'initComplete') {
 			this.isWorkerInitialized = true;
-			console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
+			////console.log("AgentManager: Pathfinding Worker initialisé et prêt.");
 
 		} else if (type === 'pathResult') {
 			if (data && data.agentId && data.path !== undefined && data.pathLengthWorld !== undefined) {
 				const { agentId, path: worldPathData, pathLengthWorld, fromCache } = data;
-				console.log(`[AgentManager DEBUG] pathResult reçu pour Agent ${agentId}. Longueur Monde: ${pathLengthWorld}`); // LOG 2
+				////console.log(`[AgentManager DEBUG] pathResult reçu pour Agent ${agentId}. Longueur Monde: ${pathLengthWorld}`); // LOG 2
 
 				// Mettre à jour les statistiques du cache
 				if (this.pathRequestStats) {
@@ -188,14 +188,14 @@ export default class AgentManager {
 				const agent = this.getAgentById(agentId);
 
 				if (agent) {
-					console.log(`[AgentManager DEBUG] Agent ${agentId} trouvé. Vérification chemin reçu...`); // LOG 3 Modifié
+					////console.log(`[AgentManager DEBUG] Agent ${agentId} trouvé. Vérification chemin reçu...`); // LOG 3 Modifié
 					let finalWorldPath = null;
 
 					// --- MODIFICATION : Gestion explicite de worldPathData null/vide ---
 					if (worldPathData && Array.isArray(worldPathData) && worldPathData.length > 0) {
 						try {
 							finalWorldPath = worldPathData.map(posData => new THREE.Vector3(posData.x, posData.y, posData.z));
-							console.log(`[AgentManager DEBUG] Chemin valide reçu et reconstruit pour Agent ${agentId} (${finalWorldPath.length} points).`); // LOG 4 Modifié
+							////console.log(`[AgentManager DEBUG] Chemin valide reçu et reconstruit pour Agent ${agentId} (${finalWorldPath.length} points).`); // LOG 4 Modifié
 						} catch (vecError) {
 							console.error(`[AgentManager ERREUR] Agent ${agentId}: Erreur reconstruction Vector3:`, vecError); // LOG ERREUR
 							finalWorldPath = null; // Assurer que le chemin est null en cas d'erreur de reconstruction
@@ -208,9 +208,9 @@ export default class AgentManager {
 					// --- FIN MODIFICATION ---
 
 					// Appel setPath (maintenant gère aussi finalWorldPath = null)
-					console.log(`[AgentManager DEBUG] Appel de agent.setPath pour Agent ${agentId}...`); // LOG 6
+					////console.log(`[AgentManager DEBUG] Appel de agent.setPath pour Agent ${agentId}...`); // LOG 6
 					agent.setPath(finalWorldPath, finalWorldPath ? pathLengthWorld : 0); // Passer 0 si chemin nul
-					console.log(`[AgentManager DEBUG] Appel de agent.setPath TERMINÉ pour Agent ${agentId}.`); // LOG 7
+					////console.log(`[AgentManager DEBUG] Appel de agent.setPath TERMINÉ pour Agent ${agentId}.`); // LOG 7
 
 				} else {
 					// Ne pas afficher d'avertissement pour les agents de préchauffage
@@ -330,7 +330,7 @@ export default class AgentManager {
         // Journaliser la requête avec moins de détails si elle n'est pas la première
         const verbose = this.pathRequestStats.totalRequests % 100 === 1;
         if (verbose) {
-            console.log(`AgentManager: Envoi requête path #${this.pathRequestStats.totalRequests} au worker pour Agent ${agentId} (${isVehicle ? 'véhicule' : 'piéton'}): (${startNode.x},${startNode.y}) -> (${endNode.x},${endNode.y})`);
+            ////console.log(`AgentManager: Envoi requête path #${this.pathRequestStats.totalRequests} au worker pour Agent ${agentId} (${isVehicle ? 'véhicule' : 'piéton'}): (${startNode.x},${startNode.y}) -> (${endNode.x},${endNode.y})`);
         }
         
         this.pathfindingWorker.postMessage({
@@ -342,7 +342,7 @@ export default class AgentManager {
 
     // 2) _initializeMeshes (modifiée pour démarrer à count=0)
 	_initializeMeshes() {
-		console.log("AgentManager: Initialisation des InstancedMesh...");
+		////console.log("AgentManager: Initialisation des InstancedMesh...");
 		// Matériaux (Ajout des matériaux pour le torse détaillé)
 		this.baseMaterials.skin = new THREE.MeshStandardMaterial({ color: 0xffcc99, roughness: 0.6, metalness: 0.1, name: 'AgentSkinMat' });
 		this.baseMaterials.shirt = new THREE.MeshStandardMaterial({ color: 0x4466cc, roughness: 0.7, metalness: 0.1, name: 'AgentShirtMat' });
@@ -481,7 +481,7 @@ export default class AgentManager {
 
 		// Création des InstancedMesh
 		const createInstMesh = (name, geom, mat, count, needsColor = false) => {
-			console.log(`Creating InstancedMesh '${name}' with count ${count}`);
+			//console.log(`Creating InstancedMesh '${name}' with count ${count}`);
 			const mesh = new THREE.InstancedMesh(geom, mat, count);
 			if (Array.isArray(mat)) {
 				mesh.geometry.groupsNeedUpdate = true;
@@ -494,7 +494,7 @@ export default class AgentManager {
 			if (needsColor) {
 				mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
 				mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-				console.log(` > Added instanceColor buffer to ${name}`);
+				//console.log(` > Added instanceColor buffer to ${name}`);
 			}
 			this.scene.add(mesh);
 			this.instanceMeshes[name] = mesh;
@@ -530,7 +530,7 @@ export default class AgentManager {
 		this.activeCount = 0;
 		this.agentToInstanceId.clear();
 		this.instanceIdToAgent.fill(null);
-		console.log("InstancedMeshes créés:", Object.keys(this.instanceMeshes));
+		//console.log("InstancedMeshes créés:", Object.keys(this.instanceMeshes));
 	}
 
 	createAgent() {
@@ -877,13 +877,13 @@ export default class AgentManager {
 	}
 
     destroy() {
-		console.log("AgentManager: Destruction...");
+		//console.log("AgentManager: Destruction...");
 		// Arrêter le worker s'il existe
 		if (this.pathfindingWorker) {
 			this.pathfindingWorker.terminate();
 			this.pathfindingWorker = null;
 			this.isWorkerInitialized = false;
-			console.log("AgentManager: Pathfinding Worker terminé.");
+			//console.log("AgentManager: Pathfinding Worker terminé.");
 		}
 	   // ... (reste de la logique de destroy existante) ...
 		const cityManager = this.experience?.world?.cityManager;
@@ -892,7 +892,7 @@ export default class AgentManager {
 			agent.destroy();
 		});
 		this.agents = [];
-		console.log("AgentManager: Agents logiques détruits.");
+		//console.log("AgentManager: Agents logiques détruits.");
 
 		Object.values(this.instanceMeshes).forEach(mesh => {
 			if (mesh.parent) mesh.parent.remove(mesh);
@@ -902,18 +902,18 @@ export default class AgentManager {
 			}
 		});
 		this.instanceMeshes = {};
-		console.log("AgentManager: InstancedMeshes retirés & matériaux clonés disposés.");
+		//console.log("AgentManager: InstancedMeshes retirés & matériaux clonés disposés.");
 
 		Object.values(this.baseGeometries).forEach(geom => { geom?.dispose(); });
 		this.baseGeometries = {};
-		console.log("AgentManager: Géométries base disposées.");
+		//console.log("AgentManager: Géométries base disposées.");
 
 		Object.values(this.baseMaterials).forEach(mat => { mat?.dispose(); });
 		this.baseMaterials = {};
-		console.log("AgentManager: Matériaux base disposés.");
+		//console.log("AgentManager: Matériaux base disposés.");
 
 		this.scene = null; this.experience = null; this.config = null;
-		console.log("AgentManager: Détruit.");
+		//console.log("AgentManager: Détruit.");
 	}
 
     /**
@@ -1033,7 +1033,7 @@ export default class AgentManager {
             const previousSize = stats.size;
             
             // 3. Effectuer quelques requêtes de test pour voir si le cache est utilisé
-            console.log("AgentManager: Test de performance du cache avec 5 agents...");
+            //console.log("AgentManager: Test de performance du cache avec 5 agents...");
             
             const testAgents = this.agents.slice(0, 5);
             let testHits = 0;
@@ -1078,26 +1078,26 @@ export default class AgentManager {
             const newHitRate = newStats.hitRate;
             
             // 6. Analyse des résultats
-            console.log("=== ANALYSE CACHE DE PATHFINDING ===");
-            console.log(`Taille actuelle du cache: ${newStats.size} chemins stockés`);
-            console.log(`Taux de succès global: ${newHitRate}`);
-            console.log(`Hits: ${newStats.hits}, NearHits: ${newStats.nearHits}, Misses: ${newStats.misses}`);
-            console.log(`Test de performance: ${testHits} hits sur ${testHits + testMisses} requêtes (${((testHits/(testHits + testMisses))*100).toFixed(2)}%)`);
+            //console.log("=== ANALYSE CACHE DE PATHFINDING ===");
+            //console.log(`Taille actuelle du cache: ${newStats.size} chemins stockés`);
+            //console.log(`Taux de succès global: ${newHitRate}`);
+            //console.log(`Hits: ${newStats.hits}, NearHits: ${newStats.nearHits}, Misses: ${newStats.misses}`);
+            //console.log(`Test de performance: ${testHits} hits sur ${testHits + testMisses} requêtes (${((testHits/(testHits + testMisses))*100).toFixed(2)}%)`);
             
             // 7. Interprétation
             if (testHits > 0) {
-                console.log("✅ Le cache fonctionne - des chemins sont retrouvés avec succès!");
-                console.log(`   Recommandation: Continuez à surveiller le taux de succès quotidien.`);
+                //console.log("✅ Le cache fonctionne - des chemins sont retrouvés avec succès!");
+                //console.log(`   Recommandation: Continuez à surveiller le taux de succès quotidien.`);
             } else {
-                console.log("⚠️ Le cache ne semble pas fonctionner efficacement sur les tests.");
-                console.log("   Causes possibles:");
-                console.log("   - Les chemins préchauffés ne correspondent pas aux chemins demandés");
-                console.log("   - Problème de normalisation des coordonnées pour les clés du cache");
-                console.log("   - Le seuil de proximité pourrait être trop faible");
-                console.log("   Recommandation: Augmentez le seuil de proximité et diversifiez les variantes préchauffées");
+                //console.log("⚠️ Le cache ne semble pas fonctionner efficacement sur les tests.");
+                //console.log("   Causes possibles:");
+                //console.log("   - Les chemins préchauffés ne correspondent pas aux chemins demandés");
+                //console.log("   - Problème de normalisation des coordonnées pour les clés du cache");
+                //console.log("   - Le seuil de proximité pourrait être trop faible");
+                //console.log("   Recommandation: Augmentez le seuil de proximité et diversifiez les variantes préchauffées");
             }
             
-            console.log("=================================");
+            //console.log("=================================");
             
             return {
                 cacheSize: newStats.size,
@@ -1131,7 +1131,7 @@ export default class AgentManager {
             
             // Limiter au nombre demandé
             const sampleAgents = validAgents.slice(0, Math.min(maxAgents, validAgents.length));
-            console.log(`AgentManager: Préchauffage du cache pour ${sampleAgents.length} agents valides...`);
+            //console.log(`AgentManager: Préchauffage du cache pour ${sampleAgents.length} agents valides...`);
             
             let processedCount = 0;
             let errorCount = 0;
@@ -1139,7 +1139,7 @@ export default class AgentManager {
             // Traiter chaque agent de l'échantillon
             const processNextAgent = (index) => {
                 if (index >= sampleAgents.length) {
-                    console.log(`AgentManager: Préchauffage terminé - ${processedCount} chemins calculés, ${errorCount} erreurs`);
+                    //console.log(`AgentManager: Préchauffage terminé - ${processedCount} chemins calculés, ${errorCount} erreurs`);
                     resolve({
                         processedCount,
                         errorCount

@@ -129,7 +129,7 @@ export default class CarManager {
         }
         // --- FIN MODIFIÉ ---
 
-        console.log("CarManager initialisé avec Pooling multi-matériaux");
+        //console.log("CarManager initialisé avec Pooling multi-matériaux");
     }
 
     /**
@@ -191,7 +191,7 @@ export default class CarManager {
         this.carPoolIndices.set(agent.id, availableCarIndex); // Stocker l'index utilisé
         this.instanceIdToAgentId[availableCarIndex] = agent.id; // instanceId -> Agent ID
 
-        console.log(`[CarManager POOLING] Voiture ${availableCarIndex} assignée à Agent ${agent.id}`);
+        //console.log(`[CarManager POOLING] Voiture ${availableCarIndex} assignée à Agent ${agent.id}`);
         return availableCar;
     }
 
@@ -234,7 +234,7 @@ export default class CarManager {
             this.carPoolIndices.delete(agentId); // Nettoyer l'index aussi
             this.instanceIdToAgentId[carIndex] = undefined; // instanceId -> Agent ID
 
-            console.log(`[CarManager POOLING] Voiture ${carIndex} libérée par Agent ${agentId} et cachée.`);
+            //console.log(`[CarManager POOLING] Voiture ${carIndex} libérée par Agent ${agentId} et cachée.`);
         } else {
             console.warn(`Tentative de libérer une voiture pour Agent ${agentId} qui n'en a pas ou index manquant.`);
         }
@@ -358,7 +358,7 @@ export default class CarManager {
         this.cars = [];
         this.agentToCar.clear();
         this.carPoolIndices.clear(); // Nettoyer la nouvelle map
-        console.log("CarManager détruit");
+        //console.log("CarManager détruit");
     }
 
     /**

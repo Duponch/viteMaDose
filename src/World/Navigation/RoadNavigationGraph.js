@@ -35,7 +35,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
     }
 
     rebuildRoadGrid(plots, crosswalkInfos) {
-        console.log("RoadNavigationGraph: Reconstruction grille routière (Trottoirs NON marchables)...");
+        //console.log("RoadNavigationGraph: Reconstruction grille routière (Trottoirs NON marchables)...");
         
         // Initialiser la grille à NON MARCHABLE
         this.gridWalkableMap.fill(NON_WALKABLE);
@@ -45,7 +45,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
         this.roadLanes.fill(LANE_NONE);
         
         // Marquer les routes comme zones MARCHABLES
-        console.log("RoadNavigationGraph: Marquage des routes comme marchables...");
+        //console.log("RoadNavigationGraph: Marquage des routes comme marchables...");
         const cellSizeWorld = 1.0 / this.gridScale;
         let markedWalkable = 0;
         let markedRightLane = 0;
@@ -105,8 +105,8 @@ export default class RoadNavigationGraph extends NavigationGraph {
             }
         }
         
-        console.log(`RoadNavigationGraph: ${markedWalkable} cellules marquées comme marchables (routes).`);
-        console.log(`RoadNavigationGraph: ${markedRightLane} cellules marquées comme voie droite, ${markedLeftLane} cellules marquées comme voie gauche.`);
+        //console.log(`RoadNavigationGraph: ${markedWalkable} cellules marquées comme marchables (routes).`);
+        //console.log(`RoadNavigationGraph: ${markedRightLane} cellules marquées comme voie droite, ${markedLeftLane} cellules marquées comme voie gauche.`);
 
         // Mettre à jour la grille pathfinding après les modifications
         this.updatePFGrid();
@@ -130,12 +130,12 @@ export default class RoadNavigationGraph extends NavigationGraph {
             }
         }
         
-        console.log(`RoadNavigationGraph: Grille de ${this.gridWidth}x${this.gridHeight} cellules, ${walkableCount} cellules marchables (${(walkableCount / (this.gridWidth * this.gridHeight) * 100).toFixed(2)}%)`);
+        //console.log(`RoadNavigationGraph: Grille de ${this.gridWidth}x${this.gridHeight} cellules, ${walkableCount} cellules marchables (${(walkableCount / (this.gridWidth * this.gridHeight) * 100).toFixed(2)}%)`);
     }
 
     createDebugVisualization(targetGroup) {
         if (!this.gridWalkableMap || !targetGroup) return;
-        console.log("RoadNavigationGraph: Création de la visualisation de la grille routière...");
+        //console.log("RoadNavigationGraph: Création de la visualisation de la grille routière...");
         
         // Nettoyer le groupe cible
         while(targetGroup.children.length > 0) {
@@ -177,12 +177,12 @@ export default class RoadNavigationGraph extends NavigationGraph {
                 const mesh = new THREE.Mesh(mergedGeometry, this.debugMaterialWalkable);
                 mesh.name = "Debug_RoadNavGrid_Walkable";
                 targetGroup.add(mesh);
-                console.log(`RoadNavigationGraph: Visualisation grille routière ajoutée (${walkableCount} cellules marchables).`);
+                //console.log(`RoadNavigationGraph: Visualisation grille routière ajoutée (${walkableCount} cellules marchables).`);
             } else {
                 console.warn("RoadNavigationGraph: Échec fusion géométries debug grille routière.");
             }
         } else {
-            console.log("RoadNavigationGraph: Aucune cellule marchable à visualiser dans la grille routière.");
+            //console.log("RoadNavigationGraph: Aucune cellule marchable à visualiser dans la grille routière.");
         }
     }
 
@@ -204,7 +204,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
         }
         
         // 3) Si non marchable (sur trottoir/parcelle), lancer la recherche en spirale ÉLARGIE
-        console.log(`RoadNavigationGraph: Node initial (${startGrid.x},${startGrid.y}) non marchable (route). Recherche étendue...`);
+        //console.log(`RoadNavigationGraph: Node initial (${startGrid.x},${startGrid.y}) non marchable (route). Recherche étendue...`);
         const maxSearchRadius = Math.max(this.gridWidth, this.gridHeight); // Rayon max
         let bestNode = null;
         let minGridDistSq = Infinity;
@@ -232,7 +232,7 @@ export default class RoadNavigationGraph extends NavigationGraph {
             if (bestNode) {
                 const bestNodeIndex = bestNode.y * this.gridWidth + bestNode.x;
                 const bestNodeValue = this.gridWalkableMap[bestNodeIndex];
-                console.log(`RoadNavigationGraph: Nœud routier le plus proche trouvé à (${bestNode.x},${bestNode.y}), Valeur Map: ${bestNodeValue} (0=Walkable). Distance grille^2 = ${minGridDistSq.toFixed(1)}`);
+                //console.log(`RoadNavigationGraph: Nœud routier le plus proche trouvé à (${bestNode.x},${bestNode.y}), Valeur Map: ${bestNodeValue} (0=Walkable). Distance grille^2 = ${minGridDistSq.toFixed(1)}`);
                 return bestNode;
             }
         }
