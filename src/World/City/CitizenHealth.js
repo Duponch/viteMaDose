@@ -243,7 +243,19 @@ export default class CitizenHealth {
         }
         
         // Vérifier si une semaine s'est écoulée
-        const daysSinceLastUpdate = currentDay - citizenInfo.lastWeeklyAgingUpdate;
+        let daysSinceLastUpdate = currentDay - citizenInfo.lastWeeklyAgingUpdate;
+        
+        // Si le jour actuel est plus petit que le dernier jour d'update, c'est probablement un changement de mois
+        if (daysSinceLastUpdate < 0) {
+            // Supposons que nous sommes passés au mois suivant
+            // Récupérer le nombre de jours dans le mois précédent (approximatif à 30 jours si non disponible)
+            const prevMonthDays = environment?.getMonthDays?.() || 30;
+            
+            // Recalculer les jours écoulés en tenant compte du changement de mois
+            daysSinceLastUpdate = (prevMonthDays - citizenInfo.lastWeeklyAgingUpdate) + currentDay;
+            
+            console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Changement de mois détecté - jours écoulés recalculés = ${daysSinceLastUpdate}`);
+        }
         
         // Log de débogage
         console.log(`[DEBUG] Citoyen ${citizenInfo.id}: Jour actuel=${currentDay}, dernier update=${citizenInfo.lastWeeklyAgingUpdate}, jours écoulés=${daysSinceLastUpdate}`);
@@ -286,7 +298,15 @@ export default class CitizenHealth {
         if (citizenInfo.status === "Argile") return;
         
         // Vérifier si un jour s'est écoulé
-        const daysSinceLastUpdate = currentDay - citizenInfo.lastDailyAdaptationUpdate;
+        let daysSinceLastUpdate = currentDay - citizenInfo.lastDailyAdaptationUpdate;
+        
+        // Gérer le changement de mois
+        if (daysSinceLastUpdate < 0) {
+            const environment = this.experience.world?.environment;
+            const prevMonthDays = environment?.getMonthDays?.() || 30;
+            daysSinceLastUpdate = (prevMonthDays - citizenInfo.lastDailyAdaptationUpdate) + currentDay;
+        }
+        
         if (daysSinceLastUpdate >= 1) {
             // Appliquer l'adaptation physiologique
             citizenInfo.maxHealth = Math.min(
@@ -350,7 +370,14 @@ export default class CitizenHealth {
         
         // Calculer l'augmentation journalière de santé (système immunitaire)
         const lastImmuneDayUpdate = citizenInfo.lastImmuneDayUpdate || 0;
-        const daysSinceLastUpdate = currentDay - lastImmuneDayUpdate;
+        let daysSinceLastUpdate = currentDay - lastImmuneDayUpdate;
+        
+        // Gérer le changement de mois
+        if (daysSinceLastUpdate < 0) {
+            const environment = this.experience.world?.environment;
+            const prevMonthDays = environment?.getMonthDays?.() || 30;
+            daysSinceLastUpdate = (prevMonthDays - lastImmuneDayUpdate) + currentDay;
+        }
         
         if (daysSinceLastUpdate >= 1) {
             // Augmenter la santé 
@@ -410,7 +437,14 @@ export default class CitizenHealth {
         
         // Vérifier si une semaine s'est écoulée depuis la dernière vérification
         const lastDiseaseCheckDay = citizenInfo.lastDiseaseCheckDay || 0;
-        const daysSinceLastCheck = currentDay - lastDiseaseCheckDay;
+        let daysSinceLastCheck = currentDay - lastDiseaseCheckDay;
+        
+        // Gérer le changement de mois
+        if (daysSinceLastCheck < 0) {
+            const environment = this.experience.world?.environment;
+            const prevMonthDays = environment?.getMonthDays?.() || 30;
+            daysSinceLastCheck = (prevMonthDays - lastDiseaseCheckDay) + currentDay;
+        }
         
         if (daysSinceLastCheck >= 7) {
             // Déterminer la chance de maladie en fonction du statut sanitaire

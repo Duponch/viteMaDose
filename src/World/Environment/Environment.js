@@ -577,4 +577,16 @@ export default class Environment {
             this.waterSystem.setDimensions(width, height);
         }
     }
+
+    /**
+     * Retourne le nombre de jours dans le mois actuel
+     * @param {number} month - Mois optionnel (1-12)
+     * @param {number} year - Année optionnelle
+     * @returns {number} - Nombre de jours dans le mois
+     */
+    getMonthDays(month, year) {
+        if (!this.calendar) return 30; // Valeur par défaut si le calendrier n'est pas disponible
+        
+        return this.calendar.getMonthDays(month, year);
+    }
 }

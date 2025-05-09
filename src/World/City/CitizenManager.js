@@ -277,7 +277,16 @@ export default class CitizenManager {
         }
         
         // Vérifier si un jour s'est écoulé depuis le dernier paiement
-        const daysSinceLastSalary = currentDay - citizen.lastSalaryDay;
+        let daysSinceLastSalary = currentDay - citizen.lastSalaryDay;
+        
+        // Gérer le changement de mois
+        if (daysSinceLastSalary < 0) {
+            const environment = this.citizenHealth?.experience.world?.environment;
+            const prevMonthDays = environment?.getMonthDays?.() || 30;
+            daysSinceLastSalary = (prevMonthDays - citizen.lastSalaryDay) + currentDay;
+            console.log(`Citoyen ${citizen.id}: Changement de mois détecté - jours depuis dernier salaire recalculés = ${daysSinceLastSalary}`);
+        }
+        
         if (daysSinceLastSalary >= 1) {
             // Payer le salaire pour chaque jour écoulé
             citizen.money += citizen.salary * daysSinceLastSalary;

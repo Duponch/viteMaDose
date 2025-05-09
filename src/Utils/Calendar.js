@@ -43,6 +43,25 @@ export default class Calendar {
     }
 
     /**
+     * Retourne le nombre de jours dans un mois donné
+     * @param {number} month - Mois (1-12)
+     * @param {number} year - Année
+     * @returns {number} - Nombre de jours dans le mois
+     */
+    getMonthDays(month, year) {
+        // Si les paramètres ne sont pas fournis, utiliser la date actuelle du jeu
+        if (month === undefined || year === undefined) {
+            const currentDate = this.getCurrentDate(Date.now());
+            month = currentDate.mois;
+            year = currentDate.annee;
+        }
+        
+        // Le mois est 1-indexé dans les paramètres mais Date utilise 0-index
+        const daysInMonth = new Date(year, month, 0).getDate();
+        return daysInMonth;
+    }
+
+    /**
      * Retourne la date formatée JJ/MM/AAAA
      * @param {Date} date
      */
