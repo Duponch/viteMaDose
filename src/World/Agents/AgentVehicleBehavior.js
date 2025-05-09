@@ -12,7 +12,7 @@ export default class AgentVehicleBehavior {
         this.carManager = this.experience.world?.carManager; // Référence au CarManager
 
         // Probabilité d'avoir un véhicule (peut aussi venir de la config agent)
-        this.hasVehicle = Math.random() < (this.agent.config?.vehicleOwnershipProbability ?? 0.1);
+        this.hasVehicle = Math.random() < 0;
 
         // Propriétés spécifiques au véhicule
         this.isUsingVehicle = false; // Si l'agent est *actuellement* dans un véhicule actif

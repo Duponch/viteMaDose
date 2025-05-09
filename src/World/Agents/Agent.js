@@ -229,115 +229,67 @@ export default class Agent {
      * @param {number} currentGameTimeForStats - Temps de jeu actuel pour les statistiques.
      */
     requestPath(startPosWorld, endPosWorld, startNodeOverride = null, endNodeOverride = null, nextStateIfSuccess, currentGameTimeForStats) {
-        // ... (Le début de cette méthode reste globalement inchangé, y compris les logs et la gestion du timeout) ...
-        // ... (On récupère agentManager, cityManager, navigationManager comme avant) ...
-        // ... (On détermine isVehicle en utilisant this.vehicleBehavior.isDriving() comme avant) ...
-        // ... (On détermine requestingState comme avant) ...
-        // ... (Vérifications préliminaires des managers comme avant) ...
-
+        // Récupérer les managers nécessaires
         const agentManager = this.experience.world?.agentManager;
-        const cityManager = this.experience.world?.cityManager;
-        const navigationManager = cityManager?.navigationManager;
-
-        // --- MODIFICATION: Utilisation de vehicleBehavior ---
-        let isVehicle = this.vehicleBehavior?.isDriving() ?? false;
-        // --------------------------------------------------
-
-        if (this.currentState === AgentState.WEEKEND_WALK_REQUESTING_PATH || nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_COMMERCIAL) {
-            if (isVehicle) console.warn(`Agent ${this.id}: Forçage mode PIÉTON pour requête WEEKEND_WALK ou COMMERCIAL (était ${isVehicle}).`);
-            isVehicle = false; // Toujours piéton pour promenade et achat médicament
-        }
-
-        // --- Partie inchangée ---
-        this.targetStateFromWeekendWalk = nextStateIfSuccess; // Pour le retour de promenade
-
-        this.currentPathPoints = null; this.calculatedTravelDurationGame = 0; this.departureTimeGame = -1; this.arrivalTmeGame = -1;
-        this.currentPathIndexVisual = 0; this.visualInterpolationProgress = 0; this.currentPathLengthWorld = 0;
-
-        let requestingState = AgentState.WAITING_FOR_PATH;
-        if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_WORK) {
-            requestingState = AgentState.REQUESTING_PATH_FOR_WORK;
-            this._currentPathRequestGoal = 'WORK';
-        } else if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_HOME) {
-            requestingState = AgentState.REQUESTING_PATH_FOR_HOME;
-            this._currentPathRequestGoal = 'HOME';
-        } else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_READY) {
-            requestingState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
-            this._currentPathRequestGoal = 'WALK';
-        } else if (nextStateIfSuccess === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) {
-            requestingState = AgentState.WEEKEND_WALK_REQUESTING_PATH;
-            this._currentPathRequestGoal = 'WALK_RETURN_SIDEWALK';
-        } else if (nextStateIfSuccess === AgentState.READY_TO_LEAVE_FOR_COMMERCIAL) {
-            requestingState = AgentState.REQUESTING_PATH_FOR_COMMERCIAL;
-            this._currentPathRequestGoal = 'COMMERCIAL';
+        const navigationManager = this.experience.world?.cityManager?.navigationManager;
+        
+        // Debug info - plus d'informations sur l'objectif du chemin
+        console.log(`[Agent ${this.id} DEBUG] requestPath: État actuel=${this.currentState}, but=${this._currentPathRequestGoal}, nextState=${nextStateIfSuccess}`);
+        
+        // Vérifier l'état actuel pour déterminer le mode de déplacement (piéton ou véhicule)
+        const isVehicle = this.currentState === AgentState.REQUESTING_PATH_FOR_WORK_VEHICLE || 
+                          this.currentState === AgentState.REQUESTING_PATH_FOR_HOME_VEHICLE;
+        
+        // Déterminer l'état pour les statistiques
+        let requestingState = this.currentState;
+        
+        // Vérifications préliminaires
+        if (!agentManager) {
+            console.error(`Agent ${this.id}: AgentManager non disponible pour requête path.`);
+            return;
         }
         
-        this.currentState = requestingState;
+        if (!navigationManager) {
+            console.error(`Agent ${this.id}: NavigationManager non disponible pour requête path.`);
+            this.forceRecoverFromTimeout(currentGameTimeForStats);
+            return;
+        }
+        
+        // Mettre à jour les flags d'état
         this.isVisible = false; // Cache l'agent pendant la requête
         this._pathRequestTimeout = this.experience.time.elapsed;
         
-
+        // Mise à jour des statistiques
         if (agentManager?.stats) {
             const dayDurationMs = this.experience.world?.environment?.dayDurationMs || (24 * 60 * 60 * 1000);
             const currentHour = Math.floor((currentGameTimeForStats % dayDurationMs) / (dayDurationMs / 24));
             if (requestingState === AgentState.REQUESTING_PATH_FOR_WORK) agentManager.stats.requestingPathForWorkByHour[currentHour]++;
             else if (requestingState === AgentState.REQUESTING_PATH_FOR_HOME) agentManager.stats.requestingPathForHomeByHour[currentHour]++;
         }
-
-        if (!navigationManager || !agentManager || !agentManager.isWorkerInitialized) {
-            console.error(`Agent ${this.id}: Managers non prêts pour requête path.`);
-            this.forceRecoverFromTimeout(currentGameTimeForStats); // Utiliser récupération
-            return;
-        }
-
-        const navigationGraph = navigationManager.getNavigationGraph(isVehicle);
-
-        if (!navigationGraph) {
-            console.error(`Agent ${this.id}: NavigationGraph non disponible pour mode ${isVehicle ? 'véhicule' : 'piéton'}.`);
-            this.forceRecoverFromTimeout(currentGameTimeForStats);
-            return;
-        }
-
-        // --- Calcul des Nœuds de Départ et d'Arrivée (INCHANGÉ - utilise le bon graphe récupéré au-dessus) ---
-        let startNode = null; let endNode = null;
-        if (startNodeOverride && typeof startNodeOverride.x === 'number' && typeof startNodeOverride.y === 'number') startNode = startNodeOverride;
-        if (endNodeOverride && typeof endNodeOverride.x === 'number' && typeof endNodeOverride.y === 'number') endNode = endNodeOverride;
-        if (!startNode && startPosWorld instanceof THREE.Vector3) startNode = navigationGraph.getClosestWalkableNode(startPosWorld);
-        if (!endNode && endPosWorld instanceof THREE.Vector3) endNode = navigationGraph.getClosestWalkableNode(endPosWorld);
-
-        // --- Vérification Finale des Nœuds Calculés (INCHANGÉ) ---
-        if (!startNode || !endNode || typeof startNode.x !== 'number' || typeof startNode.y !== 'number' || typeof endNode.x !== 'number' || typeof endNode.y !== 'number') {
-            console.error(`Agent ${this.id} (${isVehicle ? 'véhicule' : 'piéton'}): Nœud départ ou arrivée MANQUANT/INVALID après calcul. Start: ${JSON.stringify(startNode)}, End: ${JSON.stringify(endNode)}. Forcing recovery.`);
-            this.forceRecoverFromTimeout(currentGameTimeForStats);
-            return;
-        }
-        // --- Visualisation Debug (INCHANGÉ) ---
-        // ... (logique showStartNodeDebugSphere / showEndNodeDebugSphere) ...
-        if (this.experience.isDebugMode && this.experience.world && startNode && endNode) {
-            const vizNavGraph = navigationManager.getNavigationGraph(isVehicle);
-            if (vizNavGraph) {
-                const startWorldPosViz = vizNavGraph.gridToWorld(startNode.x, startNode.y);
-                const endWorldPosViz = vizNavGraph.gridToWorld(endNode.x, endNode.y);
-                this.experience.world.showStartNodeDebugSphere(startWorldPosViz);
-                this.experience.world.showEndNodeDebugSphere(endWorldPosViz);
+        
+        // Demander le chemin via NavigationManager qui gère le cache
+        try {
+            const pathResult = navigationManager.findPath(
+                startPosWorld, 
+                endPosWorld, 
+                startNodeOverride, 
+                endNodeOverride, 
+                isVehicle,
+                this.id // Pour le debug/tracking
+            );
+            
+            if (pathResult && pathResult.path) {
+                // Le chemin a été trouvé, mettre à jour l'agent
+                this.setPath(pathResult.path, pathResult.pathLengthWorld);
+            } else {
+                // Aucun chemin trouvé, gérer l'échec
+                console.warn(`Agent ${this.id}: Aucun chemin trouvé entre ${startPosWorld?.toArray()} et ${endPosWorld?.toArray()}`);
+                this.forceRecoverFromTimeout(currentGameTimeForStats);
             }
-       }
-
-        // --- Vérification Format Nœuds avant Envoi (INCHANGÉ) ---
-        // ... (vérification Number.isInteger etc.) ...
-        if (!Number.isInteger(startNode.x) || startNode.x < 0 || !Number.isInteger(startNode.y) || startNode.y < 0 ||
-            !Number.isInteger(endNode.x) || endNode.x < 0 || !Number.isInteger(endNode.y) || endNode.y < 0) {
-             console.error(`Agent ${this.id}: FORMAT NOEUDS INVALIDE (non-entier ou négatif) AVANT ENVOI WORKER! Start:`, startNode, "End:", endNode);
-             this.forceRecoverFromTimeout(currentGameTimeForStats);
-             return;
-         }
-
-        // --- LOG AVANT WORKER (INCHANGÉ) ---
-        // ... (log des positions/nœuds) ...
-         console.log(`[AGENT ${this.id} PATH_REQ] Mode: ${isVehicle ? 'Veh' : 'Ped'}, StartW: (${startPosWorld?.x.toFixed(1)}, ${startPosWorld?.z.toFixed(1)}), EndW: (${endPosWorld?.x.toFixed(1)}, ${endPosWorld?.z.toFixed(1)}), StartN: (${startNode.x},${startNode.y}), EndN: (${endNode.x},${endNode.y}), NextState: ${nextStateIfSuccess}`);
-
-        // --- Envoi de la Requête au Worker (INCHANGÉ - passe bien isVehicle) ---
-        agentManager.requestPathFromWorker(this.id, startNode, endNode, isVehicle);
+        } catch (error) {
+            console.error(`Agent ${this.id}: Erreur lors de la demande de chemin:`, error);
+            this.forceRecoverFromTimeout(currentGameTimeForStats);
+        }
     }
 
 	/**
@@ -429,6 +381,18 @@ export default class Agent {
                     this.currentPathPoints = null; this.currentPathLengthWorld = 0; this.calculatedTravelDurationGame = 0;
                     nextState = AgentState.AT_HOME; this.weekendBehavior.resetWeekendState();
                 }
+            } else if (currentStateAtCall === AgentState.AT_HOME && this._currentPathRequestGoal === 'WORK') {
+                // Cas spécial : l'agent est AT_HOME mais a demandé un chemin pour le travail
+                // Cela se produit quand nextStateIfSuccess dans requestPath est READY_TO_LEAVE_FOR_WORK
+                console.log(`[Agent ${this.id} INFO] setPath: Chemin pour le travail reçu alors qu'en état AT_HOME. Passage à READY_TO_LEAVE_FOR_WORK.`);
+                nextState = AgentState.READY_TO_LEAVE_FOR_WORK;
+            } else if (currentStateAtCall === AgentState.AT_HOME) {
+                // Cas général où l'agent est AT_HOME mais a reçu un chemin non associé à un but spécifique
+                console.log(`[Agent ${this.id} INFO] setPath: Chemin reçu alors que déjà AT_HOME sans but spécifique. Ignoré.`);
+                this.currentPathPoints = null;
+                this.currentPathLengthWorld = 0;
+                this.calculatedTravelDurationGame = 0;
+                nextState = AgentState.AT_HOME;
             } else {
                 console.warn(`[Agent ${this.id} WARN] setPath: Chemin valide reçu mais état initial (${currentStateAtCall}) non géré.`);
                 nextState = this.currentState; // Garder l'état actuel

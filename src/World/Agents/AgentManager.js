@@ -120,7 +120,7 @@ export default class AgentManager {
         // --- FIN MODIFICATION ---
 
         try {
-            console.log("AgentManager: Initialisation du Pathfinding Worker (mode SharedArrayBuffer)... HORS LIGNE");
+            console.log("AgentManager: Initialisation du Pathfinding Worker (mode SharedArrayBuffer)...");
             this.pathfindingWorker = new Worker(new URL('../Navigation/PathfindingWorker.js', import.meta.url), { type: 'module' });
             this.pathfindingWorker.onmessage = (event) => this._handleWorkerMessage(event);
             this.pathfindingWorker.onerror = (error) => { 
@@ -141,7 +141,29 @@ export default class AgentManager {
                  this.pathfindingWorker = null;
                 return;
             }
-            // --- FIN MODIFICATION ---
+            
+            // --- AJOUT: Assurer que toutes les propriétés nécessaires sont présentes ---
+            // Vérifier et ajouter les dimensions communes si nécessaire
+            if (!workerInitData.gridWidth) {
+                workerInitData.gridWidth = workerInitData.pedestrian.gridWidth;
+            }
+            if (!workerInitData.gridHeight) {
+                workerInitData.gridHeight = workerInitData.pedestrian.gridHeight;
+            }
+            
+            // Vérifier les paramètres de conversion pour les transférer au niveau supérieur si nécessaire
+            if (workerInitData.pedestrian.conversionParams) {
+                if (!workerInitData.gridScale) {
+                    workerInitData.gridScale = workerInitData.pedestrian.conversionParams.gridScale;
+                }
+                if (workerInitData.offsetX === undefined) {
+                    workerInitData.offsetX = workerInitData.pedestrian.conversionParams.offsetX;
+                }
+                if (workerInitData.offsetZ === undefined) {
+                    workerInitData.offsetZ = workerInitData.pedestrian.conversionParams.offsetZ;
+                }
+            }
+            // --- FIN AJOUT ---
 
             this.pathfindingWorker.postMessage({
                 type: 'init',

@@ -136,7 +136,7 @@ export default class AgentStateMachine {
                     const shouldWorkToday = agent.workScheduleStrategy?.shouldWorkToday(calendarDate) ?? false;
                     const workCheckCondition = (
                         agent.workPosition && shouldWorkToday &&
-                        currentDayNumber > agent.lastDepartureDayWork &&
+                        (currentDayNumber > agent.lastDepartureDayWork || agent.lastDepartureDayWork === -1) &&
                         timeWithinCurrentDayCycle >= agent.prepareWorkDepartureTimeGame &&
                         currentHour < agent.departureHomeHour && 
                         agent.requestedPathForDepartureTime !== currentGameTime 

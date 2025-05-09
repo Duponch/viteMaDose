@@ -1,6 +1,6 @@
 // --- src/World/PathfindingWorker.js ---
 
-// Supprimé: import * as PF from 'pathfinding';
+import * as PF from 'pathfinding';
 
 // --- Constantes partagées (doivent correspondre à NavigationGraph.js) ---
 const WALKABLE = 0;
@@ -17,11 +17,131 @@ let offsetZ = 0;
 let pedestrianGraphHeight = 0.2; // Hauteur par défaut pour piétons
 let roadGraphHeight = 0.1;       // Hauteur par défaut pour routes
 
+// Cache des chemins calculés
+const pathCache = {
+    cache: new Map(),
+    keyToTimestamp: new Map(),
+    keyToUsageCount: new Map(),
+    maxEntries: 5000,
+    expirationTimeMs: 30000, // 30 secondes
+    stats: {
+        hits: 0,
+        misses: 0,
+        stored: 0,
+        evictions: 0
+    },
+    
+    // Créer une clé unique pour le cache
+    generateKey(startNode, endNode, isVehicle) {
+        return `${isVehicle ? 'v' : 'p'}_${startNode.x},${startNode.y}_${endNode.x},${endNode.y}`;
+    },
+    
+    // Récupérer un chemin du cache
+    getPath(startNode, endNode, isVehicle) {
+        const key = this.generateKey(startNode, endNode, isVehicle);
+        const now = Date.now();
+        
+        if (!this.cache.has(key)) {
+            this.stats.misses++;
+            return null;
+        }
+        
+        const entry = this.cache.get(key);
+        const timestamp = this.keyToTimestamp.get(key);
+        
+        // Vérifier l'expiration
+        if (now - timestamp > this.expirationTimeMs) {
+            this.cache.delete(key);
+            this.keyToTimestamp.delete(key);
+            this.keyToUsageCount.delete(key);
+            this.stats.evictions++;
+            this.stats.misses++;
+            return null;
+        }
+        
+        // Mettre à jour les statistiques et l'activité
+        this.stats.hits++;
+        const usageCount = this.keyToUsageCount.get(key) || 0;
+        this.keyToUsageCount.set(key, usageCount + 1);
+        this.keyToTimestamp.set(key, now);
+        
+        return {
+            gridPath: entry.gridPath.map(node => ({ x: node.x, y: node.y })),
+            worldPath: entry.worldPath.map(pos => ({ x: pos.x, y: pos.y, z: pos.z })),
+            pathLengthWorld: entry.pathLengthWorld
+        };
+    },
+    
+    // Stocker un chemin dans le cache
+    setPath(startNode, endNode, gridPath, worldPath, pathLengthWorld, isVehicle) {
+        if (!gridPath || !worldPath || gridPath.length === 0 || worldPath.length === 0) {
+            return;
+        }
+        
+        const key = this.generateKey(startNode, endNode, isVehicle);
+        const now = Date.now();
+        
+        // Si le cache est plein, supprimer l'entrée la moins utilisée
+        if (this.cache.size >= this.maxEntries && !this.cache.has(key)) {
+            this._evictLeastUsed();
+        }
+        
+        // Stocker le chemin
+        this.cache.set(key, {
+            gridPath: gridPath.map(node => ({ x: node.x, y: node.y })), // Copie profonde
+            worldPath: worldPath,
+            pathLengthWorld: pathLengthWorld
+        });
+        
+        this.keyToTimestamp.set(key, now);
+        this.keyToUsageCount.set(key, 1);
+        
+        if (!this.cache.has(key)) {
+            this.stats.stored++;
+        }
+    },
+    
+    // Supprimer l'entrée la moins utilisée
+    _evictLeastUsed() {
+        let leastUsedKey = null;
+        let leastUsedCount = Infinity;
+        let leastUsedTimestamp = Infinity;
+        
+        for (const [key, count] of this.keyToUsageCount.entries()) {
+            const timestamp = this.keyToTimestamp.get(key);
+            if (count < leastUsedCount || (count === leastUsedCount && timestamp < leastUsedTimestamp)) {
+                leastUsedKey = key;
+                leastUsedCount = count;
+                leastUsedTimestamp = timestamp;
+            }
+        }
+        
+        if (leastUsedKey) {
+            this.cache.delete(leastUsedKey);
+            this.keyToTimestamp.delete(leastUsedKey);
+            this.keyToUsageCount.delete(leastUsedKey);
+            this.stats.evictions++;
+        }
+    },
+    
+    // Vider entièrement le cache
+    clear() {
+        this.cache.clear();
+        this.keyToTimestamp.clear();
+        this.keyToUsageCount.clear();
+        this.stats.evictions = 0;
+        this.stats.hits = 0;
+        this.stats.misses = 0;
+        this.stats.stored = 0;
+    }
+};
+
 // --- Fonction helper pour calculer la distance (inchangée) ---
 function calculateWorldDistance(p1, p2) {
     const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
     const dz = p2.z - p1.z;
-    return Math.sqrt(dx * dx + dz * dz);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 // --- Fonction gridToWorld (MODIFIÉ pour accepter la hauteur) ---
@@ -46,40 +166,79 @@ self.onmessage = function(event) {
 
     try {
         if (type === 'init') {
-            console.log('[Worker] Initialisation reçue (mode SharedArrayBuffer + A* interne double grille).');
-            // --- MODIFICATION: Accepter les données combinées ---
-            if (data && data.pedestrian && data.road && 
-                data.pedestrian.gridBuffer && data.road.gridBuffer &&
-                data.gridWidth && data.gridHeight && data.gridScale !== undefined && 
-                data.offsetX !== undefined && data.offsetZ !== undefined &&
-                data.pedestrian.graphHeight !== undefined && data.road.graphHeight !== undefined)
-            {
-                gridWidth = data.gridWidth;
-                gridHeight = data.gridHeight;
-                gridScale = data.gridScale;
-                offsetX = data.offsetX;
-                offsetZ = data.offsetZ;
-                pedestrianGraphHeight = data.pedestrian.graphHeight;
-                roadGraphHeight = data.road.graphHeight;
-
-                // Vérifier les buffers
-                if (!(data.pedestrian.gridBuffer instanceof SharedArrayBuffer) || !(data.road.gridBuffer instanceof SharedArrayBuffer)) {
-                    throw new Error("Un ou les deux objets reçus ne sont pas des SharedArrayBuffers.");
+            console.log('[Worker] Initialisation reçue. Adaptation au format de données...');
+            
+            // Version plus robuste pour accepter différents formats de données
+            // Ancien format: {gridWidth, gridHeight, gridScale, ...}
+            // Nouveau format: {pedestrian: {...}, road: {...}}
+            
+            if (data) {
+                if (data.pedestrian && data.road) {
+                    // Nouveau format (après modifications)
+                    if (data.pedestrian.gridBuffer && data.road.gridBuffer) {
+                        // Récupération des paramètres communs
+                        gridWidth = data.pedestrian.gridWidth || data.gridWidth;
+                        gridHeight = data.pedestrian.gridHeight || data.gridHeight;
+                        gridScale = data.pedestrian.conversionParams?.gridScale || data.gridScale;
+                        offsetX = data.pedestrian.conversionParams?.offsetX || data.offsetX;
+                        offsetZ = data.pedestrian.conversionParams?.offsetZ || data.offsetZ;
+                        
+                        // Hauteurs spécifiques
+                        pedestrianGraphHeight = data.pedestrian.conversionParams?.graphHeight || 0.2;
+                        roadGraphHeight = data.road.conversionParams?.graphHeight || 0.1;
+                        
+                        // Créer les vues sur les SharedArrayBuffers
+                        pedestrianGridWalkableMap = new Uint8Array(data.pedestrian.gridBuffer);
+                        roadGridWalkableMap = new Uint8Array(data.road.gridBuffer);
+                        
+                        console.log(`[Worker] Vues Uint8Array créées sur SharedArrayBuffers (${gridWidth}x${gridHeight}).`);
+                        console.log(`[Worker] Hauteurs: Piéton=${pedestrianGraphHeight.toFixed(2)}, Route=${roadGraphHeight.toFixed(2)}`);
+                    } else {
+                        throw new Error("Les buffers SharedArrayBuffer sont manquants dans les données pedestrian/road.");
+                    }
+                } else if (data.gridBuffer) {
+                    // Format intermédiaire: un seul buffer avec gridWidth, gridHeight, etc.
+                    gridWidth = data.gridWidth;
+                    gridHeight = data.gridHeight;
+                    gridScale = data.gridScale;
+                    offsetX = data.offsetX;
+                    offsetZ = data.offsetZ;
+                    pedestrianGraphHeight = data.graphHeight || 0.2;
+                    roadGraphHeight = data.graphHeight || 0.1;
+                    
+                    // Créer les vues sur un seul SharedArrayBuffer (pour compatibilité)
+                    pedestrianGridWalkableMap = new Uint8Array(data.gridBuffer);
+                    roadGridWalkableMap = pedestrianGridWalkableMap; // Les deux pointent vers le même buffer
+                    
+                    console.log(`[Worker] (Compatibilité) Vue Uint8Array créée sur SharedArrayBuffer unique (${gridWidth}x${gridHeight}).`);
+                } else if (data.pedestrian?.gridBuffer) {
+                    // Format mixte: pedestrian existe mais pas road, ou vice versa
+                    gridWidth = data.gridWidth || data.pedestrian.gridWidth;
+                    gridHeight = data.gridHeight || data.pedestrian.gridHeight;
+                    gridScale = data.gridScale || data.pedestrian.conversionParams?.gridScale;
+                    offsetX = data.offsetX || data.pedestrian.conversionParams?.offsetX;
+                    offsetZ = data.offsetZ || data.pedestrian.conversionParams?.offsetZ;
+                    pedestrianGraphHeight = data.pedestrian.conversionParams?.graphHeight || 0.2;
+                    
+                    // Créer les vues
+                    pedestrianGridWalkableMap = new Uint8Array(data.pedestrian.gridBuffer);
+                    roadGridWalkableMap = pedestrianGridWalkableMap; // Fallback temporaire
+                    
+                    console.log(`[Worker] (Format hybride) Vue Uint8Array créée pour piétons seulement (${gridWidth}x${gridHeight}).`);
+                } else {
+                    throw new Error("Format de données non reconnu pour l'initialisation.");
                 }
                 
-                // Créer les vues sur les buffers partagés
-                pedestrianGridWalkableMap = new Uint8Array(data.pedestrian.gridBuffer);
-                roadGridWalkableMap = new Uint8Array(data.road.gridBuffer);
-                console.log(`[Worker] Vues Uint8Array créées sur SharedArrayBuffers (${gridWidth}x${gridHeight}).`);
-                console.log(`[Worker] Hauteurs: Piéton=${pedestrianGraphHeight.toFixed(2)}, Route=${roadGraphHeight.toFixed(2)}`);
-
-                console.log('[Worker] Prêt pour les requêtes A* (double grille).');
+                // Vérification finale des paramètres essentiels
+                if (!gridWidth || !gridHeight || !gridScale || offsetX === undefined || offsetZ === undefined) {
+                    throw new Error("Paramètres de grille incomplets après adaptation.");
+                }
+                
+                console.log('[Worker] Prêt pour les requêtes A*.');
                 self.postMessage({ type: 'initComplete' });
             } else {
-                 throw new Error("Données manquantes ou invalides pour l'initialisation combinée.");
+                throw new Error("Objet data manquant dans le message d'initialisation.");
             }
-            // --- FIN MODIFICATION --- 
-
         } else if (type === 'findPath') {
             // --- MODIFICATION: Vérifier l'initialisation des DEUX maps ---
             if (!pedestrianGridWalkableMap || !roadGridWalkableMap) { 
@@ -136,6 +295,23 @@ self.onmessage = function(event) {
                  return;
             }
 
+            // Vérifier si le chemin est dans le cache
+            const cachedResult = pathCache.getPath(startNode, endNode, isVehicle);
+            
+            if (cachedResult) {
+                console.log(`[Worker] Cache HIT for Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
+                self.postMessage({ 
+                    type: 'pathResult', 
+                    data: { 
+                        agentId, 
+                        path: cachedResult.worldPath, 
+                        pathLengthWorld: cachedResult.pathLengthWorld,
+                        fromCache: true
+                    } 
+                });
+                return;
+            }
+
             let gridPath = null;
             let worldPathData = null;
             let pathLengthWorld = 0;
@@ -167,6 +343,9 @@ self.onmessage = function(event) {
                     console.warn(`[Worker A*] Chemin non trouvé ou vide pour Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
                 }
 
+                // Stocker dans le cache
+                pathCache.setPath(startNode, endNode, gridPath, worldPathData, pathLengthWorld, isVehicle);
+
             } catch (e) {
                 console.error(`[Worker] Erreur dans findPathAStar pour Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}) (${startNode.x},${startNode.y})->(${endNode.x},${endNode.y}):`, e);
                 worldPathData = null;
@@ -176,20 +355,45 @@ self.onmessage = function(event) {
             // Envoyer le résultat (inchangé)
             self.postMessage({
                 type: 'pathResult',
-                data: { agentId, path: worldPathData, pathLengthWorld: pathLengthWorld }
+                data: { 
+                    agentId, 
+                    path: worldPathData, 
+                    pathLengthWorld: pathLengthWorld,
+                    fromCache: false
+                }
             });
 
+        } else if (type === 'clearCache') {
+            // Effacer le cache
+            pathCache.clear();
+            self.postMessage({ type: 'cacheCleared' });
+            
+        } else if (type === 'getCacheStats') {
+            // Renvoyer les stats du cache
+            self.postMessage({ 
+                type: 'cacheStats', 
+                stats: { 
+                    hits: pathCache.stats.hits,
+                    misses: pathCache.stats.misses,
+                    stored: pathCache.stats.stored,
+                    evictions: pathCache.stats.evictions,
+                    hitRatio: pathCache.stats.hits / (pathCache.stats.hits + pathCache.stats.misses || 1),
+                    size: pathCache.cache.size,
+                    maxSize: pathCache.maxEntries
+                } 
+            });
+            
         } else {
             console.warn('[Worker] Type de message inconnu reçu:', type);
         }
     } catch (error) {
-        console.error('[Worker] Erreur générale dans onmessage:', error);
-         const agentIdOnError = data?.agentId;
-         if (agentIdOnError) {
-             self.postMessage({ type: 'pathResult', data: { agentId: agentIdOnError, path: null, pathLengthWorld: 0 } });
-         } else {
-             self.postMessage({ type: 'workerError', error: error.message, data: event.data });
-         }
+        console.error('[Worker] Erreur dans onmessage:', error);
+        const agentIdOnError = data?.agentId;
+        if (agentIdOnError) {
+            self.postMessage({ type: 'pathResult', data: { agentId: agentIdOnError, path: null, pathLengthWorld: 0 } });
+        } else {
+            self.postMessage({ type: 'workerError', error: error.message, data: event.data });
+        }
     }
 };
 
