@@ -33,14 +33,13 @@ export default class FirTreeRenderer {
         canvas.height = 128;
 
         // Fond marron de base
-        context.fillStyle = '#654321'; // Marron plus foncé (Original: '#654321')
+        context.fillStyle = '#150b01'; // Marron beaucoup plus foncé (Original: '#654321')
         context.fillRect(0, 0, canvas.width, canvas.height);
 
         // Ajout de lignes verticales plus sombres et plus claires pour simuler l'écorce
         for (let i = 0; i < 10; i++) {
             const x = Math.random() * canvas.width;
-            // const lightness = Math.random() * 0.2 + 0.8; // Original avait ça, mais non utilisé directement pour couleur
-            const colorShade = Math.random() > 0.5 ? '#503010' : '#7a5228'; // Alternance de teintes
+            const colorShade = Math.random() > 0.5 ? '#230b01' : '#070300'; // Alternance de teintes plus foncées
             context.strokeStyle = colorShade;
             context.lineWidth = Math.random() * 2 + 1; // Épaisseur variable
             context.beginPath();
@@ -77,13 +76,15 @@ export default class FirTreeRenderer {
             const x = Math.random() * canvas.width;
             const yStart = Math.random() * canvas.height * 0.3; // Lignes ne commencent pas toutes en haut
             const length = (Math.random() * 0.5 + 0.5) * (canvas.height - yStart); // Longueur variable
-            // Différentes teintes de vert (exactement comme l'original)
-            const greenShade = Math.random() > 0.6 ? '#2E8B57' : (Math.random() > 0.3 ? '#3CB371' : '#228B22');
+            // Teintes de vert plus foncées que la base #207020
+            const greenShade = Math.random() > 0.7 ? '#0a2a0a' : 
+                             (Math.random() > 0.4 ? '#0d300d' : 
+                             (Math.random() > 0.2 ? '#0b2b0b' : '#0a2a0a'));
             context.strokeStyle = greenShade;
-            context.lineWidth = Math.random() * 1.5 + 0.5;
+            context.lineWidth = Math.random() * 1.2 + 0.3;
             context.beginPath();
             context.moveTo(x, yStart);
-            context.lineTo(x + (Math.random() - 0.5) * 8, yStart + length); // Lignes un peu désordonnées
+            context.lineTo(x + (Math.random() - 0.5) * 6, yStart + length);
             context.stroke();
         }
         
