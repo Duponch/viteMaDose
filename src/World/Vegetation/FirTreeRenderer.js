@@ -15,7 +15,7 @@ export default class FirTreeRenderer {
         this.assetIdCounter = 0;
         
         // Couleur de base pour le feuillage unique, comme dans l'original
-        this.fixedFoliageBaseColor = 0x207020; // '#207020'
+        this.fixedFoliageBaseColor = 0x2a3f0c; // '#207020'
 
         // Création des textures partagées
         this.sharedTrunkTexture = this.createTrunkTexture();
@@ -33,7 +33,7 @@ export default class FirTreeRenderer {
         canvas.height = 128;
 
         // Fond marron de base
-        context.fillStyle = '#150b01'; // Marron beaucoup plus foncé (Original: '#654321')
+        context.fillStyle = '#100701'; // Marron beaucoup plus foncé (Original: '#654321')
         context.fillRect(0, 0, canvas.width, canvas.height);
 
         // Ajout de lignes verticales plus sombres et plus claires pour simuler l'écorce
@@ -72,14 +72,14 @@ export default class FirTreeRenderer {
         context.fillRect(0, 0, canvas.width, canvas.height);
 
         // Ajout de lignes verticales de différentes teintes de vert
-        for (let i = 0; i < 80; i++) { // Plus de lignes pour le feuillage
+        for (let i = 0; i < 80; i++) {
             const x = Math.random() * canvas.width;
-            const yStart = Math.random() * canvas.height * 0.3; // Lignes ne commencent pas toutes en haut
-            const length = (Math.random() * 0.5 + 0.5) * (canvas.height - yStart); // Longueur variable
-            // Teintes de vert plus foncées que la base #207020
-            const greenShade = Math.random() > 0.7 ? '#0a2a0a' : 
-                             (Math.random() > 0.4 ? '#0d300d' : 
-                             (Math.random() > 0.2 ? '#0b2b0b' : '#0a2a0a'));
+            const yStart = Math.random() * canvas.height * 0.3;
+            const length = (Math.random() * 0.5 + 0.5) * (canvas.height - yStart);
+            // Nouvelles teintes de vert basées sur 0x2a3f0c
+            const greenShade = Math.random() > 0.7 ? '#1a2a08' : 
+                             (Math.random() > 0.4 ? '#1e3009' : 
+                             (Math.random() > 0.2 ? '#1c2e09' : '#1a2a08'));
             context.strokeStyle = greenShade;
             context.lineWidth = Math.random() * 1.2 + 0.3;
             context.beginPath();
@@ -91,7 +91,7 @@ export default class FirTreeRenderer {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(4, 2); // Répéter la texture pour un effet plus dense
+        texture.repeat.set(4, 2);
         texture.needsUpdate = true;
         return texture;
     }
@@ -106,7 +106,7 @@ export default class FirTreeRenderer {
      */
     generateProceduralTree(baseWidth = 4, baseHeight = 8, baseDepth = 4, userScale = 1) {
         console.log("[FirTree Proc] Début de la génération du sapin (style original).");
-        const sourceTreeGroup = new THREE.Group(); // Groupe temporaire pour positionner les éléments comme dans l'original
+        const sourceTreeGroup = new THREE.Group();
 
         // Matériaux (style original)
         const trunkMaterial = new THREE.MeshStandardMaterial({
@@ -123,35 +123,34 @@ export default class FirTreeRenderer {
             name: "FirTreeFoliageMat_OriginalStyle"
         });
 
-        // Tronc de l'arbre (dimensions et position de l'original)
-        // Original: CylinderGeometry(0.4, 0.5, 2.5, 6); trunk.position.y = -0.75;
-        const trunkGeometry = new THREE.CylinderGeometry(0.4, 0.5, 2.5, 6);
+        // Application du facteur d'échelle aux dimensions de base
+        const scale = userScale;
+        
+        // Tronc de l'arbre avec échelle
+        const trunkGeometry = new THREE.CylinderGeometry(0.4 * scale, 0.5 * scale, 1.8 * scale, 6);
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.position.y = -0.75; 
+        trunk.position.y = -0.9 * scale;
         sourceTreeGroup.add(trunk);
         
-        // Feuillage de l'arbre (3 cônes, dimensions et positions de l'original)
+        // Feuillage de l'arbre avec échelle
         const coneSegments = 6;
 
         // Cône inférieur
-        // Original: ConeGeometry(2, 3, coneSegments); cone1.position.y = 1.5;
-        const cone1Geometry = new THREE.ConeGeometry(2, 3, coneSegments);
+        const cone1Geometry = new THREE.ConeGeometry(2 * scale, 3 * scale, coneSegments);
         const cone1 = new THREE.Mesh(cone1Geometry, foliageMaterial);
-        cone1.position.y = 1.5;
+        cone1.position.y = 0.9 * scale;
         sourceTreeGroup.add(cone1);
 
         // Cône du milieu
-        // Original: ConeGeometry(1.5, 2.5, coneSegments); cone2.position.y = cone1.position.y + 1.25; (soit 2.75)
-        const cone2Geometry = new THREE.ConeGeometry(1.5, 2.5, coneSegments);
+        const cone2Geometry = new THREE.ConeGeometry(1.5 * scale, 2.5 * scale, coneSegments);
         const cone2 = new THREE.Mesh(cone2Geometry, foliageMaterial);
-        cone2.position.y = 2.75; 
+        cone2.position.y = 2.15 * scale;
         sourceTreeGroup.add(cone2);
 
         // Cône supérieur
-        // Original: ConeGeometry(1, 2, coneSegments); cone3.position.y = cone2.position.y + 1.0; (soit 3.75)
-        const cone3Geometry = new THREE.ConeGeometry(1, 2, coneSegments);
+        const cone3Geometry = new THREE.ConeGeometry(1 * scale, 2 * scale, coneSegments);
         const cone3 = new THREE.Mesh(cone3Geometry, foliageMaterial);
-        cone3.position.y = 3.75;
+        cone3.position.y = 3.15 * scale;
         sourceTreeGroup.add(cone3);
 
         // Fusion et calcul de BBox
@@ -264,7 +263,7 @@ export default class FirTreeRenderer {
             id: modelId,
             parts: parts,
             fittingScaleFactor: 1.0, // Les dimensions sont fixes, donc le fitting factor est 1.
-            userScale: userScale,    // L'échelle utilisateur est toujours applicable.
+            userScale: 0.75,    // L'échelle utilisateur est toujours applicable.
             // Le centre de l'asset est maintenant au milieu de sa BBox (après translation à Y=0 pour sa base)
             centerOffset: new THREE.Vector3(0, finalSize.y / 2 * userScale, 0), // Appliquer userScale ici si la taille finale est attendue
             sizeAfterFitting: finalSize.clone() // Taille avant userScale
