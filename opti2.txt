@@ -1,0 +1,41 @@
+Sur la base de mon analyse du code, voici mon diagnostic concernant les problèmes de performance avec un grand nombre d'agents, malgré le cache de pathfinding et le système LOD :
+Le problème de performance avec un grand nombre d'agents semble provenir de plusieurs facteurs clés :
+Goulot d'étranglement du worker de pathfinding :
+Bien que vous ayez un système de cache pour le pathfinding, chaque agent envoie des requêtes au même worker JavaScript, créant un goulot d'étranglement.
+Vous n'avez qu'un seul worker pour tous les agents, ce qui limite la parallélisation.
+Chaque requête de chemin nécessite une sérialisation et désérialisation des données entre le thread principal et le worker.
+Inefficacités dans la méthode update() :
+Dans AgentManager.update(), vous créez de nombreux objets temporaires (matrices, vecteurs) pour chaque agent à chaque frame.
+Vous appelez mesh.computeBoundingSphere() sur chaque mesh à chaque frame, ce qui est coûteux en CPU.
+Vous effectuez beaucoup d'opérations matricielles par agent, même pour ceux qui sont éloignés.
+Limitations du système LOD actuel :
+Votre système LOD simplifie la géométrie mais continue d'effectuer des calculs d'animation et de matrices pour tous les agents visibles.
+Il manque une stratégie de mise à jour échelonnée où les agents éloignés seraient mis à jour moins fréquemment.
+Synchronisation et mises à jour excessives :
+Chaque agent est mis à jour à chaque frame, indépendamment de sa distance à la caméra ou de son importance.
+Il n'y a pas d'optimisation de culling hiérarchique pour exclure rapidement des groupes d'agents.
+Création excessive d'objets temporaires :
+Dans votre code, vous créez de nouveaux objets THREE.Matrix4, THREE.Vector3, etc. à chaque frame au lieu de réutiliser des instances.
+La création et destruction continue d'objets JavaScript déclenche le garbage collector, causant des micro-freezes.
+Saturation CPU avec le calcul d'états :
+La méthode updateState() est appelée pour chaque agent à chaque frame, impliquant des vérifications d'état complexes.
+Le transfert de données entre les agents et le worker de pathfinding crée une surcharge supplémentaire.
+Pour améliorer les performances, vous devriez:
+Optimiser davantage le système de LOD:
+Implémenter une stratégie de mise à jour échelonnée où les agents éloignés sont mis à jour moins fréquemment (par exemple, tous les 5-10 frames).
+Simplifier davantage la logique d'animation pour les agents lointains.
+Répartir la charge de pathfinding:
+Utiliser plusieurs workers de pathfinding pour paralléliser les calculs.
+Introduire un système de priorités pour les requêtes de chemins.
+Réduire la création d'objets:
+Créer un pool d'objets réutilisables pour les matrices et vecteurs.
+Éviter les créations répétées dans les boucles de rendu.
+Optimiser le cycle update():
+Éviter les appels à computeBoundingSphere() à chaque frame.
+Mettre en cache les résultats des calculs matriciels.
+Grouper les mises à jour d'instance par détail (batch all updates).
+Appliquer un système d'actualisation à taux variable:
+Mettre à jour les agents proches à chaque frame.
+Mettre à jour les agents à distance moyenne toutes les 2-3 frames.
+Mettre à jour les agents lointains toutes les 5-10 frames.
+En résumé, bien que vous ayez implémenté le cache et le LOD, les performances chutent à cause de la surcharge de calculs matriciels, du manque de parallélisation du pathfinding, et de l'absence d'optimisations pour les mises à jour des agents éloignés.

@@ -829,7 +829,6 @@ export default class AgentManager {
     }
 
 	update(deltaTime) {
-
 		if (!this.experience?.world?.environment?.isInitialized) return;
 		const environment        = this.experience.world.environment;
 		const currentGameTime    = this.experience.time.elapsed;
@@ -837,10 +836,11 @@ export default class AgentManager {
 		const debugMarkerScale   = isDebug ? 1.0 : 0;
 		const fixedMarkerYOffset = 5.0;
 
-		// 1. Logique
-		this.agents.forEach(agent => {
-			agent.updateState(deltaTime, environment.getCurrentHour(), currentGameTime);
-		});
+		// 1. Logique - Optimisation : mise à jour en lot pour éviter accès aux propriétés répétés
+		const agentsLength = this.agents.length;
+		for (let i = 0; i < agentsLength; i++) {
+			this.agents[i].updateState(deltaTime, environment.getCurrentHour(), currentGameTime);
+		}
 
 		// 2. Visuels
 		let needsHighDetailUpdate = false;
@@ -848,162 +848,246 @@ export default class AgentManager {
 		let needsAgentMarkerUpdate = false;
 		let needsHomeMarkerUpdate = false;
 
-		// --- Ajout des déclarations des matrices temporaires ---
-		const tempLocalOffsetMatrix = new THREE.Matrix4();
-		const tempAnimationMatrix = new THREE.Matrix4();
-		const tempPartWorldMatrix = new THREE.Matrix4(); // Matrice mondiale finale pour une partie
-		const tempHairLocalOffset = this._getPartLocalOffsetMatrix('hair'); // Offset des cheveux relatif à la tête (calculé une fois)
-		const tempHeadWorldMatrix = new THREE.Matrix4();
+		// --- Utilisation de matrices réutilisables ---
+		// Initialisation des matrices partagées si nécessaire (une seule fois)
+		if (!this._sharedMatrices) {
+			this._sharedMatrices = {
+				localOffset: new THREE.Matrix4(),
+				animation: new THREE.Matrix4(),
+				partWorld: new THREE.Matrix4(),
+				headWorld: new THREE.Matrix4(),
+				hairLocalOffset: this._getPartLocalOffsetMatrix('hair'),
+				zeroScaleMatrix: new THREE.Matrix4().makeScale(0, 0, 0)
+			};
+			// Vector3 réutilisable pour scale à 0
+			this._zeroScale = new THREE.Vector3(0, 0, 0);
+		}
 
-		for (const agent of this.agents) {
+		// Références locales pour éviter les accès répétés à this
+		const {
+			localOffset: tempLocalOffsetMatrix,
+			animation: tempAnimationMatrix,
+			partWorld: tempPartWorldMatrix,
+			headWorld: tempHeadWorldMatrix,
+			hairLocalOffset: tempHairLocalOffset,
+			zeroScaleMatrix
+		} = this._sharedMatrices;
+
+		// Optimisation : traitement par lots plutôt que par agent
+		// Cela réduit les changements de contexte et améliore l'utilisation du cache CPU
+		for (let i = 0; i < agentsLength; i++) {
+			const agent = this.agents[i];
 			const instanceId = this.agentToInstanceId.get(agent.id);
 			if (instanceId === undefined) continue;
 
 			// Met à jour la position/orientation de base
 			agent.updateVisuals(deltaTime, currentGameTime);
-			const actualScale = agent.isVisible ? agent.scale : 0;
-			this.tempScale.set(actualScale, actualScale, actualScale);
-			this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
-
-			// Déterminer quel niveau de détail utiliser
+			
+			// Obtenir directement le statut LOD
 			const isLowDetail = agent.isLodActive;
+			const isVisible = agent.isVisible;
 
-			// --- Mise à jour des parties du corps instanciées ---
-			// Fonction utilitaire pour calculer et appliquer la matrice à une instance
-			const updatePartInstance = (partName, meshName, instanceIndex, detailLevel) => {
-				const meshes = detailLevel === 'high' ? this.instanceMeshes.highDetail : this.instanceMeshes.lowDetail;
-				const mesh = meshes[meshName];
-				if (!mesh || instanceIndex >= mesh.count) return false;
+			// Déterminer quelles matrices doivent être mises à jour
+			const updateHighDetail = !isLowDetail && isVisible;
+			const updateLowDetail = isLowDetail && isVisible;
 
-				if (agent.isVisible) {
-					// --- Calcul commun pour toutes les parties ---
-					// 1. Obtenir le décalage local de la partie (position/rotation de base)
-					tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix(partName));
-
-					// 2. Obtenir la matrice d'animation de la partie
-					// Pour le LOD bas, on n'utilise pas d'animation, juste la position de base
-					if (detailLevel === 'high') {
-						tempAnimationMatrix.copy(agent.currentAnimationMatrix[partName] || this.tempMatrix.identity());
-					} else {
-						tempAnimationMatrix.identity();
-					}
-
-					// 3. Combiner : Matrice locale de la partie = Offset * Animation
-					tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
-
-					// 4. Combiner avec la matrice de l'agent : Matrice mondiale de la partie = Agent * LocalePartie
-					tempPartWorldMatrix.premultiply(this.agentMatrix);
-
-					// --- Application et cas spécifiques ---
-					if (partName === 'hair') {
-						tempPartWorldMatrix.multiplyMatrices(tempHeadWorldMatrix, tempHairLocalOffset);
-						mesh.setMatrixAt(instanceIndex, tempPartWorldMatrix);
-					} else {
-						mesh.setMatrixAt(instanceIndex, tempPartWorldMatrix);
-						if (partName === 'head') {
-							tempHeadWorldMatrix.copy(tempPartWorldMatrix);
-						}
-					}
-				} else {
-					// Masquer l'instance si l'agent n'est pas visible
-					this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0));
-					mesh.setMatrixAt(instanceIndex, this.tempMatrix);
-				}
-				return true;
-			};
-
-			// Appliquer la mise à jour pour chaque partie selon le niveau de détail
-			let highUpdated = false;
-			let lowUpdated = false;
-
-			if (isLowDetail) {
-				// Mettre à jour seulement les parties LOD
-				lowUpdated = updatePartInstance('head', 'head', instanceId, 'low') || lowUpdated;
-				lowUpdated = updatePartInstance('torso', 'torso', instanceId, 'low') || lowUpdated;
-				lowUpdated = updatePartInstance('leftHand', 'hand', instanceId * 2 + 0, 'low') || lowUpdated;
-				lowUpdated = updatePartInstance('rightHand', 'hand', instanceId * 2 + 1, 'low') || lowUpdated;
-				lowUpdated = updatePartInstance('leftFoot', 'shoe', instanceId * 2 + 0, 'low') || lowUpdated;
-				lowUpdated = updatePartInstance('rightFoot', 'shoe', instanceId * 2 + 1, 'low') || lowUpdated;
-				
-				// Masquer les parties haute qualité
-				this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0));
-				this.instanceMeshes.highDetail.head.setMatrixAt(instanceId, this.tempMatrix);
-				this.instanceMeshes.highDetail.torso.setMatrixAt(instanceId, this.tempMatrix);
-				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 0, this.tempMatrix);
-				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 1, this.tempMatrix);
-				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 0, this.tempMatrix);
-				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 1, this.tempMatrix);
-				highUpdated = true;
-			} else {
-				// Mettre à jour seulement les parties haute qualité
-				highUpdated = updatePartInstance('head', 'head', instanceId, 'high') || highUpdated;
-				highUpdated = updatePartInstance('torso', 'torso', instanceId, 'high') || highUpdated;
-				highUpdated = updatePartInstance('leftHand', 'hand', instanceId * 2 + 0, 'high') || highUpdated;
-				highUpdated = updatePartInstance('rightHand', 'hand', instanceId * 2 + 1, 'high') || highUpdated;
-				highUpdated = updatePartInstance('leftFoot', 'shoe', instanceId * 2 + 0, 'high') || highUpdated;
-				highUpdated = updatePartInstance('rightFoot', 'shoe', instanceId * 2 + 1, 'high') || highUpdated;
-				
-				// Masquer les parties basse qualité
-				this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0));
-				this.instanceMeshes.lowDetail.head.setMatrixAt(instanceId, this.tempMatrix);
-				this.instanceMeshes.lowDetail.torso.setMatrixAt(instanceId, this.tempMatrix);
-				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 0, this.tempMatrix);
-				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 1, this.tempMatrix);
-				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 0, this.tempMatrix);
-				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 1, this.tempMatrix);
-				lowUpdated = true;
+			// Calculer la matrice de l'agent seulement si nécessaire
+			if (isVisible) {
+				const actualScale = agent.scale;
+				this.tempScale.set(actualScale, actualScale, actualScale);
+				this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
 			}
 
-			if (highUpdated) needsHighDetailUpdate = true;
-			if (lowUpdated) needsLowDetailUpdate = true;
+			// --- Optimisation: mise à jour conditionnelle ---
+			// Mettre à jour les meshes de détail appropriés
+			if (updateHighDetail) {
+				needsHighDetailUpdate = true;
+				
+				// Matrices hautes qualité - Tête
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('head'));
+				tempAnimationMatrix.copy(agent.currentAnimationMatrix.head || this.tempMatrix.identity());
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.highDetail.head.setMatrixAt(instanceId, tempPartWorldMatrix);
+				tempHeadWorldMatrix.copy(tempPartWorldMatrix);
+				
+				// Torse
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('torso'));
+				tempAnimationMatrix.copy(agent.currentAnimationMatrix.torso || this.tempMatrix.identity());
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.highDetail.torso.setMatrixAt(instanceId, tempPartWorldMatrix);
+				
+				// Main gauche
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('leftHand'));
+				tempAnimationMatrix.copy(agent.currentAnimationMatrix.leftHand || this.tempMatrix.identity());
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 0, tempPartWorldMatrix);
+				
+				// Main droite
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('rightHand'));
+				tempAnimationMatrix.copy(agent.currentAnimationMatrix.rightHand || this.tempMatrix.identity());
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 1, tempPartWorldMatrix);
+				
+				// Pied gauche
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('leftFoot'));
+				tempAnimationMatrix.copy(agent.currentAnimationMatrix.leftFoot || this.tempMatrix.identity());
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 0, tempPartWorldMatrix);
+				
+				// Pied droit
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('rightFoot'));
+				tempAnimationMatrix.copy(agent.currentAnimationMatrix.rightFoot || this.tempMatrix.identity());
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 1, tempPartWorldMatrix);
+				
+				// Masquer les meshes basse qualité
+				this.instanceMeshes.lowDetail.head.setMatrixAt(instanceId, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.torso.setMatrixAt(instanceId, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 0, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 1, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 0, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 1, zeroScaleMatrix);
+				needsLowDetailUpdate = true;
+			} 
+			else if (updateLowDetail) {
+				needsLowDetailUpdate = true;
+				
+				// LOD - pas d'animation, juste positions de base
+				// Tête
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('head'));
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, this.tempMatrix.identity());
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.lowDetail.head.setMatrixAt(instanceId, tempPartWorldMatrix);
+				
+				// Torse
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('torso'));
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, this.tempMatrix.identity());
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.lowDetail.torso.setMatrixAt(instanceId, tempPartWorldMatrix);
+				
+				// Mains
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('leftHand'));
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, this.tempMatrix.identity());
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 0, tempPartWorldMatrix);
+				
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('rightHand'));
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, this.tempMatrix.identity());
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 1, tempPartWorldMatrix);
+				
+				// Pieds
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('leftFoot'));
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, this.tempMatrix.identity());
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 0, tempPartWorldMatrix);
+				
+				tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix('rightFoot'));
+				tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, this.tempMatrix.identity());
+				tempPartWorldMatrix.premultiply(this.agentMatrix);
+				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 1, tempPartWorldMatrix);
+				
+				// Masquer les meshes haute qualité
+				this.instanceMeshes.highDetail.head.setMatrixAt(instanceId, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.torso.setMatrixAt(instanceId, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 0, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 1, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 0, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 1, zeroScaleMatrix);
+				needsHighDetailUpdate = true;
+			} 
+			else {
+				// Agent non visible - masquer tous les meshes
+				this.instanceMeshes.highDetail.head.setMatrixAt(instanceId, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.torso.setMatrixAt(instanceId, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 0, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 1, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 0, zeroScaleMatrix);
+				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 1, zeroScaleMatrix);
+				
+				this.instanceMeshes.lowDetail.head.setMatrixAt(instanceId, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.torso.setMatrixAt(instanceId, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 0, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 1, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 0, zeroScaleMatrix);
+				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 1, zeroScaleMatrix);
+				
+				needsHighDetailUpdate = true;
+				needsLowDetailUpdate = true;
+			}
 
-			// --- Mise à jour Debug marker (agentMarker) ---
+			// --- Mise à jour Debug marker (agentMarker) uniquement si debug est activé ---
 			const markerMesh = this.instanceMeshes.agentMarker;
-			if (markerMesh) {
-				if (isDebug) {
-					const shouldShowMarker = agent.currentState !== 'AT_HOME' && agent.currentState !== 'AT_WORK';
-					
-					if (shouldShowMarker) {
-						this.tempMatrix.identity();
-						this.tempMatrix.makeTranslation(
-							agent.position.x,
-							agent.position.y + fixedMarkerYOffset,
-							agent.position.z
-						);
-						this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
-						this.tempMatrix.scale(this.tempScale);
-					} else {
-						this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
-					}
+			if (markerMesh && isDebug) {
+				const shouldShowMarker = agent.currentState !== 'AT_HOME' && agent.currentState !== 'AT_WORK' && isVisible;
+				
+				if (shouldShowMarker) {
+					this.tempMatrix.identity();
+					this.tempMatrix.makeTranslation(
+						agent.position.x,
+						agent.position.y + fixedMarkerYOffset,
+						agent.position.z
+					);
+					this.tempScale.set(debugMarkerScale, debugMarkerScale, debugMarkerScale);
+					this.tempMatrix.scale(this.tempScale);
 				} else {
-					this.tempMatrix.identity().scale(new THREE.Vector3(0, 0, 0));
+					this.tempMatrix.copy(zeroScaleMatrix);
 				}
 				markerMesh.setMatrixAt(instanceId, this.tempMatrix);
 				needsAgentMarkerUpdate = true;
 			}
 		}
 
-		// 3. Pousser vers le GPU (si des changements ont eu lieu)
+		// Mise à jour des données du GPU (instanceMatrix) seulement quand nécessaire
+		
+		// Variable de tracking pour éviter de recalculer les bounding spheres trop souvent
+		// Réinitialise tous les ~100 frames (à 60fps, environ 1-2 secondes)
+		if (!this._boundingSphereCounter) this._boundingSphereCounter = 0;
+		const shouldUpdateBoundingSphere = this._boundingSphereCounter++ % 100 === 0;
+		
+		// Traitements optimisés par lots (Meshes haute qualité)
 		if (needsHighDetailUpdate) {
-			Object.values(this.instanceMeshes.highDetail).forEach(mesh => {
+			for (const meshName in this.instanceMeshes.highDetail) {
+				const mesh = this.instanceMeshes.highDetail[meshName];
 				if (mesh?.instanceMatrix) {
 					mesh.instanceMatrix.needsUpdate = true;
-					mesh.computeBoundingSphere();
+					
+					// Calculer la bounding sphere beaucoup moins souvent
+					if (shouldUpdateBoundingSphere) {
+						mesh.computeBoundingSphere();
+					}
 				}
-			});
+			}
 		}
 		
+		// Traitements optimisés par lots (Meshes basse qualité)
 		if (needsLowDetailUpdate) {
-			Object.values(this.instanceMeshes.lowDetail).forEach(mesh => {
+			for (const meshName in this.instanceMeshes.lowDetail) {
+				const mesh = this.instanceMeshes.lowDetail[meshName];
 				if (mesh?.instanceMatrix) {
 					mesh.instanceMatrix.needsUpdate = true;
-					mesh.computeBoundingSphere();
+					
+					// Calculer la bounding sphere beaucoup moins souvent
+					if (shouldUpdateBoundingSphere) {
+						mesh.computeBoundingSphere();
+					}
 				}
-			});
+			}
 		}
 		
-		if (needsAgentMarkerUpdate) this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
-		if (needsHomeMarkerUpdate) this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
+		if (needsAgentMarkerUpdate && this.instanceMeshes.agentMarker) {
+			this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
+		}
+		
+		if (needsHomeMarkerUpdate && this.instanceMeshes.homeMarker) {
+			this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
+		}
 	}
 
 	removeAgent(agentId) {
