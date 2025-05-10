@@ -20,6 +20,8 @@ import './UI/EnvironmentUI.css';
 import { Matrix4, Vector3 } from 'three';
 import * as DebugTools from './World/Rendering/DebugTools.js';
 import AgentUI from './UI/AgentUI.js';
+// Import du pool d'objets
+import ObjectPool from './Utils/ObjectPool.js';
 
 let instance = null;
 
@@ -41,6 +43,8 @@ export default class Experience extends EventTarget {
         this.scene.fog = this.originalFog;
         this.camera = new Camera(this);
         this.renderer = new Renderer(this);
+        // --- Création du pool d'objets AVANT le world ---
+        this.objectPool = new ObjectPool();
         this.world = new World(this);
         this.isDebugMode = false;
         this.timeUI = new TimeUI(this);
@@ -177,6 +181,9 @@ export default class Experience extends EventTarget {
 
         // Exposer les outils de debug
         window.debugTools = DebugTools;
+
+        // Exposer le pool d'objets pour un accès facile dans la console
+        window.objectPool = this.objectPool;
 
         this.agentUI = new AgentUI(this);
     }
@@ -1491,6 +1498,12 @@ export default class Experience extends EventTarget {
         // Détruire l'interface utilisateur de l'agent
         this.agentUI?.destroy();
         this.agentUI = null;
+
+        // Nettoyer le pool d'objets
+        if (this.objectPool) {
+            this.objectPool.clear();
+            this.objectPool = null;
+        }
 
         instance = null;
         console.log("Experience détruite.");

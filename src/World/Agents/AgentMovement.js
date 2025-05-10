@@ -1,7 +1,7 @@
 // src/World/AgentMovement.js
 import * as THREE from 'three';
 
-// Vecteurs temporaires pour la performance
+// Vecteurs temporaires pour fallback (cas où le pool n'est pas disponible)
 const _tempV3_1 = new THREE.Vector3();
 const _tempV3_2 = new THREE.Vector3();
 const _tempMatrix = new THREE.Matrix4();
@@ -46,6 +46,15 @@ export default class AgentMovement {
             return newPathIndexVisual;
         }
 
+        // Obtenir une référence au pool d'objets si disponible
+        const objectPool = this.experience?.objectPool;
+        
+        // Variables temporaires - utiliser le pool si disponible
+        let segmentVector = objectPool ? objectPool.getVector3() : _tempV3_1;
+        let lookVector = null; // On le créera seulement si nécessaire
+        let tempMatrix = null; // On le créera seulement si nécessaire
+        let tempQuat = null; // On le créera seulement si nécessaire
+
         progress = Math.max(0, Math.min(1, progress)); // Clamper la progression
 
         // --- 1. Calculer la position sur le chemin ---
@@ -59,7 +68,7 @@ export default class AgentMovement {
             for (let i = 0; i < pathPoints.length - 1; i++) {
                 const p1 = pathPoints[i];
                 const p2 = pathPoints[i + 1];
-                const segmentVector = _tempV3_1.copy(p2).sub(p1);
+                segmentVector.copy(p2).sub(p1);
                 const segmentLength = segmentVector.length();
 
                 if (segmentLength < 0.001) continue; // Ignorer segments de longueur nulle
@@ -102,28 +111,40 @@ export default class AgentMovement {
         // S'orienter seulement si le point de regard est différent de la position actuelle
         // et que le chemin a plus d'un point.
         if (pathPoints.length > 1 && this.position.distanceToSquared(lookTargetPoint) > 0.01) {
-             // Regarder horizontalement (garder la même hauteur Y pour le point de regard)
-            _tempV3_2.copy(lookTargetPoint).setY(this.position.y);
+            // Créer les objets temporaires pour l'orientation seulement si nécessaire
+            lookVector = objectPool ? objectPool.getVector3() : _tempV3_2;
+            tempMatrix = objectPool ? objectPool.getMatrix4() : _tempMatrix;
+            tempQuat = objectPool ? objectPool.getQuaternion() : _tempQuat;
+            
+            // Regarder horizontalement (garder la même hauteur Y pour le point de regard)
+            lookVector.copy(lookTargetPoint).setY(this.position.y);
 
             // Utiliser lookAt pour obtenir la matrice de rotation, puis le quaternion
-            _tempMatrix.lookAt(this.position, _tempV3_2, THREE.Object3D.DEFAULT_UP);
-            _tempQuat.setFromRotationMatrix(_tempMatrix);
+            tempMatrix.lookAt(this.position, lookVector, THREE.Object3D.DEFAULT_UP);
+            tempQuat.setFromRotationMatrix(tempMatrix);
 
             // Ajustement car le modèle regarde peut-être dans une direction par défaut (ex: +Z)
             // Si votre modèle regarde vers +Z par défaut, décommentez la ligne suivante:
-             _tempQuat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+            // Utiliser un quaternion temporaire pour éviter d'en créer un nouveau
+            const piRotation = objectPool ? objectPool.getQuaternion() : new THREE.Quaternion();
+            piRotation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+            tempQuat.multiply(piRotation);
+            if (objectPool) objectPool.releaseQuaternion(piRotation);
 
             // Interpolation douce (Slerp) de l'orientation actuelle vers la cible
             const deltaSeconds = deltaTime / 1000.0;
             // Utiliser une formule indépendante du framerate pour le facteur alpha
             const slerpAlpha = 1.0 - Math.exp(-this.rotationSpeed * deltaSeconds);
-            this.orientation.slerp(_tempQuat, slerpAlpha);
-
-        } else if (pathPoints.length <= 1) {
-            // Si le chemin a un seul point ou est vide, ne pas changer l'orientation (ou la réinitialiser ?)
-            // this.orientation.identity(); // Optionnel: réinitialiser si pas de mouvement
+            this.orientation.slerp(tempQuat, slerpAlpha);
         }
-        // Si distance faible, l'orientation reste inchangée
+        
+        // Libérer les objets temporaires
+        if (objectPool) {
+            if (segmentVector) objectPool.releaseVector3(segmentVector);
+            if (lookVector) objectPool.releaseVector3(lookVector);
+            if (tempMatrix) objectPool.releaseMatrix4(tempMatrix);
+            if (tempQuat) objectPool.releaseQuaternion(tempQuat);
+        }
 
         return newPathIndexVisual; // Retourner le nouvel index visuel
     }

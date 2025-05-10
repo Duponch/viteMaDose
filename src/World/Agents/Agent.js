@@ -669,6 +669,9 @@ export default class Agent {
             this.currentState === AgentState.IN_TRANSIT_TO_COMMERCIAL || // Ajout état IN_TRANSIT_TO_COMMERCIAL
             isDriving;
 
+        // Obtenir une référence au pool d'objets
+        const objectPool = this.experience?.objectPool;
+
         // --- Réinitialisation si pas en mouvement visuel --- 
         // Ou si l'état est AT_COMMERCIAL (logiquement caché dans le magasin)
         if (!isVisuallyMoving || this.currentState === AgentState.AT_COMMERCIAL) {
@@ -712,10 +715,26 @@ export default class Agent {
             return;
         }
 
-        // Calcul LOD (optimisé)
+        // Calcul LOD (optimisé avec pool d'objets)
         const cameraPosition = this.experience.camera.instance.position;
-        const tempVector = new THREE.Vector3().subVectors(this.position, cameraPosition);
+        
+        // Utiliser un vecteur temporaire depuis le pool au lieu d'en créer un nouveau
+        let tempVector = null;
+        
+        if (objectPool) {
+            tempVector = objectPool.getVector3();
+            tempVector.copy(this.position).sub(cameraPosition);
+        } else {
+            tempVector = new THREE.Vector3().subVectors(this.position, cameraPosition);
+        }
+        
         const distanceToCameraSq = tempVector.lengthSq();
+        
+        // Libérer le vecteur temporaire immédiatement après utilisation
+        if (objectPool && tempVector) {
+            objectPool.releaseVector3(tempVector);
+            tempVector = null;
+        }
         
         // Utiliser la distance configurée
         const lodDistanceSq = this.lodDistance * this.lodDistance;
