@@ -370,9 +370,11 @@ export default class AgentManager {
 		this.baseMaterials.agentMarker = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
 
 		// Matériau plus simple pour le LOD (moins coûteux)
-		this.baseMaterials.lodSimple = new THREE.MeshBasicMaterial({ 
+		this.baseMaterials.lodSimple = new THREE.MeshStandardMaterial({ 
 			vertexColors: true, 
-			flatShading: true, 
+			flatShading: true,
+			roughness: 0.7,
+			metalness: 0,
 			name: 'AgentLodSimpleMat'
 		});
 		
