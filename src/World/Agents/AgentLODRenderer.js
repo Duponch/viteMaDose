@@ -33,15 +33,25 @@ export default class AgentLODRenderer {
         const headSize = size * 2.2;
         const headGeom = new THREE.BoxGeometry(headSize, headSize, headSize, 1, 1, 1);
         
-        // Ajouter des couleurs par défaut à la géométrie (beige clair pour la peau)
+        // Ajouter des couleurs par défaut à la géométrie
         const count = headGeom.attributes.position.count;
         const colors = new Float32Array(count * 3);
-        const color = new THREE.Color(0xffcc99); // Couleur de peau
+        const skinColor = new THREE.Color(0xffcc99); // Couleur de peau
+        const hairColor = new THREE.Color(0x211106); // Couleur marron pour les cheveux
         
+        // Pour chaque sommet
         for (let i = 0; i < count; i++) {
-            colors[i * 3] = color.r;
-            colors[i * 3 + 1] = color.g;
-            colors[i * 3 + 2] = color.b;
+            const y = headGeom.attributes.position.array[i * 3 + 1]; // Coordonnée Y du sommet
+            // Si le sommet est sur la face supérieure (y > 0)
+            if (y > 0) {
+                colors[i * 3] = hairColor.r;
+                colors[i * 3 + 1] = hairColor.g;
+                colors[i * 3 + 2] = hairColor.b;
+            } else {
+                colors[i * 3] = skinColor.r;
+                colors[i * 3 + 1] = skinColor.g;
+                colors[i * 3 + 2] = skinColor.b;
+            }
         }
         
         headGeom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
