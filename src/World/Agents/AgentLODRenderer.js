@@ -211,7 +211,6 @@ export default class AgentLODRenderer {
         if (material.metalnessMap) material.metalnessMap = null;
         
         // Optimiser les paramètres de rendu
-        material.fog = false;
         material.lights = false;
     }
 
