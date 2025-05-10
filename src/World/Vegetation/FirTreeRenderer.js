@@ -127,9 +127,9 @@ export default class FirTreeRenderer {
         const scale = userScale;
         
         // Tronc de l'arbre avec échelle
-        const trunkGeometry = new THREE.CylinderGeometry(0.4 * scale, 0.5 * scale, 1.8 * scale, 6);
+        const trunkGeometry = new THREE.CylinderGeometry(0.3 * scale, 0.4 * scale, 1.4 * scale, 6);
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.position.y = -0.9 * scale;
+        trunk.position.y = -0.7 * scale;
         sourceTreeGroup.add(trunk);
         
         // Feuillage de l'arbre avec échelle
@@ -138,19 +138,19 @@ export default class FirTreeRenderer {
         // Cône inférieur
         const cone1Geometry = new THREE.ConeGeometry(2 * scale, 3 * scale, coneSegments);
         const cone1 = new THREE.Mesh(cone1Geometry, foliageMaterial);
-        cone1.position.y = 0.9 * scale;
+        cone1.position.y = 0.7 * scale;
         sourceTreeGroup.add(cone1);
 
         // Cône du milieu
         const cone2Geometry = new THREE.ConeGeometry(1.5 * scale, 2.5 * scale, coneSegments);
         const cone2 = new THREE.Mesh(cone2Geometry, foliageMaterial);
-        cone2.position.y = 2.15 * scale;
+        cone2.position.y = 1.95 * scale;
         sourceTreeGroup.add(cone2);
 
         // Cône supérieur
         const cone3Geometry = new THREE.ConeGeometry(1 * scale, 2 * scale, coneSegments);
         const cone3 = new THREE.Mesh(cone3Geometry, foliageMaterial);
-        cone3.position.y = 3.15 * scale;
+        cone3.position.y = 2.95 * scale;
         sourceTreeGroup.add(cone3);
 
         // Fusion et calcul de BBox
@@ -263,7 +263,7 @@ export default class FirTreeRenderer {
             id: modelId,
             parts: parts,
             fittingScaleFactor: 1.0, // Les dimensions sont fixes, donc le fitting factor est 1.
-            userScale: 0.75,    // L'échelle utilisateur est toujours applicable.
+            userScale: 0.8,    // L'échelle utilisateur est toujours applicable.
             // Le centre de l'asset est maintenant au milieu de sa BBox (après translation à Y=0 pour sa base)
             centerOffset: new THREE.Vector3(0, finalSize.y / 2 * userScale, 0), // Appliquer userScale ici si la taille finale est attendue
             sizeAfterFitting: finalSize.clone() // Taille avant userScale
