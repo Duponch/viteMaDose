@@ -105,14 +105,54 @@ export default class TreePlacementStrategy extends IZonePlacementStrategy {
      * @returns {boolean} true si l'ajout a réussi, false sinon.
      */
     _addTreeInstance(treeX, treeZ, assetLoader, instanceDataManager) {
-        const assetInfo = assetLoader.getRandomAssetData('tree');
-        if (!assetInfo) {
-            console.warn("TreePlacementStrategy: Could not get random tree asset.");
-            return false; // Échec de l'ajout
+        // Sélectionner un asset d'arbre en alternant entre les types
+        // (au lieu de choisir aléatoirement parmi tous les arbres)
+        const allTrees = assetLoader.assets.tree || [];
+        if (allTrees.length === 0) {
+            console.warn("TreePlacementStrategy: No tree assets available.");
+            return false;
         }
+
+        // Séparer les assets en deux groupes: arbres réguliers et sapins
+        const regularTrees = allTrees.filter(tree => tree.treeType === 'regular');
+        const firTrees = allTrees.filter(tree => tree.treeType === 'fir');
+        
+        // Vérifier qu'on a au moins un arbre de chaque type
+        if (regularTrees.length === 0 || firTrees.length === 0) {
+            console.warn("TreePlacementStrategy: Missing one of the tree types, using available type only.");
+            // Si un type manque, utiliser le type disponible
+            const availableTrees = regularTrees.length > 0 ? regularTrees : firTrees;
+            const assetInfo = availableTrees[Math.floor(Math.random() * availableTrees.length)];
+            return this._placeTreeAsset(treeX, treeZ, assetInfo, instanceDataManager);
+        }
+        
+        // Alterner entre les deux types d'arbres avec une probabilité de 50%
+        const useFirTree = Math.random() < 0.5;
+        const treePool = useFirTree ? firTrees : regularTrees;
+        
+        // Choisir aléatoirement parmi le type sélectionné
+        const assetInfo = treePool[Math.floor(Math.random() * treePool.length)];
+        
+        return this._placeTreeAsset(treeX, treeZ, assetInfo, instanceDataManager);
+    }
+    
+    /**
+     * Place un asset d'arbre spécifique aux coordonnées indiquées
+     * @param {number} treeX - Coordonnée X de l'arbre
+     * @param {number} treeZ - Coordonnée Z de l'arbre
+     * @param {object} assetInfo - Information sur l'asset d'arbre
+     * @param {InstanceDataManager} instanceDataManager - Gestionnaire des instances
+     * @returns {boolean} true si l'ajout a réussi, false sinon
+     */
+    _placeTreeAsset(treeX, treeZ, assetInfo, instanceDataManager) {
+        if (!assetInfo) {
+            console.warn("TreePlacementStrategy: Invalid tree asset info.");
+            return false;
+        }
+        
         if (!assetInfo.sizeAfterFitting || !assetInfo.centerOffset || !assetInfo.fittingScaleFactor || !assetInfo.id) {
             console.error(`TreePlacementStrategy: Tree asset data (ID: ${assetInfo.id}) is incomplete or invalid.`);
-            return false; // Échec de l'ajout
+            return false;
         }
 
         // Échelle et rotation aléatoires
@@ -158,7 +198,6 @@ export default class TreePlacementStrategy extends IZonePlacementStrategy {
         instanceDataManager.addData('tree', assetInfo.id, instanceMatrix);
         return true; // Ajout réussi
     }
-
 
     /**
      * Implémentation nécessaire à cause de l'héritage, mais non utilisée directement

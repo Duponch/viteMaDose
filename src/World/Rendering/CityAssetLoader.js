@@ -11,6 +11,7 @@ import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
 import NewSkyscraperRenderer from '../Buildings/NewSkyscraperRenderer.js';
 import IndustrialRenderer, { generateProceduralIndustrial } from '../Buildings/IndustrialRenderer.js'; // Ajustez le chemin si nécessaire
 import TreeRenderer from '../Vegetation/TreeRenderer.js';
+import FirTreeRenderer from '../Vegetation/FirTreeRenderer.js';
 import CommercialRenderer from '../Buildings/CommercialRenderer.js';
 
 export default class CityAssetLoader {
@@ -41,6 +42,7 @@ export default class CityAssetLoader {
         this.skyscraperRenderer = new SkyscraperRenderer(config, {});
         this.newSkyscraperRenderer = new NewSkyscraperRenderer(config, {});
         this.treeRenderer = new TreeRenderer(config, materials);
+        this.firTreeRenderer = new FirTreeRenderer(config, materials);
         this.commercialRenderer = new CommercialRenderer(config, materials);
         console.log("CityAssetLoader initialisé. Utilisation de HouseRenderer pour les maisons, BuildingRenderer pour les immeubles, SkyscraperRenderer pour les gratte-ciels et CommercialRenderer pour les commerces.");
     }
@@ -83,7 +85,7 @@ export default class CityAssetLoader {
 
         // Fonction interne createLoadPromises mise à jour pour gérer les types procéduraux.
         const createLoadPromises = (assetConfigs, dir, type, width, height, depth) => { //
-            if (type === 'house' || type === 'tree') { // Keep original logic for house/tree
+            if (type === 'house') { // Keep original logic for house
                 console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`); //
                 return [ //
                     this.loadAssetModel(null, type, width, height, depth, 1.0, null) // Pass null for renderer hint
@@ -92,6 +94,23 @@ export default class CityAssetLoader {
                             return null; //
                         })
                 ];
+            } else if (type === 'tree') { // Modification pour gérer les deux types d'arbres
+                console.log(`-> Préparation de la génération procédurale pour les types d'arbres (régulier et sapin)...`);
+                const treePromises = [
+                    // Arbre régulier
+                    this.loadAssetModel(null, type, width, height, depth, 1.0, 'regular')
+                        .catch(error => {
+                            console.error(`Echec génération procédurale arbre régulier:`, error);
+                            return null;
+                        }),
+                    // Sapin
+                    this.loadAssetModel(null, type, width, height, depth, 1.0, 'fir')
+                        .catch(error => {
+                            console.error(`Echec génération procédurale sapin:`, error);
+                            return null;
+                        })
+                ];
+                return treePromises;
             } else if (type === 'skyscraper') { // *** NOUVELLE LOGIQUE POUR GRATTE-CIELS ***
                  console.log(`-> Préparation de la génération procédurale pour les variants de gratte-ciels (7 à 11 étages)...`);
                  const promises = [];
@@ -378,27 +397,39 @@ export default class CityAssetLoader {
 					}
 					return; // Sortir car c'est procédural
 				} else if (type === 'tree') {
-                    if (!this.treeRenderer) {
-                        console.error("TreeRenderer not initialized.");
+                    // Vérification du type d'arbre à générer
+                    const isFirTree = rendererTypeHint === 'fir';
+                    const renderer = isFirTree ? this.firTreeRenderer : this.treeRenderer;
+                    const rendererName = isFirTree ? 'FirTreeRenderer' : 'TreeRenderer';
+                    
+                    if (!renderer) {
+                        console.error(`${rendererName} not initialized.`);
                         resolve(null);
                         return;
                     }
+                    
                     try {
-                        assetData = this.treeRenderer.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale);
+                        assetData = renderer.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale);
                         if (assetData) {
-                            finalModelId = `tree_proc_${internalCounterId}`;
+                            // Utiliser des identifiants distincts pour les deux types d'arbres
+                            finalModelId = isFirTree 
+                                ? `firtree_proc_${internalCounterId}` 
+                                : `tree_proc_${internalCounterId}`;
+                            
                             assetData.id = finalModelId;
                             assetData.procedural = true;
-                            assetData.rendererType = 'TreeRenderer';
+                            assetData.rendererType = rendererName;
+                            assetData.treeType = isFirTree ? 'fir' : 'regular';
+                            
                             this.loadedAssets.set(finalModelId, assetData);
-                            console.log(`  - Generated procedural tree asset '${finalModelId}'`);
+                            console.log(`  - Generated procedural ${isFirTree ? 'fir tree' : 'regular tree'} asset '${finalModelId}'`);
                             resolve(assetData);
                         } else {
-                            console.warn("Procedural generation for tree returned null.");
+                            console.warn(`Procedural generation for ${isFirTree ? 'fir tree' : 'regular tree'} returned null.`);
                             resolve(null);
                         }
                     } catch (error) {
-                        console.error("Error during procedural tree generation:", error);
+                        console.error(`Error during procedural ${isFirTree ? 'fir tree' : 'regular tree'} generation:`, error);
                         resolve(null);
                     }
                 } else if (type === 'industrial') {
