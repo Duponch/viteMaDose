@@ -14,299 +14,196 @@ export default class FirTreeRenderer {
         this.materials = materials;
         this.assetIdCounter = 0;
         
-        // Palette de couleurs de feuillage pour les sapins (plus foncés que les arbres normaux)
-        this.foliageColors = [
-            0x207020, // Vert foncé principal
-            0x2E8B57, // Vert mer
-            0x3CB371, // Vert moyen
-            0x228B22, // Vert forêt
-            0x228B22, // Vert forêt (dupliqué pour augmenter la probabilité)
-            0x207020  // Vert foncé principal (dupliqué pour augmenter la probabilité)
-        ];
+        // Couleur de base pour le feuillage unique, comme dans l'original
+        this.fixedFoliageBaseColor = 0x207020; // '#207020'
 
         // Création des textures partagées
         this.sharedTrunkTexture = this.createTrunkTexture();
-        this.sharedFoliageTextures = new Map();
-        // Pré-créer une texture de feuillage pour chaque couleur
-        this.foliageColors.forEach(color => {
-            this.sharedFoliageTextures.set(color, this.createFoliageTexture(color));
-        });
+        this.sharedFoliageTexture = this.createFoliageTexture(this.fixedFoliageBaseColor);
     }
 
     /**
-     * Crée une texture procédurale pour les troncs d'arbres
+     * Crée une texture procédurale pour les troncs d'arbres, style original
      * @returns {THREE.CanvasTexture} Texture générée pour les troncs
      */
     createTrunkTexture() {
-        // Créer un canvas pour dessiner la texture
         const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
         canvas.width = 64;
         canvas.height = 128;
-        const ctx = canvas.getContext('2d');
-        
-        // Couleur de base du tronc (marron plus foncé pour le sapin)
-        const baseColor = new THREE.Color(0x654321);
-        ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Ajouter des variations de couleur pour simuler l'écorce
-        for (let i = 0; i < 80; i++) {
-            // Position aléatoire
+
+        // Fond marron de base
+        context.fillStyle = '#654321'; // Marron plus foncé (Original: '#654321')
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ajout de lignes verticales plus sombres et plus claires pour simuler l'écorce
+        for (let i = 0; i < 10; i++) {
             const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            
-            // Taille aléatoire
-            const size = Math.random() * 5 + 1;
-            
-            // Variation de couleur (plus claire ou plus foncée)
-            const variation = Math.random() * 40 - 20;
-            const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
-            const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
-            const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
-            
-            // Couleur plus foncée ou plus claire
-            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-            
-            // Dessiner des lignes verticales pour simuler l'écorce
-            const width = Math.random() * 2 + 1;
-            const height = Math.random() * 15 + 10;
-            ctx.fillRect(x, y, width, height);
+            // const lightness = Math.random() * 0.2 + 0.8; // Original avait ça, mais non utilisé directement pour couleur
+            const colorShade = Math.random() > 0.5 ? '#503010' : '#7a5228'; // Alternance de teintes
+            context.strokeStyle = colorShade;
+            context.lineWidth = Math.random() * 2 + 1; // Épaisseur variable
+            context.beginPath();
+            context.moveTo(x, 0);
+            context.lineTo(x + (Math.random() - 0.5) * 5, canvas.height); // Lignes légèrement inclinées
+            context.stroke();
         }
         
-        // Ajouter des lignes verticales pour simuler les fissures de l'écorce
-        for (let i = 0; i < 20; i++) {
-            const x = Math.random() * canvas.width;
-            const width = Math.random() * 2 + 1;
-            const height = Math.random() * 100 + 50;
-            const y = Math.random() * (canvas.height - height);
-            
-            // Couleur plus foncée pour les fissures
-            const darkVariation = -30;
-            const r = Math.max(0, Math.min(255, baseColor.r * 255 + darkVariation));
-            const g = Math.max(0, Math.min(255, baseColor.g * 255 + darkVariation));
-            const b = Math.max(0, Math.min(255, baseColor.b * 255 + darkVariation));
-            
-            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-            ctx.fillRect(x, y, width, height);
-        }
-        
-        // Créer la texture à partir du canvas
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(2, 1); // Répéter horizontalement
-        
+        texture.repeat.set(2, 1); // Répéter la texture horizontalement
+        texture.needsUpdate = true;
         return texture;
     }
 
     /**
-     * Crée une texture procédurale pour les feuillages des sapins
-     * @param {number} baseColor - Couleur de base du feuillage
+     * Crée une texture procédurale pour les feuillages des sapins, style original
+     * @param {number} baseHexColor - Couleur de base du feuillage (ex: 0x207020)
      * @returns {THREE.CanvasTexture} Texture générée pour les feuillages
      */
-    createFoliageTexture(baseColor) {
-        // Créer un canvas pour dessiner la texture
+    createFoliageTexture(baseHexColor) {
         const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
         canvas.width = 64;
         canvas.height = 128;
-        const ctx = canvas.getContext('2d');
-        
-        // Convertir la couleur de base en RGB
-        const color = new THREE.Color(baseColor);
-        ctx.fillStyle = `rgb(${color.r * 255}, ${color.g * 255}, ${color.b * 255})`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Ajouter des lignes verticales de différentes teintes de vert
-        for (let i = 0; i < 80; i++) {
+
+        const color = new THREE.Color(baseHexColor);
+        context.fillStyle = `rgb(${Math.floor(color.r * 255)}, ${Math.floor(color.g * 255)}, ${Math.floor(color.b * 255)})`;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ajout de lignes verticales de différentes teintes de vert
+        for (let i = 0; i < 80; i++) { // Plus de lignes pour le feuillage
             const x = Math.random() * canvas.width;
-            const yStart = Math.random() * canvas.height * 0.3;
-            const length = (Math.random() * 0.5 + 0.5) * (canvas.height - yStart);
-            
-            // Différentes teintes de vert
+            const yStart = Math.random() * canvas.height * 0.3; // Lignes ne commencent pas toutes en haut
+            const length = (Math.random() * 0.5 + 0.5) * (canvas.height - yStart); // Longueur variable
+            // Différentes teintes de vert (exactement comme l'original)
             const greenShade = Math.random() > 0.6 ? '#2E8B57' : (Math.random() > 0.3 ? '#3CB371' : '#228B22');
-            ctx.strokeStyle = greenShade;
-            ctx.lineWidth = Math.random() * 1.5 + 0.5;
-            ctx.beginPath();
-            ctx.moveTo(x, yStart);
-            ctx.lineTo(x + (Math.random() - 0.5) * 8, yStart + length);
-            ctx.stroke();
+            context.strokeStyle = greenShade;
+            context.lineWidth = Math.random() * 1.5 + 0.5;
+            context.beginPath();
+            context.moveTo(x, yStart);
+            context.lineTo(x + (Math.random() - 0.5) * 8, yStart + length); // Lignes un peu désordonnées
+            context.stroke();
         }
         
-        // Ajouter quelques détails plus foncés pour la profondeur
-        for (let i = 0; i < 30; i++) {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            const size = Math.random() * 8 + 2;
-            
-            // Variation de couleur plus foncée
-            const darkerColor = new THREE.Color(color).multiplyScalar(0.7);
-            ctx.fillStyle = `rgba(${darkerColor.r * 255}, ${darkerColor.g * 255}, ${darkerColor.b * 255}, 0.7)`;
-            
-            // Petites formes triangulaires pour simuler les aiguilles
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x + size, y + size);
-            ctx.lineTo(x - size, y + size);
-            ctx.closePath();
-            ctx.fill();
-        }
-        
-        // Créer la texture à partir du canvas
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(4, 2); // Répéter pour couvrir toute la surface
-        
+        texture.repeat.set(4, 2); // Répéter la texture pour un effet plus dense
+        texture.needsUpdate = true;
         return texture;
     }
 
     /**
-     * Génère un sapin procédural avec des cônes empilés
-     * @param {number} baseWidth - Largeur de base
-     * @param {number} baseHeight - Hauteur de base
-     * @param {number} baseDepth - Profondeur de base
+     * Génère un sapin procédural avec des cônes empilés, dimensions et style de l'original
+     * @param {number} baseWidth - (Ignoré pour dimensions, utilisé pour mise à l'échelle conceptuelle si fittingScaleFactor était calculé dynamiquement)
+     * @param {number} baseHeight - (Ignoré pour dimensions)
+     * @param {number} baseDepth - (Ignoré pour dimensions)
      * @param {number} userScale - Facteur d'échelle spécifié par l'utilisateur
-     * @returns {object} Asset data contenant les parties du sapin
+     * @returns {object|null} Asset data contenant les parties du sapin, ou null en cas d'erreur
      */
     generateProceduralTree(baseWidth = 4, baseHeight = 8, baseDepth = 4, userScale = 1) {
-        console.log("[FirTree Proc] Début de la génération du sapin procédural.");
-        const treeGroup = new THREE.Group();
+        console.log("[FirTree Proc] Début de la génération du sapin (style original).");
+        const sourceTreeGroup = new THREE.Group(); // Groupe temporaire pour positionner les éléments comme dans l'original
 
-        // Matériaux
-        const trunkMaterial = new THREE.MeshLambertMaterial({ 
-            color: 0x654321, 
-            name: "FirTreeTrunkMat",
-            map: this.sharedTrunkTexture
-        });
-        
-        // Sélection aléatoire d'une couleur de feuillage
-        const foliageColor = this.foliageColors[Math.floor(Math.random() * this.foliageColors.length)];
-        
-        const foliageMaterial = new THREE.MeshStandardMaterial({ 
-            color: foliageColor, 
-            name: "FirTreeFoliageMat",
+        // Matériaux (style original)
+        const trunkMaterial = new THREE.MeshStandardMaterial({
+            map: this.sharedTrunkTexture,
+            roughness: 0.8,
             metalness: 0.1,
+            name: "FirTreeTrunkMat_OriginalStyle" 
+        });
+        
+        const foliageMaterial = new THREE.MeshStandardMaterial({
+            map: this.sharedFoliageTexture,
             roughness: 0.7,
-            map: this.sharedFoliageTextures.get(foliageColor)
+            metalness: 0.1,
+            name: "FirTreeFoliageMat_OriginalStyle"
         });
 
-        // Paramètres du tronc
-        const trunkHeight = baseHeight * 0.4;
-        const trunkRadiusBottom = baseWidth * 0.15;
-        const trunkRadiusTop = baseWidth * 0.1;
-        
-        // Création du tronc (cylindre simple)
-        const trunkGeometry = new THREE.CylinderGeometry(
-            trunkRadiusTop, 
-            trunkRadiusBottom, 
-            trunkHeight, 
-            6  // segments
-        );
-        
+        // Tronc de l'arbre (dimensions et position de l'original)
+        // Original: CylinderGeometry(0.4, 0.5, 2.5, 6); trunk.position.y = -0.75;
+        const trunkGeometry = new THREE.CylinderGeometry(0.4, 0.5, 2.5, 6);
         const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-        trunk.position.y = trunkHeight / 2;
-        treeGroup.add(trunk);
+        trunk.position.y = -0.75; 
+        sourceTreeGroup.add(trunk);
         
-        // Hauteur totale du feuillage (cônes empilés)
-        const foliageHeight = baseHeight * 0.8;
-        const foliageBaseY = trunkHeight;
-        
-        // Créer 3 cônes empilés
-        const coneSegments = 6; // Nombre de segments pour les cônes
+        // Feuillage de l'arbre (3 cônes, dimensions et positions de l'original)
+        const coneSegments = 6;
 
-        // Cône inférieur (plus large)
-        const cone1Geometry = new THREE.ConeGeometry(baseWidth * 0.5, foliageHeight * 0.4, coneSegments);
+        // Cône inférieur
+        // Original: ConeGeometry(2, 3, coneSegments); cone1.position.y = 1.5;
+        const cone1Geometry = new THREE.ConeGeometry(2, 3, coneSegments);
         const cone1 = new THREE.Mesh(cone1Geometry, foliageMaterial);
-        cone1.position.y = foliageBaseY + foliageHeight * 0.2;
-        treeGroup.add(cone1);
+        cone1.position.y = 1.5;
+        sourceTreeGroup.add(cone1);
 
         // Cône du milieu
-        const cone2Geometry = new THREE.ConeGeometry(baseWidth * 0.375, foliageHeight * 0.35, coneSegments);
+        // Original: ConeGeometry(1.5, 2.5, coneSegments); cone2.position.y = cone1.position.y + 1.25; (soit 2.75)
+        const cone2Geometry = new THREE.ConeGeometry(1.5, 2.5, coneSegments);
         const cone2 = new THREE.Mesh(cone2Geometry, foliageMaterial);
-        cone2.position.y = foliageBaseY + foliageHeight * 0.5;
-        treeGroup.add(cone2);
+        cone2.position.y = 2.75; 
+        sourceTreeGroup.add(cone2);
 
-        // Cône supérieur (plus petit)
-        const cone3Geometry = new THREE.ConeGeometry(baseWidth * 0.25, foliageHeight * 0.3, coneSegments);
+        // Cône supérieur
+        // Original: ConeGeometry(1, 2, coneSegments); cone3.position.y = cone2.position.y + 1.0; (soit 3.75)
+        const cone3Geometry = new THREE.ConeGeometry(1, 2, coneSegments);
         const cone3 = new THREE.Mesh(cone3Geometry, foliageMaterial);
-        cone3.position.y = foliageBaseY + foliageHeight * 0.8;
-        treeGroup.add(cone3);
-
-        console.log("[FirTree Proc] Cônes de feuillage créés et ajoutés au groupe.");
+        cone3.position.y = 3.75;
+        sourceTreeGroup.add(cone3);
 
         // Fusion et calcul de BBox
         const allGeoms = [];
         const materialMap = new Map();
 
-        treeGroup.traverse((child) => {
-            if (child.isMesh && child.geometry && child.material) {
-                child.updateMatrixWorld(true);
-                const clonedGeom = child.geometry.clone();
-                clonedGeom.applyMatrix4(child.matrixWorld);
+        sourceTreeGroup.updateMatrixWorld(true); // Assurer que les matrices du groupe sont à jour
 
-                // Ajouter un attribut index à la géométrie si elle n'en a pas
+        sourceTreeGroup.traverse((child) => {
+            if (child.isMesh && child.geometry && child.material) {
+                // Appliquer la transformation du child pour que la géométrie soit en "world space" du sourceTreeGroup
+                const clonedGeom = child.geometry.clone();
+                clonedGeom.applyMatrix4(child.matrixWorld); // Applique la transformation locale ET celle du parent (sourceTreeGroup)
+
                 if (!clonedGeom.index) {
                     const position = clonedGeom.attributes.position;
                     if (position) {
                         const count = position.count;
                         const indices = new Uint16Array(count);
-                        for (let i = 0; i < count; i++) {
-                            indices[i] = i;
-                        }
+                        for (let i = 0; i < count; i++) indices[i] = i;
                         clonedGeom.setIndex(new THREE.BufferAttribute(indices, 1));
                     }
                 }
-
                 allGeoms.push(clonedGeom);
 
                 const matName = child.material.name || 'default_firtree_mat';
                 if (!materialMap.has(matName)) {
-                    materialMap.set(matName, { material: child.material.clone(), geoms: [] });
+                    materialMap.set(matName, { material: child.material.clone(), geoms: [] }); // Cloner pour éviter modif accidentelle
                 }
                 materialMap.get(matName).geoms.push(clonedGeom);
             }
         });
 
-        console.log("[FirTree Proc] Parcours du groupe terminé. Nombre de géométries collectées:", allGeoms.length);
-
         if (allGeoms.length === 0) {
             console.error("[FirTree Proc] Aucune géométrie valide trouvée après le parcours du groupe.");
-            trunkMaterial.dispose();
-            foliageMaterial.dispose();
+            // Pas besoin de disposer trunkMaterial et foliageMaterial ici car ils sont partagés ou clonés
             return null;
         }
 
-        // Fusionner toutes les géométries
-        const mergedGeometry = this.mergeGeometries(allGeoms);
-        if (!mergedGeometry) {
-            console.error("[FirTree Proc] Échec de la fusion des géométries.");
+        const mergedSceneGeometry = this.mergeGeometries(allGeoms); // Fusionne toutes les géométries pour le calcul global BBox
+        if (!mergedSceneGeometry) {
+            console.error("[FirTree Proc] Échec de la fusion des géométries pour BBox.");
             allGeoms.forEach(g => g.dispose());
-            trunkMaterial.dispose();
-            foliageMaterial.dispose();
             return null;
         }
-        console.log("[FirTree Proc] Géométries fusionnées avec succès.");
+        
+        mergedSceneGeometry.computeBoundingBox();
+        const bbox = mergedSceneGeometry.boundingBox.clone(); // Cloner pour éviter des modifications inattendues
+        mergedSceneGeometry.dispose(); // Plus besoin de cette géométrie combinée globale
 
-        mergedGeometry.computeBoundingBox();
-        const bbox = mergedGeometry.boundingBox;
-        const centerOffset = new THREE.Vector3();
-        bbox.getCenter(centerOffset);
-        const size = new THREE.Vector3();
-        bbox.getSize(size);
-
-        const minY = bbox.min.y;
-        mergedGeometry.translate(-centerOffset.x, -minY, -centerOffset.z);
-
-        mergedGeometry.computeBoundingBox();
-        const finalBBox = mergedGeometry.boundingBox;
-        const finalSize = new THREE.Vector3();
-        finalBBox.getSize(finalSize);
-        finalSize.x = Math.max(finalSize.x, 0.001);
-        finalSize.y = Math.max(finalSize.y, 0.001);
-        finalSize.z = Math.max(finalSize.z, 0.001);
-
-        const fittingScaleFactor = Math.min(baseWidth / finalSize.x, baseHeight / finalSize.y, baseDepth / finalSize.z);
-        const sizeAfterFitting = finalSize.clone().multiplyScalar(fittingScaleFactor);
+        const centerOffsetGlobal = new THREE.Vector3();
+        bbox.getCenter(centerOffsetGlobal);
+        const minYGlobal = bbox.min.y;
 
         // Créer les parts pour chaque matériau
         const parts = [];
@@ -316,118 +213,94 @@ export default class FirTreeRenderer {
             const mergedPartGeometry = this.mergeGeometries(groupData.geoms);
             if (!mergedPartGeometry) {
                 console.error(`[FirTree Proc] Échec de la fusion des géométries pour le matériau ${matName}.`);
-                groupData.geoms.forEach(g => g.dispose());
+                groupData.geoms.forEach(g => g.dispose()); // Disposer les clones si la fusion échoue
                 return;
             }
 
-            mergedPartGeometry.translate(-centerOffset.x, -minY, -centerOffset.z);
-
-            const finalMaterial = groupData.material;
-            finalMaterial.name = `ProcFirTreeMat_${matName}_${this.assetIdCounter}`;
+            // Translater chaque part pour que l'ensemble de l'arbre (défini par bbox globale) ait sa base à Y=0
+            mergedPartGeometry.translate(-centerOffsetGlobal.x, -minYGlobal, -centerOffsetGlobal.z);
+            
+            // Les groupData.material sont déjà des clones, on peut modifier leur nom
+            groupData.material.name = `ProcFirTreeMat_${matName}_${this.assetIdCounter}`;
 
             parts.push({
                 geometry: mergedPartGeometry,
-                material: finalMaterial
+                material: groupData.material 
             });
-
+            // groupData.geoms (clones) ont été fusionnés, ils sont disposés par mergeGeometries si succès, sinon ici.
+            // Si mergeGeometries ne dispose pas les sources, il faudrait le faire ici.
+            // BufferGeometryUtils.mergeGeometries ne dispose pas les géométries source.
+            // Cependant, nos 'groupData.geoms' sont déjà des clones qui ne seront plus utilisés ailleurs.
+            // Laissons le garbage collector s'en charger ou disposons explicitement si besoin avéré.
+            // Pour plus de propreté, disposons les géométries clonées sources après leur fusion dans 'mergedPartGeometry'
             groupData.geoms.forEach(g => g.dispose());
         });
+        
+        // Les géométries dans 'allGeoms' sont les mêmes que celles dans 'groupData.geoms', donc déjà traitées.
+        // On ne les dispose pas ici une seconde fois.
 
-        allGeoms.forEach(g => g.dispose());
-        trunkMaterial.dispose();
-        foliageMaterial.dispose();
+        // Calculer la BBox finale de l'arbre assemblé (qui est maintenant à la base Y=0)
+        const finalCombinedGeomForBBox = this.mergeGeometries(parts.map(p => p.geometry.clone())); // Cloner pour ne pas affecter les parts
+        if (!finalCombinedGeomForBBox) {
+             console.error("[FirTree Proc] Echec de la fusion des géométries finales pour BBox.");
+             parts.forEach(p => p.geometry.dispose()); // Nettoyer les parts créées
+             return null;
+        }
+        finalCombinedGeomForBBox.computeBoundingBox();
+        const finalBBox = finalCombinedGeomForBBox.boundingBox;
+        const finalSize = new THREE.Vector3();
+        finalBBox.getSize(finalSize);
+        finalCombinedGeomForBBox.dispose();
 
-        const modelId = `firtree_procedural_${this.assetIdCounter++}`;
+
+        finalSize.x = Math.max(finalSize.x, 0.001);
+        finalSize.y = Math.max(finalSize.y, 0.001);
+        finalSize.z = Math.max(finalSize.z, 0.001);
+
+        const modelId = `firtree_procedural_orig_style_${this.assetIdCounter++}`;
 
         const treeAsset = {
             id: modelId,
             parts: parts,
-            fittingScaleFactor: fittingScaleFactor,
-            userScale: userScale,
-            centerOffset: new THREE.Vector3(0, finalSize.y / 2, 0),
-            sizeAfterFitting: sizeAfterFitting
+            fittingScaleFactor: 1.0, // Les dimensions sont fixes, donc le fitting factor est 1.
+            userScale: userScale,    // L'échelle utilisateur est toujours applicable.
+            // Le centre de l'asset est maintenant au milieu de sa BBox (après translation à Y=0 pour sa base)
+            centerOffset: new THREE.Vector3(0, finalSize.y / 2 * userScale, 0), // Appliquer userScale ici si la taille finale est attendue
+            sizeAfterFitting: finalSize.clone() // Taille avant userScale
         };
-        console.log("[FirTree Proc] Asset de sapin généré avec succès:", treeAsset);
+        console.log("[FirTree Proc] Asset de sapin (style original) généré:", treeAsset);
         return treeAsset;
     }
 
     /**
-     * Fusionne plusieurs géométries en une seule
-     * @param {Array<THREE.BufferGeometry>} geometries - Liste des géométries à fusionner
-     * @returns {THREE.BufferGeometry} Géométrie fusionnée
+     * Fusionne plusieurs géométries en une seule.
+     * Gère le cas où les géométries sources doivent être disposées si elles ne sont plus utiles.
+     * @param {Array<THREE.BufferGeometry>} geometries - Liste des géométries à fusionner.
+     * @param {boolean} disposeSources - Si true, dispose les géométries sources après fusion.
+     * @returns {THREE.BufferGeometry|null} Géométrie fusionnée ou null.
      */
-    mergeGeometries(geometries) {
+    mergeGeometries(geometries, disposeSources = false) { // Par défaut, ne dispose pas les sources
         if (!geometries || geometries.length === 0) return null;
+        
+        // Filtrer les géométries potentiellement nulles ou invalides si nécessaire
+        const validGeometries = geometries.filter(g => g instanceof THREE.BufferGeometry);
+        if (validGeometries.length === 0) return null;
 
         try {
-            return mergeGeometries(geometries, false);
+            const merged = mergeGeometries(validGeometries, false); // false = ne pas utiliser de groupes
+            if (disposeSources) {
+                validGeometries.forEach(g => g.dispose());
+            }
+            return merged;
         } catch (error) {
-            console.error("[FirTree] Erreur lors de la fusion des géométries:", error);
-            
-            // Implémentation manuelle comme solution de secours
-            const attributes = {};
-            let vertexCount = 0;
-            let indexCount = 0;
-
-            // Première passe : compter les vertices et indices
-            geometries.forEach(geometry => {
-                for (const name in geometry.attributes) {
-                    if (!attributes[name]) {
-                        attributes[name] = {
-                            array: new Float32Array(0),
-                            itemSize: geometry.attributes[name].itemSize
-                        };
-                    }
-                }
-                vertexCount += geometry.attributes.position.count;
-                if (geometry.index) {
-                    indexCount += geometry.index.count;
-                }
-            });
-
-            // Deuxième passe : allouer les buffers
-            for (const name in attributes) {
-                attributes[name].array = new Float32Array(vertexCount * attributes[name].itemSize);
+            console.error("[FirTree] Erreur lors de la fusion des géométries avec BufferGeometryUtils:", error);
+            // La solution de secours manuelle est complexe et peut avoir des problèmes de performance/compatibilité.
+            // Il est préférable de s'assurer que mergeGeometries de BufferGeometryUtils fonctionne.
+            // Pour l'instant, on retourne null en cas d'échec avec l'utilitaire.
+            if (disposeSources) {
+                validGeometries.forEach(g => g.dispose());
             }
-            const indices = new Uint32Array(indexCount);
-
-            // Troisième passe : copier les données
-            let vertexOffset = 0;
-            let indexOffset = 0;
-
-            geometries.forEach(geometry => {
-                for (const name in geometry.attributes) {
-                    const attribute = geometry.attributes[name];
-                    const targetArray = attributes[name].array;
-                    for (let i = 0; i < attribute.count; i++) {
-                        for (let j = 0; j < attribute.itemSize; j++) {
-                            targetArray[vertexOffset * attribute.itemSize + i * attribute.itemSize + j] = 
-                                attribute.array[i * attribute.itemSize + j];
-                        }
-                    }
-                }
-
-                if (geometry.index) {
-                    for (let i = 0; i < geometry.index.count; i++) {
-                        indices[indexOffset + i] = geometry.index.array[i] + vertexOffset;
-                    }
-                    indexOffset += geometry.index.count;
-                }
-
-                vertexOffset += geometry.attributes.position.count;
-            });
-
-            // Créer la géométrie finale
-            const mergedGeometry = new THREE.BufferGeometry();
-            for (const name in attributes) {
-                mergedGeometry.setAttribute(
-                    name,
-                    new THREE.BufferAttribute(attributes[name].array, attributes[name].itemSize)
-                );
-            }
-            mergedGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
-
-            return mergedGeometry;
+            return null; 
         }
     }
-} 
+}
