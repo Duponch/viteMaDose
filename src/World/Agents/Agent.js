@@ -31,7 +31,7 @@ export default class Agent {
         this.debugPathColor = config.debugPathColor ?? this.torsoColor.getHex();
         this.reachTolerance = 0.5;
         this.reachToleranceSq = this.reachTolerance * this.reachTolerance;
-        this.lodDistance = 50;
+        this.lodDistance = config.lodDistance ?? 50; // Distance du niveau de détail (LOD) configurable
         this.isLodActive = false;
 
         // --- Position & Orientation (Visuel) ---
@@ -712,11 +712,14 @@ export default class Agent {
             return;
         }
 
-        // Calcul LOD (reste ici)
+        // Calcul LOD (optimisé)
         const cameraPosition = this.experience.camera.instance.position;
         const tempVector = new THREE.Vector3().subVectors(this.position, cameraPosition);
         const distanceToCameraSq = tempVector.lengthSq();
-        this.isLodActive = distanceToCameraSq > (this.lodDistance * this.lodDistance);
+        
+        // Utiliser la distance configurée
+        const lodDistanceSq = this.lodDistance * this.lodDistance;
+        this.isLodActive = distanceToCameraSq > lodDistanceSq;
 
         // Calcul progression visuelle (reste ici)
         const elapsedTimeSinceDeparture = currentGameTime - this.departureTimeGame;

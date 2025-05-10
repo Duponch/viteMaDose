@@ -4,6 +4,7 @@ import Agent from './Agent.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import WorkScheduleStrategy from '../Strategies/WorkScheduleStrategy.js';
 import WeekendWalkStrategy from '../Strategies/WeekendWalkStrategy.js';
+import AgentLODRenderer from './AgentLODRenderer.js';
 
 // --- Fonctions createCapsuleGeometry, createShoeGeometry (INCHANGÉES) ---
 // ... (coller les fonctions ici) ...
@@ -59,9 +60,15 @@ export default class AgentManager {
 		this.agentToInstanceId = new Map();               // agent.id → instanceId
 
 		this.agents = [];
-		this.instanceMeshes = {};
+		this.instanceMeshes = {
+			highDetail: {},
+			lowDetail: {}
+		};
 		this.baseGeometries = {};
 		this.baseMaterials = {};
+
+		// Créer le renderer LOD
+		this.lodRenderer = new AgentLODRenderer();
 
 		// Constantes pour la géométrie
 		this.headRadius = this.config.headRadius ?? 2.5;
@@ -362,9 +369,19 @@ export default class AgentManager {
 		});
 		this.baseMaterials.agentMarker = new THREE.MeshBasicMaterial({ color: 0xff00ff, wireframe: true });
 
+		// Matériau plus simple pour le LOD (moins coûteux)
+		this.baseMaterials.lodSimple = new THREE.MeshBasicMaterial({ 
+			vertexColors: true, 
+			flatShading: true, 
+			name: 'AgentLodSimpleMat'
+		});
+		
+		// Optimiser le matériau LOD
+		this.lodRenderer.optimizeMaterial(this.baseMaterials.lodSimple);
+
 		// Géométries de base
 		const torsoRadius = this.config.torsoRadius ?? 1.5;
-		const torsoLength = this.config.torsoLength ?? 2.0; // Augmenté pour le nouveau design
+		const torsoLength = this.config.torsoLength ?? 2.0;
 		const handRadius = this.config.handRadius ?? 0.8;
 		const handLength = this.config.handLength ?? 1.0;
 
@@ -479,8 +496,15 @@ export default class AgentManager {
 
 		this.baseGeometries.agentMarker = new THREE.OctahedronGeometry(0.5);
 
+		// --- INITIALISATION DES GÉOMÉTRIES LOD (NOUVELLE PARTIE) ---
+		// Créer les géométries simplifiées
+		this.baseGeometries.lodHead = this.lodRenderer.createSquareHeadGeometry(this.headRadius);
+		this.baseGeometries.lodTorso = this.lodRenderer.createSquareTorsoGeometry(torsoRadius, torsoLength);
+		this.baseGeometries.lodHand = this.lodRenderer.createSquareExtremityGeometry(handRadius, handLength);
+		this.baseGeometries.lodShoe = this.lodRenderer.createSquareShoeGeometry();
+
 		// Création des InstancedMesh
-		const createInstMesh = (name, geom, mat, count, needsColor = false) => {
+		const createInstMesh = (name, geom, mat, count, needsColor = false, detailLevel = 'highDetail') => {
 			//console.log(`Creating InstancedMesh '${name}' with count ${count}`);
 			const mesh = new THREE.InstancedMesh(geom, mat, count);
 			if (Array.isArray(mat)) {
@@ -497,9 +521,10 @@ export default class AgentManager {
 				//console.log(` > Added instanceColor buffer to ${name}`);
 			}
 			this.scene.add(mesh);
-			this.instanceMeshes[name] = mesh;
+			this.instanceMeshes[detailLevel][name] = mesh;
 		};
 
+		// --- CRÉATION DES INSTANCES HAUTE QUALITÉ ---
 		// Head fusionné avec cheveux : passer un tableau de matériaux
 		createInstMesh('head', this.baseGeometries.head, [
 			this.baseMaterials.skin,
@@ -521,6 +546,12 @@ export default class AgentManager {
 
 		createInstMesh('hand', this.baseGeometries.hand, this.baseMaterials.hand, this.maxAgents * 2);
 		createInstMesh('shoe', this.baseGeometries.shoe, this.baseMaterials.shoe, this.maxAgents * 2);
+
+		// --- CRÉATION DES INSTANCES LOD (BASSE QUALITÉ) ---
+		createInstMesh('head', this.baseGeometries.lodHead, this.baseMaterials.lodSimple, this.maxAgents, true, 'lowDetail');
+		createInstMesh('torso', this.baseGeometries.lodTorso, this.baseMaterials.lodSimple, this.maxAgents, true, 'lowDetail');
+		createInstMesh('hand', this.baseGeometries.lodHand, this.baseMaterials.lodSimple, this.maxAgents * 2, true, 'lowDetail');
+		createInstMesh('shoe', this.baseGeometries.lodShoe, this.baseMaterials.lodSimple, this.maxAgents * 2, true, 'lowDetail');
 
 		if (this.experience.isDebugMode) {
 			createInstMesh('agentMarker', this.baseGeometries.agentMarker, this.baseMaterials.agentMarker, this.maxAgents);
@@ -546,7 +577,8 @@ export default class AgentManager {
 			rotationSpeed: (this.config.agentRotationSpeed ?? 8.0) * (0.9 + Math.random() * 0.2),
 			yOffset: this.config.agentYOffset ?? 0.3,
 			torsoColor: new THREE.Color(Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1, Math.random() * 0.8 + 0.1),
-			debugPathColor: null
+			debugPathColor: null,
+			lodDistance: this.config.agentLodDistance ?? 50
 		};
 		agentConfig.torsoColorHex = agentConfig.torsoColor.getHex();
 		agentConfig.debugPathColor = agentConfig.torsoColorHex;
@@ -583,29 +615,82 @@ export default class AgentManager {
 		this.agentToInstanceId.set(newAgent.id, instanceId);
 
 		// 2.1) Définir la couleur initiale de l'instance (une seule fois)
-		if (this.instanceMeshes.torso?.instanceColor) {
-			this.instanceMeshes.torso.setColorAt(instanceId, newAgent.torsoColor);
+		if (this.instanceMeshes.highDetail.torso?.instanceColor) {
+			this.instanceMeshes.highDetail.torso.setColorAt(instanceId, newAgent.torsoColor);
 			// Important pour que la couleur soit envoyée au GPU la première fois (et si releaseAgent est utilisé)
-			this.instanceMeshes.torso.instanceColor.needsUpdate = true; 
+			this.instanceMeshes.highDetail.torso.instanceColor.needsUpdate = true; 
+		}
+
+		// 2.2) Définir la couleur pour les meshes LOD (basse qualité)
+		if (this.instanceMeshes.lowDetail.head?.instanceColor) {
+			// Définir explicitement la couleur pour chaque mesh LOD
+			const skinColor = new THREE.Color(0xffcc99); // Couleur de peau
+			const clothingColor = newAgent.torsoColor;
+			const shoeColor = new THREE.Color(0x444444); // Couleur de chaussure
+			
+			// Tête (couleur de peau)
+			this.instanceMeshes.lowDetail.head.setColorAt(instanceId, skinColor);
+			
+			// Torse (couleur de vêtement)
+			this.instanceMeshes.lowDetail.torso.setColorAt(instanceId, clothingColor);
+			
+			// Mains (gauche et droite)
+			this.instanceMeshes.lowDetail.hand.setColorAt(instanceId * 2, skinColor);
+			this.instanceMeshes.lowDetail.hand.setColorAt(instanceId * 2 + 1, skinColor);
+			
+			// Pieds (gauche et droite)
+			this.instanceMeshes.lowDetail.shoe.setColorAt(instanceId * 2, shoeColor);
+			this.instanceMeshes.lowDetail.shoe.setColorAt(instanceId * 2 + 1, shoeColor);
+			
+			// Marquer les buffers comme ayant besoin d'être mis à jour
+			this.instanceMeshes.lowDetail.head.instanceColor.needsUpdate = true;
+			this.instanceMeshes.lowDetail.torso.instanceColor.needsUpdate = true;
+			this.instanceMeshes.lowDetail.hand.instanceColor.needsUpdate = true;
+			this.instanceMeshes.lowDetail.shoe.instanceColor.needsUpdate = true;
+		}
+		
+		// 2.3) Définir la couleur pour les mains et pieds LOD
+		if (this.instanceMeshes.lowDetail.hand?.instanceColor) {
+			const handColor = new THREE.Color(0xffcc99); // Couleur de peau
+			const shoeColor = new THREE.Color(0x444444); // Couleur de chaussure
+			
+			// Mains (gauche et droite)
+			this.instanceMeshes.lowDetail.hand.setColorAt(instanceId * 2, handColor);
+			this.instanceMeshes.lowDetail.hand.setColorAt(instanceId * 2 + 1, handColor);
+			
+			// Pieds (gauche et droite)
+			this.instanceMeshes.lowDetail.shoe.setColorAt(instanceId * 2, shoeColor);
+			this.instanceMeshes.lowDetail.shoe.setColorAt(instanceId * 2 + 1, shoeColor);
+			
+			this.instanceMeshes.lowDetail.hand.instanceColor.needsUpdate = true;
+			this.instanceMeshes.lowDetail.shoe.instanceColor.needsUpdate = true;
 		}
 
 		this.activeCount++;
 
 		// Incrémenter les compteurs de rendu pour les nouvelles instances
-		if (this.instanceMeshes.head) this.instanceMeshes.head.count = this.activeCount;
-		if (this.instanceMeshes.torso) this.instanceMeshes.torso.count = this.activeCount;
-		if (this.instanceMeshes.hand) this.instanceMeshes.hand.count = this.activeCount * 2;
-		if (this.instanceMeshes.shoe) this.instanceMeshes.shoe.count = this.activeCount * 2;
+		// High detail
+		if (this.instanceMeshes.highDetail.head) this.instanceMeshes.highDetail.head.count = this.activeCount;
+		if (this.instanceMeshes.highDetail.torso) this.instanceMeshes.highDetail.torso.count = this.activeCount;
+		if (this.instanceMeshes.highDetail.hand) this.instanceMeshes.highDetail.hand.count = this.activeCount * 2;
+		if (this.instanceMeshes.highDetail.shoe) this.instanceMeshes.highDetail.shoe.count = this.activeCount * 2;
+		
+		// Low detail
+		if (this.instanceMeshes.lowDetail.head) this.instanceMeshes.lowDetail.head.count = this.activeCount;
+		if (this.instanceMeshes.lowDetail.torso) this.instanceMeshes.lowDetail.torso.count = this.activeCount;
+		if (this.instanceMeshes.lowDetail.hand) this.instanceMeshes.lowDetail.hand.count = this.activeCount * 2;
+		if (this.instanceMeshes.lowDetail.shoe) this.instanceMeshes.lowDetail.shoe.count = this.activeCount * 2;
+		
 		if (this.instanceMeshes.agentMarker) this.instanceMeshes.agentMarker.count = this.activeCount;
 	
 		// 4) on initialise la matrice / couleur de ce slot
 		// … (votre code existant pour setMatrixAt et setColorAt sur instanceId) …
-		this.instanceMeshes.torso.instanceColor?.setXYZ(instanceId,
+		this.instanceMeshes.highDetail.torso.instanceColor?.setXYZ(instanceId,
 			newAgent.torsoColor.r, newAgent.torsoColor.g, newAgent.torsoColor.b);
-		this.instanceMeshes.torso.instanceColor.needsUpdate = true;
+		this.instanceMeshes.highDetail.torso.instanceColor.needsUpdate = true;
 		// idem pour head, hand, shoe…
 	
-		Object.values(this.instanceMeshes).forEach(mesh => {
+		Object.values(this.instanceMeshes.highDetail).forEach(mesh => {
 			mesh.instanceMatrix.needsUpdate = true;
 		});
 	
@@ -619,7 +704,7 @@ export default class AgentManager {
 		const lastId = this.activeCount - 1;
 		// 1) swapper si ce n'est pas la dernière instance
 		if (freedId !== lastId) {
-			Object.values(this.instanceMeshes).forEach(mesh => {
+			Object.values(this.instanceMeshes.highDetail).forEach(mesh => {
 				// swap matrices
 				const m = new THREE.Matrix4();
 				mesh.getMatrixAt(lastId, m);
@@ -641,11 +726,10 @@ export default class AgentManager {
 	
 		// 2) décrémenter le compteur
 		this.activeCount--;
-		if (this.instanceMeshes.head) this.instanceMeshes.head.count = this.activeCount;
-		if (this.instanceMeshes.torso) this.instanceMeshes.torso.count = this.activeCount;
-		if (this.instanceMeshes.hand) this.instanceMeshes.hand.count = this.activeCount * 2;
-		if (this.instanceMeshes.shoe) this.instanceMeshes.shoe.count = this.activeCount * 2;
-		if (this.instanceMeshes.agentMarker) this.instanceMeshes.agentMarker.count = this.activeCount;
+		if (this.instanceMeshes.highDetail.head) this.instanceMeshes.highDetail.head.count = this.activeCount;
+		if (this.instanceMeshes.highDetail.torso) this.instanceMeshes.highDetail.torso.count = this.activeCount;
+		if (this.instanceMeshes.highDetail.hand) this.instanceMeshes.highDetail.hand.count = this.activeCount * 2;
+		if (this.instanceMeshes.highDetail.shoe) this.instanceMeshes.highDetail.shoe.count = this.activeCount * 2;
 	
 		// 3) nettoyer le mapping pour l'agent libéré
 		this.instanceIdToAgent[lastId] = undefined;
@@ -757,7 +841,8 @@ export default class AgentManager {
 		});
 
 		// 2. Visuels
-		let needsBodyMatrixUpdate = false;
+		let needsHighDetailUpdate = false;
+		let needsLowDetailUpdate = false;
 		let needsAgentMarkerUpdate = false;
 		let needsHomeMarkerUpdate = false;
 
@@ -778,10 +863,14 @@ export default class AgentManager {
 			this.tempScale.set(actualScale, actualScale, actualScale);
 			this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
 
+			// Déterminer quel niveau de détail utiliser
+			const isLowDetail = agent.isLodActive;
+
 			// --- Mise à jour des parties du corps instanciées ---
 			// Fonction utilitaire pour calculer et appliquer la matrice à une instance
-			const updatePartInstance = (partName, meshName, instanceIndex) => {
-				const mesh = this.instanceMeshes[meshName];
+			const updatePartInstance = (partName, meshName, instanceIndex, detailLevel) => {
+				const meshes = detailLevel === 'high' ? this.instanceMeshes.highDetail : this.instanceMeshes.lowDetail;
+				const mesh = meshes[meshName];
 				if (!mesh || instanceIndex >= mesh.count) return false;
 
 				if (agent.isVisible) {
@@ -789,8 +878,13 @@ export default class AgentManager {
 					// 1. Obtenir le décalage local de la partie (position/rotation de base)
 					tempLocalOffsetMatrix.copy(this._getPartLocalOffsetMatrix(partName));
 
-					// 2. Obtenir la matrice d'animation de la partie (calculée dans agent.updateVisuals)
-					tempAnimationMatrix.copy(agent.currentAnimationMatrix[partName] || this.tempMatrix.identity());
+					// 2. Obtenir la matrice d'animation de la partie
+					// Pour le LOD bas, on n'utilise pas d'animation, juste la position de base
+					if (detailLevel === 'high') {
+						tempAnimationMatrix.copy(agent.currentAnimationMatrix[partName] || this.tempMatrix.identity());
+					} else {
+						tempAnimationMatrix.identity();
+					}
 
 					// 3. Combiner : Matrice locale de la partie = Offset * Animation
 					tempPartWorldMatrix.multiplyMatrices(tempLocalOffsetMatrix, tempAnimationMatrix);
@@ -816,16 +910,50 @@ export default class AgentManager {
 				return true;
 			};
 
-			// Appliquer la mise à jour pour chaque partie
-			let updated = false;
-			updated = updatePartInstance('head', 'head', instanceId) || updated;
-			updated = updatePartInstance('torso', 'torso', instanceId) || updated;
-			updated = updatePartInstance('leftHand', 'hand', instanceId * 2 + 0) || updated;
-			updated = updatePartInstance('rightHand', 'hand', instanceId * 2 + 1) || updated;
-			updated = updatePartInstance('leftFoot', 'shoe', instanceId * 2 + 0) || updated;
-			updated = updatePartInstance('rightFoot', 'shoe', instanceId * 2 + 1) || updated;
+			// Appliquer la mise à jour pour chaque partie selon le niveau de détail
+			let highUpdated = false;
+			let lowUpdated = false;
 
-			if (updated) needsBodyMatrixUpdate = true;
+			if (isLowDetail) {
+				// Mettre à jour seulement les parties LOD
+				lowUpdated = updatePartInstance('head', 'head', instanceId, 'low') || lowUpdated;
+				lowUpdated = updatePartInstance('torso', 'torso', instanceId, 'low') || lowUpdated;
+				lowUpdated = updatePartInstance('leftHand', 'hand', instanceId * 2 + 0, 'low') || lowUpdated;
+				lowUpdated = updatePartInstance('rightHand', 'hand', instanceId * 2 + 1, 'low') || lowUpdated;
+				lowUpdated = updatePartInstance('leftFoot', 'shoe', instanceId * 2 + 0, 'low') || lowUpdated;
+				lowUpdated = updatePartInstance('rightFoot', 'shoe', instanceId * 2 + 1, 'low') || lowUpdated;
+				
+				// Masquer les parties haute qualité
+				this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0));
+				this.instanceMeshes.highDetail.head.setMatrixAt(instanceId, this.tempMatrix);
+				this.instanceMeshes.highDetail.torso.setMatrixAt(instanceId, this.tempMatrix);
+				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 0, this.tempMatrix);
+				this.instanceMeshes.highDetail.hand.setMatrixAt(instanceId * 2 + 1, this.tempMatrix);
+				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 0, this.tempMatrix);
+				this.instanceMeshes.highDetail.shoe.setMatrixAt(instanceId * 2 + 1, this.tempMatrix);
+				highUpdated = true;
+			} else {
+				// Mettre à jour seulement les parties haute qualité
+				highUpdated = updatePartInstance('head', 'head', instanceId, 'high') || highUpdated;
+				highUpdated = updatePartInstance('torso', 'torso', instanceId, 'high') || highUpdated;
+				highUpdated = updatePartInstance('leftHand', 'hand', instanceId * 2 + 0, 'high') || highUpdated;
+				highUpdated = updatePartInstance('rightHand', 'hand', instanceId * 2 + 1, 'high') || highUpdated;
+				highUpdated = updatePartInstance('leftFoot', 'shoe', instanceId * 2 + 0, 'high') || highUpdated;
+				highUpdated = updatePartInstance('rightFoot', 'shoe', instanceId * 2 + 1, 'high') || highUpdated;
+				
+				// Masquer les parties basse qualité
+				this.tempMatrix.identity().scale(new THREE.Vector3(0,0,0));
+				this.instanceMeshes.lowDetail.head.setMatrixAt(instanceId, this.tempMatrix);
+				this.instanceMeshes.lowDetail.torso.setMatrixAt(instanceId, this.tempMatrix);
+				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 0, this.tempMatrix);
+				this.instanceMeshes.lowDetail.hand.setMatrixAt(instanceId * 2 + 1, this.tempMatrix);
+				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 0, this.tempMatrix);
+				this.instanceMeshes.lowDetail.shoe.setMatrixAt(instanceId * 2 + 1, this.tempMatrix);
+				lowUpdated = true;
+			}
+
+			if (highUpdated) needsHighDetailUpdate = true;
+			if (lowUpdated) needsLowDetailUpdate = true;
 
 			// --- Mise à jour Debug marker (agentMarker) ---
 			const markerMesh = this.instanceMeshes.agentMarker;
@@ -854,15 +982,24 @@ export default class AgentManager {
 		}
 
 		// 3. Pousser vers le GPU (si des changements ont eu lieu)
-		if (needsBodyMatrixUpdate) {
-			['head','torso','hand','shoe'].forEach(k => {
-				const mesh = this.instanceMeshes[k];
+		if (needsHighDetailUpdate) {
+			Object.values(this.instanceMeshes.highDetail).forEach(mesh => {
 				if (mesh?.instanceMatrix) {
 					mesh.instanceMatrix.needsUpdate = true;
-					if (k === 'head' || k === 'torso') mesh.computeBoundingSphere();
+					mesh.computeBoundingSphere();
 				}
 			});
 		}
+		
+		if (needsLowDetailUpdate) {
+			Object.values(this.instanceMeshes.lowDetail).forEach(mesh => {
+				if (mesh?.instanceMatrix) {
+					mesh.instanceMatrix.needsUpdate = true;
+					mesh.computeBoundingSphere();
+				}
+			});
+		}
+		
 		if (needsAgentMarkerUpdate) this.instanceMeshes.agentMarker.instanceMatrix.needsUpdate = true;
 		if (needsHomeMarkerUpdate) this.instanceMeshes.homeMarker.instanceMatrix.needsUpdate = true;
 	}
@@ -894,14 +1031,24 @@ export default class AgentManager {
 		this.agents = [];
 		//console.log("AgentManager: Agents logiques détruits.");
 
-		Object.values(this.instanceMeshes).forEach(mesh => {
+		Object.values(this.instanceMeshes.highDetail).forEach(mesh => {
 			if (mesh.parent) mesh.parent.remove(mesh);
 			// Dispose material CLONE (celui de InstancedMesh)
 			if (mesh.material && mesh.material !== this.baseMaterials[mesh.name.replace('Instances','').toLowerCase()]) {
 			   mesh.material.dispose?.();
 			}
 		});
-		this.instanceMeshes = {};
+		this.instanceMeshes.highDetail = {};
+		//console.log("AgentManager: InstancedMeshes retirés & matériaux clonés disposés.");
+
+		Object.values(this.instanceMeshes.lowDetail).forEach(mesh => {
+			if (mesh.parent) mesh.parent.remove(mesh);
+			// Dispose material CLONE (celui de InstancedMesh)
+			if (mesh.material && mesh.material !== this.baseMaterials[mesh.name.replace('Instances','').toLowerCase()]) {
+			   mesh.material.dispose?.();
+			}
+		});
+		this.instanceMeshes.lowDetail = {};
 		//console.log("AgentManager: InstancedMeshes retirés & matériaux clonés disposés.");
 
 		Object.values(this.baseGeometries).forEach(geom => { geom?.dispose(); });
@@ -911,6 +1058,12 @@ export default class AgentManager {
 		Object.values(this.baseMaterials).forEach(mat => { mat?.dispose(); });
 		this.baseMaterials = {};
 		//console.log("AgentManager: Matériaux base disposés.");
+
+		// Nettoyer le renderer LOD
+		if (this.lodRenderer) {
+			this.lodRenderer.dispose();
+			this.lodRenderer = null;
+		}
 
 		this.scene = null; this.experience = null; this.config = null;
 		//console.log("AgentManager: Détruit.");

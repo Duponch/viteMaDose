@@ -356,9 +356,17 @@ export default class Experience extends EventTarget {
             const instancedMeshManager = this.world?.cityManager?.contentGenerator?.instancedMeshManager;
             const carManager = this.world?.carManager; // <<< NOUVEAU
 
-            // Ajouter les agents (torse et tête)
-            if (agentManager?.instanceMeshes?.torso) objectsToIntersect.push(agentManager.instanceMeshes.torso);
-            if (agentManager?.instanceMeshes?.head) objectsToIntersect.push(agentManager.instanceMeshes.head);
+            // Ajouter les agents (torse et tête) - HAUTE QUALITÉ
+            if (agentManager?.instanceMeshes?.highDetail) {
+                if (agentManager.instanceMeshes.highDetail.torso) objectsToIntersect.push(agentManager.instanceMeshes.highDetail.torso);
+                if (agentManager.instanceMeshes.highDetail.head) objectsToIntersect.push(agentManager.instanceMeshes.highDetail.head);
+            }
+            
+            // Ajouter les agents LOD (torse et tête) - BASSE QUALITÉ
+            if (agentManager?.instanceMeshes?.lowDetail) {
+                if (agentManager.instanceMeshes.lowDetail.torso) objectsToIntersect.push(agentManager.instanceMeshes.lowDetail.torso);
+                if (agentManager.instanceMeshes.lowDetail.head) objectsToIntersect.push(agentManager.instanceMeshes.lowDetail.head);
+            }
 
             // Ajouter les voitures (body, wheel, etc.) // <<< NOUVEAU
             if (carManager?.instancedMeshes) {
@@ -394,10 +402,20 @@ export default class Experience extends EventTarget {
 
                 // --- Vérifier si un Agent a été cliqué ---
                 if (agentManager && agentManager.agents &&
-                    (clickedObject === agentManager.instanceMeshes.torso || clickedObject === agentManager.instanceMeshes.head) &&
+                    ((agentManager.instanceMeshes.highDetail && 
+                      (clickedObject === agentManager.instanceMeshes.highDetail.torso || 
+                       clickedObject === agentManager.instanceMeshes.highDetail.head)) ||
+                     (agentManager.instanceMeshes.lowDetail && 
+                      (clickedObject === agentManager.instanceMeshes.lowDetail.torso || 
+                       clickedObject === agentManager.instanceMeshes.lowDetail.head))) &&
                     firstIntersect.instanceId !== undefined) {
+                    
+                    // Convertir l'instanceId en id d'agent
                     const agentInstanceId = firstIntersect.instanceId;
-                    const clickedAgent = agentManager.agents[agentInstanceId];
+                    // Utiliser l'instanceId pour trouver l'agent
+                    const clickedAgentId = agentManager.instanceIdToAgent[agentInstanceId];
+                    const clickedAgent = agentManager.getAgentById(clickedAgentId);
+                    
                     if (clickedAgent) {
                         this.deselectBuilding(); // Important: désélectionner bâtiment
                         this.selectAgent(clickedAgent);
