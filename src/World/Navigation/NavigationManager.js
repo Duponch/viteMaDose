@@ -153,10 +153,11 @@ export default class NavigationManager {
         const worldPath = path.map(node => graph.gridToWorld(node.x, node.y));
         
         // Calculer la longueur du chemin
-        let pathLengthWorld = 0;
+        let pathLengthWorldSquared = 0;
         for (let i = 0; i < worldPath.length - 1; i++) {
-            pathLengthWorld += worldPath[i].distanceTo(worldPath[i + 1]);
+            pathLengthWorldSquared += worldPath[i].distanceToSquared(worldPath[i + 1]);
         }
+        const pathLengthWorld = Math.sqrt(pathLengthWorldSquared);
 
         // 3. Stocker dans le cache si autorisé
         if (useCache) {

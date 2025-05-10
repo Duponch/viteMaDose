@@ -275,12 +275,12 @@ export default class WaterSystem {
         if (!this.waterMesh) return;
         
         const camera = this.experience.camera.instance;
-        const distance = camera.position.distanceTo(this.waterMesh.position);
+        const distance = camera.position.distanceToSquared(this.waterMesh.position);
 
         // Trouver le niveau LOD approprié
         let newLodLevel = this.lodLevels.length - 1;
         for (let i = 0; i < this.lodLevels.length; i++) {
-            if (distance > this.lodLevels[i].distance) {
+            if (distance > this.lodLevels[i].distance * this.lodLevels[i].distance) {
                 newLodLevel = i;
                 break;
             }
