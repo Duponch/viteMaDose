@@ -442,64 +442,377 @@ export default class InstancedMeshManager {
         // Les lumières sont allumées entre 18h inclus et 6h exclus
         const lightsOn = (currentHour >= 18 || currentHour < 6);
 
+        // Initialiser les états aléatoires pour les fenêtres si ce n'est pas déjà fait
+        if (!this.windowLitState) {
+            this.windowLitState = new Map();
+            
+            // 1. Regrouper les fenêtres par bâtiment RÉEL
+            const buildingGroups = new Map();
+            
+            this.windowMeshes.forEach(mesh => {
+                // Le format du nom est typiquement "typeID_buildingID_partN"
+                // Extraire un ID stable pour le bâtiment réel
+                const nameParts = mesh.name.split('_');
+                let buildingId;
+                
+                // Pour les types avec suffixe _proc_ (bâtiments procéduraux)
+                if (nameParts.length >= 3 && mesh.name.includes('_proc_')) {
+                    const baseNameEndIndex = mesh.name.indexOf('_part');
+                    if (baseNameEndIndex !== -1) {
+                        // Prendre tout jusqu'à _part pour les procéduraux
+                        buildingId = mesh.name.substring(0, baseNameEndIndex);
+                    } else {
+                        // Fallback: utiliser les 3 premiers segments
+                        buildingId = `${nameParts[0]}_${nameParts[1]}_${nameParts[2]}`;
+                    }
+                }
+                // Cas des maisons (house_XXXX)
+                else if (nameParts[0] === 'house' && nameParts.length >= 2) {
+                    buildingId = `${nameParts[0]}_${nameParts[1]}`;
+                }
+                // Autres types (commerciaux, skyscrapers, etc.)
+                else if (nameParts.length >= 2) {
+                    buildingId = `${nameParts[0]}_${nameParts[1]}`;
+                }
+                // Fallback si aucun modèle ne correspond
+                else {
+                    buildingId = `unknown_${mesh.uuid.substring(0, 8)}`;
+                }
+                
+                // Ajouter ce mesh au groupe du bâtiment
+                if (!buildingGroups.has(buildingId)) {
+                    buildingGroups.set(buildingId, []);
+                }
+                buildingGroups.get(buildingId).push(mesh);
+            });
+            
+            // 2. Pour chaque bâtiment, décider quelles fenêtres seront allumées
+            buildingGroups.forEach((meshes, buildingId) => {
+                // Compter le nombre total de fenêtres (instances) dans ce bâtiment
+                let totalWindowCount = 0;
+                
+                meshes.forEach(mesh => {
+                    if (mesh.isInstancedMesh) {
+                        totalWindowCount += mesh.count;
+                    } else {
+                        totalWindowCount += 1;
+                    }
+                });
+                
+                // Créer un tableau pour suivre chaque fenêtre
+                const windowIndices = [];
+                
+                // Ajouter des indices pour chaque instance de chaque mesh
+                meshes.forEach(mesh => {
+                    if (mesh.isInstancedMesh) {
+                        for (let i = 0; i < mesh.count; i++) {
+                            windowIndices.push({ meshId: mesh.uuid, instanceIndex: i });
+                        }
+                    } else {
+                        windowIndices.push({ meshId: mesh.uuid });
+                    }
+                });
+                
+                // Mélanger le tableau pour une sélection aléatoire
+                for (let i = windowIndices.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [windowIndices[i], windowIndices[j]] = [windowIndices[j], windowIndices[i]];
+                }
+                
+                // Sélectionner environ 50% des fenêtres à allumer
+                const numToLight = Math.floor(totalWindowCount * 0.5);
+                
+                // Marquer les fenêtres sélectionnées comme "allumées"
+                for (let i = 0; i < numToLight; i++) {
+                    const window = windowIndices[i];
+                    if (!this.windowLitState.has(window.meshId)) {
+                        this.windowLitState.set(window.meshId, new Set());
+                    }
+                    
+                    if (window.instanceIndex !== undefined) {
+                        this.windowLitState.get(window.meshId).add(window.instanceIndex);
+                    } else {
+                        this.windowLitState.get(window.meshId).add("single");
+                    }
+                }
+            });
+        }
+        
+        // 3. Mettre à jour l'apparence des fenêtres selon l'heure et leur état
         this.windowMeshes.forEach(mesh => {
-            // Le matériau peut être un tableau si l'objet d'origine en avait plusieurs,
-            // mais pour les InstancedMesh, c'est généralement un seul matériau.
             if (!mesh.material || typeof mesh.material.dispose !== 'function') return;
-
+            
             const material = mesh.material;
             let needsMaterialUpdate = false;
-
-            // Identifier le type de fenêtre basé sur le nom du matériau (convention établie)
+            
+            // Récupérer l'état des fenêtres de ce mesh
+            const litWindows = this.windowLitState.get(mesh.uuid) || new Set();
+            
+            // Identifier le type de fenêtre pour appliquer les paramètres visuels appropriés
             const isSkyscraperWindow = material.name === "SkyscraperWindowMat_Standard";
-			const isNewSkyscraperWindow = material.name === "NewSkyscraperWindowMat"; // <-- AJOUTER CETTE VÉRIFICATION
+            const isNewSkyscraperWindow = material.name === "NewSkyscraperWindowMat";
             const isHouseWindow = material.name.startsWith("Inst_HouseWindow_");
             const isBuildingWindow = material.name === "BuildingWindowMat";
             const isNewBuildingWindow = material.name === "NewBuildingWindow" || material.name === "NewBuildingBalconyWindow";
-
-            let targetIntensity = 0.0;
-
-            if (isSkyscraperWindow) {
-                targetIntensity = lightsOn ? 1 : 0.0; // Valeur spécifique gratte-ciel
-                // Logique additionnelle spécifique (ex: transmission, roughness)
-                const targetTransmission = lightsOn ? 0.0 : 0.0; // Exemple
-                const targetRoughness = lightsOn ? 0.8 : 0.1; // Exemple
-                if (material.transmission !== targetTransmission) {
-                    material.transmission = targetTransmission;
-                    needsMaterialUpdate = true;
+            
+            // Décider de l'intensité émissive selon le type de fenêtre
+            let maxEmissiveIntensity = 0.0;
+            if (isSkyscraperWindow) maxEmissiveIntensity = 1.0;
+            else if (isHouseWindow) maxEmissiveIntensity = 1.23;
+            else if (isBuildingWindow) maxEmissiveIntensity = 0.8;
+            else if (isNewBuildingWindow) maxEmissiveIntensity = 0.9;
+            else if (isNewSkyscraperWindow) maxEmissiveIntensity = 0.9;
+            
+            // Cas 1: InstancedMesh (plusieurs fenêtres dans un même mesh)
+            if (mesh.isInstancedMesh && mesh.count > 1) {
+                if (lightsOn) {
+                    // La nuit - Configurer le matériau pour l'émission
+                    if (isSkyscraperWindow) {
+                        if (material.transmission !== 0.0) {
+                            material.transmission = 0.0;
+                            needsMaterialUpdate = true;
+                        }
+                        if (material.roughness !== 0.8) {
+                            material.roughness = 0.8;
+                            needsMaterialUpdate = true;
+                        }
+                    }
+                    
+                    // Configurer les couleurs individuelles pour chaque instance
+                    if (!mesh.userData.hasCustomColor) {
+                        // Première mise en place - Créer un attribut de couleur par instance
+                        const colors = new Float32Array(mesh.count * 3);
+                        
+                        for (let i = 0; i < mesh.count; i++) {
+                            const isLit = litWindows.has(i);
+                            const intensity = isLit ? maxEmissiveIntensity : 0.0;
+                            
+                            // Couleur jaune avec intensité variable
+                            colors[i * 3] = 1.0; // R (toujours 1)
+                            colors[i * 3 + 1] = 1.0; // G (toujours 1)
+                            colors[i * 3 + 2] = 0.6; // B (toujours 0.6)
+                            
+                            // Si on pouvait régler directement emissiveIntensity par instance, on utiliserait intensity ici
+                        }
+                        
+                        // Configurer le matériau pour utiliser les couleurs par instance
+                        material.vertexColors = true;
+                        material.emissive.set(1.0, 1.0, 0.6); // Jaune
+                        material.emissiveIntensity = maxEmissiveIntensity;
+                        
+                        // Ajouter l'attribut de couleur à la géométrie
+                        mesh.geometry.setAttribute('color', new THREE.InstancedBufferAttribute(colors, 3));
+                        mesh.userData.hasCustomColor = true;
+                        
+                        // Créer des dummy scales pour masquer les fenêtres éteintes
+                        mesh.userData.originalScales = [];
+                        mesh.userData.dummyMatrices = [];
+                        
+                        // Modifier l'échelle pour chaque instance
+                        for (let i = 0; i < mesh.count; i++) {
+                            const matrix = new THREE.Matrix4();
+                            mesh.getMatrixAt(i, matrix);
+                            
+                            // Décomposer la matrice
+                            const position = new THREE.Vector3();
+                            const quaternion = new THREE.Quaternion();
+                            const scale = new THREE.Vector3();
+                            matrix.decompose(position, quaternion, scale);
+                            
+                            // Stocker l'échelle originale
+                            mesh.userData.originalScales[i] = scale.clone();
+                            
+                            // Pour les fenêtres éteintes, créer une matrice avec échelle quasi nulle
+                            if (!litWindows.has(i)) {
+                                const scaleX = Math.abs(scale.x) < 0.01 ? scale.x : 0.01 * Math.sign(scale.x);
+                                const scaleY = Math.abs(scale.y) < 0.01 ? scale.y : 0.01 * Math.sign(scale.y);
+                                const scaleZ = Math.abs(scale.z) < 0.01 ? scale.z : 0.01 * Math.sign(scale.z);
+                                
+                                const newMatrix = new THREE.Matrix4();
+                                newMatrix.compose(
+                                    position,
+                                    quaternion,
+                                    new THREE.Vector3(scaleX, scaleY, scaleZ)
+                                );
+                                
+                                mesh.setMatrixAt(i, newMatrix);
+                            }
+                        }
+                        
+                        mesh.instanceMatrix.needsUpdate = true;
+                        needsMaterialUpdate = true;
+                    } else {
+                        // Mise à jour - Vérifier si les matrices doivent être mises à jour
+                        let needMatrixUpdate = false;
+                        
+                        for (let i = 0; i < mesh.count; i++) {
+                            const isLit = litWindows.has(i);
+                            
+                            // Vérifier si l'état d'éclairage a changé pour cette instance
+                            const matrix = new THREE.Matrix4();
+                            mesh.getMatrixAt(i, matrix);
+                            
+                            // Décomposer la matrice actuelle
+                            const position = new THREE.Vector3();
+                            const quaternion = new THREE.Quaternion();
+                            const scale = new THREE.Vector3();
+                            matrix.decompose(position, quaternion, scale);
+                            
+                            const isCurrentlyHidden = Math.abs(scale.x) < 0.05 || Math.abs(scale.y) < 0.05 || Math.abs(scale.z) < 0.05;
+                            
+                            if ((isLit && isCurrentlyHidden) || (!isLit && !isCurrentlyHidden)) {
+                                // Échelle à restaurer ou réduire
+                                const newMatrix = new THREE.Matrix4();
+                                if (isLit) {
+                                    // Restaurer l'échelle originale
+                                    newMatrix.compose(
+                                        position,
+                                        quaternion,
+                                        mesh.userData.originalScales[i]
+                                    );
+                                } else {
+                                    // Réduire l'échelle
+                                    const scaleX = Math.abs(scale.x) < 0.01 ? scale.x : 0.01 * Math.sign(scale.x);
+                                    const scaleY = Math.abs(scale.y) < 0.01 ? scale.y : 0.01 * Math.sign(scale.y);
+                                    const scaleZ = Math.abs(scale.z) < 0.01 ? scale.z : 0.01 * Math.sign(scale.z);
+                                    
+                                    newMatrix.compose(
+                                        position,
+                                        quaternion, 
+                                        new THREE.Vector3(scaleX, scaleY, scaleZ)
+                                    );
+                                }
+                                
+                                mesh.setMatrixAt(i, newMatrix);
+                                needMatrixUpdate = true;
+                            }
+                        }
+                        
+                        if (needMatrixUpdate) {
+                            mesh.instanceMatrix.needsUpdate = true;
+                        }
+                    }
+                } else {
+                    // Le jour - Restaurer toutes les matrices et désactiver l'émission
+                    if (mesh.userData.hasCustomColor) {
+                        // Restaurer toutes les matrices
+                        let needMatrixUpdate = false;
+                        
+                        for (let i = 0; i < mesh.count; i++) {
+                            const matrix = new THREE.Matrix4();
+                            mesh.getMatrixAt(i, matrix);
+                            
+                            // Décomposer la matrice actuelle
+                            const position = new THREE.Vector3();
+                            const quaternion = new THREE.Quaternion();
+                            const scale = new THREE.Vector3();
+                            matrix.decompose(position, quaternion, scale);
+                            
+                            const isCurrentlyHidden = Math.abs(scale.x) < 0.05 || Math.abs(scale.y) < 0.05 || Math.abs(scale.z) < 0.05;
+                            
+                            if (isCurrentlyHidden && mesh.userData.originalScales[i]) {
+                                // Restaurer l'échelle originale
+                                const newMatrix = new THREE.Matrix4();
+                                newMatrix.compose(
+                                    position,
+                                    quaternion,
+                                    mesh.userData.originalScales[i]
+                                );
+                                
+                                mesh.setMatrixAt(i, newMatrix);
+                                needMatrixUpdate = true;
+                            }
+                        }
+                        
+                        if (needMatrixUpdate) {
+                            mesh.instanceMatrix.needsUpdate = true;
+                        }
+                    }
+                    
+                    // Désactiver l'émission
+                    if (material.emissiveIntensity !== 0.0) {
+                        material.emissiveIntensity = 0.0;
+                        needsMaterialUpdate = true;
+                    }
+                    
+                    // Réinitialiser les propriétés spécifiques
+                    if (isSkyscraperWindow) {
+                        if (material.transmission !== 0.0) {
+                            material.transmission = 0.0;
+                            needsMaterialUpdate = true;
+                        }
+                        if (material.roughness !== 0.1) {
+                            material.roughness = 0.1;
+                            needsMaterialUpdate = true;
+                        }
+                    }
                 }
-                if (material.roughness !== targetRoughness) {
-                    material.roughness = targetRoughness;
-                    needsMaterialUpdate = true;
+            } 
+            // Cas 2: Mesh standard (une seule fenêtre)
+            else {
+                const isLit = litWindows.has("single");
+                
+                if (lightsOn && isLit) {
+                    // La nuit et cette fenêtre est allumée
+                    if (material.emissiveIntensity !== maxEmissiveIntensity) {
+                        material.emissiveIntensity = maxEmissiveIntensity;
+                        needsMaterialUpdate = true;
+                    }
+                    
+                    // Paramètres spécifiques aux fenêtres de gratte-ciel
+                    if (isSkyscraperWindow) {
+                        if (material.transmission !== 0.0) {
+                            material.transmission = 0.0;
+                            needsMaterialUpdate = true;
+                        }
+                        if (material.roughness !== 0.8) {
+                            material.roughness = 0.8;
+                            needsMaterialUpdate = true;
+                        }
+                    }
+                    
+                    // Rendre visible si nécessaire
+                    if (!mesh.visible) {
+                        mesh.visible = true;
+                    }
+                } else if (lightsOn && !isLit) {
+                    // Nuit, mais cette fenêtre est éteinte
+                    if (material.emissiveIntensity !== 0.0) {
+                        material.emissiveIntensity = 0.0;
+                        needsMaterialUpdate = true;
+                    }
+                    
+                    // On peut cacher les fenêtres individuelles éteintes la nuit
+                    if (mesh.visible) {
+                        mesh.visible = false;
+                    }
+                } else {
+                    // Jour - Toutes les fenêtres visibles mais sans émission
+                    if (material.emissiveIntensity !== 0.0) {
+                        material.emissiveIntensity = 0.0;
+                        needsMaterialUpdate = true;
+                    }
+                    
+                    // Paramètres spécifiques pour le jour
+                    if (isSkyscraperWindow) {
+                        if (material.transmission !== 0.0) {
+                            material.transmission = 0.0;
+                            needsMaterialUpdate = true;
+                        }
+                        if (material.roughness !== 0.1) {
+                            material.roughness = 0.1;
+                            needsMaterialUpdate = true;
+                        }
+                    }
+                    
+                    // S'assurer que toutes les fenêtres sont visibles le jour
+                    if (!mesh.visible) {
+                        mesh.visible = true;
+                    }
                 }
-            } else if (isHouseWindow) {
-                targetIntensity = lightsOn ? 1.23 : 0.0; // Valeur spécifique maison
-            } else if (isBuildingWindow) {
-                targetIntensity = lightsOn ? 0.8 : 0.0; // Valeur spécifique immeuble
-            } else if (isNewBuildingWindow) {
-                targetIntensity = lightsOn ? 0.9 : 0.0; // Même valeur que BuildingWindow
-            } else if (isNewSkyscraperWindow) { // <-- AJOUTER CE BLOC
-                targetIntensity = lightsOn ? 0.9 : 0.0; // Choisissez une intensité (ex: 1.1)
-                // Ajoutez ici toute autre logique spécifique si nécessaire (transmission, roughness, etc.)
-                // Exemple:
-                // const targetRoughness = lightsOn ? 0.5 : 0.2;
-                // if (material.roughness !== targetRoughness) {
-                //     material.roughness = targetRoughness;
-                //     needsMaterialUpdate = true;
-                // }
-            } else {
-                // Fenêtre non reconnue ou type non géré
-                return;
             }
-
-            // Appliquer l'intensité émissive si elle a changé
-            if (material.emissiveIntensity !== targetIntensity) {
-                material.emissiveIntensity = targetIntensity;
-                 needsMaterialUpdate = true; // Indiquer que le matériau doit être mis à jour si l'intensité change
-            }
-
-            // Marquer le matériau pour mise à jour si nécessaire
-            // Note: même si seul emissiveIntensity change, needsUpdate=true est souvent requis.
+            
+            // Appliquer les changements si nécessaire
             if (needsMaterialUpdate) {
                 material.needsUpdate = true;
             }
@@ -507,9 +820,82 @@ export default class InstancedMeshManager {
     }
 
     /**
+     * Mélange aléatoirement un tableau (algorithme de Fisher-Yates)
+     * @param {Array} array - Le tableau à mélanger
+     */
+    shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+        return array;
+    }
+
+    /**
      * Nettoie les InstancedMesh créés et réinitialise l'état interne.
      */
     reset() {
+        // Nettoyer les états aléatoires des fenêtres
+        this.windowLitState = null;
+
+        // Restaurer les meshes de fenêtres
+        this.windowMeshes.forEach(mesh => {
+            // Restaurer les attributs géométriques
+            if (mesh.geometry && mesh.geometry.hasAttribute('color')) {
+                mesh.geometry.deleteAttribute('color');
+            }
+            
+            // Restaurer les échelles originales
+            if (mesh.isInstancedMesh && mesh.count > 1 && mesh.userData.originalScales) {
+                let needsUpdate = false;
+                
+                for (let i = 0; i < mesh.count; i++) {
+                    if (mesh.userData.originalScales[i]) {
+                        const matrix = new THREE.Matrix4();
+                        mesh.getMatrixAt(i, matrix);
+                        
+                        // Décomposer la matrice actuelle
+                        const position = new THREE.Vector3();
+                        const quaternion = new THREE.Quaternion();
+                        matrix.decompose(position, quaternion, new THREE.Vector3());
+                        
+                        // Restaurer l'échelle originale
+                        const newMatrix = new THREE.Matrix4();
+                        newMatrix.compose(
+                            position, 
+                            quaternion,
+                            mesh.userData.originalScales[i]
+                        );
+                        
+                        mesh.setMatrixAt(i, newMatrix);
+                        needsUpdate = true;
+                    }
+                }
+                
+                if (needsUpdate) {
+                    mesh.instanceMatrix.needsUpdate = true;
+                }
+                
+                mesh.userData.originalScales = null;
+                mesh.userData.dummyMatrices = null;
+            }
+            
+            // Réinitialiser le matériau
+            if (mesh.material) {
+                mesh.material.vertexColors = false;
+                mesh.material.emissiveIntensity = 0.0;
+                mesh.material.needsUpdate = true;
+            }
+            
+            // Nettoyer les autres propriétés
+            mesh.userData.hasCustomColor = false;
+            
+            // S'assurer que toutes les fenêtres sont visibles
+            if (!mesh.visible) {
+                mesh.visible = true;
+            }
+        });
+
         // Nettoyer les meshes de fenêtres (références)
         this.windowMeshes = [];
 
@@ -549,8 +935,80 @@ export default class InstancedMeshManager {
                  );
              }
         }
+    }
 
-        // console.log("InstancedMeshManager reset complete.");
+    /**
+     * Crée des matériaux individuels pour chaque instance d'un InstancedMesh
+     * @param {THREE.InstancedMesh} mesh - Le mesh instancié
+     */
+    createInstanceMaterials(mesh) {
+        if (!mesh || !mesh.isInstancedMesh || !mesh.material) return;
+        
+        const baseMaterial = mesh.material;
+        
+        // Créer un nouveau matériau pour chaque instance
+        const instanceMaterials = new Array(mesh.count);
+        for (let i = 0; i < mesh.count; i++) {
+            instanceMaterials[i] = baseMaterial.clone();
+            instanceMaterials[i].name = `${baseMaterial.name}_Instance${i}`;
+        }
+        
+        // Stocker les matériaux dans le mesh
+        mesh.userData.instanceMaterials = instanceMaterials;
+        mesh.userData.hasInstanceMaterials = true;
+        mesh.userData.originalMaterial = baseMaterial;
+        
+        // Conserver le matériau d'origine pour le rendu standard
+        // Le rendu personnalisé utilisera les matériaux individuels
+        
+        // Écraser la méthode onBeforeRender pour utiliser les matériaux personnalisés
+        mesh.onBeforeRender = function(renderer, scene, camera, geometry, material, group) {
+            if (this.userData.instanceMaterials) {
+                // Sauvegarder l'état actuel du renderer
+                const currentRenderState = renderer.getRenderTarget();
+                
+                // Pour chaque instance
+                for (let i = 0; i < this.count; i++) {
+                    // Récupérer la matrice de l'instance
+                    const matrix = new THREE.Matrix4();
+                    this.getMatrixAt(i, matrix);
+                    
+                    // Extraire position, rotation et échelle
+                    const position = new THREE.Vector3();
+                    const quaternion = new THREE.Quaternion();
+                    const scale = new THREE.Vector3();
+                    matrix.decompose(position, quaternion, scale);
+                    
+                    // Créer un mesh temporaire avec le matériau individuel
+                    const tempMesh = new THREE.Mesh(this.geometry, this.userData.instanceMaterials[i]);
+                    tempMesh.position.copy(position);
+                    tempMesh.quaternion.copy(quaternion);
+                    tempMesh.scale.copy(scale);
+                    
+                    // Rendre ce mesh spécifique
+                    tempMesh.updateMatrixWorld();
+                    renderer.renderBufferDirect(camera, scene, geometry, this.userData.instanceMaterials[i], tempMesh, group);
+                }
+                
+                // Restaurer l'état du renderer
+                renderer.setRenderTarget(currentRenderState);
+                
+                // Indiquer que le rendu a déjà été effectué
+                this._rendered = true;
+            }
+        };
+        
+        // Écraser la méthode dispose pour nettoyer correctement
+        const originalDispose = mesh.dispose;
+        mesh.dispose = function() {
+            if (this.userData.instanceMaterials) {
+                this.userData.instanceMaterials.forEach(mat => {
+                    if (mat) mat.dispose();
+                });
+                this.userData.instanceMaterials = null;
+            }
+            if (originalDispose) originalDispose.call(this);
+        };
     }
 
     /**
