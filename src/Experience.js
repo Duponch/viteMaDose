@@ -803,6 +803,9 @@ export default class Experience extends EventTarget {
             
         // Information d'agression chimique
         const agressionChimiqueInfo = "Oui (-1/médicament)";
+        
+        // Information de vieillissement hebdomadaire
+        const vieillissementInfo = "Oui (-1/semaine)";
 
         // Liste des besoins actuels
         let besoinsHTML = 'Aucun';
@@ -853,6 +856,10 @@ export default class Experience extends EventTarget {
                 <div class="tooltip-row">
                     <span class="tooltip-label">⚠️ Agression Chim.</span>
                     <span class="tooltip-value">${agressionChimiqueInfo}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">👴 Vieillissement</span>
+                    <span class="tooltip-value">${vieillissementInfo}</span>
                 </div>
                 <div class="tooltip-row">
                     <span class="tooltip-label">${statusIcon} Statut</span>
