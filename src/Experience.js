@@ -800,6 +800,9 @@ export default class Experience extends EventTarget {
         const adaptationInfo = hasAdaptation 
             ? "Oui (+1/jour)" 
             : "Non (bloquée)";
+            
+        // Information d'agression chimique
+        const agressionChimiqueInfo = "Oui (-1/médicament)";
 
         // Liste des besoins actuels
         let besoinsHTML = 'Aucun';
@@ -846,6 +849,10 @@ export default class Experience extends EventTarget {
                 <div class="tooltip-row">
                     <span class="tooltip-label">🔄 Adaptation Phy.</span>
                     <span class="tooltip-value">${adaptationInfo}</span>
+                </div>
+                <div class="tooltip-row">
+                    <span class="tooltip-label">⚠️ Agression Chim.</span>
+                    <span class="tooltip-value">${agressionChimiqueInfo}</span>
                 </div>
                 <div class="tooltip-row">
                     <span class="tooltip-label">${statusIcon} Statut</span>

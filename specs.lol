@@ -56,3 +56,17 @@ Voici les specs du citoyen :
 
 
 (Quand agent a besoin medoc + est sur son temps libre (cad à la maison) + en horaire d'ouverture : l'agent fait des allers retours en boucle au magasin jusuqu'à sa fermeture (pourrait acheter plusieurs par plusieurs ou alors max 1 aller retour par jour... à voir...))
+
+
+
+
+
+
+
+
+
+
+
+
+- ajouter Vieillissement nat. dans infobulle (- 1 / an)
+- ajouter agression chimique (-1 santé max par prise)
