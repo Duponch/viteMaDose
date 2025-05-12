@@ -81,7 +81,15 @@ export default class NavigationGraph {
         // Créer le SharedArrayBuffer pour la grille
         const bufferSize = this.gridWidth * this.gridHeight;
         try {
-            this.gridBuffer = new SharedArrayBuffer(bufferSize);
+            // Vérification de la disponibilité de SharedArrayBuffer
+            const useSharedMemory = typeof SharedArrayBuffer !== 'undefined';
+            
+            // Utiliser SharedArrayBuffer si disponible, sinon ArrayBuffer standard
+            const buffer = useSharedMemory 
+                ? new SharedArrayBuffer(bufferSize * Uint8Array.BYTES_PER_ELEMENT)
+                : new ArrayBuffer(bufferSize * Uint8Array.BYTES_PER_ELEMENT);
+            
+            this.gridBuffer = buffer;
             this.gridWalkableMap = new Uint8Array(this.gridBuffer);
             
             // Créer la grille PF.Grid à partir du SharedArrayBuffer

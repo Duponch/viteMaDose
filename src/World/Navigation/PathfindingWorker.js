@@ -16,6 +16,8 @@ let offsetX = 0;
 let offsetZ = 0;
 let pedestrianGraphHeight = 0.2; // Hauteur par défaut pour piétons
 let roadGraphHeight = 0.1;       // Hauteur par défaut pour routes
+let pathfinder = null;
+let isInitialized = false;
 
 // --- Cache de chemins ---
 const pathCache = {
@@ -283,6 +285,11 @@ function gridToWorld(gridX, gridY, graphHeight) { // <-- Accepte graphHeight
     return { x: worldX, y: graphHeight + 0.01, z: worldZ }; // Léger offset Y pour visibilité
 }
 
+// Fonction pour vérifier la disponibilité de SharedArrayBuffer
+function isSharedArrayBufferAvailable() {
+    return typeof SharedArrayBuffer !== 'undefined';
+}
+
 // --- Gestionnaire onmessage (MODIFIÉ) ---
 self.onmessage = function(event) {
     const { type, data } = event.data;
@@ -290,9 +297,20 @@ self.onmessage = function(event) {
     try {
         if (type === 'init') {
             //console.log('[Worker] Initialisation reçue (mode SharedArrayBuffer + A* interne double grille).');
-            // --- MODIFICATION: Accepter les données combinées ---
+            // --- MODIFICATION: Vérifier la disponibilité de SharedArrayBuffer ---
+            const useSharedMemory = isSharedArrayBufferAvailable();
+            
+            if (!useSharedMemory) {
+                console.warn('[Worker] SharedArrayBuffer n\'est pas disponible. Passage au mode standard.');
+                // Informer l'application principale
+                self.postMessage({ 
+                    type: 'warning', 
+                    message: 'SharedArrayBuffer n\'est pas disponible. Fonctionnalités de navigation limitées.' 
+                });
+            }
+            
+            // --- Accepter les données combinées ---
             if (data && data.pedestrian && data.road && 
-                data.pedestrian.gridBuffer && data.road.gridBuffer &&
                 data.gridWidth && data.gridHeight && data.gridScale !== undefined && 
                 data.offsetX !== undefined && data.offsetZ !== undefined &&
                 data.pedestrian.graphHeight !== undefined && data.road.graphHeight !== undefined)
@@ -305,18 +323,27 @@ self.onmessage = function(event) {
                 pedestrianGraphHeight = data.pedestrian.graphHeight;
                 roadGraphHeight = data.road.graphHeight;
 
-                // Vérifier les buffers
-                if (!(data.pedestrian.gridBuffer instanceof SharedArrayBuffer) || !(data.road.gridBuffer instanceof SharedArrayBuffer)) {
-                    throw new Error("Un ou les deux objets reçus ne sont pas des SharedArrayBuffers.");
+                // Créer les vues sur les buffers - adapter en fonction de la disponibilité de SharedArrayBuffer
+                if (useSharedMemory && data.pedestrian.gridBuffer instanceof SharedArrayBuffer && data.road.gridBuffer instanceof SharedArrayBuffer) {
+                    pedestrianGridWalkableMap = new Uint8Array(data.pedestrian.gridBuffer);
+                    roadGridWalkableMap = new Uint8Array(data.road.gridBuffer);
+                    console.log(`[Worker] Vues Uint8Array créées sur SharedArrayBuffers (${gridWidth}x${gridHeight}).`);
+                } else {
+                    // Utiliser des copies locales dans le worker si les SharedArrayBuffer ne sont pas disponibles
+                    // ou si les données transmises ne sont pas des SharedArrayBuffers
+                    if (data.pedestrian.gridBuffer) {
+                        pedestrianGridWalkableMap = new Uint8Array(data.pedestrian.gridBuffer.byteLength);
+                        pedestrianGridWalkableMap.set(new Uint8Array(data.pedestrian.gridBuffer));
+                    }
+                    if (data.road.gridBuffer) {
+                        roadGridWalkableMap = new Uint8Array(data.road.gridBuffer.byteLength);
+                        roadGridWalkableMap.set(new Uint8Array(data.road.gridBuffer));
+                    }
+                    console.log(`[Worker] Copies locales des grilles créées (${gridWidth}x${gridHeight}).`);
                 }
-                
-                // Créer les vues sur les buffers partagés
-                pedestrianGridWalkableMap = new Uint8Array(data.pedestrian.gridBuffer);
-                roadGridWalkableMap = new Uint8Array(data.road.gridBuffer);
-                //console.log(`[Worker] Vues Uint8Array créées sur SharedArrayBuffers (${gridWidth}x${gridHeight}).`);
-                //console.log(`[Worker] Hauteurs: Piéton=${pedestrianGraphHeight.toFixed(2)}, Route=${roadGraphHeight.toFixed(2)}`);
 
-                //console.log('[Worker] Prêt pour les requêtes A* (double grille avec cache).');
+                console.log(`[Worker] Hauteurs: Piéton=${pedestrianGraphHeight.toFixed(2)}, Route=${roadGraphHeight.toFixed(2)}`);
+                console.log('[Worker] Prêt pour les requêtes A* (double grille avec cache).');
                 self.postMessage({ type: 'initComplete' });
             } else {
                  throw new Error("Données manquantes ou invalides pour l'initialisation combinée.");

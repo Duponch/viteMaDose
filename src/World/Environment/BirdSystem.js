@@ -60,10 +60,10 @@ export default class BirdSystem {
         try {
             // Chargement des shaders
             const [vertexResponse, fragmentResponse, positionResponse, velocityResponse] = await Promise.all([
-                fetch('src/World/Shaders/birdVertex.glsl'),
-                fetch('src/World/Shaders/birdFragment.glsl'),
-                fetch('src/World/Shaders/birdPositionShader.glsl'),
-                fetch('src/World/Shaders/birdVelocityShader.glsl')
+                fetch('/src/World/Shaders/birdVertex.glsl'),
+                fetch('/src/World/Shaders/birdFragment.glsl'),
+                fetch('/src/World/Shaders/birdPositionShader.glsl'),
+                fetch('/src/World/Shaders/birdVelocityShader.glsl')
             ]);
             
             if (!vertexResponse.ok || !fragmentResponse.ok || !positionResponse.ok || !velocityResponse.ok) {
