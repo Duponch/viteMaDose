@@ -6,13 +6,15 @@
 
 [[redirects]]
   from = "/src/*"
-  to = "/src/:splat"
+  to = "/:splat"
   status = 200
+  force = true
 
 [[redirects]]
-  from = "/Public/*"
-  to = "/public/:splat"
+  from = "/public/*"
+  to = "/:splat"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/*"

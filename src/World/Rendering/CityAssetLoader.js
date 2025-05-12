@@ -570,6 +570,11 @@ export default class CityAssetLoader {
                 undefined,
                 (error) => {
                     console.error(`Erreur chargement ${extension.toUpperCase()} ${path} [${modelIdBase}]:`, error);
+                    console.error(`URL complète: ${window.location.origin}/${path}`); // Ajout pour debugging
+                    console.error(`Type d'erreur: ${error.constructor.name}`);
+                    if (error instanceof SyntaxError) {
+                        console.error(`Erreur de parsing, cela peut indiquer une mauvaise URL ou un problème de CORS`);
+                    }
                     resolve(null);
                 }
             );
