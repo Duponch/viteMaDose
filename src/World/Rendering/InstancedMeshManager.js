@@ -441,6 +441,21 @@ export default class InstancedMeshManager {
 
         // Les lumières sont allumées entre 18h inclus et 6h exclus
         const lightsOn = (currentHour >= 18 || currentHour < 6);
+        
+        // Suivi de l'état jour/nuit précédent pour détecter les transitions
+        if (this.previousLightsOn === undefined) {
+            this.previousLightsOn = lightsOn;
+        }
+        
+        // Si on passe du jour à la nuit, réinitialiser l'état pour un nouveau cycle
+        const dayToNightTransition = !this.previousLightsOn && lightsOn;
+        if (dayToNightTransition) {
+            console.log("Transition jour -> nuit détectée, réinitialisation des états des fenêtres");
+            this.windowLitState = null; // Force une nouvelle génération des états
+        }
+        
+        // Sauvegarder l'état actuel pour la prochaine mise à jour
+        this.previousLightsOn = lightsOn;
 
         // Initialiser les états aléatoires pour les fenêtres si ce n'est pas déjà fait
         if (!this.windowLitState) {
@@ -536,6 +551,27 @@ export default class InstancedMeshManager {
                     }
                 }
             });
+            
+            // Créer des références aux échelles originales pour tous les meshes instanciés
+            this.windowMeshes.forEach(mesh => {
+                if (mesh.isInstancedMesh && mesh.count > 1 && !mesh.userData.originalScalesStored) {
+                    mesh.userData.originalScales = [];
+                    
+                    for (let i = 0; i < mesh.count; i++) {
+                        const matrix = new THREE.Matrix4();
+                        mesh.getMatrixAt(i, matrix);
+                        
+                        const position = new THREE.Vector3();
+                        const quaternion = new THREE.Quaternion();
+                        const scale = new THREE.Vector3();
+                        matrix.decompose(position, quaternion, scale);
+                        
+                        mesh.userData.originalScales[i] = scale.clone();
+                    }
+                    
+                    mesh.userData.originalScalesStored = true;
+                }
+            });
         }
         
         // 3. Mettre à jour l'apparence des fenêtres selon l'heure et leur état
@@ -578,139 +614,112 @@ export default class InstancedMeshManager {
                         }
                     }
                     
-                    // Configurer les couleurs individuelles pour chaque instance
-                    if (!mesh.userData.hasCustomColor) {
-                        // Première mise en place - Créer un attribut de couleur par instance
-                        const colors = new Float32Array(mesh.count * 3);
-                        
-                        for (let i = 0; i < mesh.count; i++) {
-                            const isLit = litWindows.has(i);
-                            const intensity = isLit ? maxEmissiveIntensity : 0.0;
-                            
-                            // Couleur jaune avec intensité variable
-                            colors[i * 3] = 1.0; // R (toujours 1)
-                            colors[i * 3 + 1] = 1.0; // G (toujours 1)
-                            colors[i * 3 + 2] = 0.6; // B (toujours 0.6)
-                            
-                            // Si on pouvait régler directement emissiveIntensity par instance, on utiliserait intensity ici
-                        }
-                        
-                        // Configurer le matériau pour utiliser les couleurs par instance
-                        material.vertexColors = true;
-                        material.emissive.set(1.0, 1.0, 0.6); // Jaune
+                    // Activer l'émission
+                    if (material.emissiveIntensity !== maxEmissiveIntensity) {
                         material.emissiveIntensity = maxEmissiveIntensity;
+                        needsMaterialUpdate = true;
+                    }
+                    
+                    // Mettre à jour les échelles pour masquer/montrer chaque instance
+                    let needMatrixUpdate = false;
+                    
+                    for (let i = 0; i < mesh.count; i++) {
+                        const isLit = litWindows.has(i);
                         
-                        // Ajouter l'attribut de couleur à la géométrie
-                        mesh.geometry.setAttribute('color', new THREE.InstancedBufferAttribute(colors, 3));
-                        mesh.userData.hasCustomColor = true;
-                        
-                        // Créer des dummy scales pour masquer les fenêtres éteintes
-                        mesh.userData.originalScales = [];
-                        mesh.userData.dummyMatrices = [];
-                        
-                        // Modifier l'échelle pour chaque instance
-                        for (let i = 0; i < mesh.count; i++) {
+                        // Si les échelles originales n'ont pas été stockées, le faire maintenant
+                        if (!mesh.userData.originalScales || !mesh.userData.originalScales[i]) {
+                            if (!mesh.userData.originalScales) {
+                                mesh.userData.originalScales = [];
+                            }
+                            
                             const matrix = new THREE.Matrix4();
                             mesh.getMatrixAt(i, matrix);
                             
-                            // Décomposer la matrice
                             const position = new THREE.Vector3();
                             const quaternion = new THREE.Quaternion();
                             const scale = new THREE.Vector3();
                             matrix.decompose(position, quaternion, scale);
                             
-                            // Stocker l'échelle originale
-                            mesh.userData.originalScales[i] = scale.clone();
-                            
-                            // Pour les fenêtres éteintes, créer une matrice avec échelle quasi nulle
-                            if (!litWindows.has(i)) {
-                                const scaleX = Math.abs(scale.x) < 0.01 ? scale.x : 0.01 * Math.sign(scale.x);
-                                const scaleY = Math.abs(scale.y) < 0.01 ? scale.y : 0.01 * Math.sign(scale.y);
-                                const scaleZ = Math.abs(scale.z) < 0.01 ? scale.z : 0.01 * Math.sign(scale.z);
-                                
-                                const newMatrix = new THREE.Matrix4();
-                                newMatrix.compose(
-                                    position,
-                                    quaternion,
-                                    new THREE.Vector3(scaleX, scaleY, scaleZ)
-                                );
-                                
-                                mesh.setMatrixAt(i, newMatrix);
+                            // Ne remplacer que si l'échelle est "normale" (non miniaturisée)
+                            if (Math.abs(scale.x) > 0.1 && Math.abs(scale.y) > 0.1 && Math.abs(scale.z) > 0.1) {
+                                mesh.userData.originalScales[i] = scale.clone();
                             }
                         }
                         
-                        mesh.instanceMatrix.needsUpdate = true;
-                        needsMaterialUpdate = true;
-                    } else {
-                        // Mise à jour - Vérifier si les matrices doivent être mises à jour
-                        let needMatrixUpdate = false;
+                        // Obtenir la matrice actuelle
+                        const matrix = new THREE.Matrix4();
+                        mesh.getMatrixAt(i, matrix);
                         
-                        for (let i = 0; i < mesh.count; i++) {
-                            const isLit = litWindows.has(i);
+                        // Décomposer la matrice actuelle
+                        const position = new THREE.Vector3();
+                        const quaternion = new THREE.Quaternion();
+                        const scale = new THREE.Vector3();
+                        matrix.decompose(position, quaternion, scale);
+                        
+                        // Vérifier si l'instance est déjà dans l'état souhaité
+                        const isCurrentlyHidden = Math.abs(scale.x) < 0.05 || Math.abs(scale.y) < 0.05 || Math.abs(scale.z) < 0.05;
+                        
+                        if ((isLit && isCurrentlyHidden) || (!isLit && !isCurrentlyHidden)) {
+                            const newMatrix = new THREE.Matrix4();
                             
-                            // Vérifier si l'état d'éclairage a changé pour cette instance
-                            const matrix = new THREE.Matrix4();
-                            mesh.getMatrixAt(i, matrix);
-                            
-                            // Décomposer la matrice actuelle
-                            const position = new THREE.Vector3();
-                            const quaternion = new THREE.Quaternion();
-                            const scale = new THREE.Vector3();
-                            matrix.decompose(position, quaternion, scale);
-                            
-                            const isCurrentlyHidden = Math.abs(scale.x) < 0.05 || Math.abs(scale.y) < 0.05 || Math.abs(scale.z) < 0.05;
-                            
-                            if ((isLit && isCurrentlyHidden) || (!isLit && !isCurrentlyHidden)) {
-                                // Échelle à restaurer ou réduire
-                                const newMatrix = new THREE.Matrix4();
-                                if (isLit) {
-                                    // Restaurer l'échelle originale
+                            if (isLit) {
+                                // Restaurer l'échelle originale pour les fenêtres allumées
+                                if (mesh.userData.originalScales && mesh.userData.originalScales[i]) {
                                     newMatrix.compose(
                                         position,
                                         quaternion,
                                         mesh.userData.originalScales[i]
                                     );
-                                } else {
-                                    // Réduire l'échelle
-                                    const scaleX = Math.abs(scale.x) < 0.01 ? scale.x : 0.01 * Math.sign(scale.x);
-                                    const scaleY = Math.abs(scale.y) < 0.01 ? scale.y : 0.01 * Math.sign(scale.y);
-                                    const scaleZ = Math.abs(scale.z) < 0.01 ? scale.z : 0.01 * Math.sign(scale.z);
-                                    
-                                    newMatrix.compose(
-                                        position,
-                                        quaternion, 
-                                        new THREE.Vector3(scaleX, scaleY, scaleZ)
-                                    );
+                                    mesh.setMatrixAt(i, newMatrix);
+                                    needMatrixUpdate = true;
                                 }
+                            } else {
+                                // Réduire l'échelle pour les fenêtres éteintes
+                                const scaleX = 0.01;
+                                const scaleY = 0.01;
+                                const scaleZ = 0.01;
                                 
+                                newMatrix.compose(
+                                    position,
+                                    quaternion,
+                                    new THREE.Vector3(scaleX, scaleY, scaleZ)
+                                );
                                 mesh.setMatrixAt(i, newMatrix);
                                 needMatrixUpdate = true;
                             }
                         }
-                        
-                        if (needMatrixUpdate) {
-                            mesh.instanceMatrix.needsUpdate = true;
-                        }
+                    }
+                    
+                    // Mettre à jour la matrice d'instance si nécessaire
+                    if (needMatrixUpdate) {
+                        mesh.instanceMatrix.needsUpdate = true;
                     }
                 } else {
                     // Le jour - Restaurer toutes les matrices et désactiver l'émission
-                    if (mesh.userData.hasCustomColor) {
-                        // Restaurer toutes les matrices
-                        let needMatrixUpdate = false;
-                        
-                        for (let i = 0; i < mesh.count; i++) {
+                    
+                    // Désactiver l'émission
+                    if (material.emissiveIntensity !== 0.0) {
+                        material.emissiveIntensity = 0.0;
+                        needsMaterialUpdate = true;
+                    }
+                    
+                    // Restaurer toutes les échelles originales
+                    let needMatrixUpdate = false;
+                    
+                    for (let i = 0; i < mesh.count; i++) {
+                        if (mesh.userData.originalScales && mesh.userData.originalScales[i]) {
                             const matrix = new THREE.Matrix4();
                             mesh.getMatrixAt(i, matrix);
                             
-                            // Décomposer la matrice actuelle
                             const position = new THREE.Vector3();
                             const quaternion = new THREE.Quaternion();
                             const scale = new THREE.Vector3();
                             matrix.decompose(position, quaternion, scale);
                             
+                            // Vérifier si l'échelle actuelle est réduite
                             const isCurrentlyHidden = Math.abs(scale.x) < 0.05 || Math.abs(scale.y) < 0.05 || Math.abs(scale.z) < 0.05;
                             
-                            if (isCurrentlyHidden && mesh.userData.originalScales[i]) {
+                            if (isCurrentlyHidden) {
                                 // Restaurer l'échelle originale
                                 const newMatrix = new THREE.Matrix4();
                                 newMatrix.compose(
@@ -723,19 +732,13 @@ export default class InstancedMeshManager {
                                 needMatrixUpdate = true;
                             }
                         }
-                        
-                        if (needMatrixUpdate) {
-                            mesh.instanceMatrix.needsUpdate = true;
-                        }
                     }
                     
-                    // Désactiver l'émission
-                    if (material.emissiveIntensity !== 0.0) {
-                        material.emissiveIntensity = 0.0;
-                        needsMaterialUpdate = true;
+                    if (needMatrixUpdate) {
+                        mesh.instanceMatrix.needsUpdate = true;
                     }
                     
-                    // Réinitialiser les propriétés spécifiques
+                    // Réinitialiser les propriétés spécifiques pour le jour
                     if (isSkyscraperWindow) {
                         if (material.transmission !== 0.0) {
                             material.transmission = 0.0;
@@ -782,7 +785,7 @@ export default class InstancedMeshManager {
                         needsMaterialUpdate = true;
                     }
                     
-                    // On peut cacher les fenêtres individuelles éteintes la nuit
+                    // Masquer la fenêtre éteinte
                     if (mesh.visible) {
                         mesh.visible = false;
                     }
@@ -837,6 +840,7 @@ export default class InstancedMeshManager {
     reset() {
         // Nettoyer les états aléatoires des fenêtres
         this.windowLitState = null;
+        this.previousLightsOn = undefined;
 
         // Restaurer les meshes de fenêtres
         this.windowMeshes.forEach(mesh => {
@@ -877,6 +881,7 @@ export default class InstancedMeshManager {
                 }
                 
                 mesh.userData.originalScales = null;
+                mesh.userData.originalScalesStored = false;
                 mesh.userData.dummyMatrices = null;
             }
             
