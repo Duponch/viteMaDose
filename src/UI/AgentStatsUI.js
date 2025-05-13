@@ -1,10 +1,11 @@
 // src/UI/AgentStatsUI.js
 import Chart from 'chart.js/auto';
+import { defaultUIStates } from '../config/uiConfig.js';
 
 export default class AgentStatsUI {
     constructor(experience) {
         this.experience = experience;
-        this.isVisible = false;
+        this.isVisible = this.experience.uiStates?.agentStats ?? false;
         this.elements = {};
         this.charts = { 
             requestingWorkChart: null,
@@ -82,8 +83,7 @@ export default class AgentStatsUI {
 		this.elements.statsPanel = document.createElement('div');
 		this.elements.statsPanel.id = 'agent-stats-panel'; // ID pour CSS
 		this.elements.statsPanel.dataset.uiInteractive = 'true'; // Garder pour la logique de clic
-		// --- IMPORTANT: Garder display:none ici pour le contrôle initial ---
-		this.elements.statsPanel.style.display = 'none';
+		this.elements.statsPanel.style.display = this.isVisible ? 'block' : 'none';
 		// --- FIN IMPORTANT ---
 		this.container.appendChild(this.elements.statsPanel);
 	

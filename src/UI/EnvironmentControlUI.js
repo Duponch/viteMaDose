@@ -1,6 +1,8 @@
 /**
  * Interface utilisateur pour contrôler le système d'environnement
  */
+import { defaultUIStates } from '../config/uiConfig.js';
+
 export default class EnvironmentControlUI {
     /**
      * @param {Object} experience - Référence à l'instance principale
@@ -8,11 +10,11 @@ export default class EnvironmentControlUI {
     constructor(experience) {
         this.experience = experience;
         this.environment = this.experience.world.environment;
-        this.isVisible = true; // Par défaut, l'UI est visible
+        this.isVisible = this.experience.uiStates?.environment ?? false;
         
         // Émettre l'événement de visibilité initial
         this.experience.dispatchEvent(new CustomEvent('environmentuichanged', {
-            detail: { isVisible: true }
+            detail: { isVisible: this.isVisible }
         }));
         
         // Attendre que l'environnement soit initialisé et que le système d'environnement soit disponible
@@ -20,7 +22,7 @@ export default class EnvironmentControlUI {
             if (this.environment && this.environment.environmentSystem) {
                 clearInterval(this.checkEnvironmentSystemInterval);
                 this.environmentSystem = this.environment.environmentSystem;
-                this.waterSystem = this.environment.waterSystem; // Référence au système d'eau
+                this.waterSystem = this.environment.waterSystem;
                 
                 // Sauvegarder les valeurs initiales du système
                 this.defaultValues = {
@@ -46,6 +48,13 @@ export default class EnvironmentControlUI {
         this.container = document.createElement('div');
         this.container.className = 'environment-control-ui';
         this.container.dataset.uiInteractive = 'true';
+        this.container.style.display = this.isVisible ? 'block' : 'none';
+        
+        // Mettre à jour l'état du bouton toggle dans TimeControlUI
+        const environmentButton = document.querySelector('#environment-toggle');
+        if (environmentButton) {
+            environmentButton.classList.toggle('active', this.isVisible);
+        }
         
         // Titre de la section
         const title = document.createElement('h3');
@@ -316,5 +325,43 @@ export default class EnvironmentControlUI {
         this.sliders = null;
         this.valueDisplays = null;
         this.checkboxes = null;
+    }
+
+    show() {
+        if (this.isVisible) return;
+        this.isVisible = true;
+        this.container.style.display = 'block';
+        
+        // Mettre à jour l'état du bouton
+        const environmentButton = document.querySelector('#environment-toggle');
+        if (environmentButton) {
+            environmentButton.classList.add('active');
+        }
+        
+        // Mettre à jour l'état dans Experience
+        this.experience.updateUIState('environment', true);
+    }
+
+    hide() {
+        if (!this.isVisible) return;
+        this.isVisible = false;
+        this.container.style.display = 'none';
+        
+        // Mettre à jour l'état du bouton
+        const environmentButton = document.querySelector('#environment-toggle');
+        if (environmentButton) {
+            environmentButton.classList.remove('active');
+        }
+        
+        // Mettre à jour l'état dans Experience
+        this.experience.updateUIState('environment', false);
+    }
+
+    toggleVisibility() {
+        if (this.isVisible) {
+            this.hide();
+        } else {
+            this.show();
+        }
     }
 } 

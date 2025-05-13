@@ -22,6 +22,7 @@ import * as DebugTools from './World/Rendering/DebugTools.js';
 import AgentUI from './UI/AgentUI.js';
 // Import du pool d'objets
 import ObjectPool from './Utils/ObjectPool.js';
+import { defaultUIStates, saveUIStates, loadUIStates } from './config/uiConfig.js';
 
 let instance = null;
 
@@ -47,6 +48,10 @@ export default class Experience extends EventTarget {
         this.objectPool = new ObjectPool();
         this.world = new World(this);
         this.isDebugMode = false;
+
+        // Charger les états des UI AVANT de créer les UIs
+        this.uiStates = loadUIStates();
+
         this.timeUI = new TimeUI(this);
         this.weatherControlUI = new WeatherControlUI(this);
         this.environmentControlUI = new EnvironmentControlUI(this);
@@ -1134,9 +1139,7 @@ export default class Experience extends EventTarget {
             weatherUI.style.display = isVisible ? 'none' : 'block';
             if (this.weatherUI) {
                 this.weatherUI.isVisible = !isVisible;
-                this.dispatchEvent(new CustomEvent('weatheruichanged', {
-                    detail: { isVisible: !isVisible }
-                }));
+                this.updateUIState('weather', !isVisible);
             }
         }
     }
@@ -1148,9 +1151,7 @@ export default class Experience extends EventTarget {
             environmentUI.style.display = isVisible ? 'none' : 'block';
             if (this.environmentUI) {
                 this.environmentUI.isVisible = !isVisible;
-                this.dispatchEvent(new CustomEvent('environmentuichanged', {
-                    detail: { isVisible: !isVisible }
-                }));
+                this.updateUIState('environment', !isVisible);
             }
         }
     }
@@ -1635,5 +1636,20 @@ export default class Experience extends EventTarget {
         } else if (event.code === 'KeyF') {
             this.time.togglePause();
         }
+    }
+
+    /**
+     * Met à jour l'état d'une UI et sauvegarde la configuration
+     * @param {string} uiName - Le nom de l'UI à mettre à jour
+     * @param {boolean} isVisible - Le nouvel état de visibilité
+     */
+    updateUIState(uiName, isVisible) {
+        this.uiStates[uiName] = isVisible;
+        saveUIStates(this.uiStates);
+        
+        // Émettre l'événement de changement
+        this.dispatchEvent(new CustomEvent(`${uiName}uichanged`, {
+            detail: { isVisible }
+        }));
     }
 }

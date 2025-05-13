@@ -3,6 +3,7 @@
  * Version améliorée avec curseurs indépendants
  */
 import * as THREE from 'three';
+import { defaultUIStates } from '../config/uiConfig.js';
 
 export default class WeatherControlUI {
     /**
@@ -11,11 +12,11 @@ export default class WeatherControlUI {
     constructor(experience) {
         this.experience = experience;
         this.environment = this.experience.world.environment;
-        this.isVisible = true; // Par défaut, l'UI est visible
+        this.isVisible = this.experience.uiStates?.weather ?? false;
         
         // Émettre l'événement de visibilité initial
         this.experience.dispatchEvent(new CustomEvent('weatheruichanged', {
-            detail: { isVisible: true }
+            detail: { isVisible: this.isVisible }
         }));
         
         // Attendre que l'environnement soit initialisé et que le système météo soit disponible
@@ -51,6 +52,13 @@ export default class WeatherControlUI {
         this.container = document.createElement('div');
         this.container.className = 'weather-control-ui';
         this.container.dataset.uiInteractive = 'true';
+        this.container.style.display = this.isVisible ? 'block' : 'none';
+
+        // Mettre à jour l'état du bouton toggle dans TimeControlUI
+        const weatherButton = document.querySelector('#weather-toggle');
+        if (weatherButton) {
+            weatherButton.classList.toggle('active', this.isVisible);
+        }
 
 		// Titre de la section
         const title = document.createElement('h3');
@@ -283,5 +291,43 @@ export default class WeatherControlUI {
         
         this.sliders = null;
         this.valueDisplays = null;
+    }
+
+    show() {
+        if (this.isVisible) return;
+        this.isVisible = true;
+        this.container.style.display = 'block';
+        
+        // Mettre à jour l'état du bouton
+        const weatherButton = document.querySelector('#weather-toggle');
+        if (weatherButton) {
+            weatherButton.classList.add('active');
+        }
+        
+        // Mettre à jour l'état dans Experience
+        this.experience.updateUIState('weather', true);
+    }
+
+    hide() {
+        if (!this.isVisible) return;
+        this.isVisible = false;
+        this.container.style.display = 'none';
+        
+        // Mettre à jour l'état du bouton
+        const weatherButton = document.querySelector('#weather-toggle');
+        if (weatherButton) {
+            weatherButton.classList.remove('active');
+        }
+        
+        // Mettre à jour l'état dans Experience
+        this.experience.updateUIState('weather', false);
+    }
+
+    toggleVisibility() {
+        if (this.isVisible) {
+            this.hide();
+        } else {
+            this.show();
+        }
     }
 } 
