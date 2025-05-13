@@ -72,8 +72,8 @@ export default class RainEffect {
     async initializeRain() {
         // Chargement des shaders
         const [vertexResponse, fragmentResponse] = await Promise.all([
-            fetch('RainVertex.glsl'),
-            fetch('RainFragment.glsl')
+            fetch('../src/World/Shaders/RainVertex.glsl'),
+            fetch('../src/World/Shaders/RainFragment.glsl')
         ]);
         
         if (!vertexResponse.ok || !fragmentResponse.ok) {
@@ -197,8 +197,8 @@ export default class RainEffect {
     async initializeSplashes() {
         // Chargement des shaders
         const [vertexResponse, fragmentResponse] = await Promise.all([
-            fetch('RainSplashVertex.glsl'),
-            fetch('RainSplashFragment.glsl')
+            fetch('../src/World/Shaders/RainSplashVertex.glsl'),
+            fetch('../src/World/Shaders/RainSplashFragment.glsl')
         ]);
         
         if (!vertexResponse.ok || !fragmentResponse.ok) {

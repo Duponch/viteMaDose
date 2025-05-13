@@ -33,8 +33,8 @@ export default class RainbowEffect {
         try {
             // Chargement des shaders
             const [vertexResponse, fragmentResponse] = await Promise.all([
-                fetch('RainbowVertex.glsl'),
-                fetch('RainbowFragment.glsl')
+                fetch('../src/World/Shaders/RainbowVertex.glsl'),
+                fetch('../src/World/Shaders/RainbowFragment.glsl')
             ]);
             
             if (!vertexResponse.ok || !fragmentResponse.ok) {
