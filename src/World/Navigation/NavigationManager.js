@@ -23,9 +23,9 @@ export default class NavigationManager {
         
         // Initialisation du cache de chemins
         this.pathCache = new PathCache({
-            maxEntries: config.pathCacheMaxEntries || 5000,
-            expirationTime: config.pathCacheExpirationTime || 10 * 60 * 1000, // 10 minutes par défaut
-            nearbyThreshold: config.pathCacheNearbyThreshold || 3,
+            maxEntries: config.pathCacheMaxEntries || 8000,
+            expirationTime: config.pathCacheExpirationTime || 30 * 60 * 1000,
+            nearbyThreshold: config.pathCacheNearbyThreshold || 6,
             enableStats: true
         });
     }

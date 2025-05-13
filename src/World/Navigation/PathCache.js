@@ -47,7 +47,13 @@ export default class PathCache {
      * @returns {string} Clé de cache unique
      */
     generateKey(startNode, endNode, isVehicle) {
-        return `${startNode.x},${startNode.y}-${endNode.x},${endNode.y}-${isVehicle ? 'v' : 'p'}`;
+        // Modification: Quantification plus agressive des coordonnées
+        // Arrondir au multiple de 2 le plus proche pour augmenter les hits
+        const sx = Math.round(startNode.x / 2) * 2;
+        const sy = Math.round(startNode.y / 2) * 2;
+        const ex = Math.round(endNode.x / 2) * 2;
+        const ey = Math.round(endNode.y / 2) * 2;
+        return `${sx},${sy}-${ex},${ey}-${isVehicle ? 'v' : 'p'}`;
     }
 
     /**
@@ -200,8 +206,9 @@ export default class PathCache {
             // Score total (distance combinée)
             const score = startDist + endDist;
             
+            // Modification: Augmenter le seuil pour considérer un chemin comme "proche"
             // Vérifier si ce chemin est le meilleur jusqu'à présent
-            if (score < bestScore && startDist <= this.nearbyThreshold && endDist <= this.nearbyThreshold) {
+            if (score < bestScore && startDist <= Math.max(8, this.nearbyThreshold * 2) && endDist <= Math.max(8, this.nearbyThreshold * 2)) {
                 bestMatch = entry;
                 bestScore = score;
             }

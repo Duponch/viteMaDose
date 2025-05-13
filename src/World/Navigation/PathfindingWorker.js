@@ -417,26 +417,50 @@ self.onmessage = function(event) {
             const startWalkable = isWalkable(normalizedStartNode.x, normalizedStartNode.y, activeGridMap);
             const endWalkable = isWalkable(normalizedEndNode.x, normalizedEndNode.y, activeGridMap);
             //console.log(`[Worker Check] Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}). Start (${normalizedStartNode.x},${normalizedStartNode.y}) walkable: ${startWalkable}. End (${normalizedEndNode.x},${normalizedEndNode.y}) walkable: ${endWalkable}.`);
-            if (!startWalkable || !endWalkable) {
-                 console.error(`[Worker Error] Start or End node not walkable on the selected grid map for Agent ${agentId}.`);
-                 // Optionnel : renvoyer échec immédiatement si non marchable
-                 self.postMessage({ type: 'pathResult', data: { agentId: agentId, path: null, pathLengthWorld: 0 } });
-                 return;
+
+            // MODIFICATION: Rechercher des nœuds marchables proches si nécessaire
+            let finalStartNode = normalizedStartNode;
+            let finalEndNode = normalizedEndNode;
+            let nodesAdjusted = false;
+
+            if (!startWalkable) {
+                const nearestStartNode = findNearestWalkableNode(normalizedStartNode, activeGridMap, 10);
+                if (nearestStartNode) {
+                    finalStartNode = nearestStartNode;
+                    nodesAdjusted = true;
+                    console.log(`[Worker] Nœud de départ ajusté pour Agent ${agentId}: (${normalizedStartNode.x},${normalizedStartNode.y}) → (${nearestStartNode.x},${nearestStartNode.y})`);
+                } else {
+                    console.error(`[Worker Error] Start node not walkable and no nearby walkable node found for Agent ${agentId}.`);
+                    self.postMessage({ type: 'pathResult', data: { agentId: agentId, path: null, pathLengthWorld: 0 } });
+                    return;
+                }
             }
-            // ---- FIN LOG ----
+
+            if (!endWalkable) {
+                const nearestEndNode = findNearestWalkableNode(normalizedEndNode, activeGridMap, 10);
+                if (nearestEndNode) {
+                    finalEndNode = nearestEndNode;
+                    nodesAdjusted = true;
+                    console.log(`[Worker] Nœud d'arrivée ajusté pour Agent ${agentId}: (${normalizedEndNode.x},${normalizedEndNode.y}) → (${nearestEndNode.x},${nearestEndNode.y})`);
+                } else {
+                    console.error(`[Worker Error] End node not walkable and no nearby walkable node found for Agent ${agentId}.`);
+                    self.postMessage({ type: 'pathResult', data: { agentId: agentId, path: null, pathLengthWorld: 0 } });
+                    return;
+                }
+            }
 
             // Vérification des bornes (inchangée, utilise gridWidth/gridHeight globaux)
             const isValidCoord = (node) => node && node.x >= 0 && node.x < gridWidth && node.y >= 0 && node.y < gridHeight;
-            if (!isValidCoord(normalizedStartNode) || !isValidCoord(normalizedEndNode)) {
-                 console.error(`[Worker] Coordonnées invalides pour Agent ${agentId} - Start: (${normalizedStartNode.x}, ${normalizedStartNode.y}), End: (${normalizedEndNode.x}, ${normalizedEndNode.y}). Limites grille: ${gridWidth}x${gridHeight}`);
+            if (!isValidCoord(finalStartNode) || !isValidCoord(finalEndNode)) {
+                 console.error(`[Worker] Coordonnées invalides pour Agent ${agentId} - Start: (${finalStartNode.x}, ${finalStartNode.y}), End: (${finalEndNode.x}, ${finalEndNode.y}). Limites grille: ${gridWidth}x${gridHeight}`);
                  self.postMessage({ type: 'pathResult', data: { agentId: agentId, path: null, pathLengthWorld: 0 } });
                  return;
             }
 
             // Gérer le cas départ = arrivée
-            if (normalizedStartNode.x === normalizedEndNode.x && normalizedStartNode.y === normalizedEndNode.y) {
+            if (finalStartNode.x === finalEndNode.x && finalStartNode.y === finalEndNode.y) {
                  // --- Utiliser la hauteur correcte --- 
-                 const worldPathData = [gridToWorld(normalizedStartNode.x, normalizedStartNode.y, activeGraphHeight)];
+                 const worldPathData = [gridToWorld(finalStartNode.x, finalStartNode.y, activeGraphHeight)];
                  self.postMessage({ type: 'pathResult', data: { agentId, path: worldPathData, pathLengthWorld: 0 } });
                  return;
             }
@@ -448,7 +472,7 @@ self.onmessage = function(event) {
             try {
                 // --- Appel A* avec la bonne grille --- 
                 //console.time(`[Worker] A* Path ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
-                gridPath = findPathAStar(normalizedStartNode, normalizedEndNode, activeGridMap); // <-- Passer la grille active et les nœuds normalisés
+                gridPath = findPathAStar(finalStartNode, finalEndNode, activeGridMap); // <-- Passer la grille active et les nœuds normalisés
                 //console.timeEnd(`[Worker] A* Path ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'})`);
                 // --- FIN Appel A* --- 
 
@@ -465,7 +489,7 @@ self.onmessage = function(event) {
                         }
                         
                         // --- AJOUT: Stocker dans le cache ---
-                        pathCache.storePath(normalizedStartNode, normalizedEndNode, isVehicle, worldPathData, pathLengthWorld);
+                        pathCache.storePath(finalStartNode, finalEndNode, isVehicle, worldPathData, pathLengthWorld);
                         // --- FIN AJOUT ---
                     } else {
                          pathLengthWorld = 0;
@@ -477,7 +501,7 @@ self.onmessage = function(event) {
                 }
 
             } catch (e) {
-                console.error(`[Worker] Erreur dans findPathAStar pour Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}) (${normalizedStartNode.x},${normalizedStartNode.y})->(${normalizedEndNode.x},${normalizedEndNode.y}):`, e);
+                console.error(`[Worker] Erreur dans findPathAStar pour Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}) (${finalStartNode.x},${finalStartNode.y})->(${finalEndNode.x},${finalEndNode.y}):`, e);
                 worldPathData = null;
                 pathLengthWorld = 0;
             }
@@ -609,6 +633,32 @@ function isWalkable(x, y, gridMap) { // <-- Accepte gridMap
     if (!isValid(x, y)) return false;
     const index = y * gridWidth + x;
     return gridMap[index] === WALKABLE;
+}
+
+// --- Ajout: findNearestWalkableNode pour chercher un nœud walkable proche ---
+function findNearestWalkableNode(node, gridMap, maxRadius = 10) { // Augmenté de 5 à 10
+    if (isWalkable(node.x, node.y, gridMap)) {
+        return { x: node.x, y: node.y };
+    }
+    
+    // Recherche en spirale
+    for (let r = 1; r <= maxRadius; r++) {
+        for (let dx = -r; dx <= r; dx++) {
+            for (let dy = -r; dy <= r; dy++) {
+                // Ne vérifier que les nœuds sur le périmètre du carré
+                if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+                
+                const nx = Math.round(node.x + dx);
+                const ny = Math.round(node.y + dy);
+                
+                if (isWalkable(nx, ny, gridMap)) {
+                    return { x: nx, y: ny };
+                }
+            }
+        }
+    }
+    
+    return null; // Aucun nœud walkable trouvé
 }
 
 // --- getNeighbors (MODIFIÉ pour accepter la grille) ---

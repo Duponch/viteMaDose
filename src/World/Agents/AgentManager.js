@@ -1372,15 +1372,29 @@ export default class AgentManager {
                 const vehicleStates = [false, true]; // Toujours tester les deux pour maximiser la couverture
                 
                 // Créer des variantes de points de départ et d'arrivée pour augmenter la couverture du cache
-                const createVariants = (node, count = 3) => {
+                const createVariants = (node, count = 5) => { // Augmenté de 3 à 5 variantes
                     const variants = [{ x: node.x, y: node.y }]; // Point original
                     
                     // Créer des variantes avec de petits décalages
                     for (let i = 1; i < count; i++) {
+                        // Ajouter des variantes avec des décalages plus variés
+                        // Utiliser des multiples de 0.5 pour mieux couvrir les cas
                         variants.push({
-                            x: Math.floor(node.x) + (i * 0.25),
-                            y: Math.floor(node.y) + (i * 0.25)
+                            x: Math.floor(node.x) + (i * 0.5),
+                            y: Math.floor(node.y) + (i * 0.5)
                         });
+                        
+                        // Ajouter des variantes dans d'autres directions
+                        if (i <= 2) { // Limiter pour ne pas avoir trop de variantes
+                            variants.push({
+                                x: Math.floor(node.x) - (i * 0.5),
+                                y: Math.floor(node.y) + (i * 0.5)
+                            });
+                            variants.push({
+                                x: Math.floor(node.x) + (i * 0.5),
+                                y: Math.floor(node.y) - (i * 0.5)
+                            });
+                        }
                     }
                     return variants;
                 };
@@ -1412,8 +1426,9 @@ export default class AgentManager {
                                 })
                             );
                             
-                            // Chemin retour (travail → maison) - uniquement pour la première variante
-                            if (homeVariant === homeVariants[0] && workVariant === workVariants[0]) {
+                            // Chemin retour (travail → maison) - pour toutes les variantes
+                            // Modification: Générer plus de chemins retour
+                            if (useVehicle || homeVariant === homeVariants[0] || Math.random() < 0.5) {
                                 pathPromises.push(
                                     this._preheatSinglePath(
                                         agent.id, 

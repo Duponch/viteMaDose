@@ -601,7 +601,7 @@ export default class World {
 
             // Préchauffer le cache de chemins pour les trajets fréquents
             const preheatEnabled = this.cityManager.config.preheatPathCache !== false;
-            const preheatCount = this.cityManager.config.preheatPathCount || Math.min(50, Math.floor(maxAgents * 0.1));
+            const preheatCount = this.cityManager.config.preheatPathCount || 150; // Augmenté à 150 agents pour préchauffage
             
             if (preheatEnabled && this.agentManager) {
                 //console.log(`World: Démarrage du préchauffage du cache pour ${preheatCount} agents...`);
