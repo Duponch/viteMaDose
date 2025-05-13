@@ -573,7 +573,6 @@ button {
     align-items: center;
     margin-bottom: 12px;
     padding-bottom: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 #agent-tooltip .agent-id {
@@ -592,7 +591,6 @@ button {
     gap: 8px;
 	margin-bottom: 12px;
     padding-bottom: 8px;
-	border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 #agent-tooltip .tooltip-section:first-child {
@@ -723,4 +721,52 @@ button {
 .control-buttons button:hover:not(:disabled) {
 	background-color: rgba(255, 255, 255, 0.6);
 	color: #000000;
+}
+
+/* Styles pour le panneau d'actions dans l'infobulle */
+#agent-tooltip .agent-actions-panel {
+    margin-top: 12px;
+    padding-top: 12px;
+}
+
+#agent-tooltip .agent-actions-panel h3 {
+    margin: 0 0 10px 0;
+    font-size: 16px;
+    text-align: center;
+    color: #a7c5eb;
+}
+
+#agent-tooltip .agent-actions-panel .button-container {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+#agent-tooltip .agent-actions-panel .treatment-btn {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 3px;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+#agent-tooltip .agent-actions-panel .palliative-btn {
+    background-color: #4CAF50;
+}
+
+#agent-tooltip .agent-actions-panel .classic-btn {
+    background-color: #2196F3;
+}
+
+#agent-tooltip .agent-actions-panel .natural-btn {
+    background-color: #FF9800;
+}
+
+#agent-tooltip .agent-actions-panel .treatment-btn:hover {
+    filter: brightness(1.2);
+}
+
+#agent-tooltip .agent-actions-panel .treatment-btn:active {
+    filter: brightness(0.8);
 }

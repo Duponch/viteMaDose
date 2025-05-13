@@ -873,6 +873,13 @@ export default class Experience extends EventTarget {
                     <span class="tooltip-value">${inventoryHTML}</span>
                 </div>
             </div>
+            <div class="agent-actions-panel">
+                <div class="button-container">
+                    <button class="treatment-btn palliative-btn" data-treatment-type="palliative" title="Augmente temporairement la santé du citoyen">Soin Palliatif</button>
+                    <button class="treatment-btn classic-btn" data-treatment-type="classic" title="Guérit une maladie mais augmente la dépendance chimique">Traitement Classique</button>
+                    <button class="treatment-btn natural-btn" data-treatment-type="natural" title="Guérit une maladie après 5 prises, sans effets secondaires">Traitement Naturel</button>
+                </div>
+            </div>
         `;
         if (this.tooltipElement.innerHTML !== content) {
             this.tooltipElement.innerHTML = content;

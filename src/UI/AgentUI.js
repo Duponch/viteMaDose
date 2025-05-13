@@ -9,102 +9,13 @@ export default class AgentUI {
         
         // Références DOM
         this.elements = {
-            actionsPanel: null,
             treatmentButtons: null
         };
         
         // Référence à l'agent actuellement sélectionné
         this.selectedAgent = null;
         
-        this._createDOM();
         this._setupEventListeners();
-    }
-    
-    /**
-     * Crée les éléments DOM pour l'interface
-     * @private
-     */
-    _createDOM() {
-        // Panneau d'actions pour l'agent
-        this.elements.actionsPanel = document.createElement('div');
-        this.elements.actionsPanel.className = 'agent-actions-panel';
-        this.elements.actionsPanel.dataset.uiInteractive = 'true';
-        this.elements.actionsPanel.style.position = 'absolute';
-        this.elements.actionsPanel.style.bottom = '10px';
-        this.elements.actionsPanel.style.left = '50%';
-        this.elements.actionsPanel.style.transform = 'translateX(-50%)';
-        this.elements.actionsPanel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-        this.elements.actionsPanel.style.color = 'white';
-        this.elements.actionsPanel.style.padding = '10px';
-        this.elements.actionsPanel.style.borderRadius = '5px';
-        this.elements.actionsPanel.style.display = 'none';
-        this.elements.actionsPanel.style.zIndex = '1000';
-        
-        const title = document.createElement('h3');
-        title.style.margin = '0 0 10px 0';
-        title.style.fontSize = '16px';
-        title.style.textAlign = 'center';
-        title.textContent = 'Actions pour le citoyen';
-        this.elements.actionsPanel.appendChild(title);
-        
-        // Conteneur de boutons
-        const buttonContainer = document.createElement('div');
-        buttonContainer.style.display = 'flex';
-        buttonContainer.style.justifyContent = 'center';
-        buttonContainer.style.gap = '10px';
-        
-        // Bouton pour traitement palliatif
-        const palliativeBtn = document.createElement('button');
-        palliativeBtn.className = 'treatment-btn palliative-btn';
-        palliativeBtn.textContent = 'Soin Palliatif';
-        palliativeBtn.dataset.treatmentType = 'palliative';
-        palliativeBtn.title = 'Augmente temporairement la santé du citoyen';
-        palliativeBtn.style.padding = '5px 10px';
-        palliativeBtn.style.backgroundColor = '#4CAF50';
-        palliativeBtn.style.border = 'none';
-        palliativeBtn.style.borderRadius = '3px';
-        palliativeBtn.style.color = 'white';
-        palliativeBtn.style.cursor = 'pointer';
-        
-        // Bouton pour traitement classique
-        const classicBtn = document.createElement('button');
-        classicBtn.className = 'treatment-btn classic-btn';
-        classicBtn.textContent = 'Traitement Classique';
-        classicBtn.dataset.treatmentType = 'classic';
-        classicBtn.title = 'Guérit une maladie mais augmente la dépendance chimique';
-        classicBtn.style.padding = '5px 10px';
-        classicBtn.style.backgroundColor = '#2196F3';
-        classicBtn.style.border = 'none';
-        classicBtn.style.borderRadius = '3px';
-        classicBtn.style.color = 'white';
-        classicBtn.style.cursor = 'pointer';
-        
-        // Bouton pour traitement naturel
-        const naturalBtn = document.createElement('button');
-        naturalBtn.className = 'treatment-btn natural-btn';
-        naturalBtn.textContent = 'Traitement Naturel';
-        naturalBtn.dataset.treatmentType = 'natural';
-        naturalBtn.title = 'Guérit une maladie après 5 prises, sans effets secondaires';
-        naturalBtn.style.padding = '5px 10px';
-        naturalBtn.style.backgroundColor = '#FF9800';
-        naturalBtn.style.border = 'none';
-        naturalBtn.style.borderRadius = '3px';
-        naturalBtn.style.color = 'white';
-        naturalBtn.style.cursor = 'pointer';
-        
-        // Ajouter les boutons au conteneur
-        buttonContainer.appendChild(palliativeBtn);
-        buttonContainer.appendChild(classicBtn);
-        buttonContainer.appendChild(naturalBtn);
-        
-        // Ajouter le conteneur de boutons au panneau
-        this.elements.actionsPanel.appendChild(buttonContainer);
-        
-        // Stocker les références aux boutons
-        this.elements.treatmentButtons = buttonContainer.querySelectorAll('.treatment-btn');
-        
-        // Ajouter à la page
-        document.body.appendChild(this.elements.actionsPanel);
     }
     
     /**
@@ -112,21 +23,22 @@ export default class AgentUI {
      * @private
      */
     _setupEventListeners() {
-        // Écouter les clics sur les boutons de traitement
-        this.elements.treatmentButtons.forEach(button => {
-            button.addEventListener('click', this._handleTreatmentClick.bind(this));
+        // Écouter les clics sur les boutons de traitement dans l'infobulle
+        document.addEventListener('click', (event) => {
+            const button = event.target.closest('.treatment-btn');
+            if (button) {
+                this._handleTreatmentClick(event);
+            }
         });
         
         // Écouter l'événement de sélection d'agent
         this.experience.addEventListener('agentselected', (e) => {
             this.selectedAgent = e.detail.agent;
-            this.showActionsPanel();
         });
         
         // Écouter l'événement de désélection d'agent
         this.experience.addEventListener('agentdeselected', () => {
             this.selectedAgent = null;
-            this.hideActionsPanel();
         });
     }
     
@@ -166,48 +78,24 @@ export default class AgentUI {
     }
     
     /**
-     * Ajoute un retour visuel au bouton après un clic
+     * Ajoute un retour visuel sur le bouton après un clic
      * @param {HTMLElement} button - Le bouton cliqué
      * @param {boolean} success - Si l'action a réussi
      * @private
      */
     _addButtonFeedback(button, success) {
-        // Sauvegarder la couleur d'origine
-        const originalColor = button.style.backgroundColor;
+        const originalBackground = button.style.backgroundColor;
+        const originalText = button.textContent;
         
-        // Changer la couleur selon le résultat
+        // Changer temporairement l'apparence du bouton
         button.style.backgroundColor = success ? '#4CAF50' : '#f44336';
+        button.textContent = success ? '✓ Succès' : '✗ Échec';
         
-        // Restaurer la couleur après 500ms
+        // Restaurer l'apparence après un délai
         setTimeout(() => {
-            button.style.backgroundColor = originalColor;
-        }, 500);
-    }
-    
-    /**
-     * Affiche le panneau d'actions pour l'agent
-     */
-    showActionsPanel() {
-        if (!this.elements.actionsPanel) return;
-        
-        // Mise à jour du titre avec l'ID de l'agent
-        const titleElement = this.elements.actionsPanel.querySelector('h3');
-        if (titleElement && this.selectedAgent) {
-            titleElement.textContent = `Actions pour ${this.selectedAgent.id}`;
-        }
-        
-        this.elements.actionsPanel.style.display = 'block';
-        this.agentActionsVisible = true;
-    }
-    
-    /**
-     * Cache le panneau d'actions
-     */
-    hideActionsPanel() {
-        if (!this.elements.actionsPanel) return;
-        
-        this.elements.actionsPanel.style.display = 'none';
-        this.agentActionsVisible = false;
+            button.style.backgroundColor = originalBackground;
+            button.textContent = originalText;
+        }, 1000);
     }
     
     /**
@@ -215,14 +103,7 @@ export default class AgentUI {
      */
     destroy() {
         // Supprimer les écouteurs d'événements
-        this.elements.treatmentButtons.forEach(button => {
-            button.removeEventListener('click', this._handleTreatmentClick);
-        });
-        
-        // Supprimer les éléments DOM
-        if (this.elements.actionsPanel && this.elements.actionsPanel.parentNode) {
-            this.elements.actionsPanel.parentNode.removeChild(this.elements.actionsPanel);
-        }
+        document.removeEventListener('click', this._handleTreatmentClick);
         
         // Nettoyer les références
         this.elements = null;
