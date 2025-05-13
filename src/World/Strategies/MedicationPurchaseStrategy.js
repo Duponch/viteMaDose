@@ -268,23 +268,31 @@ export default class MedicationPurchaseStrategy {
             return false;
         }
         
-        // Vérifier si l'agent a assez d'argent
-        if (citizenInfo.money < this.medicationPrice) return false;
+        // Calculer le nombre de médicaments à acheter (jusqu'à 10 maximum)
+        const maxMedications = 10;
+        const currentMedications = agent.inventory?.medications || 0;
+        const medicationsToBuy = Math.min(maxMedications - currentMedications, Math.floor(citizenInfo.money / this.medicationPrice));
         
-        // Déduire le prix du médicament
-        citizenInfo.money -= this.medicationPrice;
+        if (medicationsToBuy <= 0) {
+            console.warn(`Agent ${agent.id}: Pas assez d'argent pour acheter des médicaments ou inventaire plein.`);
+            return false;
+        }
+        
+        // Déduire le prix total des médicaments
+        const totalCost = medicationsToBuy * this.medicationPrice;
+        citizenInfo.money -= totalCost;
         
         // Ajouter l'argent au maire
         if (cityManager && cityManager.mayorMoney) {
-            cityManager.mayorMoney.addMoney(this.medicationPrice);
+            cityManager.mayorMoney.addMoney(totalCost);
         }
         
-        // Ajouter le médicament à l'inventaire
+        // Ajouter les médicaments à l'inventaire
         if (!agent.inventory) agent.inventory = {};
         if (!agent.inventory.medications) agent.inventory.medications = 0;
-        agent.inventory.medications++;
+        agent.inventory.medications += medicationsToBuy;
         
-        console.log(`Agent ${agent.id}: Achat de médicament réussi. Inventaire: ${agent.inventory.medications} médicament(s).`);
+        console.log(`Agent ${agent.id}: Achat de ${medicationsToBuy} médicament(s) réussi. Inventaire: ${agent.inventory.medications} médicament(s).`);
         
         return true;
     }
