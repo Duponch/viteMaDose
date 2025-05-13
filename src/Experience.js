@@ -48,10 +48,10 @@ export default class Experience extends EventTarget {
         this.world = new World(this);
         this.isDebugMode = false;
         this.timeUI = new TimeUI(this);
-        this.timeControlUI = new TimeControlUI(this);
-        this.agentStatsUI = new AgentStatsUI(this);
         this.weatherControlUI = new WeatherControlUI(this);
         this.environmentControlUI = new EnvironmentControlUI(this);
+        this.agentStatsUI = new AgentStatsUI(this);
+        this.timeControlUI = new TimeControlUI(this); // Déplacé après les autres UIs
         
         // Remplacer OrbitControls par ControlManager
         this.controlManager = new ControlManager(this);
@@ -1130,14 +1130,28 @@ export default class Experience extends EventTarget {
     toggleWeatherUI() {
         const weatherUI = document.querySelector('.weather-control-ui');
         if (weatherUI) {
-            weatherUI.style.display = weatherUI.style.display === 'none' ? 'block' : 'none';
+            const isVisible = weatherUI.style.display !== 'none';
+            weatherUI.style.display = isVisible ? 'none' : 'block';
+            if (this.weatherUI) {
+                this.weatherUI.isVisible = !isVisible;
+                this.dispatchEvent(new CustomEvent('weatheruichanged', {
+                    detail: { isVisible: !isVisible }
+                }));
+            }
         }
     }
 
     toggleEnvironmentUI() {
         const environmentUI = document.querySelector('.environment-control-ui');
         if (environmentUI) {
-            environmentUI.style.display = environmentUI.style.display === 'none' ? 'block' : 'none';
+            const isVisible = environmentUI.style.display !== 'none';
+            environmentUI.style.display = isVisible ? 'none' : 'block';
+            if (this.environmentUI) {
+                this.environmentUI.isVisible = !isVisible;
+                this.dispatchEvent(new CustomEvent('environmentuichanged', {
+                    detail: { isVisible: !isVisible }
+                }));
+            }
         }
     }
 

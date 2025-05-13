@@ -858,3 +858,40 @@ button {
 .debug-category.expanded .debug-category-button::after {
     content: '▼'; /* Flèche vers le bas quand étendu */
 }
+
+/* Style commun pour les boutons de contrôle */
+.time-controls button,
+.control-buttons button {
+    border-radius: 100px;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    width: 40px;
+    height: 40px;
+    font-size: 1em;
+    line-height: 1;
+    transition: all 0.2s ease;
+}
+
+.time-controls button:hover:not(:disabled),
+.control-buttons button:hover:not(:disabled) {
+    background-color: rgba(255, 255, 255, 0.6);
+    color: #000000;
+}
+
+/* Style pour les boutons actifs */
+.time-controls button.active,
+.control-buttons button.active {
+    background-color: rgba(0, 120, 150, 0.7) !important;
+    color: white !important;
+}
+
+.time-controls button.active:hover,
+.control-buttons button.active:hover {
+    background-color: rgba(0, 140, 170, 0.8) !important;
+    color: white !important;
+}
+
+/* Style spécifique pour le bouton de pause/play */
+#pause-play-button.paused {
+    background-color: rgba(0, 120, 150, 0.7);
+}

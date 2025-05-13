@@ -11,6 +11,12 @@ export default class WeatherControlUI {
     constructor(experience) {
         this.experience = experience;
         this.environment = this.experience.world.environment;
+        this.isVisible = true; // Par défaut, l'UI est visible
+        
+        // Émettre l'événement de visibilité initial
+        this.experience.dispatchEvent(new CustomEvent('weatheruichanged', {
+            detail: { isVisible: true }
+        }));
         
         // Attendre que l'environnement soit initialisé et que le système météo soit disponible
         this.checkWeatherSystemInterval = setInterval(() => {

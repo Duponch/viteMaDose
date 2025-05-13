@@ -29,9 +29,8 @@ export default class TimeControlUI {
         this.createButtons();
         this.setupEventListeners();
         this.updateButtonStates(); // Met à jour états initiaux
-        // L'appel initial à updateLayerButtonsAppearance est ok,
-        // même si le container est caché, il mettra juste le style des boutons.
         this.updateLayerButtonsAppearance();
+        this.syncUIButtonStates(); // Ajouter la synchronisation initiale
     }
 
     createButtons() {
@@ -49,6 +48,10 @@ export default class TimeControlUI {
         // --- Boutons Météo et Environnement ---
         this.elements.weatherUIButton = this._createButton('weather-ui-button', '🌤', "Afficher/Masquer l'UI météo");
         this.elements.environmentUIButton = this._createButton('environment-ui-button', '♣', "Afficher/Masquer l'UI environnement");
+        
+        // Ajouter la classe active aux boutons par défaut
+        this.elements.weatherUIButton.classList.add('active');
+        this.elements.environmentUIButton.classList.add('active');
 
         // --- Bouton Debug Principal (inchangé) ---
         this.elements.debugToggleButton = this._createButton('debug-toggle-button', '#', "Afficher/Masquer les contrôles Debug");
@@ -153,6 +156,9 @@ export default class TimeControlUI {
         this.container.appendChild(this.elements.decreaseButton);
         this.container.appendChild(this.elements.pausePlayButton);
         this.container.appendChild(this.elements.increaseButton);
+
+        // Synchroniser l'état initial des boutons
+        this.syncUIButtonStates();
     }
 
 	_createButton(id, textContent, title = '') {
@@ -178,15 +184,18 @@ export default class TimeControlUI {
         // --- Listeners Boutons Météo et Environnement ---
         this.elements.weatherUIButton.addEventListener('click', () => {
             this.experience.toggleWeatherUI();
+            this.syncUIButtonStates(); // Utiliser la synchronisation au lieu du toggle direct
         });
 
         this.elements.environmentUIButton.addEventListener('click', () => {
             this.experience.toggleEnvironmentUI();
+            this.syncUIButtonStates(); // Utiliser la synchronisation au lieu du toggle direct
         });
 
-        // --- Listener Bouton Debug Principal (inchangé) ---
+        // --- Listener Bouton Debug Principal ---
         this.elements.debugToggleButton.addEventListener('click', () => {
             this.experience.toggleDebugMode();
+            this.syncUIButtonStates(); // Utiliser la synchronisation au lieu du toggle direct
         });
 
         // --- Listeners Boutons de Catégories et Sous-Calques ---
@@ -305,7 +314,14 @@ export default class TimeControlUI {
         // Écouteur pour le bouton de carte
         this.elements.cityMapButton.addEventListener('click', () => {
             this.experience.world.cityManager.toggleCityMap();
+            this.syncUIButtonStates(); // Utiliser la synchronisation au lieu du toggle direct
         });
+
+        // Ajouter des écouteurs pour les changements d'état des UI
+        this.experience.addEventListener('weatheruichanged', () => this.syncUIButtonStates());
+        this.experience.addEventListener('environmentuichanged', () => this.syncUIButtonStates());
+        this.experience.addEventListener('debugmodechanged', () => this.syncUIButtonStates());
+        this.experience.addEventListener('citymapvisibilitychanged', () => this.syncUIButtonStates());
     }
 
     /**
@@ -454,6 +470,29 @@ export default class TimeControlUI {
         });
     }
 
+    // Nouvelle méthode pour synchroniser l'état des boutons avec l'état réel des UI
+    syncUIButtonStates() {
+        // Synchroniser le bouton de debug
+        this.elements.debugToggleButton.classList.toggle('active', this.experience.isDebugMode);
+
+        // Synchroniser le bouton de la carte
+        if (this.experience.world?.cityManager?.cityMapVisualizer) {
+            this.elements.cityMapButton.classList.toggle('active', this.experience.world.cityManager.cityMapVisualizer.isVisible);
+        }
+
+        // Synchroniser le bouton météo
+        const weatherUI = document.querySelector('.weather-control-ui');
+        if (weatherUI) {
+            this.elements.weatherUIButton.classList.toggle('active', weatherUI.style.display !== 'none');
+        }
+
+        // Synchroniser le bouton environnement
+        const environmentUI = document.querySelector('.environment-control-ui');
+        if (environmentUI) {
+            this.elements.environmentUIButton.classList.toggle('active', environmentUI.style.display !== 'none');
+        }
+    }
+
     destroy() {
         // --- Retirer listeners Temps & Debug ---
         this.time?.removeEventListener('paused', this.pauseHandler);
@@ -477,6 +516,13 @@ export default class TimeControlUI {
         this.container = null;
         this.debugLayersContainer = null;
         this.elements = {};
+
+        // Retirer les écouteurs
+        this.experience?.removeEventListener('weatheruichanged', this.syncUIButtonStates);
+        this.experience?.removeEventListener('environmentuichanged', this.syncUIButtonStates);
+        this.experience?.removeEventListener('debugmodechanged', this.syncUIButtonStates);
+        this.experience?.removeEventListener('citymapvisibilitychanged', this.syncUIButtonStates);
+
         console.log("TimeControlUI destroyed.");
     }
 }

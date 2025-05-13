@@ -354,8 +354,14 @@ export default class CityMapVisualizer {
         if (!this.isVisible) {
             this.isVisible = true;
             this.canvas.style.display = 'block';
-            this.startPositionUpdates(); // Démarrer les mises à jour uniquement quand visible
+            this.startPositionUpdates();
             this.drawMap();
+            // Émettre l'événement de changement de visibilité
+            if (this.experience) {
+                this.experience.dispatchEvent(new CustomEvent('citymapvisibilitychanged', {
+                    detail: { isVisible: true }
+                }));
+            }
         }
     }
 
@@ -363,6 +369,13 @@ export default class CityMapVisualizer {
         if (this.isVisible) {
             this.isVisible = false;
             this.canvas.style.display = 'none';
+            this.stopPositionUpdates();
+            // Émettre l'événement de changement de visibilité
+            if (this.experience) {
+                this.experience.dispatchEvent(new CustomEvent('citymapvisibilitychanged', {
+                    detail: { isVisible: false }
+                }));
+            }
             this.stopPositionUpdates(); // Arrêter les mises à jour quand masquée
         }
     }
