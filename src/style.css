@@ -532,7 +532,7 @@ button {
 
 .agent-id-link:hover,
 .resident-id-link:hover {
-    color: #ffffff; /* Blanc au survol */
+    color: #8ecfdf; /* Blanc au survol */
     background-color: rgba(167, 197, 235, 0.2); /* Léger fond bleu */
 }
 
@@ -564,6 +564,7 @@ button {
     align-items: center;
     margin-bottom: 12px;
     padding-bottom: 8px;
+	color: #8ecfdf;
 }
 
 #agent-tooltip .agent-id {
