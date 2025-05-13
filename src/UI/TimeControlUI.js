@@ -213,9 +213,33 @@ export default class TimeControlUI {
                         isVisible ? '▶' : '▼'
                     );
 
-                    // Si on ouvre le menu, on peut aussi basculer la visibilité
+                    // Si on ouvre le menu, on active la catégorie
+                    // Si on ferme le menu, on désactive la catégorie
                     if (!isVisible) {
                         this.experience.toggleAllSubLayersInCategory(categoryName);
+                    } else {
+                        // Désactiver la catégorie et tous ses sous-éléments
+                        const category = this.experience.debugLayerVisibility[categoryName];
+                        if (category) {
+                            category._visible = false;
+                            Object.keys(category).forEach(key => {
+                                if (!key.startsWith('_')) {
+                                    category[key] = false;
+                                }
+                            });
+                            // Mettre à jour la visibilité dans le monde 3D
+                            if (this.experience.world) {
+                                this.experience.world.setGroupVisibility(categoryName, false);
+                            }
+                            // Déclencher l'événement de mise à jour
+                            this.experience.dispatchEvent(new CustomEvent('debugcategoryvisibilitychanged', {
+                                detail: {
+                                    categoryName: categoryName,
+                                    isVisible: false,
+                                    allStates: { ...this.experience.debugLayerVisibility }
+                                }
+                            }));
+                        }
                     }
                 });
             }
