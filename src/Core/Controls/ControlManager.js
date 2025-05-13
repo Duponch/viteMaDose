@@ -15,6 +15,12 @@ export default class ControlManager extends EventTarget {
         // Mode actif par défaut
         this.activeMode = 'classic';
         
+        // Objet pour stocker l'état de la caméra lors des transitions
+        this.lastFpsState = {
+            position: null,
+            direction: null
+        };
+        
         // État initial
         this.classicControls.enable();
         this.fpsControls.disable();
@@ -36,13 +42,41 @@ export default class ControlManager extends EventTarget {
         if (mode === this.activeMode) return;
         
         if (mode === 'classic') {
+            // Sauvegarder la position et la direction actuelles de la caméra
+            const cameraPosition = new THREE.Vector3().copy(this.experience.camera.instance.position);
+            const cameraDirection = new THREE.Vector3();
+            this.experience.camera.instance.getWorldDirection(cameraDirection);
+            
+            // Stocker l'état pour une utilisation ultérieure
+            this.lastFpsState.position = cameraPosition.clone();
+            this.lastFpsState.direction = cameraDirection.clone();
+            
+            // Calculer un point cible devant la caméra
+            const targetPosition = new THREE.Vector3().copy(cameraPosition).add(
+                cameraDirection.multiplyScalar(10)
+            );
+            
+            // Désactiver les contrôles FPS
             this.fpsControls.disable();
+            
+            // Activer les contrôles classiques
             this.classicControls.enable();
+            
+            // Configurer les contrôles classiques pour qu'ils utilisent la même position et direction
+            this.classicControls.target.copy(targetPosition);
+            
             this.activeMode = 'classic';
             //console.log("Passage au mode de contrôle classique");
         } else if (mode === 'fps') {
+            // Récupérer la position et orientation actuelles de la caméra
+            const cameraPosition = new THREE.Vector3().copy(this.experience.camera.instance.position);
+            
+            // Désactiver les contrôles classiques
             this.classicControls.disable();
+            
+            // Activer les contrôles FPS (la caméra conserve sa position automatiquement)
             this.fpsControls.enable();
+            
             this.activeMode = 'fps';
             //console.log("Passage au mode de contrôle FPS");
         } else {

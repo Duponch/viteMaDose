@@ -86,6 +86,13 @@ export default class FpsControls {
     
     disable() {
         if (this.isActive) {
+            // Sauvegarder la position et l'orientation de la caméra pour une transition en douceur
+            if (this.experience.controlManager && this.experience.controlManager.lastFpsState) {
+                this.experience.controlManager.lastFpsState.position = this.camera.instance.position.clone();
+                this.experience.controlManager.lastFpsState.direction = new THREE.Vector3();
+                this.camera.instance.getWorldDirection(this.experience.controlManager.lastFpsState.direction);
+            }
+            
             // Retirer les écouteurs d'événements du document
             document.removeEventListener('keydown', this._boundKeyDown, true);
             document.removeEventListener('keyup', this._boundKeyUp, true);

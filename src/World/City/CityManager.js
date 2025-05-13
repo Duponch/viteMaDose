@@ -149,7 +149,7 @@ export default class CityManager {
             agentHeadBobAmplitude: 0.1,
             agentAnimationSpeedFactor: 6,
             agentLodDistance: 50, // Augmenter la distance à laquelle le LOD est activé pour les agents
-            maxAgents: 2500,
+            maxAgents: 500,
             // Capacités par défaut
             maxCitizensPerHouse: 5,
             maxCitizensPerBuilding: 10,
