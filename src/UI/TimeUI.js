@@ -97,7 +97,7 @@ export default class TimeUI {
 
         // Mettre à jour l'affichage de l'argent du maire
         const mayorMoney = this.experience.world?.cityManager?.mayorMoney?.getMoney() || 0;
-        this.mayorMoneyElement.innerHTML = `🏦 ${mayorMoney.toFixed(0)} €`;
+        this.mayorMoneyElement.innerHTML = `🏦 ${mayorMoney.toFixed(0)}`;
 
         const citizenManager = this.experience.world?.cityManager?.citizenManager;
         if (citizenManager && citizenManager.citizens.size > 0) {
