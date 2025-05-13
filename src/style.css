@@ -768,3 +768,110 @@ button {
     background-color: rgba(255, 255, 255, 0.87);
 	color: #000000!important;
 }
+
+/* Styles pour le mode debug */
+.debug-panel {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background-color: rgba(0, 0, 0, 0.85);
+    border-radius: 8px;
+    padding: 15px;
+    color: white;
+    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+    z-index: 1000;
+}
+
+.debug-panel h3 {
+    margin: 0 0 15px 0;
+    color: #a7c5eb;
+    font-size: 1.1em;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.debug-category {
+    margin-bottom: 15px;
+}
+
+.debug-category-title {
+    color: #a7c5eb;
+    font-size: 0.95em;
+    margin-bottom: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.debug-category-title:hover {
+    color: white;
+}
+
+.debug-sublayers {
+    margin-left: 20px;
+    margin-top: 8px;
+}
+
+.debug-sublayer {
+    margin-bottom: 6px;
+}
+
+.debug-sublayer-button {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: all 0.2s ease;
+    width: 100%;
+    text-align: left;
+}
+
+.debug-sublayer-button:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.debug-sublayer-button.active {
+    background-color: rgba(167, 197, 235, 0.3);
+    color: #a7c5eb;
+}
+
+/* Style pour les boutons de catégorie */
+.debug-category-button {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 4px;
+    color: white;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 0.95em;
+    transition: all 0.2s ease;
+    width: 100%;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.debug-category-button:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.debug-category-button.active {
+    background-color: rgba(167, 197, 235, 0.3);
+    color: #a7c5eb;
+}
+
+/* Indicateur de flèche pour les catégories */
+.debug-category-button::after {
+    content: '▼';
+    font-size: 0.8em;
+    transition: transform 0.2s ease;
+}
+
+.debug-category-button.collapsed::after {
+    transform: rotate(-90deg);
+}
