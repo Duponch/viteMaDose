@@ -2,7 +2,7 @@
  * Configuration des états par défaut des interfaces utilisateur
  */
 export const defaultUIStates = {
-    weather: false,      // WeatherControlUI
+    weather: false,       // WeatherControlUI - ouvert par défaut
     environment: false,  // EnvironmentControlUI
     agentStats: false,  // AgentStatsUI
     fps: false,        // FpsControlUI

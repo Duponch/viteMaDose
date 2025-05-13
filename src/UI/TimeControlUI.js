@@ -49,6 +49,10 @@ export default class TimeControlUI {
         this.elements.weatherUIButton = this._createButton('weather-ui-button', '🌤', "Afficher/Masquer l'UI météo");
         this.elements.environmentUIButton = this._createButton('environment-ui-button', '♣', "Afficher/Masquer l'UI environnement");
         
+        // Synchroniser les boutons avec l'état par défaut des UIs
+        this.elements.weatherUIButton.classList.toggle('active', this.experience.uiStates?.weather ?? false);
+        this.elements.environmentUIButton.classList.toggle('active', this.experience.uiStates?.environment ?? false);
+
         // --- Bouton Debug Principal (inchangé) ---
         this.elements.debugToggleButton = this._createButton('debug-toggle-button', '#', "Afficher/Masquer les contrôles Debug");
 
