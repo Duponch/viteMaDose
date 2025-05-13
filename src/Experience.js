@@ -226,63 +226,46 @@ export default class Experience extends EventTarget {
 
         // Si les dimensions ne sont pas valides (mesure a échoué)
         if (tooltipWidth <= 0 || tooltipHeight <= 0) {
-            // Tenter de positionner au point de base, MAIS ne pas forcer l'affichage
-            // car les étapes suivantes pourraient le cacher à nouveau.
-            // Le display final sera géré à la toute fin.
-            tooltipElement.style.left = `${Math.round(baseScreenX)}px`;
-            tooltipElement.style.top = `${Math.round(baseScreenY)}px`;
-            tooltipElement.style.visibility = 'visible'; // Rendre visible si on quitte ici
-            // NE PAS faire display = 'block' ici, car il faut vérifier les autres conditions
-            // Si l'élément était caché initialement, il le restera (ce qui est peut-être le problème)
-            // --> Correction: On doit le rendre visible si la projection est bonne
-            if (projectedPosition.z < 1 && initialDisplay === 'none') {
-                // On le rend visible uniquement s'il était caché ET que la projection est valide
-                // Mais on le laisse à la position de base car on n'a pas pu le clamper
-                tooltipElement.style.display = 'block';
-            } else if (projectedPosition.z < 1) {
-                // S'il n'était pas caché, on le laisse affiché
+            tooltipElement.style.visibility = 'visible';
+            if (projectedPosition.z < 1) {
                 tooltipElement.style.display = 'block';
             }
             return;
         }
 
-        // 5. Calculer la position désirée (au-dessus du point)
-        const desiredOffsetX = 15;
-        let desiredTopY = baseScreenY - tooltipHeight - 10; // Position 'top' désirée
-        let finalScreenX = baseScreenX + desiredOffsetX; // Calcul X
+        // 5. Calculer la position désirée
+        // Centrer verticalement
+        const finalScreenY = (this.sizes.height - tooltipHeight) / 2;
+        
+        // Positionner sur la moitié droite (3/4 de l'écran)
+        const finalScreenX = (this.sizes.width * 0.75) - (tooltipWidth / 2);
 
         // 6. Vérifier et contraindre les limites de l'écran
         const margin = 10;
 
-        // Clamp horizontal (inchangé)
-        if (finalScreenX + tooltipWidth > this.sizes.width - margin) {
-            finalScreenX = this.sizes.width - tooltipWidth - margin;
-        } else if (finalScreenX < margin) { // Utiliser else if pour éviter double ajustement
-            finalScreenX = margin;
+        // Clamp horizontal
+        let clampedX = finalScreenX;
+        if (clampedX + tooltipWidth > this.sizes.width - margin) {
+            clampedX = this.sizes.width - tooltipWidth - margin;
+        } else if (clampedX < margin) {
+            clampedX = margin;
         }
 
-        // Clamp vertical (logique corrigée)
-        let finalScreenY = desiredTopY;
-
-        if (finalScreenY < margin) { // Dépasse en haut ?
-            finalScreenY = baseScreenY + 20; // Essayer en dessous
-        }
-        // Vérifier si la position actuelle (au-dessus ou en dessous) dépasse en bas
-        if (finalScreenY + tooltipHeight > this.sizes.height - margin) {
-            finalScreenY = this.sizes.height - tooltipHeight - margin; // Coller en bas
-        }
-        // Re-vérifier le haut après avoir potentiellement collé en bas
-        if (finalScreenY < margin) {
-            finalScreenY = margin; // Coller en haut
+        // Clamp vertical
+        let clampedY = finalScreenY;
+        if (clampedY + tooltipHeight > this.sizes.height - margin) {
+            clampedY = this.sizes.height - tooltipHeight - margin;
+        } else if (clampedY < margin) {
+            clampedY = margin;
         }
 
         // 7. Appliquer la position finale
-        tooltipElement.style.left = `${Math.round(finalScreenX)}px`;
-        tooltipElement.style.top = `${Math.round(finalScreenY)}px`;
+        tooltipElement.style.left = `${Math.round(clampedX)}px`;
+        tooltipElement.style.top = `${Math.round(clampedY)}px`;
 
-        // 8. Assurer la visibilité et le bon 'display' FINALEMENT
-        tooltipElement.style.visibility = 'visible'; // Rendre visible
-        tooltipElement.style.display = 'block'; // Assurer qu'il est affiché
+        // 8. Assurer la visibilité et le bon 'display'
+        tooltipElement.style.visibility = 'visible';
+        tooltipElement.style.display = 'block';
     }
 
     // Crée le mesh utilisé pour surligner le bâtiment sélectionné
