@@ -39,6 +39,9 @@ export default class MedicationPurchaseStrategy {
         // Vérifier si l'agent a besoin d'un médicament
         if (!citizenInfo.needsMedication) return false;
 
+        // Vérifier si l'agent a déjà des médicaments dans son inventaire
+        if (agent.inventory && agent.inventory.medications && agent.inventory.medications > 0) return false;
+
         // Vérifier si l'agent a assez d'argent
         if (citizenInfo.money < this.medicationPrice) return false;
 
