@@ -119,7 +119,6 @@ export default class TimeControlUI {
                 subMenu.dataset.categoryName = categoryName;
                 subMenu.style.display = 'none'; // Caché par défaut
                 subMenu.style.marginLeft = '15px'; // Indentation
-                subMenu.style.display = 'flex';
                 subMenu.style.flexDirection = 'column';
                 subMenu.style.gap = '4px';
                 this.elements[`subMenu_${categoryName}`] = subMenu; // Stocker référence au sous-menu
@@ -194,29 +193,32 @@ export default class TimeControlUI {
         Object.keys(this.elements).forEach(key => {
             const element = this.elements[key];
 
-            // --- MODIFICATION Listener Catégorie ---
             if (key.startsWith('categoryBtn_')) {
                 const categoryName = element.dataset.categoryName;
-                const hasSubMenu = !!this.elements[`subMenu_${categoryName}`]; // Vérifier s'il y a des enfants
+                const subMenuElement = this.elements[`subMenu_${categoryName}`];
 
                 element.addEventListener('click', () => {
-                     if (!this.experience.isDebugMode) {
-                         console.log("Activez d'abord le mode Debug principal.");
-                         return;
-                     }
-                     if (hasSubMenu) {
-                         // NOUVEAU: Appeler la méthode pour basculer tous les enfants
-                         console.log(`[TimeControlUI] Clic sur catégorie ${categoryName}, appel de toggleAllSubLayersInCategory.`);
-                         this.experience.toggleAllSubLayersInCategory(categoryName);
-                     } else {
-                         // COMPORTEMENT ORIGINAL: Basculer la catégorie elle-même si pas d'enfants
-                         console.log(`[TimeControlUI] Clic sur catégorie ${categoryName}, appel de toggleCategoryVisibility.`);
-                         this.experience.toggleCategoryVisibility(categoryName);
-                     }
+                    if (!this.experience.isDebugMode) {
+                        console.log("Activez d'abord le mode Debug principal.");
+                        return;
+                    }
+
+                    // Toggle l'affichage du sous-menu
+                    const isVisible = subMenuElement.style.display === 'flex';
+                    subMenuElement.style.display = isVisible ? 'none' : 'flex';
+                    
+                    // Mettre à jour la flèche
+                    element.textContent = element.textContent.replace(
+                        isVisible ? '▼' : '▶',
+                        isVisible ? '▶' : '▼'
+                    );
+
+                    // Si on ouvre le menu, on peut aussi basculer la visibilité
+                    if (!isVisible) {
+                        this.experience.toggleAllSubLayersInCategory(categoryName);
+                    }
                 });
             }
-            // --- FIN MODIFICATION Listener Catégorie ---
-
             // Listener Sous-calque (inchangé)
             else if (key.startsWith('subLayerBtn_')) {
                 const categoryName = element.dataset.categoryName;
@@ -243,11 +245,7 @@ export default class TimeControlUI {
         this.debugModeChangeHandler = (event) => {
              const isEnabled = event.detail.isEnabled;
              this.debugLayersContainer.style.display = isEnabled ? 'flex' : 'none';
-			 for (const key in this.elements) {
-				if (key.startsWith('subMenu_')) {
-					this.elements[key].style.display = isEnabled ? 'flex' : 'none';
-				}
-			}
+             // Ne plus forcer l'affichage des sous-menus lors de l'activation du mode debug
              this.updateButtonStates(); // Met à jour l'état du bouton debug principal
              this.updateLayerButtonsAppearance(); // Met à jour l'apparence de tous les boutons de calques
         };
