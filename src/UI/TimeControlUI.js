@@ -212,19 +212,22 @@ export default class TimeControlUI {
                         return;
                     }
 
-                    // Toggle l'affichage du sous-menu
-                    const isVisible = subMenuElement.style.display === 'flex';
-                    subMenuElement.style.display = isVisible ? 'none' : 'flex';
-                    
-                    // Mettre à jour la flèche
-                    element.textContent = element.textContent.replace(
-                        isVisible ? '▼' : '▶',
-                        isVisible ? '▶' : '▼'
-                    );
+                    // Vérifier si le sous-menu existe avant d'accéder à ses propriétés
+                    if (subMenuElement) {
+                        // Toggle l'affichage du sous-menu
+                        const isVisible = subMenuElement.style.display === 'flex';
+                        subMenuElement.style.display = isVisible ? 'none' : 'flex';
+                        
+                        // Mettre à jour la flèche
+                        element.textContent = element.textContent.replace(
+                            isVisible ? '▼' : '▶',
+                            isVisible ? '▶' : '▼'
+                        );
+                    }
 
                     // Si on ouvre le menu, on active la catégorie
                     // Si on ferme le menu, on désactive la catégorie
-                    if (!isVisible) {
+                    if (!subMenuElement || !subMenuElement.style.display || subMenuElement.style.display === 'none') {
                         this.experience.toggleAllSubLayersInCategory(categoryName);
                     } else {
                         // Désactiver la catégorie et tous ses sous-éléments
