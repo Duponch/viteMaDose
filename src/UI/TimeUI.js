@@ -13,6 +13,7 @@ export default class TimeUI {
         this.container = document.body; // Ou un autre élément conteneur d'UI si tu en a un
         this.timeDateElement = null;
         this.statsElement = null;
+        this.mayorMoneyElement = null;
 
         this.createDisplayElements();
 
@@ -25,15 +26,23 @@ export default class TimeUI {
     }
 
     createDisplayElements() {
+        // Créer l'élément pour la date et l'heure
         this.timeDateElement = document.createElement('div');
-        this.timeDateElement.classList.add('time-date-display');
+        this.timeDateElement.id = 'time-date-display';
+        this.timeDateElement.className = 'time-date-display';
         this.container.appendChild(this.timeDateElement);
 
-        this.statsElement = document.createElement('div');
-        this.statsElement.classList.add('citizen-stats-display');
-        this.container.appendChild(this.statsElement);
+        // Créer l'élément pour l'argent du maire
+        this.mayorMoneyElement = document.createElement('div');
+        this.mayorMoneyElement.id = 'mayor-money-display';
+        this.mayorMoneyElement.className = 'time-date-display';
+        this.container.appendChild(this.mayorMoneyElement);
 
-        this.update();
+        // Créer l'élément pour les statistiques moyennes
+        this.statsElement = document.createElement('div');
+        this.statsElement.id = 'stats-display';
+        this.statsElement.className = 'citizen-stats-display';
+        this.container.appendChild(this.statsElement);
     }
 
     /**
@@ -72,8 +81,9 @@ export default class TimeUI {
 
     update() {
         if (!this.environment || !this.timeDateElement || !this.statsElement || !this.environment.isInitialized) {
-             if (this.timeDateElement) this.timeDateElement.textContent = "Chargement...";
-             if (this.statsElement) this.statsElement.textContent = "";
+            if (this.timeDateElement) this.timeDateElement.textContent = "Chargement...";
+            if (this.statsElement) this.statsElement.textContent = "";
+            if (this.mayorMoneyElement) this.mayorMoneyElement.textContent = "";
             return;
         }
 
@@ -84,6 +94,10 @@ export default class TimeUI {
         const dateStr = cal ? `${cal.jourSemaine} ${cal.jour.toString().padStart(2, '0')}/${cal.mois.toString().padStart(2, '0')}/${cal.annee}` : "Date inconnue";
 
         this.timeDateElement.innerHTML = `${heure} | ${dateStr}`;
+
+        // Mettre à jour l'affichage de l'argent du maire
+        const mayorMoney = this.experience.world?.cityManager?.mayorMoney?.getMoney() || 0;
+        this.mayorMoneyElement.innerHTML = `🏦 ${mayorMoney.toFixed(0)} €`;
 
         const citizenManager = this.experience.world?.cityManager?.citizenManager;
         if (citizenManager && citizenManager.citizens.size > 0) {
@@ -122,8 +136,12 @@ export default class TimeUI {
         if (this.statsElement && this.statsElement.parentNode) {
             this.statsElement.parentNode.removeChild(this.statsElement);
         }
+        if (this.mayorMoneyElement && this.mayorMoneyElement.parentNode) {
+            this.mayorMoneyElement.parentNode.removeChild(this.mayorMoneyElement);
+        }
         this.timeDateElement = null;
         this.statsElement = null;
+        this.mayorMoneyElement = null;
         this.environment = null;
         this.experience = null;
     }

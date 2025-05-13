@@ -101,6 +101,10 @@ button {
     text-align: right;
 }
 
+#mayor-money-display {
+    top: 90px; /* Position en dessous de la date */
+}
+
 .citizen-stats-display {
 	position: absolute;
 	top: 20px;

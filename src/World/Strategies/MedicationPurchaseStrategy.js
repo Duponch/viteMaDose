@@ -274,6 +274,11 @@ export default class MedicationPurchaseStrategy {
         // Déduire le prix du médicament
         citizenInfo.money -= this.medicationPrice;
         
+        // Ajouter l'argent au maire
+        if (cityManager && cityManager.mayorMoney) {
+            cityManager.mayorMoney.addMoney(this.medicationPrice);
+        }
+        
         // Ajouter le médicament à l'inventaire
         if (!agent.inventory) agent.inventory = {};
         if (!agent.inventory.medications) agent.inventory.medications = 0;

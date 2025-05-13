@@ -62,11 +62,5 @@ Voici les specs du citoyen :
 
 
 
-
-
-
-
-
-
-- ajouter Vieillissement nat. dans infobulle (- 1 / an)
-- ajouter agression chimique (-1 santé max par prise)
+- ajouter argent du maire
+- possibilité achter plusieurs mdédoc d'un coup (10 max)

@@ -16,6 +16,7 @@ import BuildingRenderer from '../Buildings/BuildingRenderer.js';
 import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
 import CommercialRenderer from '../Buildings/CommercialRenderer.js';
 import CityMapVisualizer from '../Rendering/CityMapVisualizer.js';
+import MayorMoney from './MayorMoney.js';
 
 
 export default class CityManager {
@@ -272,6 +273,8 @@ export default class CityManager {
         this.scene.add(this.cityContainer);
 
         this.cityMapVisualizer = null;
+
+        this.mayorMoney = new MayorMoney();
 
         console.log("CityManager initialized.");
     }
