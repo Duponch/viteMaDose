@@ -126,7 +126,7 @@ export default class BirdSystem {
             // Ajouter le groupe à la scène
             this.scene.add(this.birdGroup);
             
-            console.log(`Système d'oiseaux GPgPU initialisé avec ${MAX_BIRDS_COUNT} oiseaux potentiels`);
+            //console.log(`Système d'oiseaux GPgPU initialisé avec ${MAX_BIRDS_COUNT} oiseaux potentiels`);
         } catch (error) {
             console.error("Erreur lors de l'initialisation du système d'oiseaux:", error);
         }
@@ -469,7 +469,7 @@ export default class BirdSystem {
                 geometry.index.needsUpdate = true;
             }
             
-            console.log(`Densité d'oiseaux mise à jour: ${this._birdDensity.toFixed(2)}, ${visibleBirdsCount} oiseaux visibles`);
+            //console.log(`Densité d'oiseaux mise à jour: ${this._birdDensity.toFixed(2)}, ${visibleBirdsCount} oiseaux visibles`);
         }
     }
     

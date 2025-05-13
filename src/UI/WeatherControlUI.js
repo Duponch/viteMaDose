@@ -107,7 +107,7 @@ export default class WeatherControlUI {
             rainbow: this.container.querySelector('#value-rainbow')
         };
         
-        console.log("Interface de contrôle météo avec curseurs initialisée");
+        //console.log("Interface de contrôle météo avec curseurs initialisée");
     }
     
     /**
@@ -188,7 +188,7 @@ export default class WeatherControlUI {
                 const g = 1 - value;
                 const b = 1 - value;
                 const color = new THREE.Color(r, g, b);
-                console.log(`Mise à jour de la couleur des nuages: ${r}, ${g}, ${b}`);
+                //console.log(`Mise à jour de la couleur des nuages: ${r}, ${g}, ${b}`);
                 this.weatherSystem.cloudSystem.cloudColor = color;
                 break;
                 
@@ -241,7 +241,7 @@ export default class WeatherControlUI {
                     const g = 1 - value;
                     const b = 1 - value;
                     const color = new THREE.Color(r, g, b);
-                    console.log(`Réinitialisation de la couleur des nuages: ${r}, ${g}, ${b}`);
+                    //console.log(`Réinitialisation de la couleur des nuages: ${r}, ${g}, ${b}`);
                     this.weatherSystem.cloudSystem.cloudColor = color;
                     this.sliders.cloudColor.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;

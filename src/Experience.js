@@ -179,7 +179,7 @@ export default class Experience extends EventTarget {
         document.addEventListener('keydown', this._boundHandleTimeControls);
 
         this.createHighlightMesh(); // Créer le mesh de surbrillance
-        console.log("Experience initialisée. Mode debug:", this.isDebugMode);
+        //console.log("Experience initialisée. Mode debug:", this.isDebugMode);
 
         // Exposer l'instance pour un accès global
         window.experience = this;
@@ -340,7 +340,7 @@ export default class Experience extends EventTarget {
 
         // Vérifier si c'est un clic (durée courte, peu de mouvement)
         if (clickDuration <= this.MAX_CLICK_DURATION && distanceSq <= this.MAX_CLICK_DISTANCE_SQ) {
-            // console.log("Click détecté."); // Décommenter pour debug
+            // //console.log("Click détecté."); // Décommenter pour debug
             this.mouse.x = (event.clientX / this.sizes.width) * 2 - 1;
             this.mouse.y = -(event.clientY / this.sizes.height) * 2 + 1;
             this.raycaster.setFromCamera(this.mouse, this.camera.instance);
@@ -428,9 +428,9 @@ export default class Experience extends EventTarget {
                             this.deselectBuilding(); // Désélectionner bâtiment
                             this.selectAgent(clickedAgent); // Sélectionner l'agent DANS la voiture
                             clickedOnSomething = true;
-                            console.log(`Clic sur voiture (instance ${instanceId}), agent sélectionné: ${agentId}`);
+                            //console.log(`Clic sur voiture (instance ${instanceId}), agent sélectionné: ${agentId}`);
                         } else {
-                            console.log(`Clic sur voiture (instance ${instanceId}), mais aucun agent associé trouvé.`);
+                            //console.log(`Clic sur voiture (instance ${instanceId}), mais aucun agent associé trouvé.`);
                         }
                     }
                 }
@@ -461,12 +461,12 @@ export default class Experience extends EventTarget {
                     }
 
                     if (closestBuilding) {
-                        console.log(`Bâtiment cliqué: ID=${closestBuilding.id}, Type=${closestBuilding.type}`);
+                        //console.log(`Bâtiment cliqué: ID=${closestBuilding.id}, Type=${closestBuilding.type}`);
                         this.deselectAgent(); // Important: désélectionner agent
                         this.selectBuilding(closestBuilding, clickedMesh, instanceId);
                         clickedOnSomething = true;
                     } else {
-                        console.log(`Clic sur mesh (${clickedMesh.name}, instance ${instanceId}), mais impossible de lier à un BuildingInfo.`);
+                        //console.log(`Clic sur mesh (${clickedMesh.name}, instance ${instanceId}), mais impossible de lier à un BuildingInfo.`);
                     }
                 }
             }
@@ -490,7 +490,7 @@ export default class Experience extends EventTarget {
         if (clickedLink) {
             const buildingId = clickedLink.dataset.buildingId;
             if (buildingId && buildingId !== 'N/A') {
-                console.log(`Agent Tooltip: Clic sur l'ID bâtiment: ${buildingId}`);
+                //console.log(`Agent Tooltip: Clic sur l'ID bâtiment: ${buildingId}`);
                 const citizenManager = this.world?.cityManager?.citizenManager;
                 const instancedMeshManager = this.world?.cityManager?.contentGenerator?.instancedMeshManager;
 
@@ -541,7 +541,7 @@ export default class Experience extends EventTarget {
 
                 // 3. Sélectionner le bâtiment si trouvé
                 if (foundMesh && foundInstanceId !== -1) {
-                    console.log(`Bâtiment ${buildingId} trouvé : Mesh ${foundMesh.name}, Instance ${foundInstanceId}`);
+                    //console.log(`Bâtiment ${buildingId} trouvé : Mesh ${foundMesh.name}, Instance ${foundInstanceId}`);
                     // Désélectionner l'agent actuel (car on sélectionne un bâtiment)
                     this.deselectAgent();
                     // Sélectionner le bâtiment trouvé
@@ -571,11 +571,11 @@ export default class Experience extends EventTarget {
         if (clickedLink) {
             const agentId = clickedLink.dataset.agentId;
             if (agentId) {
-                // console.log(`Clic sur l'ID résident/employé: ${agentId}`); // Décommenter pour debug
+                // //console.log(`Clic sur l'ID résident/employé: ${agentId}`); // Décommenter pour debug
                 const agentManager = this.world?.agentManager;
                 const agentToSelect = agentManager?.agents.find(a => a.id === agentId);
                 if (agentToSelect) {
-                    // console.log(`Agent ${agentId} trouvé, sélection en cours...`); // Décommenter pour debug
+                    // //console.log(`Agent ${agentId} trouvé, sélection en cours...`); // Décommenter pour debug
                     this.deselectBuilding(); // Quitter la sélection bâtiment
                     this.selectAgent(agentToSelect); // Sélectionner l'agent cliqué
                     this.clickHandledByTooltip = true;
@@ -621,7 +621,7 @@ export default class Experience extends EventTarget {
 
         // Lancer une transition douce vers l'agent
         this.camera.moveToTarget(targetCamPos, targetLookAt, 500, agent);
-        console.log(`Agent ${agent.id} sélectionné, transition vers l'agent en cours...`);
+        //console.log(`Agent ${agent.id} sélectionné, transition vers l'agent en cours...`);
 
         // Déclencher un événement pour que l'interface utilisateur puisse réagir
         this.dispatchEvent(new CustomEvent('agentselected', { detail: { agent } }));
@@ -978,11 +978,11 @@ export default class Experience extends EventTarget {
         this.buildingTooltipElement.querySelectorAll('.toggle-building-occupant-list').forEach(button => {
             // --- Utiliser une fonction nommée pour faciliter le removeEventListener ---
             const handler = (event) => {
-                console.log("Building Tooltip: Toggle button clicked!");
+                //console.log("Building Tooltip: Toggle button clicked!");
                 event.stopPropagation();
                 // 1. Inverser l'état stocké
                 this.isBuildingOccupantListExpanded = !this.isBuildingOccupantListExpanded;
-                console.log(`Building Tooltip: Set isBuildingOccupantListExpanded to ${this.isBuildingOccupantListExpanded}`);
+                //console.log(`Building Tooltip: Set isBuildingOccupantListExpanded to ${this.isBuildingOccupantListExpanded}`);
                 // 2. Forcer la mise à jour du contenu (qui lira le nouvel état)
                 this.updateBuildingTooltipContent();
                 // 3. Mettre à jour la position (important car la hauteur change)
@@ -1009,7 +1009,7 @@ export default class Experience extends EventTarget {
                 const agentManager = this.world?.agentManager;
                 const agentToSelect = agentManager?.agents.find(a => a.id === agentId);
                 if (agentToSelect) {
-                    console.log(`Stats Panel: Clic sur l'ID agent: ${agentId}`);
+                    //console.log(`Stats Panel: Clic sur l'ID agent: ${agentId}`);
                     // Pas besoin de désélectionner bâtiment ici, car on est dans un panneau différent
                     // this.deselectBuilding();
                     this.selectAgent(agentToSelect); // Sélectionner l'agent cliqué
@@ -1070,7 +1070,7 @@ export default class Experience extends EventTarget {
     enableDebugMode() {
         if (!this.isDebugMode) {
             this.isDebugMode = true;
-            console.log("Debug Mode ENABLED");
+            //console.log("Debug Mode ENABLED");
             if (this.scene) this.scene.fog = null;
             if (this.world) this.world.setDebugMode(true);
 
@@ -1092,7 +1092,7 @@ export default class Experience extends EventTarget {
     disableDebugMode() {
         if (this.isDebugMode) {
             this.isDebugMode = false;
-            console.log("Debug Mode DISABLED");
+            //console.log("Debug Mode DISABLED");
             if (this.scene && this.originalFog) this.scene.fog = this.originalFog;
             if (this.world) this.world.setDebugMode(false);
             // Cacher tous les sous-menus lorsque le mode debug est désactivé (comportement actuel OK)
@@ -1107,7 +1107,7 @@ export default class Experience extends EventTarget {
 
     toggleDebugMode() {
         this.isDebugMode = !this.isDebugMode;
-        console.log(`Debug Mode global ${this.isDebugMode ? 'ENABLED' : 'DISABLED'}`);
+        //console.log(`Debug Mode global ${this.isDebugMode ? 'ENABLED' : 'DISABLED'}`);
 
         if (this.scene) {
             this.scene.fog = this.isDebugMode ? null : this.originalFog;
@@ -1157,7 +1157,7 @@ export default class Experience extends EventTarget {
     }
 
     toggleAllSubLayersInCategory(categoryName) {
-        console.log(`[Experience] Entrée dans toggleAllSubLayersInCategory pour ${categoryName}`);
+        //console.log(`[Experience] Entrée dans toggleAllSubLayersInCategory pour ${categoryName}`);
         if (!this.debugLayerVisibility.hasOwnProperty(categoryName)) {
             console.warn(`Experience.toggleAllSubLayersInCategory: Unknown category name '${categoryName}'`);
             return;
@@ -1173,10 +1173,10 @@ export default class Experience extends EventTarget {
 
         const shouldActivate = subLayerKeys.every(key => !category[key]);
         const targetState = shouldActivate;
-        console.log(`[Experience] Pour ${categoryName}, targetState déterminé : ${targetState}`);
+        //console.log(`[Experience] Pour ${categoryName}, targetState déterminé : ${targetState}`);
 
         category._visible = targetState;
-        console.log(`[Experience] Pour ${categoryName}, category._visible mis à : ${category._visible}`);
+        //console.log(`[Experience] Pour ${categoryName}, category._visible mis à : ${category._visible}`);
 
         let changesMade = false;
         subLayerKeys.forEach(subTypeName => {
@@ -1184,7 +1184,7 @@ export default class Experience extends EventTarget {
                 category[subTypeName] = targetState;
                 if (this.isDebugMode && this.world) {
                     if (category._visible) {
-                        console.log(`[Experience] Appel setSubLayerMeshVisibility(${categoryName}, ${subTypeName}, ${targetState})`);
+                        //console.log(`[Experience] Appel setSubLayerMeshVisibility(${categoryName}, ${subTypeName}, ${targetState})`);
                         this.world.setSubLayerMeshVisibility(categoryName, subTypeName, targetState);
                     }
                 }
@@ -1193,7 +1193,7 @@ export default class Experience extends EventTarget {
         });
 
         if (this.isDebugMode && this.world) {
-            console.log(`[Experience] Appel setGroupVisibility(${categoryName}, ${category._visible})`);
+            //console.log(`[Experience] Appel setGroupVisibility(${categoryName}, ${category._visible})`);
             this.world.setGroupVisibility(categoryName, category._visible);
         }
 
@@ -1226,7 +1226,7 @@ export default class Experience extends EventTarget {
         const newVisibility = !currentVisibility;
         category._visible = newVisibility;
 
-        console.log(`Debug Category '${categoryName}' visibility toggled to: ${newVisibility}`);
+        //console.log(`Debug Category '${categoryName}' visibility toggled to: ${newVisibility}`);
 
         // Appliquer la visibilité au groupe correspondant dans World
         if (this.isDebugMode && this.world) {
@@ -1257,14 +1257,14 @@ export default class Experience extends EventTarget {
         const newVisibility = !currentVisibility;
         category[subTypeName] = newVisibility;
 
-        console.log(`  Debug Sub-Layer '${categoryName}.${subTypeName}' visibility toggled to: ${newVisibility}`);
+        //console.log(`  Debug Sub-Layer '${categoryName}.${subTypeName}' visibility toggled to: ${newVisibility}`);
 
         let parentVisibilityChanged = false;
         let applyIndividualChildVisibility = true; // Flag pour savoir si on doit mettre à jour l'enfant seul
 
         // --- 1. Faut-il activer le parent ? ---
         if (newVisibility && !category._visible) {
-            console.log(`   Parent category '${categoryName}' was hidden, activating it.`);
+            //console.log(`   Parent category '${categoryName}' was hidden, activating it.`);
             category._visible = true;
             parentVisibilityChanged = true;
             applyIndividualChildVisibility = false; // La synchro globale s'en chargera
@@ -1272,7 +1272,7 @@ export default class Experience extends EventTarget {
                 this.world.setGroupVisibility(categoryName, true);
                 const subLayerKeys = Object.keys(category).filter(key => !key.startsWith('_'));
                 subLayerKeys.forEach(key => {
-                    console.log(`[Experience] Syncing child mesh visibility: ${categoryName}.${key} = ${category[key]}`);
+                    //console.log(`[Experience] Syncing child mesh visibility: ${categoryName}.${key} = ${category[key]}`);
                     this.world.setSubLayerMeshVisibility(categoryName, key, category[key]);
                 });
             }
@@ -1282,7 +1282,7 @@ export default class Experience extends EventTarget {
             const subLayerKeys = Object.keys(category).filter(key => !key.startsWith('_'));
             const allChildrenInactive = subLayerKeys.every(key => !category[key]);
             if (allChildrenInactive) {
-                console.log(`   Last active child of '${categoryName}' deactivated, hiding parent.`);
+                //console.log(`   Last active child of '${categoryName}' deactivated, hiding parent.`);
                 category._visible = false;
                 parentVisibilityChanged = true;
                 // Pas besoin de applyIndividualChildVisibility = false ici, car le groupe entier sera caché
@@ -1294,7 +1294,7 @@ export default class Experience extends EventTarget {
 
         // --- 3. Mettre à jour la visibilité 3D de l'enfant si le parent n'a pas changé OU n'a pas été activé ---
         if (applyIndividualChildVisibility && this.isDebugMode && category._visible && this.world) {
-            console.log(`[Experience] Applying individual child visibility: ${categoryName}.${subTypeName} = ${newVisibility}`);
+            //console.log(`[Experience] Applying individual child visibility: ${categoryName}.${subTypeName} = ${newVisibility}`);
             this.world.setSubLayerMeshVisibility(categoryName, subTypeName, newVisibility);
         }
 
@@ -1326,7 +1326,7 @@ export default class Experience extends EventTarget {
 
         // Inverser l'état de visibilité du calque
         this.debugLayerVisibility[layerName] = !this.debugLayerVisibility[layerName];
-        console.log(`  Debug Layer '${layerName}' visibility toggled to: ${this.debugLayerVisibility[layerName]}`);
+        //console.log(`  Debug Layer '${layerName}' visibility toggled to: ${this.debugLayerVisibility[layerName]}`);
 
         // Si le mode debug global est actif, mettre à jour la visibilité du groupe correspondant dans World
         if (this.isDebugMode && this.world) {
@@ -1411,7 +1411,7 @@ export default class Experience extends EventTarget {
 
     // Nettoie les ressources et écouteurs lors de la destruction
     destroy() {
-        console.log("Destruction de l'Experience...");
+        //console.log("Destruction de l'Experience...");
         
         // UI
         this.timeUI.destroy();
@@ -1525,7 +1525,7 @@ export default class Experience extends EventTarget {
         }
 
         instance = null;
-        console.log("Experience détruite.");
+        //console.log("Experience détruite.");
     }
 
     // Propriété pour accéder facilement au gestionnaire de voitures

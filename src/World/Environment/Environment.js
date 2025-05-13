@@ -183,7 +183,7 @@ export default class Environment {
     }
 
     async initialize() {
-        console.log("Environment: Initialisation asynchrone...");
+        //console.log("Environment: Initialisation asynchrone...");
         try {
             // --- Chargement Shaders --- (MODIFIÉ POUR NETLIFY)
             const [vertexResponse, fragmentResponse] = await Promise.all([
@@ -193,7 +193,7 @@ export default class Environment {
             if (!vertexResponse.ok || !fragmentResponse.ok) { throw new Error(`Erreur chargement shaders: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`); }
             this.vertexShaderCode = await vertexResponse.text();
             this.fragmentShaderCode = await fragmentResponse.text();
-            console.log("Environment: Shaders chargés.");
+            //console.log("Environment: Shaders chargés.");
 
             // --- Création Éléments Scène ---
             this.renderSkybox(); // Définit les rayons/distances
@@ -211,7 +211,7 @@ export default class Environment {
             this.waterSystem = new WaterSystem(this.experience, this);
             // ------------------------------------------------------
             
-            console.log("Environment: Initialisation terminée.");
+            //console.log("Environment: Initialisation terminée.");
         } catch (error) { console.error("Environment: Erreur init:", error); }
     }
 
@@ -249,7 +249,7 @@ export default class Environment {
         // Pas besoin de configurer les ombres ici
         // moonDistance est défini dans renderSkybox
         this.scene.add(this.moonLight);
-        console.log("Moonlight initialisée.");
+        //console.log("Moonlight initialisée.");
     }
     // ---------------------------------------------------
 
@@ -262,7 +262,7 @@ export default class Environment {
         this.moonDistance = this.skyboxRadius * 1.1;  // Distance de la lune (légèrement plus proche ?)
         // ----------------------------------------
 
-        console.log(`Skybox: Rayon=${this.skyboxRadius.toFixed(0)}, DistSoleil=${this.sunDistance.toFixed(0)}, DistLune=${this.moonDistance.toFixed(0)}`);
+        //console.log(`Skybox: Rayon=${this.skyboxRadius.toFixed(0)}, DistSoleil=${this.sunDistance.toFixed(0)}, DistLune=${this.moonDistance.toFixed(0)}`);
 
         const skyGeometry = new THREE.SphereGeometry(this.skyboxRadius, 32, 15);
         const skyMaterial = new THREE.ShaderMaterial({ /* ... (inchangé) ... */
@@ -278,7 +278,7 @@ export default class Environment {
 
         // createStarsPoints() et createMoonMesh() sont appelés DANS initialize() APRÈS renderSkybox()
 
-        console.log(`Skybox Shader créée.`);
+        //console.log(`Skybox Shader créée.`);
     }
 
     // --- NOUVELLE MÉTHODE : Création mesh lune ---
@@ -301,7 +301,7 @@ export default class Environment {
         this.moonMesh.renderOrder = 0; // Dessiné après skybox (-1) mais avant le reste (par défaut)
         this.moonMesh.visible = false; // Invisible initialement
         this.scene.add(this.moonMesh);
-        console.log(`Moon Mesh créé (taille: ${this.moonSize}).`);
+        //console.log(`Moon Mesh créé (taille: ${this.moonSize}).`);
     }
     // ---------------------------------------------
 
@@ -313,7 +313,7 @@ export default class Environment {
         const starsGeometry = new THREE.BufferGeometry(); starsGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3)); starsGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         const starsMaterial = new THREE.PointsMaterial({ size: 3, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: 0.0, depthWrite: false });
         this.starsMesh = new THREE.Points(starsGeometry, starsMaterial); this.scene.add(this.starsMesh);
-        console.log("Stars Points créés.");
+        //console.log("Stars Points créés.");
     }
 
     updateDayNightCycle() { // Suppression du paramètre deltaTime
@@ -488,11 +488,11 @@ export default class Environment {
         this.outerGroundMesh.receiveShadow = true;
         this.outerGroundMesh.name = "OuterGround_Hills_CircularGeom_FlatCenter";
         this.scene.add(this.outerGroundMesh);
-        console.log(`Sol extérieur (géométrie circulaire, centre plat) créé. Rayon: ${terrainVisibleRadius}, Rayon plat: ${flatRadius}`);
+        //console.log(`Sol extérieur (géométrie circulaire, centre plat) créé. Rayon: ${terrainVisibleRadius}, Rayon plat: ${flatRadius}`);
     }
 
     destroy() {
-        console.log("Nettoyage de l'environnement (Shader Skybox, Lune, Nuages Instanciés)...");
+        //console.log("Nettoyage de l'environnement (Shader Skybox, Lune, Nuages Instanciés)...");
         // Lumières, Skybox, Étoiles, Sol Extérieur, Lune (INCHANGÉ)
         if (this.sunLight) this.scene.remove(this.sunLight);
         if (this.ambientLight) this.scene.remove(this.ambientLight);

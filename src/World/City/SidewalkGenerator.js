@@ -164,11 +164,11 @@ export default class SidewalkGenerator {
         const cellSizeWorld = 1.0 / gridScale;
 
         if (sidewalkW <= 0 || !plots || plots.length === 0) {
-            console.log("SidewalkGenerator: Sidewalk width is 0 or no plots provided, skipping sidewalk generation.");
+            //console.log("SidewalkGenerator: Sidewalk width is 0 or no plots provided, skipping sidewalk generation.");
             return null;
         }
 
-        console.log("SidewalkGenerator: Generating sidewalk geometries using SNAPPED values...");
+        //console.log("SidewalkGenerator: Generating sidewalk geometries using SNAPPED values...");
         // Snapper la largeur du trottoir une seule fois
         const snappedSidewalkW = Math.round(sidewalkW / cellSizeWorld) * cellSizeWorld;
         if (snappedSidewalkW <= 0) {
@@ -258,12 +258,12 @@ export default class SidewalkGenerator {
         baseSidewalkGeom.dispose(); // Nettoyer la géométrie de base
 
         if (allSidewalkGeometries.length === 0) {
-            console.log("SidewalkGenerator: No sidewalk geometries were generated.");
+            //console.log("SidewalkGenerator: No sidewalk geometries were generated.");
             return null;
         }
 
         // --- Fusion des géométries ---
-        console.log(`SidewalkGenerator: Merging ${allSidewalkGeometries.length} geometries...`);
+        //console.log(`SidewalkGenerator: Merging ${allSidewalkGeometries.length} geometries...`);
         const mergedSidewalkGeometry = mergeGeometries(allSidewalkGeometries, false);
 
         // Nettoyer les géométries individuelles après la fusion (important!)
@@ -280,7 +280,7 @@ export default class SidewalkGenerator {
         sidewalkMesh.receiveShadow = true; // Mais ils en reçoivent
         sidewalkMesh.name = "Merged_Sidewalks"; // Nom pour débogage
 
-        console.log("SidewalkGenerator: Sidewalk mesh created successfully.");
+        //console.log("SidewalkGenerator: Sidewalk mesh created successfully.");
         return sidewalkMesh;
     }
 

@@ -43,7 +43,7 @@ export default class CrosswalkInstancer {
             return;
         }
 
-        console.log(`CrosswalkInstancer: Generating instance data for ${crosswalkInfos.length} crosswalks (${stripeCount} stripes each)...`);
+        //console.log(`CrosswalkInstancer: Generating instance data for ${crosswalkInfos.length} crosswalks (${stripeCount} stripes each)...`);
         let stripesAdded = 0;
 
         // Pré-calculer les valeurs constantes
@@ -106,7 +106,7 @@ export default class CrosswalkInstancer {
 			}
 		}); // Fin boucle crosswalkInfos
 
-        console.log(`CrosswalkInstancer: ${stripesAdded} crosswalk stripe instances added to data.`);
+        //console.log(`CrosswalkInstancer: ${stripesAdded} crosswalk stripe instances added to data.`);
     }
 
     /**

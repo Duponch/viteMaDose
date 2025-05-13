@@ -105,7 +105,7 @@ export default class FirTreeRenderer {
      * @returns {object|null} Asset data contenant les parties du sapin, ou null en cas d'erreur
      */
     generateProceduralTree(baseWidth = 4, baseHeight = 8, baseDepth = 4, userScale = 1) {
-        console.log("[FirTree Proc] Début de la génération du sapin (style original).");
+        //console.log("[FirTree Proc] Début de la génération du sapin (style original).");
         const sourceTreeGroup = new THREE.Group();
 
         // Matériaux (style original)
@@ -268,7 +268,7 @@ export default class FirTreeRenderer {
             centerOffset: new THREE.Vector3(0, finalSize.y / 2 * userScale, 0), // Appliquer userScale ici si la taille finale est attendue
             sizeAfterFitting: finalSize.clone() // Taille avant userScale
         };
-        console.log("[FirTree Proc] Asset de sapin (style original) généré:", treeAsset);
+        //console.log("[FirTree Proc] Asset de sapin (style original) généré:", treeAsset);
         return treeAsset;
     }
 

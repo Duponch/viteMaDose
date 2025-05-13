@@ -12,7 +12,7 @@ export default class CityLayoutGenerator {
         this.nextPlotId = 0;
         // Ajouter la taille de cellule de la grille
         this.gridCellSize = 1.0 / config.gridScale;
-        console.log("CityLayoutGenerator initialisé.");
+        //console.log("CityLayoutGenerator initialisé.");
     }
 
     // Nouvelle méthode utilitaire pour snapper les dimensions
@@ -56,7 +56,7 @@ export default class CityLayoutGenerator {
         // Collecter les parcelles feuilles finales et leur assigner un type de zone
         this.collectLeafPlots(this.rootPlot);
 
-        console.log(`Layout terminé: ${this.leafPlots.length} parcelles finales utilisables générées.`);
+        //console.log(`Layout terminé: ${this.leafPlots.length} parcelles finales utilisables générées.`);
         return this.leafPlots; // Retourne seulement les feuilles utilisables
     }
 

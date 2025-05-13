@@ -64,7 +64,7 @@ export default class LampPostManager {
             // Centre verticalement le cône
             this.lampPostConeGeometry.translate(0, coneHeight / 2 - 2.5, 0);
             this.lampPostConeGeometry.computeBoundingBox();
-            console.log(`Géométrie du cône lumière créée (H: ${coneHeight.toFixed(1)}, R_bas: ${coneRadiusBottom})`);
+            //console.log(`Géométrie du cône lumière créée (H: ${coneHeight.toFixed(1)}, R_bas: ${coneRadiusBottom})`);
         } else {
             console.error("Hauteur du cône calculée négative ou nulle. Impossible de créer la géométrie du cône.");
             this.lampPostConeGeometry = null;
@@ -125,7 +125,7 @@ export default class LampPostManager {
         const spacing = this.config.lampPostSpacing || 20;
         const lampData = [];
         const sidewalkH = this.config.sidewalkHeight || 0.2;
-        console.log(`Ajout des lampadaires avec espacement ${spacing} et orientation corrigée...`);
+        //console.log(`Ajout des lampadaires avec espacement ${spacing} et orientation corrigée...`);
 
         const positionMap = new Map();
         const addLampData = (x, z, angleY) => {
@@ -169,10 +169,10 @@ export default class LampPostManager {
         });
 
         if (lampData.length === 0) {
-            console.log("Aucune position de lampadaire générée.");
+            //console.log("Aucune position de lampadaire générée.");
             return;
         }
-        console.log(`${lampData.length} lampadaires uniques à créer.`);
+        //console.log(`${lampData.length} lampadaires uniques à créer.`);
         this.createLampPostInstancedMeshes(lampData);
     }
 
@@ -193,7 +193,7 @@ export default class LampPostManager {
         }
         const count = lampData.length;
         if (count === 0) return;
-        console.log(`Création des InstancedMesh pour ${count} lampadaires...`);
+        //console.log(`Création des InstancedMesh pour ${count} lampadaires...`);
 
         const greyInstancedMesh = new THREE.InstancedMesh(greyGeometry, greyMaterial, count);
         greyInstancedMesh.name = "LampPosts_GreyParts_Instanced";
@@ -262,7 +262,7 @@ export default class LampPostManager {
             if (coneInstancedMesh) {
                 this.cityContainer.add(coneInstancedMesh);
             }
-            console.log("InstancedMesh des lampadaires ajoutés au container.");
+            //console.log("InstancedMesh des lampadaires ajoutés au container.");
         }
 
         this.lampPostMeshes.grey = greyInstancedMesh;

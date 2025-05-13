@@ -38,7 +38,7 @@ export default class WeatherSystem {
         
         // Configuration du debug
         if (this.debug && this.debug.active) {
-            console.log('Initialisation de l\'interface de débogage météo');
+            //console.log('Initialisation de l\'interface de débogage météo');
             this.debugFolder = this.debug.ui.addFolder('Météo');
             
             // Ajouter un contrôle simple pour vérifier que l'interface fonctionne
@@ -147,7 +147,7 @@ export default class WeatherSystem {
             }
         };
         
-        console.log("Système météorologique initialisé");
+        //console.log("Système météorologique initialisé");
     }
     
     /**
@@ -166,7 +166,7 @@ export default class WeatherSystem {
         
         // Vérifier si on peut changer la météo (durée minimale)
         if (now - this.lastWeatherChangeTime < this.minWeatherDuration && !instantTransition) {
-            console.log("Trop tôt pour changer la météo");
+            //console.log("Trop tôt pour changer la météo");
             return;
         }
         
@@ -199,7 +199,7 @@ export default class WeatherSystem {
         this.transitionProgress = instantTransition ? 1.0 : 0.0;
         this.lastWeatherChangeTime = now;
         
-        console.log(`Changement météo vers: ${preset.name}${instantTransition ? ' (instantané)' : ' (avec transition)'}`);
+        //console.log(`Changement météo vers: ${preset.name}${instantTransition ? ' (instantané)' : ' (avec transition)'}`);
     }
     
     /**
@@ -343,6 +343,6 @@ export default class WeatherSystem {
         this.lightningEffect = null;
         this.rainbowEffect = null;
         
-        console.log("Système météorologique nettoyé");
+        //console.log("Système météorologique nettoyé");
     }
 } 

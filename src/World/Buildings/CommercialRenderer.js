@@ -225,7 +225,7 @@ export default class CommercialRenderer {
             })
         };
 
-        console.log("CommercialRenderer initialized with local materials.");
+        //console.log("CommercialRenderer initialized with local materials.");
     }
 
     /**
@@ -577,15 +577,6 @@ export default class CommercialRenderer {
         const awningPivotZ = scaledGroundFloorDepth / 2 - 0.05 * scale; // Position Z du pivot (légèrement en avant du mur)
         const awningAngle = Math.PI / 6; // Angle d'inclinaison
 
-        console.log("[CommercialRenderer] Positions de l'auvent:", {
-            baseHeight,
-            scaledGroundFloorHeight,
-            wallTopY,
-            awningY,
-            awningPivotZ,
-            awningAngle
-        });
-
         // Création des bandes de l'auvent
         for (let i = 0; i < numStripes; i++) {
             const stripeColor = i % 2 === 0 ? 0x008080 : 0xffffff; // Alternance Teal / Blanc
@@ -739,12 +730,12 @@ export default class CommercialRenderer {
             sizeAfterFitting: sizeAfterFitting
         };
 
-        console.log(`[Commercial Proc] Asset généré avec ${parts.length} parties. ID: ${asset.id}`);
+        //console.log(`[Commercial Proc] Asset généré avec ${parts.length} parties. ID: ${asset.id}`);
         return asset;
     }
 
     destroy() {
-        console.log("Destroying CommercialRenderer...");
+        //console.log("Destroying CommercialRenderer...");
         // Libérer les textures
         this.groundFloorTexture?.dispose();
         this.upperFloorTexture?.dispose();
@@ -755,6 +746,6 @@ export default class CommercialRenderer {
             material?.dispose();
         });
         this.localMaterials = {};
-        console.log("CommercialRenderer destroyed.");
+        //console.log("CommercialRenderer destroyed.");
     }
 } 

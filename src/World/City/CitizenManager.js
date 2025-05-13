@@ -28,7 +28,7 @@ export default class CitizenManager {
     initializeHealthSystem(experience) {
         if (!this.citizenHealth && experience) {
             this.citizenHealth = new CitizenHealth(experience);
-            console.log("CitizenManager: Système de santé initialisé");
+            //console.log("CitizenManager: Système de santé initialisé");
         }
     }
 
@@ -247,7 +247,7 @@ export default class CitizenManager {
         
         // Pour le débogage
         if (currentDay > 0 && (this._lastLoggedDay === undefined || currentDay !== this._lastLoggedDay)) {
-            console.log(`CitizenManager: Jour actuel du calendrier = ${currentDay}`);
+            //console.log(`CitizenManager: Jour actuel du calendrier = ${currentDay}`);
             this._lastLoggedDay = currentDay;
         }
         
@@ -283,7 +283,7 @@ export default class CitizenManager {
             const environment = this.citizenHealth?.experience.world?.environment;
             const prevMonthDays = environment?.getMonthDays?.() || 30;
             daysSinceLastSalary = (prevMonthDays - citizen.lastSalaryDay) + currentDay;
-            console.log(`Citoyen ${citizen.id}: Changement de mois détecté - jours depuis dernier salaire recalculés = ${daysSinceLastSalary}`);
+            //console.log(`Citoyen ${citizen.id}: Changement de mois détecté - jours depuis dernier salaire recalculés = ${daysSinceLastSalary}`);
         }
         
         if (daysSinceLastSalary >= 1) {
@@ -438,6 +438,6 @@ export default class CitizenManager {
         this.buildingInstances.clear();
         this.citizens.clear();
         this.nextBuildingInstanceId = 0;
-        console.log("CitizenManager reset.");
+        //console.log("CitizenManager reset.");
     }
 }

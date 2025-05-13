@@ -42,7 +42,7 @@ export default class FogEffect {
         // Initialiser notre brouillard si nécessaire
         this.initWeatherFog();
         
-        console.log(`Effet de brouillard initialisé, type original: ${this.originalFogType || 'aucun'}`);
+        //console.log(`Effet de brouillard initialisé, type original: ${this.originalFogType || 'aucun'}`);
     }
     
     /**

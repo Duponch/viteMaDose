@@ -71,7 +71,7 @@ export default class PlotContentGenerator {
         this.grassGroup = new THREE.Group();
         this.grassGroup.name = "GrassInstances";
 
-        console.log("PlotContentGenerator initialized (refactored).");
+        ////console.log("PlotContentGenerator initialized (refactored).");
     }
 
     /**
@@ -83,7 +83,7 @@ export default class PlotContentGenerator {
      * @param {{houseRenderer: HouseRenderer, buildingRenderer: BuildingRenderer, skyscraperRenderer: SkyscraperRenderer, commercialRenderer: CommercialRenderer}} renderers - Les renderers spécialisés.
      */
     generateContent(leafPlots, assetLoader, crosswalkInfos, cityManager, renderers) {
-        console.log("PlotContentGenerator: Starting content generation (refactored)...");
+        ////console.log("PlotContentGenerator: Starting content generation (refactored)...");
 
         // --- Réinitialisation ---
         this.resetManagers(); // Réinitialise les managers internes
@@ -215,7 +215,7 @@ export default class PlotContentGenerator {
         // Ajouter le groupe d'herbe à la scène
         this.experience.scene.add(this.grassGroup);
 
-        console.log("PlotContentGenerator: Content generation finished.");
+        ////console.log("PlotContentGenerator: Content generation finished.");
         return this.getGroups();
     }
     
@@ -369,7 +369,7 @@ export default class PlotContentGenerator {
         clearGroup(this.groundGroup);
         // buildingGroup est vidé par instancedMeshManager.reset()
 
-        console.log("PlotContentGenerator reset complete.");
+        ////console.log("PlotContentGenerator reset complete.");
     }
 
     /**

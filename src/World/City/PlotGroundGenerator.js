@@ -419,11 +419,11 @@ export default class PlotGroundGenerator {
      */
     generateGrounds(plots) {
         if (!plots || plots.length === 0) {
-            console.log("PlotGroundGenerator: No plots provided, skipping ground generation.");
+            //console.log("PlotGroundGenerator: No plots provided, skipping ground generation.");
             return null;
         }
 
-        console.log("PlotGroundGenerator: Generating plot ground meshes...");
+        //console.log("PlotGroundGenerator: Generating plot ground meshes...");
         const groundGroup = new THREE.Group();
         groundGroup.name = "PlotGrounds"; // Nom du groupe pour débogage
 
@@ -516,7 +516,7 @@ export default class PlotGroundGenerator {
             groundsCreated++;
         }); // Fin boucle plots
 
-        console.log(`PlotGroundGenerator: ${groundsCreated} ground meshes created and added to group.`);
+        //console.log(`PlotGroundGenerator: ${groundsCreated} ground meshes created and added to group.`);
         return groundGroup;
     }
 

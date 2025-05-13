@@ -386,7 +386,7 @@ export default class TreeRenderer {
      * @returns {object} Asset data contenant les parties de l'arbre
      */
     generateProceduralTree(baseWidth = 4, baseHeight = 8, baseDepth = 4, userScale = 1) {
-        console.log("[Tree Proc] Début de la génération de l'arbre procédural.");
+        //console.log("[Tree Proc] Début de la génération de l'arbre procédural.");
         const treeGroup = new THREE.Group();
 
         // Matériaux
@@ -417,14 +417,14 @@ export default class TreeRenderer {
         const trunk = this.createCurvedTrunk(trunkHeight, trunkRadiusBottom, trunkRadiusTop, trunkMaterial);
         trunk.position.y = trunkHeight / 2;
         treeGroup.add(trunk);
-        console.log("[Tree Proc] Tronc courbé créé et ajouté au groupe.");
+        //console.log("[Tree Proc] Tronc courbé créé et ajouté au groupe.");
         
         // Ajouter des nœuds au tronc
         /* const trunkKnots = this.createTrunkKnots(trunkHeight, trunkRadiusBottom, trunkMaterial);
         trunkKnots.forEach(knot => {
             treeGroup.add(knot);
         }); */
-        console.log("[Tree Proc] Nœuds ajoutés au tronc.");
+        //console.log("[Tree Proc] Nœuds ajoutés au tronc.");
 
         // Feuillage
         const foliageBaseY = trunkHeight;
@@ -456,7 +456,7 @@ export default class TreeRenderer {
         foliage3.position.x = -foliageWidthFactor * 0.35;
         foliage3.rotation.z = -Math.PI / 6;
         treeGroup.add(foliage3);
-        console.log("[Tree Proc] Feuillage créé et ajouté au groupe.");
+        //console.log("[Tree Proc] Feuillage créé et ajouté au groupe.");
 
         // Fusion et calcul de BBox
         const allGeoms = [];
@@ -490,7 +490,7 @@ export default class TreeRenderer {
                 materialMap.get(matName).geoms.push(clonedGeom);
             }
         });
-        console.log("[Tree Proc] Parcours du groupe terminé. Nombre de géométries collectées:", allGeoms.length);
+        //console.log("[Tree Proc] Parcours du groupe terminé. Nombre de géométries collectées:", allGeoms.length);
 
         if (allGeoms.length === 0) {
             console.error("[Tree Proc] Aucune géométrie valide trouvée après le parcours du groupe.");
@@ -508,7 +508,7 @@ export default class TreeRenderer {
             foliageMaterial.dispose();
             return null;
         }
-        console.log("[Tree Proc] Géométries fusionnées avec succès.");
+        //console.log("[Tree Proc] Géométries fusionnées avec succès.");
 
         mergedGeometry.computeBoundingBox();
         const bbox = mergedGeometry.boundingBox;
@@ -570,7 +570,7 @@ export default class TreeRenderer {
             centerOffset: new THREE.Vector3(0, finalSize.y / 2, 0),
             sizeAfterFitting: sizeAfterFitting
         };
-        console.log("[Tree Proc] Asset d'arbre généré avec succès:", treeAsset);
+        //console.log("[Tree Proc] Asset d'arbre généré avec succès:", treeAsset);
         return treeAsset;
     }
 

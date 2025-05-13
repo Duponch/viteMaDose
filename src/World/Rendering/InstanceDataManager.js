@@ -9,7 +9,7 @@ import * as THREE from 'three';
 export default class InstanceDataManager {
     constructor() {
         this.reset();
-        console.log("InstanceDataManager initialized.");
+        //console.log("InstanceDataManager initialized.");
     }
 
     /**

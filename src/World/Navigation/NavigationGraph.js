@@ -19,7 +19,7 @@ export default class NavigationGraph {
         this.sidewalkHeight = config.sidewalkHeight || 0.2;
         this.debugMaterialWalkable = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
         this.debugMaterialPath = new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 2 });
-        console.log("NavigationGraph: Initialisé.");
+        //console.log("NavigationGraph: Initialisé.");
 
         // --- AJOUT : Hauteur spécifique du graphe ---
         this.graphHeight = this.sidewalkHeight; // Valeur par défaut (utilisée par piétons)
@@ -29,7 +29,7 @@ export default class NavigationGraph {
     }
 
     buildGraph(plots, crosswalkInfos) {
-        console.log("NavigationGraph: Construction de la grille avec SharedArrayBuffer...");
+        //console.log("NavigationGraph: Construction de la grille avec SharedArrayBuffer...");
         
         if (!plots || plots.length === 0) {
             console.error("NavigationGraph: Aucune parcelle fournie pour la construction du graphe");
@@ -55,7 +55,7 @@ export default class NavigationGraph {
             maxZ = Math.max(maxZ, plotZ + plotDepth + roadWidth);
         });
 
-        console.log(`NavigationGraph: Limites de la grille - X: [${minX}, ${maxX}], Z: [${minZ}, ${maxZ}]`);
+        //console.log(`NavigationGraph: Limites de la grille - X: [${minX}, ${maxX}], Z: [${minZ}, ${maxZ}]`);
 
         // Ajouter une marge de sécurité
         const margin = Math.max(this.config.roadWidth || 6.0, this.config.sidewalkWidth || 2.0) * 2;
@@ -74,9 +74,9 @@ export default class NavigationGraph {
         this.offsetX = Math.floor(-minX * this.gridScale);
         this.offsetZ = Math.floor(-minZ * this.gridScale);
 
-        console.log(`NavigationGraph: Dimensions de la grille - ${this.gridWidth}x${this.gridHeight} cellules`);
-        console.log(`NavigationGraph: Offset - X: ${this.offsetX}, Z: ${this.offsetZ}`);
-        console.log(`NavigationGraph: Échelle de la grille - ${this.gridScale}`);
+        //console.log(`NavigationGraph: Dimensions de la grille - ${this.gridWidth}x${this.gridHeight} cellules`);
+        //console.log(`NavigationGraph: Offset - X: ${this.offsetX}, Z: ${this.offsetZ}`);
+        //console.log(`NavigationGraph: Échelle de la grille - ${this.gridScale}`);
 
         // Créer le SharedArrayBuffer pour la grille
         const bufferSize = this.gridWidth * this.gridHeight;
@@ -103,24 +103,24 @@ export default class NavigationGraph {
                 matrix.push(row);
             }
             this.grid = new PF.Grid(this.gridWidth, this.gridHeight, matrix);
-            console.log("NavigationGraph: Grille PF.Grid créée avec succès");
+            //console.log("NavigationGraph: Grille PF.Grid créée avec succès");
         } catch (error) {
             console.error("NavigationGraph: Erreur lors de la création du SharedArrayBuffer:", error);
             return;
         }
 
-        console.log(`NavigationGraph: Grille logique créée (${this.gridWidth}x${this.gridHeight})`);
-        console.log("NavigationGraph: Initialisation de la grille comme non marchable...");
+        //console.log(`NavigationGraph: Grille logique créée (${this.gridWidth}x${this.gridHeight})`);
+        //console.log("NavigationGraph: Initialisation de la grille comme non marchable...");
         this.gridWalkableMap.fill(NON_WALKABLE); // Initialise tout à non marchable
 
-        console.log("NavigationGraph: Initialisation non marchable terminée.");
+        //console.log("NavigationGraph: Initialisation non marchable terminée.");
         this.markSidewalksArea(plots, this.config.sidewalkWidth);
         this.markCrosswalksCorrected(crosswalkInfos);
-        console.log("NavigationGraph: Grille construite (avec zones marchables définies).");
+        //console.log("NavigationGraph: Grille construite (avec zones marchables définies).");
     }
 
 	markCrosswalksCorrected(crosswalkInfos) {
-        console.log("NavigationGraph: Marquage des passages piétons (centre snappé, dimensions snappées)...");
+        //console.log("NavigationGraph: Marquage des passages piétons (centre snappé, dimensions snappées)...");
         let markedCells = 0;
         const cellSizeWorld = 1.0 / this.gridScale;
 
@@ -203,11 +203,11 @@ export default class NavigationGraph {
             // L'appel à drawLineOnGrid n'est plus nécessaire avec cette méthode
             // markedCells += this.drawLineOnGrid(startGrid, endGrid, crosswalkGridThickness);
        });
-        console.log(`NavigationGraph: ${markedCells} cellules de passage piéton marquées (méthode centre).`);
+        //console.log(`NavigationGraph: ${markedCells} cellules de passage piéton marquées (méthode centre).`);
     }
 
 	markSidewalksArea(plots, sidewalkW) {
-        console.log("NavigationGraph: Marquage de la ZONE des trottoirs (origine snappée, dimensions snappées)...");
+        //console.log("NavigationGraph: Marquage de la ZONE des trottoirs (origine snappée, dimensions snappées)...");
         let markedCells = 0;
         const cellSizeWorld = 1.0 / this.gridScale;
 
@@ -287,7 +287,7 @@ export default class NavigationGraph {
                 }
             }
         });
-        console.log(`NavigationGraph: ${markedCells} cellules de ZONE de trottoir marquées (méthode centre).`);
+        //console.log(`NavigationGraph: ${markedCells} cellules de ZONE de trottoir marquées (méthode centre).`);
     }
 
 	worldToGrid(worldX, worldZ) {
@@ -299,14 +299,14 @@ export default class NavigationGraph {
         }
         
         // Ajouter des logs pour déboguer la conversion
-        //console.log(`NavigationGraph: Conversion monde->grille pour (${worldX}, ${worldZ})`);
-        //console.log(`NavigationGraph: Paramètres - gridScale: ${this.gridScale}, offsetX: ${this.offsetX}, offsetZ: ${this.offsetZ}`);
+        ////console.log(`NavigationGraph: Conversion monde->grille pour (${worldX}, ${worldZ})`);
+        ////console.log(`NavigationGraph: Paramètres - gridScale: ${this.gridScale}, offsetX: ${this.offsetX}, offsetZ: ${this.offsetZ}`);
 
         // Calculer les coordonnées grille sans clamping d'abord
         const rawGridX = Math.floor(worldX * this.gridScale + this.offsetX);
         const rawGridY = Math.floor(worldZ * this.gridScale + this.offsetZ);
 
-        //console.log(`NavigationGraph: Coordonnées grille brutes - (${rawGridX}, ${rawGridY})`);
+        ////console.log(`NavigationGraph: Coordonnées grille brutes - (${rawGridX}, ${rawGridY})`);
 
         // Vérifier si les coordonnées sont dans les limites avant le clamping
         if (rawGridX < 0 || rawGridX >= this.gridWidth || rawGridY < 0 || rawGridY >= this.gridHeight) {
@@ -471,7 +471,7 @@ export default class NavigationGraph {
     // --- Fonctions de Debug adaptées ---
     createDebugVisualization(targetGroup) {
          if (!this.gridWalkableMap || !targetGroup) return;
-        console.log("NavigationGraph: Création de la visualisation de la grille...");
+        //console.log("NavigationGraph: Création de la visualisation de la grille...");
         while(targetGroup.children.length > 0) {
              const child = targetGroup.children[0]; targetGroup.remove(child);
              if (child.geometry) child.geometry.dispose();
@@ -508,9 +508,11 @@ export default class NavigationGraph {
                  const mesh = new THREE.Mesh(mergedGeometry, this.debugMaterialWalkable);
                  mesh.name = "Debug_NavGrid_Walkable";
                  targetGroup.add(mesh);
-                 console.log(`NavigationGraph: Visualisation grille ajoutée (${walkableCount} cellules marchables).`);
+                 //console.log(`NavigationGraph: Visualisation grille ajoutée (${walkableCount} cellules marchables).`);
              } else { console.warn("NavigationGraph: Échec fusion géométries debug grille."); }
-        } else { console.log("NavigationGraph: Aucune cellule marchable à visualiser."); }
+        } else { 
+			//console.log("NavigationGraph: Aucune cellule marchable à visualiser."); 
+		}
     }
 
     // Méthode pour visualiser un chemin (inchangée conceptuellement, utilise gridToWorld)
@@ -531,7 +533,7 @@ export default class NavigationGraph {
     }
 
     destroy() {
-        console.log("NavigationGraph: Destruction...");
+        //console.log("NavigationGraph: Destruction...");
         // Rien à faire pour le SharedArrayBuffer explicitement ici,
         // mais assurez-vous qu'aucune référence n'est conservée ailleurs.
         this.gridBuffer = null;
@@ -550,6 +552,6 @@ export default class NavigationGraph {
                 this.grid.setWalkableAt(x, y, isWalkable);
             }
         }
-        console.log("NavigationGraph: Grille PF.Grid mise à jour");
+        //console.log("NavigationGraph: Grille PF.Grid mise à jour");
     }
 }

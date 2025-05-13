@@ -19,7 +19,7 @@ export default class ControlManager extends EventTarget {
         this.classicControls.enable();
         this.fpsControls.disable();
         
-        console.log("ControlManager initialisé avec mode", this.activeMode);
+        //console.log("ControlManager initialisé avec mode", this.activeMode);
     }
     
     update() {
@@ -39,12 +39,12 @@ export default class ControlManager extends EventTarget {
             this.fpsControls.disable();
             this.classicControls.enable();
             this.activeMode = 'classic';
-            console.log("Passage au mode de contrôle classique");
+            //console.log("Passage au mode de contrôle classique");
         } else if (mode === 'fps') {
             this.classicControls.disable();
             this.fpsControls.enable();
             this.activeMode = 'fps';
-            console.log("Passage au mode de contrôle FPS");
+            //console.log("Passage au mode de contrôle FPS");
         } else {
             console.warn(`Mode de contrôle inconnu: ${mode}`);
             return;

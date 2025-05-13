@@ -47,7 +47,7 @@ export default class LightningEffect {
         // Définir une fréquence maximale de déclenchement (limiter à 2 par seconde max)
         this.minTimeBetweenLightnings = 500; // ms
         
-        console.log("Effet d'éclairs initialisé");
+        //console.log("Effet d'éclairs initialisé");
     }
     
     /**
@@ -601,6 +601,6 @@ export default class LightningEffect {
         this.lightningColors = null;
         this.tempColor = null;
         
-        console.log("Effet d'éclairs nettoyé");
+        //console.log("Effet d'éclairs nettoyé");
     }
 }

@@ -36,7 +36,7 @@ export default class EnvironmentSystem {
             this.birdSystem
         ];
         
-        console.log("Système d'environnement initialisé");
+        //console.log("Système d'environnement initialisé");
     }
     
     /**
@@ -116,7 +116,7 @@ export default class EnvironmentSystem {
         this.effects = [];
         this.birdSystem = null;
         
-        console.log("Système d'environnement nettoyé");
+        //console.log("Système d'environnement nettoyé");
     }
     
     /**

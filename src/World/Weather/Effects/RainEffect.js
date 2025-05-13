@@ -49,7 +49,7 @@ export default class RainEffect {
         // Initialisation
         this.initialize();
         
-        console.log("Effet de pluie initialisé avec système de particules");
+        //console.log("Effet de pluie initialisé avec système de particules");
     }
     
     /**
@@ -716,7 +716,7 @@ export default class RainEffect {
         // Log pour débogage
         if ((oldIntensity <= 0.01 && this._intensity > 0.01) || 
             (oldIntensity > 0.01 && this._intensity <= 0.01)) {
-            console.log(`Pluie ${this._intensity > 0.01 ? 'activée' : 'désactivée'} avec intensité: ${this._intensity.toFixed(2)}`);
+            //console.log(`Pluie ${this._intensity > 0.01 ? 'activée' : 'désactivée'} avec intensité: ${this._intensity.toFixed(2)}`);
         }
     }
     

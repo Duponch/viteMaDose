@@ -55,7 +55,7 @@ export default class CommercialManager {
             this.plotsWithCommercial.add(selectedPlot.id);
         });
 
-        console.log(`CommercialManager: ${this.plotsWithCommercial.size} parcelles sélectionnées pour avoir un commerce`);
+        //console.log(`CommercialManager: ${this.plotsWithCommercial.size} parcelles sélectionnées pour avoir un commerce`);
     }
     
     /**

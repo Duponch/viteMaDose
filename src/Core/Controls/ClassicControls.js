@@ -15,7 +15,7 @@ export default class ClassicControls {
         // État initial
         this.isActive = true;
         
-        console.log("ClassicControls initialisés");
+        //console.log("ClassicControls initialisés");
     }
     
     update() {

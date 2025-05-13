@@ -118,8 +118,6 @@ export default class AgentStatsUI {
 		this.elements.requestingHomeChartCanvas = document.createElement('canvas');
 		this.elements.requestingHomeChartCanvas.id = 'agent-requesting-home-chart';
 		this.elements.statsPanel.appendChild(this.elements.requestingHomeChartCanvas);
-	
-		console.log("AgentStatsUI elements created (styles moved to CSS).");
 	}
 
     // --- NOUVEAU Gestionnaire MouseUp pour la fermeture du panneau ---
@@ -170,7 +168,7 @@ export default class AgentStatsUI {
 
         // 6. Si clic valide ET en dehors -> Fermer
         if (clickedOutside) {
-            console.log("Fermeture de l'infobulle des stats - clic en dehors détecté");
+            //console.log("Fermeture de l'infobulle des stats - clic en dehors détecté");
             this.hide();
         }
     }
@@ -343,7 +341,7 @@ export default class AgentStatsUI {
 
         // Inverser l'état stocké pour cette liste spécifique
         this.listToggleStates[targetId] = !this.listToggleStates[targetId];
-        console.log(`AgentStatsUI: Toggle state for ${targetId} set to ${this.listToggleStates[targetId]}`); // Debug
+        //console.log(`AgentStatsUI: Toggle state for ${targetId} set to ${this.listToggleStates[targetId]}`); // Debug
 
         // Forcer la mise à jour pour regénérer le HTML avec le nouvel état
         // Appeler update() mettra aussi à jour les graphiques, ce qui n'est pas idéal
@@ -433,7 +431,7 @@ export default class AgentStatsUI {
     }
 
     destroy() {
-        console.log("Destroying AgentStatsUI...");
+        //console.log("Destroying AgentStatsUI...");
         if (this.intervalId) clearInterval(this.intervalId);
         // Retirer les écouteurs globaux
         document.removeEventListener('mousedown', this._boundHandleMouseDown, true);
@@ -447,6 +445,6 @@ export default class AgentStatsUI {
         this.experience = null;
         this.container = null;
         this.elements = {};
-        console.log("AgentStatsUI destroyed.");
+        //console.log("AgentStatsUI destroyed.");
     }
 }

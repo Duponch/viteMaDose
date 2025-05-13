@@ -6,12 +6,12 @@ export default class CityMapVisualizer {
         this.leafPlots = leafPlots;
 
         // Log des parcelles reçues
-        console.log("CityMapVisualizer - Nombre de parcelles reçues:", leafPlots.length);
+        //console.log("CityMapVisualizer - Nombre de parcelles reçues:", leafPlots.length);
         const zoneCounts = {};
         leafPlots.forEach(plot => {
             zoneCounts[plot.zoneType] = (zoneCounts[plot.zoneType] || 0) + 1;
         });
-        console.log("CityMapVisualizer - Répartition des zones:", zoneCounts);
+        //console.log("CityMapVisualizer - Répartition des zones:", zoneCounts);
 
         this.canvas = document.createElement('canvas');
         this.ctx = this.canvas.getContext('2d');

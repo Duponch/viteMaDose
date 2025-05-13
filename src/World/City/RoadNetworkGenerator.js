@@ -13,7 +13,7 @@ export default class RoadNetworkGenerator {
 
     generateRoads(leafPlots) {
         this.reset();
-        console.log("Génération réseau routier et 1 passage piéton par segment, aligné bord trottoir (ajusté)...");
+        //console.log("Génération réseau routier et 1 passage piéton par segment, aligné bord trottoir (ajusté)...");
 
         if (!leafPlots || leafPlots.length === 0) { /* ... */ }
 
@@ -114,7 +114,7 @@ export default class RoadNetworkGenerator {
 		// --- Fusion lignes centrales (inchangé) ---
 		if (this.centerlineGeometries.length > 0) { const mergedCenterlineGeometry = mergeGeometries(this.centerlineGeometries, false); if (mergedCenterlineGeometry) { const centerlineMesh = new THREE.Mesh(mergedCenterlineGeometry, this.materials.centerlineMaterial); centerlineMesh.castShadow = false; centerlineMesh.receiveShadow = true; centerlineMesh.name = "Merged_Road_Centerlines"; this.roadGroup.add(centerlineMesh); } else { console.warn("Fusion lignes centrales échouée."); } this.centerlineGeometries.forEach(geom => geom.dispose()); this.centerlineGeometries = []; }
 
-        console.log(`Réseau routier généré: ${this.drawnRoads.size} segments. ${this.crosswalkInfos.length} passages piétons positionnés aux intersections (alignés + offset corrigé).`);
+        //console.log(`Réseau routier généré: ${this.drawnRoads.size} segments. ${this.crosswalkInfos.length} passages piétons positionnés aux intersections (alignés + offset corrigé).`);
         return { roadGroup: this.roadGroup, crosswalkInfos: this.crosswalkInfos };
     }
 

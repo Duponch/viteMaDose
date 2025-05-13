@@ -44,7 +44,7 @@ export default class CityAssetLoader {
         this.treeRenderer = new TreeRenderer(config, materials);
         this.firTreeRenderer = new FirTreeRenderer(config, materials);
         this.commercialRenderer = new CommercialRenderer(config, materials);
-        console.log("CityAssetLoader initialisé. Utilisation de HouseRenderer pour les maisons, BuildingRenderer pour les immeubles, SkyscraperRenderer pour les gratte-ciels et CommercialRenderer pour les commerces.");
+        //console.log("CityAssetLoader initialisé. Utilisation de HouseRenderer pour les maisons, BuildingRenderer pour les immeubles, SkyscraperRenderer pour les gratte-ciels et CommercialRenderer pour les commerces.");
     }
 
     // ----- getRandomAssetData -----
@@ -80,13 +80,13 @@ export default class CityAssetLoader {
     // ----- loadAssets -----
     // ----- loadAssets -----
     async loadAssets() {
-        console.log("Chargement des assets (maisons via HouseRenderer, immeubles via BuildingRenderer, gratte-ciels via SkyscraperRenderer, etc.)..."); //
+        //console.log("Chargement des assets (maisons via HouseRenderer, immeubles via BuildingRenderer, gratte-ciels via SkyscraperRenderer, etc.)..."); //
         this.reset(); //
 
         // Fonction interne createLoadPromises mise à jour pour gérer les types procéduraux.
         const createLoadPromises = (assetConfigs, dir, type, width, height, depth) => { //
             if (type === 'house') { // Keep original logic for house
-                console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`); //
+                //console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`); //
                 return [ //
                     this.loadAssetModel(null, type, width, height, depth, 1.0, null) // Pass null for renderer hint
                         .catch(error => { //
@@ -95,7 +95,7 @@ export default class CityAssetLoader {
                         })
                 ];
             } else if (type === 'tree') { // Modification pour gérer les deux types d'arbres
-                console.log(`-> Préparation de la génération procédurale pour les types d'arbres (régulier et sapin)...`);
+                //console.log(`-> Préparation de la génération procédurale pour les types d'arbres (régulier et sapin)...`);
                 const treePromises = [
                     // Arbre régulier
                     this.loadAssetModel(null, type, width, height, depth, 1.0, 'regular')
@@ -112,7 +112,7 @@ export default class CityAssetLoader {
                 ];
                 return treePromises;
             } else if (type === 'skyscraper') { // *** NOUVELLE LOGIQUE POUR GRATTE-CIELS ***
-                 console.log(`-> Préparation de la génération procédurale pour les variants de gratte-ciels (7 à 11 étages)...`);
+                 //console.log(`-> Préparation de la génération procédurale pour les variants de gratte-ciels (7 à 11 étages)...`);
                  const promises = [];
                  const minFloors = 7;
                  const maxFloors = 11;
@@ -129,7 +129,7 @@ export default class CityAssetLoader {
                  }
                  return promises; // Retourne le tableau de promesses
             } else if (type === 'building') { // *** NEW LOGIC FOR BUILDINGS ***
-                console.log(`-> Préparation de la génération procédurale pour ${this.config.proceduralBuildingVariants ?? 10} variants d'immeubles (50/50)...`);
+                //console.log(`-> Préparation de la génération procédurale pour ${this.config.proceduralBuildingVariants ?? 10} variants d'immeubles (50/50)...`);
                 const promises = [];
                 const numVariants = this.config.proceduralBuildingVariants ?? 10; // Make it configurable? Default 10.
                 for (let i = 0; i < numVariants; i++) {
@@ -147,7 +147,7 @@ export default class CityAssetLoader {
             }
             if (type === 'industrial') { //
                 // Génération procédurale industrielle
-                console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`);
+                //console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`);
                 const asset = generateProceduralIndustrial(width, height, depth, {}); //
                 this.assets['industrial'] = [asset]; //
                 return [Promise.resolve(asset)]; //
@@ -242,7 +242,7 @@ export default class CityAssetLoader {
             this.assets.tree = treeResults.filter(r => r !== null); //
             this.assets.skyscraper = skyscraperResults.filter(r => r !== null); //
 
-            console.log(`Assets chargés: ${this.assets.house.length} maisons (procédurales), ${this.assets.building.length} immeubles (procéduraux), ${this.assets.industrial.length} usines, ${this.assets.park.length} parcs, ${this.assets.tree.length} arbres, ${this.assets.skyscraper.length} gratte-ciels.`); //
+            //console.log(`Assets chargés: ${this.assets.house.length} maisons (procédurales), ${this.assets.building.length} immeubles (procéduraux), ${this.assets.industrial.length} usines, ${this.assets.park.length} parcs, ${this.assets.tree.length} arbres, ${this.assets.skyscraper.length} gratte-ciels.`); //
             return this.assets; //
         } catch (error) { //
             console.error("Erreur durant le chargement groupé des assets:", error); //
@@ -279,7 +279,7 @@ export default class CityAssetLoader {
 
             // Check cache first (only for file paths)
             if (path && this.loadedAssets.has(modelIdBase)) {
-                console.log(`  - Asset '${modelIdBase}' déjà chargé, récupération depuis le cache.`);
+                //console.log(`  - Asset '${modelIdBase}' déjà chargé, récupération depuis le cache.`);
                 resolve(this.loadedAssets.get(modelIdBase));
                 return;
             }
@@ -287,7 +287,7 @@ export default class CityAssetLoader {
             // --- Procedural Generation ---
             if (path === null) {
                 let assetData = null;
-                console.log(`Attempting procedural generation for type: ${type} ${rendererTypeHint ? `(Hint: ${rendererTypeHint})` : ''}`);
+                //console.log(`Attempting procedural generation for type: ${type} ${rendererTypeHint ? `(Hint: ${rendererTypeHint})` : ''}`);
 
                 if (type === 'house') {
                     if (!this.houseRenderer) {
@@ -303,7 +303,7 @@ export default class CityAssetLoader {
                             assetData.procedural = true;
                             assetData.rendererType = 'HouseRenderer';
                             this.loadedAssets.set(finalModelId, assetData);
-                            console.log(`  - Generated procedural house asset '${finalModelId}'`);
+                            //console.log(`  - Generated procedural house asset '${finalModelId}'`);
                             resolve(assetData);
                         } else {
                             console.warn("Procedural generation for house returned null.");
@@ -318,7 +318,7 @@ export default class CityAssetLoader {
                     const useNewRenderer = rendererTypeHint === 'new'; // Use the hint
                     const renderer = useNewRenderer ? this.newBuildingRenderer : this.buildingRenderer;
                     const rendererName = useNewRenderer ? 'NewBuildingRenderer' : 'BuildingRenderer';
-                    // console.log(`Generating procedural building using ${rendererName}...`); // Log less verbose
+                    // //console.log(`Generating procedural building using ${rendererName}...`); // Log less verbose
 
                     if (!renderer) {
                         console.error(`Renderer (${rendererName}) not initialized for type 'building'.`);
@@ -335,7 +335,7 @@ export default class CityAssetLoader {
                             assetData.procedural = true;
                             assetData.rendererType = rendererName; // Store which renderer was used
                             this.loadedAssets.set(finalModelId, assetData); // Cache it
-                            console.log(`  - Generated procedural building asset '${finalModelId}'`);
+                            //console.log(`  - Generated procedural building asset '${finalModelId}'`);
                             resolve(assetData); // Resolve with the generated asset
                         } else {
                             console.warn(`Procedural generation for building using ${rendererName} returned null.`);
@@ -385,7 +385,7 @@ export default class CityAssetLoader {
 							assetData.rendererType = rendererName;
 							assetData.numFloors = numFloors; // Assurer que numFloors est bien dans l'asset
 							this.loadedAssets.set(finalModelId, assetData); // Cache l'asset
-							console.log(`  - Generated procedural skyscraper asset '${finalModelId}' (${numFloors} floors) using ${rendererName}`);
+							//console.log(`  - Generated procedural skyscraper asset '${finalModelId}' (${numFloors} floors) using ${rendererName}`);
 							resolve(assetData); // Résout la promesse avec l'asset généré
 						} else {
 							console.warn(`Procedural generation for skyscraper (${numFloors} floors) using ${rendererName} returned null.`);
@@ -422,7 +422,7 @@ export default class CityAssetLoader {
                             assetData.treeType = isFirTree ? 'fir' : 'regular';
                             
                             this.loadedAssets.set(finalModelId, assetData);
-                            console.log(`  - Generated procedural ${isFirTree ? 'fir tree' : 'regular tree'} asset '${finalModelId}'`);
+                            //console.log(`  - Generated procedural ${isFirTree ? 'fir tree' : 'regular tree'} asset '${finalModelId}'`);
                             resolve(assetData);
                         } else {
                             console.warn(`Procedural generation for ${isFirTree ? 'fir tree' : 'regular tree'} returned null.`);
@@ -442,7 +442,7 @@ export default class CityAssetLoader {
                             assetData.procedural = true;
                             assetData.rendererType = 'IndustrialRenderer';
                             this.loadedAssets.set(finalModelId, assetData);
-                            console.log(`  - Generated procedural industrial asset '${finalModelId}'`);
+                            //console.log(`  - Generated procedural industrial asset '${finalModelId}'`);
                             resolve(assetData);
                         } else {
                             console.warn("Procedural generation for industrial returned null.");
@@ -583,7 +583,7 @@ export default class CityAssetLoader {
 
     // ----- disposeAssets -----
     disposeAssets() {
-        console.log("Disposition des assets chargés (traitement des assets procéduraux)...");
+        //console.log("Disposition des assets chargés (traitement des assets procéduraux)...");
         let disposedGeometries = 0;
         let disposedMaterials = 0;
         Object.keys(this.assets).forEach(type => {
@@ -613,7 +613,7 @@ export default class CityAssetLoader {
             this.assets[type] = [];
         });
         if (disposedGeometries > 0 || disposedMaterials > 0) {
-            console.log(`  - ${disposedGeometries} géométries et ${disposedMaterials} matériaux disposés.`);
+            //console.log(`  - ${disposedGeometries} géométries et ${disposedMaterials} matériaux disposés.`);
         }
         this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [], crosswalk: [], commercial: [] };
     }

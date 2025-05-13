@@ -33,7 +33,7 @@ export default class TreePlacementStrategy extends IZonePlacementStrategy {
      * @param {InstanceDataManager} instanceDataManager - Pour enregistrer les matrices des arbres.
      */
     placeTrees(plots, assetLoader, instanceDataManager) {
-        console.log("TreePlacementStrategy: Placing trees...");
+        //console.log("TreePlacementStrategy: Placing trees...");
         // Vérifier si des assets d'arbres sont chargés
         if (!assetLoader || !assetLoader.assets.tree || assetLoader.assets.tree.length === 0) {
             console.warn("TreePlacementStrategy: No tree assets loaded, skipping tree placement.");
@@ -93,7 +93,7 @@ export default class TreePlacementStrategy extends IZonePlacementStrategy {
             }
         }); // Fin boucle plots
 
-        console.log(`TreePlacementStrategy: ${treesPlaced} tree instances added.`);
+        //console.log(`TreePlacementStrategy: ${treesPlaced} tree instances added.`);
     }
 
     /**

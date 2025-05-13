@@ -306,7 +306,7 @@ export default class IndustrialRenderer {
      * @returns {object|null} L'asset généré ou null en cas d'erreur.
      */
     generateProceduralIndustrial(baseWidth, baseHeight, baseDepth, userScale = 1) {
-        console.log("Generating procedural industrial building asset...");
+        //console.log("Generating procedural industrial building asset...");
         const industrialGroup = new THREE.Group();
 
         // --- Récupérer Géométries et Matériaux ---
@@ -599,7 +599,7 @@ export default class IndustrialRenderer {
             centerOffset: new THREE.Vector3(0, globalSize.y / 2, 0), // Centre est maintenant à l'origine (0, moitié hauteur, 0)
             sizeAfterFitting: sizeAfterFitting
         };
-        console.log("Procedural industrial asset generated:", asset);
+        //console.log("Procedural industrial asset generated:", asset);
         return asset;
     }
 
@@ -618,7 +618,7 @@ export default class IndustrialRenderer {
         });
         this.baseIndustrialMaterials = {};
 
-        console.log("IndustrialRenderer reset.");
+        //console.log("IndustrialRenderer reset.");
         // Redéfinir après reset si nécessaire
         // this._defineBaseMaterials();
         // this._defineBaseGeometries();

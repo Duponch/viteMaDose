@@ -130,7 +130,7 @@ export default class CitizenHealth {
         // Vérifier si le citoyen a déjà cette maladie
         if (!citizenInfo.diseases.includes(diseaseName)) {
             citizenInfo.diseases.push(diseaseName);
-            console.log(`Citoyen ${citizenInfo.id}: Nouvelle maladie: ${diseaseName}`);
+            //console.log(`Citoyen ${citizenInfo.id}: Nouvelle maladie: ${diseaseName}`);
         }
     }
     
@@ -146,7 +146,7 @@ export default class CitizenHealth {
         // Vérifier si le citoyen a suffisamment d'argent
         /*const medicationCost = 10;
         if (citizenInfo.money < medicationCost) {
-            console.log(`Citoyen ${citizenInfo.id}: Pas assez d'argent pour acheter un médicament`);
+            //console.log(`Citoyen ${citizenInfo.id}: Pas assez d'argent pour acheter un médicament`);
             return false;
         }
 

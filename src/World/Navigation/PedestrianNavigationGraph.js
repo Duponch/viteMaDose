@@ -16,7 +16,7 @@ export default class PedestrianNavigationGraph extends NavigationGraph {
     }
 
     markSidewalksAndCrosswalks(plots, crosswalkInfos) {
-        console.log("PedestrianNavigationGraph: Marquage des trottoirs et passages piétons...");
+        //console.log("PedestrianNavigationGraph: Marquage des trottoirs et passages piétons...");
         let markedCells = 0;
         const cellSizeWorld = 1.0 / this.gridScale;
         const sidewalkWidth = this.config.sidewalkWidth || 2.0; // Largeur du trottoir
@@ -124,6 +124,6 @@ export default class PedestrianNavigationGraph extends NavigationGraph {
             }
         });
 
-        console.log(`PedestrianNavigationGraph: ${markedCells} cellules de trottoirs et passages piétons marquées.`);
+        //console.log(`PedestrianNavigationGraph: ${markedCells} cellules de trottoirs et passages piétons marquées.`);
     }
 } 

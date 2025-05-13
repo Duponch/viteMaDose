@@ -77,7 +77,7 @@ export default class RainbowEffect {
             // Ajout à la scène (mais caché jusqu'à ce que l'opacité soit > 0)
             this.scene.add(this.rainbowMesh);
             
-            console.log("Effet arc-en-ciel initialisé");
+            //////console.log("Effet arc-en-ciel initialisé");
         } catch (error) {
             console.error("Erreur lors de l'initialisation de l'effet arc-en-ciel:", error);
         }
@@ -170,6 +170,6 @@ export default class RainbowEffect {
         
         this.uniforms = null;
         
-        console.log("Effet arc-en-ciel nettoyé");
+        //////console.log("Effet arc-en-ciel nettoyé");
     }
 } 

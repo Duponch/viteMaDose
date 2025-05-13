@@ -276,7 +276,7 @@ export default class CityManager {
 
         this.mayorMoney = new MayorMoney();
 
-        console.log("CityManager initialized.");
+        ////////console.log("CityManager initialized.");
     }
 
     // --- Délégation vers CitizenManager ---
@@ -315,27 +315,27 @@ export default class CityManager {
     // --- Fin délégation ---
 
     async generateCity() {
-        console.time("CityGeneration");
+        //console.time("CityGeneration");
         this.clearCity(); // Efface la ville précédente
         try {
-            console.log("--- Starting city generation ---");
+            //console.log("--- Starting city generation ---");
             this.createGlobalGround(); // Crée le sol global
 
-            console.time("AssetLoading");
+            //console.time("AssetLoading");
             await this.assetLoader.loadAssets(); // Charge tous les modèles 3D
-            console.timeEnd("AssetLoading");
+            //console.timeEnd("AssetLoading");
             this.logLoadedAssets();
 
-            console.time("LayoutGeneration");
+            //console.time("LayoutGeneration");
             this.leafPlots = this.layoutGenerator.generateLayout(this.config.mapSize); // Génère les parcelles
-            console.timeEnd("LayoutGeneration");
-            console.log(`Layout generated with ${this.leafPlots.length} plots.`);
+            //console.timeEnd("LayoutGeneration");
+            //console.log(`Layout generated with ${this.leafPlots.length} plots.`);
             this.logInitialZoneTypes(); // Log les types initiaux des parcelles
             if (!this.leafPlots || this.leafPlots.length === 0)
                 throw new Error("Layout produced no plots.");
 
             // --- District Logic via DistrictManager ---
-            console.time("DistrictFormationAndValidation");
+            //console.time("DistrictFormationAndValidation");
             try {
                 // Crée et utilise DistrictManager pour former et valider les quartiers
                 const districtManager = new DistrictManager(this.config, this.leafPlots, this.debugVisualManager.parentGroup);
@@ -345,7 +345,7 @@ export default class CityManager {
                 console.error("Error during district formation:", error);
                 throw error; // Arrête la génération si les districts sont invalides
             }
-            console.timeEnd("DistrictFormationAndValidation");
+            //console.timeEnd("DistrictFormationAndValidation");
 
             // assignDefaultTypeToUnassigned est maintenant appelé DANS generateAndValidateDistricts
             // this.assignDefaultTypeToUnassigned(); // S'assure que toutes les parcelles ont un type
@@ -356,25 +356,25 @@ export default class CityManager {
             this.cityMapVisualizer.setContainer(document.body);
             this.cityMapVisualizer.setExperience(this.experience);
 
-            console.time("RoadAndCrosswalkInfoGeneration");
+            //console.time("RoadAndCrosswalkInfoGeneration");
             // Génère le réseau routier et les infos pour les passages piétons
             const { roadGroup, crosswalkInfos } = this.roadGenerator.generateRoads(this.leafPlots);
             this.roadGroup = roadGroup; // Stocke le groupe contenant les routes
             this.cityContainer.add(this.roadGroup); // Ajoute les routes à la scène
-            console.timeEnd("RoadAndCrosswalkInfoGeneration");
-            console.log(`Road network generated and ${crosswalkInfos.length} crosswalk locations identified.`);
+            //console.timeEnd("RoadAndCrosswalkInfoGeneration");
+            //console.log(`Road network generated and ${crosswalkInfos.length} crosswalk locations identified.`);
 
             // --- NavigationManager ---
             if (!this.navigationManager) {
                 this.navigationManager = new NavigationManager(this.config);
             }
-            console.time("NavigationGraphBuilding");
+            //console.time("NavigationGraphBuilding");
             this.navigationManager.buildGraph(this.leafPlots, crosswalkInfos); // Construit le graphe de navigation
-            console.timeEnd("NavigationGraphBuilding");
+            //console.timeEnd("NavigationGraphBuilding");
 
-            console.time("PathfinderInitialization");
+            //console.time("PathfinderInitialization");
             this.navigationManager.initializePathfinder(); // Initialise le service de pathfinding
-            console.timeEnd("PathfinderInitialization");
+            //console.timeEnd("PathfinderInitialization");
 
             // Vérifier que les deux types de navigation sont disponibles
             const pedestrianGraph = this.navigationManager.getNavigationGraph(false);
@@ -387,7 +387,7 @@ export default class CityManager {
                 return;
             }
 
-            console.log("CityManager: NavigationManager initialisé avec succès (piéton et véhicule)");
+            //console.log("CityManager: NavigationManager initialisé avec succès (piéton et véhicule)");
             this.navigationGraph = pedestrianGraph; // Pour compatibilité avec le code existant
             this.pathfinder = pedestrianPathfinder; // Pour compatibilité avec le code existant
 
@@ -396,13 +396,13 @@ export default class CityManager {
             if (!vehicleGraph) {
                 console.error("[CityManager] Le graphe routier n'est pas prêt : impossible d'activer/configurer les voitures.");
             } else {
-                console.log("[CityManager] Placez ici la logique d'activation/configuration des voitures. Le graphe routier est prêt.");
+                //console.log("[CityManager] Placez ici la logique d'activation/configuration des voitures. Le graphe routier est prêt.");
                 // Exemple :
                 // if (this.carManager) this.carManager.activateAllCars();
                 // ou toute autre logique de spawn/configuration de voitures
             }
 
-            console.time("ContentGeneration");
+            //console.time("ContentGeneration");
             // Appel à PlotContentGenerator refactoré
             const { sidewalkGroup, buildingGroup, groundGroup } = this.contentGenerator.generateContent(
                 this.leafPlots,
@@ -412,18 +412,18 @@ export default class CityManager {
                 this.renderers // Passe les renderers spécialisés
             );
             // Les groupes sont déjà gérés par PlotContentGenerator ou ajoutés ici
-            console.timeEnd("ContentGeneration");
+            //console.timeEnd("ContentGeneration");
 
-            console.log(`Total Building Instances Registered: ${this.citizenManager.buildingInstances.size}`);
+            //console.log(`Total Building Instances Registered: ${this.citizenManager.buildingInstances.size}`);
 
             // --- Lamp Post Generation via LampPostManager ---
-            console.time("LampPostGeneration");
+            //console.time("LampPostGeneration");
             this.lampPostManager.addLampPosts(this.leafPlots); // Ajoute les lampadaires
-            console.timeEnd("LampPostGeneration");
+            //console.timeEnd("LampPostGeneration");
 
             // --- Debug Visuals via DebugVisualManager ---
             if (this.experience.isDebugMode) {
-                console.time("DebugVisualsUpdate");
+                //console.time("DebugVisualsUpdate");
                 if (!this.debugVisualManager.parentGroup.parent) {
                     this.cityContainer.add(this.debugVisualManager.parentGroup);
                 }
@@ -431,19 +431,19 @@ export default class CityManager {
                  if(this.config.showDistrictBoundaries) {
                     this.debugVisualManager.createDistrictBoundaries(this.districts);
                 }
-                console.timeEnd("DebugVisualsUpdate");
+                //console.timeEnd("DebugVisualsUpdate");
             } else {
                 this.debugVisualManager.clearDebugVisuals(); // Nettoie tous les visuels de debug
                 if (this.debugVisualManager.parentGroup.parent) {
                     this.cityContainer.remove(this.debugVisualManager.parentGroup); // Retire le groupe de debug
                 }
             }
-            console.log("--- City generation finished ---");
+            //console.log("--- City generation finished ---");
         } catch (error) {
             console.error("Major error during city generation:", error);
             this.clearCity(); // Tente de nettoyer en cas d'erreur majeure
         } finally {
-            console.timeEnd("CityGeneration"); // Fin du chronomètre global
+            //console.timeEnd("CityGeneration"); // Fin du chronomètre global
         }
     }
 
@@ -460,11 +460,11 @@ export default class CityManager {
         this.groundMesh.receiveShadow = true;
         this.groundMesh.name = "CityGround";
         this.scene.add(this.groundMesh);
-        // console.log(`CityGround created: ${this.config.mapSize}x${this.config.mapSize}`);
+        //console.log(`CityGround created: ${this.config.mapSize}x${this.config.mapSize}`);
     }
 
     clearCity() {
-        console.log("Clearing the existing city...");
+        //console.log("Clearing the existing city...");
         // Nettoyage Debug
         if (this.debugVisualManager) {
             this.debugVisualManager.clearDebugVisuals();
@@ -512,7 +512,7 @@ export default class CityManager {
             this.cityMapVisualizer = null;
         }
 
-        console.log("City cleared.");
+        //console.log("City cleared.");
     }
 
     // Reset ajouté à CitizenManager pour nettoyer les données
@@ -521,12 +521,12 @@ export default class CityManager {
     //     this.buildingInstances.clear();
     //     this.citizens.clear();
     //     this.nextBuildingInstanceId = 0;
-    //     console.log("CitizenManager reset.");
+    //     //console.log("CitizenManager reset.");
     // };
 
 
     destroy() {
-        console.log("Destroying CityManager...");
+        ////////console.log("Destroying CityManager...");
         this.clearCity(); // Appelle le nettoyage
 
         // Dispose Materials (ceux créés DANS CityManager)
@@ -577,7 +577,7 @@ export default class CityManager {
         this.renderers = null;
 
 
-        console.log("CityManager destroyed.");
+        //console.log("CityManager destroyed.");
     }
 
     // Getters (inchangés ou ajustés pour pointer vers les bons managers)
@@ -594,7 +594,7 @@ export default class CityManager {
         const counts = Object.entries(this.assetLoader.assets)
             .map(([type, list]) => `${type}: ${list.length}`)
             .join(', ');
-        console.log(`Assets loaded - ${counts}`);
+        //console.log(`Assets loaded - ${counts}`);
     }
 
     logInitialZoneTypes() {
@@ -603,12 +603,12 @@ export default class CityManager {
         this.leafPlots.forEach(p => {
             counts[p.zoneType] = (counts[p.zoneType] || 0) + 1;
         });
-        console.log("Initial zone types (from LayoutGenerator):", counts);
+        //console.log("Initial zone types (from LayoutGenerator):", counts);
     }
 
     logAdjustedZoneTypes() {
         // Cette info est maintenant logguée par DistrictManager
-        // console.log("Final zone types (after adjustment & fallback):", counts);
+        //console.log("Final zone types (after adjustment & fallback):", counts);
     }
 
     assignDefaultTypeToUnassigned() {

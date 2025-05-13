@@ -64,7 +64,7 @@ export default class FpsControls {
         this._boundPointerLockChange = this._onPointerLockChange.bind(this);
         this._boundPreventShortcuts = this._preventShortcuts.bind(this);
         
-        console.log("FpsControls initialisés");
+        //console.log("FpsControls initialisés");
     }
     
     enable() {
@@ -80,7 +80,7 @@ export default class FpsControls {
             this.canvas.requestPointerLock();
             
             this.isActive = true;
-            console.log("FpsControls activés");
+            //console.log("FpsControls activés");
         }
     }
     
@@ -109,7 +109,7 @@ export default class FpsControls {
             this.pressedKeys.clear();
             
             this.isActive = false;
-            console.log("FpsControls désactivés");
+            //console.log("FpsControls désactivés");
         }
     }
     
@@ -437,7 +437,7 @@ export default class FpsControls {
         // En mode FPS, changer la cible n'a pas d'effet immédiat
         // On pourrait tourner la caméra pour qu'elle regarde cette position,
         // mais ce n'est généralement pas le comportement souhaité en FPS
-        console.log("FpsControls: Setting target not supported directly");
+        //console.log("FpsControls: Setting target not supported directly");
     }
     
     lookAt(position) {

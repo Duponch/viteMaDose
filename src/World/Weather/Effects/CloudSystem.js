@@ -81,7 +81,7 @@ export default class CloudSystem {
         // Ajouter le groupe de nuages à la scène
         this.scene.add(this.cloudGroup);
         
-        console.log(`Système de nuages initialisé avec ${this.totalNumberOfClouds} nuages potentiels`);
+        //console.log(`Système de nuages initialisé avec ${this.totalNumberOfClouds} nuages potentiels`);
     }
     
     /**

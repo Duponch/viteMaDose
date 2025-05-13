@@ -36,21 +36,21 @@ export default class NavigationManager {
      * @param {Array<Object>} crosswalkInfos - Les informations relatives aux passages piétons.
      */
     buildGraph(plots, crosswalkInfos) {
-        console.time("NavigationGraphBuilding");
+        //console.time("NavigationGraphBuilding");
         
-        console.log("NavigationManager: Début de la construction des graphes de navigation");
-        console.log(`NavigationManager: Nombre de parcelles: ${plots.length}`);
-        console.log(`NavigationManager: Nombre de passages piétons: ${crosswalkInfos.length}`);
+        //console.log("NavigationManager: Début de la construction des graphes de navigation");
+        //console.log(`NavigationManager: Nombre de parcelles: ${plots.length}`);
+        //console.log(`NavigationManager: Nombre de passages piétons: ${crosswalkInfos.length}`);
         
         // Créer les deux grilles de navigation
         this.pedestrianNavigationGraph = new PedestrianNavigationGraph(this.config);
         this.roadNavigationGraph = new RoadNavigationGraph(this.config);
         
         // Construire les grilles
-        console.log("NavigationManager: Construction du graphe piéton...");
+        //console.log("NavigationManager: Construction du graphe piéton...");
         this.pedestrianNavigationGraph.buildGraph(plots, crosswalkInfos);
         
-        console.log("NavigationManager: Construction du graphe routier...");
+        //console.log("NavigationManager: Construction du graphe routier...");
         this.roadNavigationGraph.buildGraph(plots, crosswalkInfos);
         
         // Vérifier que les graphes ont été correctement construits
@@ -59,8 +59,8 @@ export default class NavigationManager {
             return;
         }
         
-        console.log("NavigationManager: Construction des graphes terminée");
-        console.timeEnd("NavigationGraphBuilding");
+        //console.log("NavigationManager: Construction des graphes terminée");
+        //console.timeEnd("NavigationGraphBuilding");
     }
 
     /**
@@ -77,7 +77,7 @@ export default class NavigationManager {
             return;
         }
         
-        console.log("NavigationManager: Pathfinders initialisés avec succès");
+        //console.log("NavigationManager: Pathfinders initialisés avec succès");
     }
 
     /**
@@ -180,7 +180,7 @@ export default class NavigationManager {
             return;
         }
 
-        console.log(`NavigationManager: Préchauffage du cache avec ${commonRoutes.length} trajets communs...`);
+        //console.log(`NavigationManager: Préchauffage du cache avec ${commonRoutes.length} trajets communs...`);
         const preloadData = [];
 
         for (const route of commonRoutes) {
@@ -199,7 +199,7 @@ export default class NavigationManager {
         }
 
         this.pathCache.preloadPaths(preloadData);
-        console.log(`NavigationManager: Cache préchauffé avec ${preloadData.length} trajets`);
+        //console.log(`NavigationManager: Cache préchauffé avec ${preloadData.length} trajets`);
     }
 
     /**

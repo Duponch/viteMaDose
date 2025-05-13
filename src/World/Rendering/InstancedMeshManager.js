@@ -50,7 +50,7 @@ export default class InstancedMeshManager {
         // On n'initialise plus de géométrie et matériau basiques pour les commerces
         // puisque ceux-ci utiliseront désormais le renderer procédural
 
-        console.log("InstancedMeshManager initialized.");
+        //console.log("InstancedMeshManager initialized.");
     }
 
     /**
@@ -58,7 +58,7 @@ export default class InstancedMeshManager {
      * @param {Object.<string, Object.<string, Array<THREE.Matrix4>>>} instanceData - Données provenant de InstanceDataManager.
      */
     createMeshes(instanceData) {
-        console.log("InstancedMeshManager: Creating InstancedMeshes (Corrected)...");
+        //console.log("InstancedMeshManager: Creating InstancedMeshes (Corrected)...");
         this.reset(); // Nettoyer les anciens meshes avant d'en créer de nouveaux
 
         let totalMeshesCreated = 0;
@@ -426,9 +426,9 @@ export default class InstancedMeshManager {
         } // Fin boucle type
 
         if (totalMeshesCreated > 0) {
-            console.log(`InstancedMeshManager: ${totalMeshesCreated} InstancedMesh(es) created (${totalInstancesCreated} total instances). ${this.windowMeshes.length} window mesh(es) tracked.`);
+            //console.log(`InstancedMeshManager: ${totalMeshesCreated} InstancedMesh(es) created (${totalInstancesCreated} total instances). ${this.windowMeshes.length} window mesh(es) tracked.`);
         } else {
-            console.log("InstancedMeshManager: No InstancedMesh created.");
+            //console.log("InstancedMeshManager: No InstancedMesh created.");
         }
     }
 
@@ -550,14 +550,14 @@ export default class InstancedMeshManager {
              }
         }
 
-        // console.log("InstancedMeshManager reset complete.");
+        // //console.log("InstancedMeshManager reset complete.");
     }
 
     /**
      * Méthode de destruction complète (appelée lorsque le World est détruit).
      */
     destroy() {
-        console.log("Destroying InstancedMeshManager...");
+        //console.log("Destroying InstancedMeshManager...");
         this.reset(); // Effectue le nettoyage principal
         // Libérer les références
         this.config = null;
@@ -570,6 +570,6 @@ export default class InstancedMeshManager {
              this.stripeBaseGeometry.dispose();
              this.stripeBaseGeometry = null;
         }
-        console.log("InstancedMeshManager destroyed.");
+        //console.log("InstancedMeshManager destroyed.");
     }
 }

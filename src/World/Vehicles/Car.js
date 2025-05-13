@@ -233,7 +233,7 @@ export default class Car {
                 if (this.currentPathIndex >= this.path.length) {
                     // Fin du chemin ATTEINTE DANS CETTE BOUCLE
                     this.position.copy(targetPoint); // Snap à la dernière position
-                    console.log(`Car ${this.instanceId}: Arrivée à destination (fin du chemin, boucle interne).`);
+                    //console.log(`Car ${this.instanceId}: Arrivée à destination (fin du chemin, boucle interne).`);
                     this.isActive = false;
                     this.path = null;
                     this.currentPathIndex = 0;
@@ -275,7 +275,7 @@ export default class Car {
                 if (this.currentPathIndex >= this.path.length) {
                     // Fin du chemin ATTEINTE A LA FIN DE CE PAS
                     this.position.copy(targetPoint); // Snap
-                    console.log(`Car ${this.instanceId}: Arrivée à destination (fin du chemin, fin de pas).`);
+                    //console.log(`Car ${this.instanceId}: Arrivée à destination (fin du chemin, fin de pas).`);
                     this.isActive = false;
                     this.path = null;
                     this.currentPathIndex = 0;

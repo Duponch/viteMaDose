@@ -61,7 +61,7 @@ export default class NewSkyscraperRenderer {
         wallTexture.rotation = 0;
         wallTexture.needsUpdate = true;
 
-        console.log("NewSkyscraperRenderer initialized.");
+        //console.log("NewSkyscraperRenderer initialized.");
     }
 
     /**
@@ -213,7 +213,7 @@ export default class NewSkyscraperRenderer {
 	 * @returns {object|null} Asset data { id, parts, fittingScaleFactor, ... } or null.
 	 */
 	generateProceduralSkyscraper(baseWidth, baseHeight, baseDepth, userScale = 1, numFloors = 9) {
-		console.log(`[NewSkyscraper Proc] Generating asset with ${numFloors} floors...`);
+		//console.log(`[NewSkyscraper Proc] Generating asset with ${numFloors} floors...`);
 		const skyscraperGroup = new THREE.Group();
 
 		// ----- Dimensions & Params (Copied & Adapted from HTML snippet) -----
@@ -436,7 +436,7 @@ export default class NewSkyscraperRenderer {
 			numFloors: numFloors
 		};
 
-		console.log(`[NewSkyscraper Proc] Asset '${asset.id}' generated with ${numFloors} floors.`);
+		//console.log(`[NewSkyscraper Proc] Asset '${asset.id}' generated with ${numFloors} floors.`);
 		return asset;
 	} // Fin generateProceduralSkyscraper
 
@@ -445,12 +445,12 @@ export default class NewSkyscraperRenderer {
       * Cleans up resources used by the renderer.
       */
      destroy() {
-		console.log("Destroying NewSkyscraperRenderer resources...");
+		//console.log("Destroying NewSkyscraperRenderer resources...");
 		Object.values(this.localMaterials).forEach(material => {
 			 material?.dispose();
 		 });
 		this.localMaterials = {};
-		 console.log("NewSkyscraperRenderer destroyed.");
+		 //console.log("NewSkyscraperRenderer destroyed.");
 	}
 
     /**

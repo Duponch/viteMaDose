@@ -25,7 +25,7 @@ export default class Pathfinder {
 			// Ajoutez d'autres options si disponibles pour JPS
 		});
 
-        console.log("Pathfinder: Initialisé avec PF.AStarFinder.");
+        //console.log("Pathfinder: Initialisé avec PF.AStarFinder.");
     }
 
     /**

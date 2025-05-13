@@ -119,7 +119,7 @@ export default class NewBuildingRenderer {
             }
         });
 
-        console.log("NewBuildingRenderer initialized with local materials.");
+        //console.log("NewBuildingRenderer initialized with local materials.");
     }
 
     /**
@@ -578,16 +578,16 @@ export default class NewBuildingRenderer {
             sizeAfterFitting: sizeAfterFitting
         };
 
-        console.log(`[NewBuilding Proc] Asset généré avec ${parts.length} parties. ID: ${asset.id}`);
+        //console.log(`[NewBuilding Proc] Asset généré avec ${parts.length} parties. ID: ${asset.id}`);
         return asset;
     }
 
     destroy() {
-        console.log("Destroying NewBuildingRenderer...");
+        //console.log("Destroying NewBuildingRenderer...");
         Object.values(this.localMaterials).forEach(material => {
             material?.dispose();
         });
         this.localMaterials = {};
-        console.log("NewBuildingRenderer destroyed.");
+        //console.log("NewBuildingRenderer destroyed.");
     }
 }

@@ -124,7 +124,7 @@ export default class EnvironmentControlUI {
             waterVisible: this.container.querySelector('#checkbox-waterVisible')
         };
         
-        console.log("Interface de contrôle d'environnement initialisée");
+        //console.log("Interface de contrôle d'environnement initialisée");
     }
     
     /**

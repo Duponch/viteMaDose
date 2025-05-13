@@ -147,7 +147,7 @@ export default class World {
         }
         
         // --- Activation du mode debug ---
-        console.log("  [World Debug] Enabling Debug Mode with lazy loading...");
+        //console.log("  [World Debug] Enabling Debug Mode with lazy loading...");
 
         if (!this.debugVisualManager) { /* ... erreur DVM manquant ... */ return; }
 
@@ -248,7 +248,7 @@ export default class World {
                 limitedInstances.set(key, value);
                 count++;
             }
-            console.log(`[World Debug] Bâtiments limités à ${maxBuildings} sur ${buildingInstances.size} total`);
+            //console.log(`[World Debug] Bâtiments limités à ${maxBuildings} sur ${buildingInstances.size} total`);
         }
         
         // Générer les contours de bâtiments avec la map limitée
@@ -306,7 +306,7 @@ export default class World {
 
 		// Si on active une catégorie et que ses visuels n'ont pas été générés, les créer maintenant
 		if (isVisible && this._debugVisualsCache && this._debugVisualsCache[categoryName] === null) {
-			console.log(`[World Debug] Génération des visuels ${categoryName} à la demande`);
+			//console.log(`[World Debug] Génération des visuels ${categoryName} à la demande`);
 			
 			// Générer les visuels appropriés selon la catégorie
 			const t0 = performance.now(); // Mesurer le temps de génération
@@ -335,7 +335,7 @@ export default class World {
 				
 				// Logs de performance
 				const t1 = performance.now();
-				console.log(`[World Debug] Génération de ${categoryName} terminée en ${(t1-t0).toFixed(1)}ms`);
+				//console.log(`[World Debug] Génération de ${categoryName} terminée en ${(t1-t0).toFixed(1)}ms`);
 			} catch (error) {
 				console.error(`[World Debug] Erreur lors de la génération de ${categoryName}:`, error);
 			}
@@ -360,7 +360,7 @@ export default class World {
 					this.setAgentPathForAgent(agent, agent.currentPathPoints, 0xff00ff);
 				}
 			}
-			console.log(`[World Debug] ${numAgents} chemins de piétons rafraîchis`);
+			//console.log(`[World Debug] ${numAgents} chemins de piétons rafraîchis`);
 		}
 		
 		if (categoryName === 'vehiclePath' && isVisible && this.carManager) {
@@ -380,7 +380,7 @@ export default class World {
 					pathsCreated++;
 				}
 			}
-			console.log(`[World Debug] ${pathsCreated} chemins de véhicules rafraîchis`);
+			//console.log(`[World Debug] ${pathsCreated} chemins de véhicules rafraîchis`);
 		}
     }
    
@@ -399,7 +399,7 @@ export default class World {
         const targetMesh = targetGroup.children.find(child => child.userData?.subType === subTypeName || child.name.endsWith(`_${subTypeName}`));
 
         if (targetMesh) {
-            console.log(`[World] Setting visibility for ${categoryName}.${subTypeName} (Mesh: ${targetMesh.name}) to ${isVisible}`);
+            //console.log(`[World] Setting visibility for ${categoryName}.${subTypeName} (Mesh: ${targetMesh.name}) to ${isVisible}`);
             targetMesh.visible = isVisible;
         } else {
             console.warn(`[World] setSubLayerMeshVisibility: Mesh for subType '${subTypeName}' not found in category '${categoryName}'.`);
@@ -426,7 +426,7 @@ export default class World {
         }
         if (targetGroup) {
             targetGroup.visible = isVisible;
-            // console.log(`  [World Debug] Layer '${layerName}' visibility set to ${isVisible}`);
+            // //console.log(`  [World Debug] Layer '${layerName}' visibility set to ${isVisible}`);
         }
     }
 
@@ -533,7 +533,7 @@ export default class World {
     }
 
    destroy() {
-        console.log("Destroying World...");
+        //console.log("Destroying World...");
         this.agentManager?.destroy();
         this.agentManager = null;
         
@@ -559,17 +559,17 @@ export default class World {
         this.environment?.destroy();
         this.environment = null;
 
-        console.log("World destroyed.");
+        //console.log("World destroyed.");
     }
 
     async initializeWorld() {
-        console.log("World: Initialisation asynchrone...");
+        //console.log("World: Initialisation asynchrone...");
         try {
             await this.environment.initialize();
-            console.log("World: Environnement initialisé.");
+            //console.log("World: Environnement initialisé.");
 
             await this.cityManager.generateCity();
-            console.log("World: Ville générée.");
+            //console.log("World: Ville générée.");
 
             const maxAgents = this.cityManager.config.maxAgents ?? 300;
             this.agentManager = new AgentManager(
@@ -578,20 +578,20 @@ export default class World {
                 this.cityManager.config,
                 maxAgents
             );
-            console.log("World: AgentManager instancié.");
+            //console.log("World: AgentManager instancié.");
             
             // Initialisation du gestionnaire de voitures
             this.carManager = new CarManager(
                 this.scene,
                 this.experience
             );
-            console.log("World: CarManager instancié.");
+            //console.log("World: CarManager instancié.");
 
             // --- MODIFICATION: Initialiser le worker avec le NavigationManager ---
             // const navGraph = this.cityManager.getNavigationGraph(); // Ancienne méthode
             if (this.agentManager && this.cityManager.navigationManager) {
                 this.agentManager.initializePathfindingWorker(this.cityManager.navigationManager);
-                console.log("World: Initialisation du Pathfinding Worker (double grille) demandée.");
+                //console.log("World: Initialisation du Pathfinding Worker (double grille) demandée.");
             } else {
                  console.error("World: Echec initialisation Worker - AgentManager ou NavigationManager manquant.");
             }
@@ -604,20 +604,20 @@ export default class World {
             const preheatCount = this.cityManager.config.preheatPathCount || Math.min(50, Math.floor(maxAgents * 0.1));
             
             if (preheatEnabled && this.agentManager) {
-                console.log(`World: Démarrage du préchauffage du cache pour ${preheatCount} agents...`);
+                //console.log(`World: Démarrage du préchauffage du cache pour ${preheatCount} agents...`);
                 // Attendre un peu que le worker se stabilise avant de démarrer le préchauffage
                 setTimeout(async () => {
                     try {
                         const result = await this.agentManager.preheatCommonPaths(preheatCount);
-                        console.log(`World: Préchauffage du cache terminé. ${result.processedCount} chemins calculés.`);
+                        //console.log(`World: Préchauffage du cache terminé. ${result.processedCount} chemins calculés.`);
                         
                         // Afficher les statistiques du cache
                         try {
                             const stats = await this.agentManager.requestCacheStats();
-                            console.log("World: Statistiques du cache après préchauffage:", stats);
+                            //console.log("World: Statistiques du cache après préchauffage:", stats);
                             
                             // Analyse approfondie des performances du cache
-                            console.log("World: Analyse approfondie des performances du cache...");
+                            //console.log("World: Analyse approfondie des performances du cache...");
                             await this.agentManager.analyzePathCachePerformance();
                         } catch (statsError) {
                             console.warn("World: Impossible de récupérer les statistiques du cache:", statsError);
@@ -635,7 +635,7 @@ export default class World {
                 this.setAllDebugGroupsVisibility(false); // Assurer qu'ils sont cachés
             }
 
-            console.log("World: Initialisation complète.");
+            //console.log("World: Initialisation complète.");
 
         } catch (error) {
             console.error("World: Erreur lors de l'initialisation asynchrone:", error);
@@ -648,7 +648,7 @@ export default class World {
 			console.warn("World: Aucun bâtiment enregistré via CitizenManager. Impossible de créer agents avec domicile/travail.");
 			// return; // Peut-être créer des agents sans domicile/travail ?
 		}
-	   console.log(`World: Demande de création de ${numberOfAgents} agents...`);
+	   //console.log(`World: Demande de création de ${numberOfAgents} agents...`);
 	   for (let i = 0; i < numberOfAgents; i++) {
 			const agent = this.agentManager.createAgent(); // createAgent gère l'enregistrement via CityManager
 			if (!agent) {
@@ -656,7 +656,7 @@ export default class World {
 				break;
 			}
 	   }
-	   console.log(`World: ${this.agentManager.agents.length} agents logiques créés (demandé: ${numberOfAgents}).`);
+	   //console.log(`World: ${this.agentManager.agents.length} agents logiques créés (demandé: ${numberOfAgents}).`);
    }
 
    update() {
@@ -668,7 +668,7 @@ export default class World {
 		// --- Daily Citizen Stats Update ---
 		// Check if it's noon (hour 12) and a new day
 		if (currentHour === 12 && currentDay !== this.lastUpdatedDay && currentDay !== -1) {
-			console.log(`World: Performing daily citizen stats update for day ${currentDay}`);
+			//console.log(`World: Performing daily citizen stats update for day ${currentDay}`);
 			this.cityManager?.citizenManager?.citizens.forEach(citizen => {
 				// Calculate happiness based on health and salary (clamped between 0 and 100)
 				citizen.happiness = Math.max(0, Math.min(100, (citizen.health + citizen.salary) / 2));
@@ -685,8 +685,8 @@ export default class World {
 			if (this.agentManager) {
 			    this.agentManager.requestCacheStats()
 			        .then(stats => {
-			            console.log(`Cache de chemins - Jour ${currentDay} - Statistiques:`, stats);
-			            console.log(`Taux de succès cache: ${stats.hitRate} (${stats.hits} hits, ${stats.nearHits} nearHits sur ${stats.size} chemins stockés)`);
+			            //console.log(`Cache de chemins - Jour ${currentDay} - Statistiques:`, stats);
+			            //console.log(`Taux de succès cache: ${stats.hitRate} (${stats.hits} hits, ${stats.nearHits} nearHits sur ${stats.size} chemins stockés)`);
 			        })
 			        .catch(err => console.warn("Impossible de récupérer les stats du cache:", err));
 			}
@@ -724,7 +724,7 @@ export default class World {
         this.startNodeDebugSphere.position.copy(position);
         this.startNodeDebugSphere.position.y += 0.5; // Légèrement surélevée
         this.startNodeDebugSphere.visible = true;
-        console.log(`[World Debug] Affichage Sphère Start Node Bleue à: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
+        //console.log(`[World Debug] Affichage Sphère Start Node Bleue à: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
     }
 
     showEndNodeDebugSphere(position) {
@@ -738,7 +738,7 @@ export default class World {
         this.endNodeDebugSphere.position.copy(position);
         this.endNodeDebugSphere.position.y += 0.5; // Légèrement surélevée
         this.endNodeDebugSphere.visible = true;
-        console.log(`[World Debug] Affichage Sphère End Node Verte à: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
+        //console.log(`[World Debug] Affichage Sphère End Node Verte à: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}`);
     }
     // --- FIN AJOUT ---
 
