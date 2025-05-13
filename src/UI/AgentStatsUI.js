@@ -68,6 +68,9 @@ export default class AgentStatsUI {
 		this.elements.toggleButton.title = 'Afficher/Masquer les statistiques des agents';
 		this.elements.toggleButton.dataset.uiInteractive = 'true'; // Garder pour la logique de clic
 		
+		// Synchroniser l'état du bouton avec l'état par défaut
+		this.elements.toggleButton.classList.toggle('active', this.isVisible);
+		
 		// Créer ou récupérer le container des contrôles
 		let controlsContainer = document.querySelector('.control-buttons');
 		if (!controlsContainer) {
@@ -186,6 +189,7 @@ export default class AgentStatsUI {
         if (!this.isVisible) return;
         this.isVisible = false;
         this.elements.statsPanel.style.display = 'none';
+        this.elements.toggleButton.classList.remove('active');
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
@@ -205,6 +209,7 @@ export default class AgentStatsUI {
         if (this.isVisible) return;
         this.isVisible = true;
         this.elements.statsPanel.style.display = 'block';
+        this.elements.toggleButton.classList.add('active');
         this.update();
         if (this.intervalId) clearInterval(this.intervalId);
         this.intervalId = setInterval(() => this.update(), this.updateInterval);
