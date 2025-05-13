@@ -55,8 +55,11 @@ Voici les specs du citoyen :
 
 
 
-(Quand agent a besoin medoc + est sur son temps libre (cad à la maison) + en horaire d'ouverture : l'agent fait des allers retours en boucle au magasin jusuqu'à sa fermeture (pourrait acheter plusieurs par plusieurs ou alors max 1 aller retour par jour... à voir...))
 
+- ajouter condition, ne pas acheter médoc si il en possède déjà
+- vérifier si il gagne pas un salaire le weekend
+
+- probabilité de choper maladie : test la fonctionnalité
 
 
 
@@ -64,3 +67,7 @@ Voici les specs du citoyen :
 
 - ajouter argent du maire
 - possibilité achter plusieurs mdédoc d'un coup (10 max)
+
+
+
+- ajouter score de cohésion sociale (exemple : ajouter pronoms = diminution du score)
