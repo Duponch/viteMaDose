@@ -895,3 +895,13 @@ button {
 #pause-play-button.paused {
     background-color: rgba(0, 120, 150, 0.7);
 }
+
+/* Styles pour la minimap */
+#city-map-canvas {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 1000;
+    cursor: pointer;
+	border-radius: 9px;
+}

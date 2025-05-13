@@ -54,15 +54,9 @@ export default class CityMapVisualizer {
         this.canvas.width = size;
         this.canvas.height = size;
 
-        // Style du canvas
-        this.canvas.style.position = 'absolute';
-        this.canvas.style.bottom = '20px'; // Position en bas
-        this.canvas.style.left = '70px'; // Position à gauche après le bouton agent-stats-toggle
-        this.canvas.style.zIndex = '1000';
+        // Ajouter l'ID pour le style CSS
+        this.canvas.id = 'city-map-canvas';
         this.canvas.style.display = 'none';
-        this.canvas.style.border = '2px solid white';
-        this.canvas.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
-        this.canvas.style.cursor = 'pointer'; // Curseur pointer pour indiquer que c'est cliquable
 
         // Ajouter l'écouteur de clic
         this.canvas.addEventListener('click', this.handleMapClick.bind(this));
