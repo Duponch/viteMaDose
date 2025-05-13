@@ -739,34 +739,32 @@ button {
 #agent-tooltip .agent-actions-panel .button-container {
     display: flex;
     justify-content: center;
-    gap: 10px;
+    gap: 8px; /* Réduit l'espace entre les boutons */
+    flex-wrap: nowrap;
+    width: 100%; /* Prend toute la largeur disponible */
+    padding: 0 4px; /* Ajoute un petit padding horizontal */
 }
 
 #agent-tooltip .agent-actions-panel .treatment-btn {
-    padding: 5px 10px;
+    padding: 5px 8px; /* Réduit le padding horizontal */
     border: none;
     border-radius: 3px;
     color: white;
     cursor: pointer;
     transition: background-color 0.2s ease;
+    flex: 1; /* Les boutons prennent un espace égal */
+    min-width: 0; /* Permet aux boutons de rétrécir si nécessaire */
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9em;
+    white-space: nowrap;
+    overflow: hidden; /* Cache le texte qui dépasserait */
+    text-overflow: ellipsis; /* Ajoute des points de suspension si le texte est trop long */
 }
 
-#agent-tooltip .agent-actions-panel .palliative-btn {
-    background-color: #4CAF50;
-}
-
-#agent-tooltip .agent-actions-panel .classic-btn {
-    background-color: #2196F3;
-}
-
-#agent-tooltip .agent-actions-panel .natural-btn {
-    background-color: #FF9800;
-}
-
-#agent-tooltip .agent-actions-panel .treatment-btn:hover {
-    filter: brightness(1.2);
-}
-
-#agent-tooltip .agent-actions-panel .treatment-btn:active {
-    filter: brightness(0.8);
+.palliative-btn:hover, .classic-btn:hover, .natural-btn:hover {
+    background-color: rgba(255, 255, 255, 0.87);
+	color: #000000!important;
 }

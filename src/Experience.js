@@ -785,7 +785,7 @@ export default class Experience extends EventTarget {
             : "Non (bloquée)";
             
         // Information d'agression chimique
-        const agressionChimiqueInfo = "Oui (-1/médicament)";
+        const agressionChimiqueInfo = "Oui (-1/médoc)";
         
         // Information de vieillissement hebdomadaire
         const vieillissementInfo = "Oui (-1/semaine)";
@@ -875,9 +875,9 @@ export default class Experience extends EventTarget {
             </div>
             <div class="agent-actions-panel">
                 <div class="button-container">
-                    <button class="treatment-btn palliative-btn" data-treatment-type="palliative" title="Augmente temporairement la santé du citoyen">Soin Palliatif</button>
-                    <button class="treatment-btn classic-btn" data-treatment-type="classic" title="Guérit une maladie mais augmente la dépendance chimique">Traitement Classique</button>
-                    <button class="treatment-btn natural-btn" data-treatment-type="natural" title="Guérit une maladie après 5 prises, sans effets secondaires">Traitement Naturel</button>
+                    <button class="treatment-btn palliative-btn" data-treatment-type="palliative" title="Augmente temporairement la santé du citoyen">Soin Pall.</button>
+                    <button class="treatment-btn classic-btn" data-treatment-type="classic" title="Guérit une maladie mais augmente la dépendance chimique">Trait. Class.</button>
+                    <button class="treatment-btn natural-btn" data-treatment-type="natural" title="Guérit une maladie après 5 prises, sans effets secondaires">Trait. Nat.</button>
                 </div>
             </div>
         `;
