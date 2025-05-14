@@ -255,13 +255,13 @@ export default class CitizenManager {
         this.citizens.forEach(citizen => {
             this.citizenHealth.updateHealth(citizen, currentDay);
             
-            // Payer le salaire quotidien (une fois par jour)
+            // Payer le salaire quotidien uniquement les jours travaillés (lundi-vendredi)
             this._updateSalary(citizen, currentDay);
         });
     }
     
     /**
-     * Met à jour le salaire d'un citoyen (une fois par jour)
+     * Met à jour le salaire d'un citoyen (uniquement les jours travaillés)
      * @private
      * @param {Object} citizen - L'objet citoyen
      * @param {number} currentDay - Le jour actuel
@@ -275,20 +275,57 @@ export default class CitizenManager {
             return;
         }
         
+        // Obtenir la date calendaire actuelle pour vérifier le jour de la semaine
+        const environment = this.citizenHealth?.experience.world?.environment;
+        if (!environment) return;
+        
+        const calendarDate = environment.getCurrentCalendarDate();
+        if (!calendarDate || !calendarDate.jourSemaine) return;
+        
+        // Vérifier si c'est un jour travaillé (lundi au vendredi)
+        const workSchedule = new (require('../Strategies/WorkScheduleStrategy').default)();
+        const isWorkDay = workSchedule.shouldWorkToday(calendarDate);
+        
+        // Si ce n'est pas un jour travaillé, mettre à jour le dernier jour de salaire sans payer
+        if (!isWorkDay) {
+            citizen.lastSalaryDay = currentDay;
+            return;
+        }
+        
         // Vérifier si un jour s'est écoulé depuis le dernier paiement
         let daysSinceLastSalary = currentDay - citizen.lastSalaryDay;
         
         // Gérer le changement de mois
         if (daysSinceLastSalary < 0) {
-            const environment = this.citizenHealth?.experience.world?.environment;
-            const prevMonthDays = environment?.getMonthDays?.() || 30;
+            const prevMonthDays = environment.getMonthDays?.() || 30;
             daysSinceLastSalary = (prevMonthDays - citizen.lastSalaryDay) + currentDay;
             //console.log(`Citoyen ${citizen.id}: Changement de mois détecté - jours depuis dernier salaire recalculés = ${daysSinceLastSalary}`);
         }
         
         if (daysSinceLastSalary >= 1) {
-            // Payer le salaire pour chaque jour écoulé
-            citizen.money += citizen.salary * daysSinceLastSalary;
+            // Compter uniquement les jours travaillés (lundi-vendredi) entre le dernier paiement et aujourd'hui
+            let workDayCount = 0;
+            
+            // Parcourir chaque jour depuis le dernier paiement
+            for (let i = 1; i <= daysSinceLastSalary; i++) {
+                // Calculer la date pour ce jour
+                const pastDate = new Date(calendarDate.date);
+                pastDate.setDate(pastDate.getDate() - (daysSinceLastSalary - i));
+                
+                // Créer un objet calendarDate pour ce jour passé
+                const pastCalendarDate = {
+                    date: pastDate,
+                    jourSemaine: ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'][pastDate.getDay()]
+                };
+                
+                // Vérifier si c'était un jour travaillé
+                if (workSchedule.shouldWorkToday(pastCalendarDate)) {
+                    workDayCount++;
+                }
+            }
+            
+            // Payer le salaire uniquement pour les jours travaillés
+            citizen.money += citizen.salary * workDayCount;
             citizen.lastSalaryDay = currentDay;
         }
     }

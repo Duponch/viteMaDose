@@ -65,8 +65,6 @@ Voici les specs du citoyen :
 
 
 
-- ajouter argent du maire
-- possibilité achter plusieurs mdédoc d'un coup (10 max)
 
 
 
