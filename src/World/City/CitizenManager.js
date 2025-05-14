@@ -1,6 +1,7 @@
 // src/World/CitizenManager.js
 import * as THREE from 'three';
 import CitizenHealth from './CitizenHealth.js';
+import WorkScheduleStrategy from '../Strategies/WorkScheduleStrategy.js';
 
 export default class CitizenManager {
     /**
@@ -255,7 +256,8 @@ export default class CitizenManager {
         this.citizens.forEach(citizen => {
             this.citizenHealth.updateHealth(citizen, currentDay);
             
-            // Payer le salaire quotidien uniquement les jours travaillés (lundi-vendredi)
+            // POINT UNIQUE DE PAIEMENT: Payer le salaire quotidien uniquement les jours travaillés (lundi-vendredi)
+            // Le salaire n'est plus versé dans World.js à midi
             this._updateSalary(citizen, currentDay);
         });
     }
@@ -283,7 +285,7 @@ export default class CitizenManager {
         if (!calendarDate || !calendarDate.jourSemaine) return;
         
         // Vérifier si c'est un jour travaillé (lundi au vendredi)
-        const workSchedule = new (require('../Strategies/WorkScheduleStrategy').default)();
+        const workSchedule = new WorkScheduleStrategy();
         const isWorkDay = workSchedule.shouldWorkToday(calendarDate);
         
         // Si ce n'est pas un jour travaillé, mettre à jour le dernier jour de salaire sans payer

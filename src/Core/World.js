@@ -676,8 +676,8 @@ export default class World {
 				// Increase health by 1 (max maxHealth)
 				citizen.health = Math.min(citizen.maxHealth, citizen.health + 1);
 
-				// Increase money by their salary
-				citizen.money += citizen.salary;
+				// Le salaire est géré par CitizenManager._updateSalary qui vérifie les jours travaillés
+				// Ne pas ajouter de salaire ici
 			});
 			this.lastUpdatedDay = currentDay; // Update the last updated day
 			
