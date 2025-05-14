@@ -61,7 +61,7 @@ export default class Agent {
 
         // --- Heures & Délais ---
         this.departureWorkHour = 8;
-        this.departureHomeHour = 19;
+        this.departureHomeHour = 18;
         this.anticipationMinutes = 5;
         this.prepareWorkDepartureTimeGame = -1;
         this.prepareHomeDepartureTimeGame = -1;
