@@ -44,8 +44,10 @@ export default class Agent {
         this.stateMachine = new AgentStateMachine(this);
         this.homeBuildingId = null;
         this.workBuildingId = null;
-        this.homePosition = null;
-        this.workPosition = null;
+        this.homePosition = null;       // Position du point de départ/arrivée sur le trottoir
+        this.workPosition = null;       // Position du point de départ/arrivée sur le trottoir
+        this.homeBuildingPosition = null; // Position du bâtiment (cube bleu)
+        this.workBuildingPosition = null; // Position du bâtiment (cube bleu)
         this.homeGridNode = null;
         this.workGridNode = null;
         this.hasReachedDestination = false;
@@ -58,6 +60,14 @@ export default class Agent {
         this.currentPathLengthWorld = 0;
         this.currentPathIndexVisual = 0; // Index pour le suivi visuel du chemin
         this.visualInterpolationProgress = 0; // Progression (0-1) pour le visuel
+
+        // --- États pour les transitions entre bâtiment et trottoir ---
+        this.isMovingFromBuildingToPath = false;
+        this.isMovingFromPathToBuilding = false;
+        this.buildingTransitionProgress = 0;
+        this.buildingTransitionPathPoints = null;
+        this.buildingTransitionStartTime = -1;
+        this.buildingTransitionDuration = 0;
 
         // --- Heures & Délais ---
         this.departureWorkHour = 8;
@@ -72,6 +82,7 @@ export default class Agent {
         this.lastArrivalTimeWork = -1;
         this.requestedPathForDepartureTime = -1;
 
+        // Initialiser ces valeurs à -1 pour s'assurer que la condition currentDayNumber > lastDepartureDayWork soit true
         this.lastDepartureDayWork = -1;
         this.lastDepartureDayHome = -1;
 
@@ -150,12 +161,18 @@ export default class Agent {
 
         const homeInfo = cityManager?.getBuildingInfo(this.homeBuildingId);
         if (homeInfo && pedestrianNavGraph) { // Vérifier aussi navGraph
+            // Stocker la position du bâtiment lui-même (cube bleu)
+            this.homeBuildingPosition = homeInfo.position.clone();
+            
+            // Trouver le point sur le trottoir le plus proche
             let baseHomePos = homeInfo.position.clone();
             baseHomePos.y = sidewalkHeight;
             this.homeGridNode = pedestrianNavGraph.getClosestWalkableNode(baseHomePos);
             this.homePosition = this.homeGridNode ? pedestrianNavGraph.gridToWorld(this.homeGridNode.x, this.homeGridNode.y) : baseHomePos;
-            this.position.copy(this.homePosition); // Position initiale visuelle
-            this.position.y = this.homePosition.y + this.yOffset; // Appliquer l'offset Y par rapport au sol du chemin
+            
+            // Position initiale sur le bâtiment, et non sur le trottoir
+            this.position.copy(this.homeBuildingPosition);
+            this.position.y += this.yOffset; // Appliquer l'offset Y par rapport au sol
 
             // --- MODIFICATION: Utilisation de vehicleBehavior ---
             // Initialiser la position de garage via vehicleBehavior
@@ -173,6 +190,9 @@ export default class Agent {
 
         const workInfo = cityManager?.getBuildingInfo(this.workBuildingId);
         if (workInfo && pedestrianNavGraph) { // Vérifier aussi navGraph
+            // Stocker la position du bâtiment lui-même (cube bleu)
+            this.workBuildingPosition = workInfo.position.clone();
+            
             let baseWorkPos = workInfo.position.clone();
             baseWorkPos.y = sidewalkHeight;
             this.workGridNode = pedestrianNavGraph.getClosestWalkableNode(baseWorkPos);
@@ -183,6 +203,7 @@ export default class Agent {
                 console.warn(`Agent ${this.id}: Infos travail ${this.workBuildingId} ou NavGraph piéton non trouvées.`);
             }
             this.workPosition = null; this.workGridNode = null;
+            this.workBuildingPosition = null;
         }
 
         this._calculateScheduledTimes();
@@ -524,18 +545,35 @@ export default class Agent {
      * Met à jour l'état logique de l'agent en déléguant à AgentStateMachine.
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame (ms).
      * @param {number} currentHour - Heure actuelle du jeu (0-23).
-     * @param {number} currentGameTime - Temps total écoulé dans le jeu (ms).
+     * @param {CalendarDate|null} calendarDate - Date du jeu.
+     * @param {number} currentGameTime - Temps actuel du jeu (ms).
      */
-    updateState(deltaTime, currentHour, currentGameTime) {
-        if (this.stateMachine) {
-            this.stateMachine.update(deltaTime, currentHour, currentGameTime);
-        } else {
-            if (this.currentState !== AgentState.IDLE) {
-                this.currentState = AgentState.IDLE;
-                this.isVisible = false;
-            }
-            console.error(`Agent ${this.id}: StateMachine non initialisée.`);
+    update(deltaTime, currentHour, calendarDate, currentGameTime) {
+        // Vérifier que currentGameTime est un nombre
+        if (typeof currentGameTime !== 'number') {
+            console.warn(`Agent ${this.id}: currentGameTime n'est pas un nombre dans Agent.update:`, currentGameTime);
+            currentGameTime = this.experience.time.elapsed;
         }
+        
+        // Mise à jour de la state machine (mise à jour d'état logique)
+        if (this.stateMachine) {
+            this.stateMachine.update(deltaTime, currentHour, calendarDate, currentGameTime);
+        }
+
+        // --- Distance Camera Handling & LOD ---
+        // Obtenez la caméra via Experience
+        const camera = this.experience.camera?.instance;
+        
+        if (camera) {
+            const cameraDistance = camera.position.distanceTo(this.position);
+            this.isLodActive = cameraDistance > this.lodDistance;
+        } else {
+            this.isLodActive = false;
+        }
+        // ---------------------------------------
+
+        // Utiliser la nouvelle méthode updateVisual pour gérer le déplacement et l'animation
+        this.updateVisual(deltaTime, currentGameTime);
     }
 
     /**
@@ -660,26 +698,34 @@ export default class Agent {
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame (ms).
      * @param {number} currentGameTime - Temps de jeu total (ms).
      */
-    updateVisuals(deltaTime, currentGameTime) {
+    updateVisual(deltaTime, currentGameTime) {
+        // --- MODIFICATION: Gestion des transitions bâtiment<->chemin ---
+        if (this.isMovingFromBuildingToPath || this.isMovingFromPathToBuilding) {
+            const transitionCompleted = this.updateBuildingTransition(currentGameTime);
+            // Log pour le débogage
+            if (transitionCompleted) {
+                console.log(`Agent ${this.id}: Transition complétée. isMovingFromBuildingToPath=${this.isMovingFromBuildingToPath}, isMovingFromPathToBuilding=${this.isMovingFromPathToBuilding}`);
+            }
+            return;
+        }
+        // ------------------------------------------------------
+        
+        // Vérifier si l'agent est dans un état de déplacement
         const isDriving = this.vehicleBehavior?.isDriving() ?? false;
-        const isVisuallyMoving = 
+        const isMoving = 
             this.currentState === AgentState.IN_TRANSIT_TO_WORK ||
             this.currentState === AgentState.IN_TRANSIT_TO_HOME ||
             this.currentState === AgentState.WEEKEND_WALKING ||
+            this.currentState === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK || 
             this.currentState === AgentState.IN_TRANSIT_TO_COMMERCIAL || // Ajout état IN_TRANSIT_TO_COMMERCIAL
             isDriving;
 
-        // Obtenir une référence au pool d'objets
-        const objectPool = this.experience?.objectPool;
-
-        // --- Réinitialisation si pas en mouvement visuel --- 
-        // Ou si l'état est AT_COMMERCIAL (logiquement caché dans le magasin)
-        if (!isVisuallyMoving || this.currentState === AgentState.AT_COMMERCIAL) {
-            // Positionner à l'emplacement logique (maison ou travail)
+        if (!isMoving) {
+            // Agent immobile - Positions "fixes" par état
             if (this.currentState === AgentState.AT_HOME && this.homePosition) {
-                this.position.copy(this.homePosition).setY(this.yOffset);
+                this.position.copy(this.homeBuildingPosition).setY(this.yOffset);
             } else if (this.currentState === AgentState.AT_WORK && this.workPosition) {
-                this.position.copy(this.workPosition).setY(this.yOffset);
+                this.position.copy(this.workBuildingPosition).setY(this.yOffset);
             } else if (this.currentState === AgentState.AT_COMMERCIAL && this.medicationBehavior?.commercialPosition) {
                 // Si AT_COMMERCIAL, positionner à la position du magasin (même s'il est invisible)
                 this.position.copy(this.medicationBehavior.commercialPosition).setY(this.yOffset);
@@ -694,72 +740,89 @@ export default class Agent {
         if (isDriving) {
             const carPosition = this.vehicleBehavior.getVehiclePosition();
             const carOrientation = this.vehicleBehavior.getVehicleOrientation();
-            if (carPosition && carOrientation) {
                 this.position.copy(carPosition); 
-                if (this.animationHandler) this.animationHandler.update(0, false); 
-                this.currentAnimationMatrix = this.animationHandler?.animationMatrices;
-            } else {
-                 console.warn(`Agent ${this.id}: isDriving=true mais voiture non trouvée dans vehicleBehavior.`);
-                 this.isVisible = false; 
-                 if (this.animationHandler) this.animationHandler.resetMatrices();
-                 this.currentAnimationMatrix = this.animationHandler?.animationMatrices;
+            this.orientation.copy(carOrientation);
+            
+            // Met à jour les matrices d'animation
+            if (this.animationHandler) {
+                this.animationHandler.updateCar(this.isLodActive);
+                this.currentAnimationMatrix = this.animationHandler.animationMatrices;
             }
             return; 
         }
 
-        // --- Si l'agent est PIÉTON et en mouvement ---
-        if (!this.currentPathPoints || this.currentPathPoints.length === 0 || this.calculatedTravelDurationGame <= 0 || this.departureTimeGame < 0) {
-            this.isVisible = false;
-            if (this.animationHandler) this.animationHandler.resetMatrices();
-            this.currentAnimationMatrix = this.animationHandler?.animationMatrices;
+        // --- AGENT PIÉTON SEULEMENT APRÈS CE POINT ---
+
+        // Si pas de chemin actuel, sortir
+        if (!this.currentPathPoints || this.currentPathPoints.length === 0 || this.currentPathLengthWorld <= 0) {
             return;
         }
 
-        // Calcul LOD (optimisé avec pool d'objets)
-        const cameraPosition = this.experience.camera.instance.position;
+        // Vérifier si destination déjà atteinte
+        const lastPoint = this.currentPathPoints[this.currentPathPoints.length - 1];
+        const distanceToLastPointSq = this.position.distanceToSquared(lastPoint);
         
-        // Utiliser un vecteur temporaire depuis le pool au lieu d'en créer un nouveau
-        let tempVector = null;
-        
-        if (objectPool) {
-            tempVector = objectPool.getVector3();
-            tempVector.copy(this.position).sub(cameraPosition);
-        } else {
-            tempVector = new THREE.Vector3().subVectors(this.position, cameraPosition);
-        }
-        
-        const distanceToCameraSq = tempVector.lengthSq();
-        
-        // Libérer le vecteur temporaire immédiatement après utilisation
-        if (objectPool && tempVector) {
-            objectPool.releaseVector3(tempVector);
-            tempVector = null;
-        }
-        
-        // Utiliser la distance configurée
-        const lodDistanceSq = this.lodDistance * this.lodDistance;
-        this.isLodActive = distanceToCameraSq > lodDistanceSq;
-
-        // Calcul progression visuelle (reste ici)
-        const elapsedTimeSinceDeparture = currentGameTime - this.departureTimeGame;
-        let progress = Math.max(0, Math.min(1, this.calculatedTravelDurationGame > 0 ? elapsedTimeSinceDeparture / this.calculatedTravelDurationGame : 0));
-        this.visualInterpolationProgress = progress;
-
-        // Forcer arrivée visuelle si état weekend (reste ici)
-        if ((this.currentState === AgentState.WEEKEND_WALKING || this.currentState === AgentState.WEEKEND_WALK_RETURNING_TO_SIDEWALK) && progress > 0.9) {
-            progress = 1.0;
-            this.visualInterpolationProgress = 1.0;
-        }
-
-        // Marquer arrivé pour la logique d'état (reste ici)
-        if (progress >= 1.0 && !this.hasReachedDestination) {
+        // Vérifier si l'agent est arrivé à destination pour démarrer la transition vers le bâtiment
+        if (!this.hasReachedDestination && distanceToLastPointSq <= this.reachToleranceSq) {
+            console.log(`Agent ${this.id}: A atteint la destination (distance: ${Math.sqrt(distanceToLastPointSq).toFixed(2)})`);
             this.hasReachedDestination = true;
+            
+            // Démarrer la transition vers le bâtiment
+            if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
+                console.log(`Agent ${this.id}: Début transition vers cube WORK`);
+                this.startPathToBuildingTransition(currentGameTime, 'WORK');
+            } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
+                console.log(`Agent ${this.id}: Début transition vers cube HOME`);
+                this.startPathToBuildingTransition(currentGameTime, 'HOME');
+            }
+            
+            return;
         }
-        progress = Math.max(0, progress);
+        
+        // === Cas supplémentaire: vérifier si le temps de déplacement est écoulé ===
+        if (!this.hasReachedDestination && this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
+            console.log(`Agent ${this.id}: Temps d'arrivée atteint (même si pas à la position exacte)`);
+            this.hasReachedDestination = true;
+            
+            // Téléporter à la position finale si trop loin
+            if (distanceToLastPointSq > this.reachToleranceSq * 4) {
+                console.log(`Agent ${this.id}: Téléportation à la fin du chemin (trop éloigné: ${Math.sqrt(distanceToLastPointSq).toFixed(2)})`);
+                this.position.copy(lastPoint).setY(this.yOffset);
+            }
+            
+            // Démarrer la transition vers le bâtiment selon l'état
+            if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
+                console.log(`Agent ${this.id}: Début transition vers cube WORK (par temps écoulé)`);
+                this.startPathToBuildingTransition(currentGameTime, 'WORK');
+            } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
+                console.log(`Agent ${this.id}: Début transition vers cube HOME (par temps écoulé)`);
+                this.startPathToBuildingTransition(currentGameTime, 'HOME');
+            }
+            
+            return;
+        }
 
-        // --- DÉLÉGATION DU DÉPLACEMENT VISUEL ---
+        // Calculer la progression sur le chemin
+        if (this.departureTimeGame > 0 && this.arrivalTmeGame > 0) {
+            // Calculation du pourcentage de progression et en s'assurant d'être entre 0-1
+            let calculatedProgress;
+            const totalTravelTimeNeeded = this.arrivalTmeGame - this.departureTimeGame;
+            
+            // Vérifier que le temps total n'est pas négatif ou 0
+            if (totalTravelTimeNeeded <= 0) {
+                calculatedProgress = 1.0; // Au cas où: 100% de progression
+            } else {
+                // Combien de temps s'est écoulé depuis le départ par rapport au temps total nécessaire
+        const elapsedTimeSinceDeparture = currentGameTime - this.departureTimeGame;
+                calculatedProgress = Math.min(1.0, Math.max(0.0, elapsedTimeSinceDeparture / totalTravelTimeNeeded));
+            }
+            
+            this.visualInterpolationProgress = calculatedProgress;
+        }
+
+        // --- Mise à jour du mouvement ---
         if (this.movementHandler) {
-            // Appelle la méthode qui met à jour this.position et this.orientation
+            // Appelle le gestionnaire de mouvement pour calculer position et orientation
             this.currentPathIndexVisual = this.movementHandler.updatePedestrianMovement(
                 deltaTime,
                 this.currentPathPoints,
@@ -788,7 +851,208 @@ export default class Agent {
         // ----------------------------------------
     }
 
-	destroy() {
+    // Nouvelle méthode pour réinitialiser les matrices d'animation
+    _resetAnimationMatrices() {
+        // Réinitialiser toutes les matrices d'animation à l'identité
+        Object.keys(this.currentAnimationMatrix).forEach(key => {
+            this.currentAnimationMatrix[key].identity();
+        });
+    }
+
+    // Ajouter une méthode pour calculer et définir le prochain contrôle d'état nécessaire
+    _calculateAndSetNextCheckTime(currentGameTime, recalculate = false) {
+        // Calculer le prochain contrôle d'état nécessaire
+        const nextCheckTime = currentGameTime + 10000; // 10 secondes à partir de maintenant
+        this._nextStateCheckTime = nextCheckTime;
+        if (recalculate) {
+            this._nextStateCheckTime = currentGameTime + 10000; // 10 secondes à partir de maintenant
+        }
+    }
+
+    /**
+     * Démarre une transition du bâtiment vers le point de départ du chemin
+     * @param {number} currentGameTime - Le temps de jeu actuel
+     * @param {string} goal - "WORK" ou "HOME" pour indiquer la direction
+     */
+    startTransitionFromBuildingToPath(currentGameTime, goal) {
+        // Déterminer les points de départ et d'arrivée
+        let startPos, endPos;
+        
+        if (goal === 'WORK') {
+            startPos = this.homeBuildingPosition.clone();
+            endPos = this.homePosition.clone();
+        } else if (goal === 'HOME') {
+            startPos = this.workBuildingPosition.clone();
+            endPos = this.workPosition.clone();
+        } else {
+            console.error(`Agent ${this.id}: startTransitionFromBuildingToPath avec goal invalide: ${goal}`);
+            return false;
+        }
+        
+        if (!startPos || !endPos) {
+            console.error(`Agent ${this.id}: startTransitionFromBuildingToPath impossible, positions manquantes`);
+            return false;
+        }
+        
+        // Logs de débogage détaillés
+        console.log(`Agent ${this.id}: startTransitionFromBuildingToPath - 
+            De: ${startPos.x.toFixed(2)},${startPos.y.toFixed(2)},${startPos.z.toFixed(2)} 
+            Vers: ${endPos.x.toFixed(2)},${endPos.y.toFixed(2)},${endPos.z.toFixed(2)}`);
+        
+        // Créer un chemin simple
+        startPos.y = this.yOffset;
+        endPos.y = this.yOffset;
+        this.buildingTransitionPathPoints = [startPos, endPos];
+        
+        // Calculer la durée de transition
+        const distance = startPos.distanceTo(endPos);
+        const speed = this.agentBaseSpeed;
+        this.buildingTransitionDuration = (distance / speed) * 1000; // en ms
+        
+        // Initialiser les états de transition
+        this.isMovingFromBuildingToPath = true;
+        this.isMovingFromPathToBuilding = false;
+        this.buildingTransitionProgress = 0;
+        this.buildingTransitionStartTime = currentGameTime;
+        
+        // Rendre l'agent visible
+        this.isVisible = true;
+        
+        return true;
+    }
+
+    /**
+     * Démarre une transition du point d'arrivée du chemin vers le bâtiment
+     * @param {number} currentGameTime - Le temps de jeu actuel
+     * @param {string} goal - "WORK" ou "HOME" pour indiquer la direction
+     */
+    startPathToBuildingTransition(currentGameTime, goal) {
+        // Déterminer les points de départ et d'arrivée
+        let startPos, endPos;
+        
+        if (goal === 'WORK') {
+            startPos = this.workPosition.clone();
+            endPos = this.workBuildingPosition.clone();
+        } else if (goal === 'HOME') {
+            startPos = this.homePosition.clone();
+            endPos = this.homeBuildingPosition.clone();
+        } else {
+            console.error(`Agent ${this.id}: startPathToBuildingTransition avec goal invalide: ${goal}`);
+            return false;
+        }
+        
+        if (!startPos || !endPos) {
+            console.error(`Agent ${this.id}: startPathToBuildingTransition impossible, positions manquantes`);
+            return false;
+        }
+        
+        // Logs de débogage détaillés
+        console.log(`Agent ${this.id}: startPathToBuildingTransition - 
+            De: ${startPos.x.toFixed(2)},${startPos.y.toFixed(2)},${startPos.z.toFixed(2)} 
+            Vers: ${endPos.x.toFixed(2)},${endPos.y.toFixed(2)},${endPos.z.toFixed(2)}`);
+        
+        // Créer un chemin simple
+        startPos.y = this.yOffset;
+        endPos.y = this.yOffset;
+        this.buildingTransitionPathPoints = [startPos, endPos];
+        
+        // Calculer la durée de transition
+        const distance = startPos.distanceTo(endPos);
+        const speed = this.agentBaseSpeed;
+        this.buildingTransitionDuration = (distance / speed) * 1000; // en ms
+        
+        // Initialiser les états de transition
+        this.isMovingFromBuildingToPath = false;
+        this.isMovingFromPathToBuilding = true;
+        this.buildingTransitionProgress = 0;
+        this.buildingTransitionStartTime = currentGameTime;
+        
+        return true;
+    }
+    
+    /**
+     * Met à jour l'état de transition entre le bâtiment et le chemin
+     * @param {number} currentGameTime - Le temps de jeu actuel
+     * @returns {boolean} - true si la transition est terminée
+     */
+    updateBuildingTransition(currentGameTime) {
+        if (!this.isMovingFromBuildingToPath && !this.isMovingFromPathToBuilding) {
+            return false;
+        }
+        
+        if (!this.buildingTransitionPathPoints || this.buildingTransitionPathPoints.length < 2) {
+            console.warn(`Agent ${this.id}: updateBuildingTransition sans points de chemin valides`);
+            this.isMovingFromBuildingToPath = false;
+            this.isMovingFromPathToBuilding = false;
+            return false;
+        }
+        
+        // Calculer la progression
+        const elapsedTime = currentGameTime - this.buildingTransitionStartTime;
+        
+        // Logs détaillés pour le débogage
+        if (Math.random() < 0.05) { // Limiter les logs à 5% des frames pour éviter de surcharger la console
+            console.log(`Agent ${this.id}: updateBuildingTransition - 
+                Temps écoulé: ${elapsedTime.toFixed(2)}ms / ${this.buildingTransitionDuration.toFixed(2)}ms 
+                (${(elapsedTime/this.buildingTransitionDuration*100).toFixed(1)}%)`);
+        }
+        
+        this.buildingTransitionProgress = Math.min(1.0, elapsedTime / this.buildingTransitionDuration);
+        
+        // Mettre à jour la position
+        const startPos = this.buildingTransitionPathPoints[0];
+        const endPos = this.buildingTransitionPathPoints[1];
+        this.position.lerpVectors(startPos, endPos, this.buildingTransitionProgress);
+        
+        // Si la transition est terminée
+        if (this.buildingTransitionProgress >= 1.0) {
+            console.log(`Agent ${this.id}: Transition terminée! Type: ${this.isMovingFromBuildingToPath ? 'Building->Path' : 'Path->Building'}`);
+            
+            if (this.isMovingFromBuildingToPath) {
+                // Transition du bâtiment au chemin terminée, commencer le chemin principal
+                this.isMovingFromBuildingToPath = false;
+                
+                // Démarrer le chemin principal selon l'état
+                if (this.currentState === AgentState.READY_TO_LEAVE_FOR_WORK) {
+                    console.log(`Agent ${this.id}: Fin transition bâtiment->chemin, passage à IN_TRANSIT_TO_WORK`);
+                    this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                } else if (this.currentState === AgentState.READY_TO_LEAVE_FOR_HOME) {
+                    console.log(`Agent ${this.id}: Fin transition bâtiment->chemin, passage à IN_TRANSIT_TO_HOME`);
+                    this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                }
+                
+                return true;
+            } else if (this.isMovingFromPathToBuilding) {
+                // Transition du chemin au bâtiment terminée, finir le trajet
+                this.isMovingFromPathToBuilding = false;
+                this.isVisible = false;
+                
+                // Changer l'état selon la destination
+                if (this._currentPathRequestGoal === 'WORK') {
+                    console.log(`Agent ${this.id}: Fin transition chemin->bâtiment, passage à AT_WORK`);
+                    this.currentState = AgentState.AT_WORK;
+                    this.lastArrivalTimeWork = currentGameTime;
+                } else if (this._currentPathRequestGoal === 'HOME') {
+                    console.log(`Agent ${this.id}: Fin transition chemin->bâtiment, passage à AT_HOME`);
+                    this.currentState = AgentState.AT_HOME;
+                    this.lastArrivalTimeHome = currentGameTime;
+                }
+                
+                // Nettoyer les données de chemin
+                this.currentPathPoints = null;
+                this.calculatedTravelDurationGame = 0;
+                this.departureTimeGame = -1;
+                this.arrivalTmeGame = -1;
+                this.hasReachedDestination = false;
+                
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    destroy() {
         this.path = null;
         this.homePosition = null;
         this.workPosition = null;
@@ -835,24 +1099,6 @@ export default class Agent {
         // --- OPTIMISATION: Calculer le prochain check ---
         this._calculateAndSetNextCheckTime(currentGameTime);
         // --- FIN OPTIMISATION ---
-    }
-
-    // Nouvelle méthode pour réinitialiser les matrices d'animation
-    _resetAnimationMatrices() {
-        // Réinitialiser toutes les matrices d'animation à l'identité
-        Object.keys(this.currentAnimationMatrix).forEach(key => {
-            this.currentAnimationMatrix[key].identity();
-        });
-    }
-
-    // Ajouter une méthode pour calculer et définir le prochain contrôle d'état nécessaire
-    _calculateAndSetNextCheckTime(currentGameTime, recalculate = false) {
-        // Calculer le prochain contrôle d'état nécessaire
-        const nextCheckTime = currentGameTime + 10000; // 10 secondes à partir de maintenant
-        this._nextStateCheckTime = nextCheckTime;
-        if (recalculate) {
-            this._nextStateCheckTime = currentGameTime + 10000; // 10 secondes à partir de maintenant
-        }
     }
 }
 

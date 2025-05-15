@@ -398,7 +398,7 @@ self.onmessage = function(event) {
             
             if (cachedResult) {
                 const endTime = performance.now();
-                console.log(`[Worker] Cache HIT pour Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}) en ${(endTime - startTime).toFixed(2)}ms`);
+                //console.log(`[Worker] Cache HIT pour Agent ${agentId} (${isVehicle ? 'Véhicule' : 'Piéton'}) en ${(endTime - startTime).toFixed(2)}ms`);
                 
                 self.postMessage({
                     type: 'pathResult',
@@ -428,7 +428,7 @@ self.onmessage = function(event) {
                 if (nearestStartNode) {
                     finalStartNode = nearestStartNode;
                     nodesAdjusted = true;
-                    console.log(`[Worker] Nœud de départ ajusté pour Agent ${agentId}: (${normalizedStartNode.x},${normalizedStartNode.y}) → (${nearestStartNode.x},${nearestStartNode.y})`);
+                    //console.log(`[Worker] Nœud de départ ajusté pour Agent ${agentId}: (${normalizedStartNode.x},${normalizedStartNode.y}) → (${nearestStartNode.x},${nearestStartNode.y})`);
                 } else {
                     console.error(`[Worker Error] Start node not walkable and no nearby walkable node found for Agent ${agentId}.`);
                     self.postMessage({ type: 'pathResult', data: { agentId: agentId, path: null, pathLengthWorld: 0 } });
@@ -441,7 +441,7 @@ self.onmessage = function(event) {
                 if (nearestEndNode) {
                     finalEndNode = nearestEndNode;
                     nodesAdjusted = true;
-                    console.log(`[Worker] Nœud d'arrivée ajusté pour Agent ${agentId}: (${normalizedEndNode.x},${normalizedEndNode.y}) → (${nearestEndNode.x},${nearestEndNode.y})`);
+                    //console.log(`[Worker] Nœud d'arrivée ajusté pour Agent ${agentId}: (${normalizedEndNode.x},${normalizedEndNode.y}) → (${nearestEndNode.x},${nearestEndNode.y})`);
                 } else {
                     console.error(`[Worker Error] End node not walkable and no nearby walkable node found for Agent ${agentId}.`);
                     self.postMessage({ type: 'pathResult', data: { agentId: agentId, path: null, pathLengthWorld: 0 } });

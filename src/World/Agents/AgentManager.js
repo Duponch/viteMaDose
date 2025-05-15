@@ -830,11 +830,12 @@ export default class AgentManager {
 
 	update(deltaTime) {
         if (!this.experience?.world?.environment?.isInitialized) return;
-        const environment        = this.experience.world.environment;
-        const currentGameTime    = this.experience.time.elapsed;
-        const isDebug            = this.experience.isDebugMode;
-        const debugMarkerScale   = isDebug ? 1.0 : 0;
+        const environment = this.experience.world.environment;
+        const currentGameTime = this.experience.time.elapsed;
+        const isDebug = this.experience.isDebugMode;
+        const debugMarkerScale = isDebug ? 1.0 : 0;
         const fixedMarkerYOffset = 5.0;
+        const calendarDate = environment.getCurrentCalendarDate();
         
         // Obtenir une référence au pool d'objets
         const objectPool = this.experience.objectPool;
@@ -842,12 +843,7 @@ export default class AgentManager {
             console.warn("AgentManager: objectPool non disponible, utilisation du mode non optimisé");
         }
 
-        // 1. Logique
-        this.agents.forEach(agent => {
-            agent.updateState(deltaTime, environment.getCurrentHour(), currentGameTime);
-        });
-
-        // 2. Visuels
+        // Variables temporaires pour les calculs de matrices
         let needsHighDetailUpdate = false;
         let needsLowDetailUpdate = false;
         let needsAgentMarkerUpdate = false;
@@ -869,12 +865,20 @@ export default class AgentManager {
         // Variable temporaire pour stocker l'échelle de l'agent
         let zeroScale = null;
 
+        // Mise à jour des matrices d'instance pour chaque agent actif
         for (const agent of this.agents) {
-            const instanceId = this.agentToInstanceId.get(agent.id);
-            if (instanceId === undefined) continue;
+            const instanceId = agent.instanceId;
+            if (!agent || instanceId === undefined) continue; // Ignorer les agents invalides
 
+            // --- Mise à jour logique de l'agent ---
+            if (typeof currentGameTime !== 'number') {
+                console.warn("AgentManager: currentGameTime n'est pas un nombre:", currentGameTime);
+                currentGameTime = this.experience.time.elapsed;
+            }
+            agent.update(deltaTime, environment.getCurrentHour(), calendarDate, currentGameTime);
+
+            // --- Mise à jour des matrices d'instance ---
             // Met à jour la position/orientation de base
-            agent.updateVisuals(deltaTime, currentGameTime);
             const actualScale = agent.isVisible ? agent.scale : 0;
             this.tempScale.set(actualScale, actualScale, actualScale);
             this.agentMatrix.compose(agent.position, agent.orientation, this.tempScale);
