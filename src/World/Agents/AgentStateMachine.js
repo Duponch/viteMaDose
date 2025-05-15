@@ -443,30 +443,27 @@ export default class AgentStateMachine {
                     (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame) || 
                     (!agent.currentPathPoints || agent.currentPathPoints.length === 0);
                 
+                // CORRECTION: Si l'heure d'arrivée est atteinte, démarrer la transition vers le bâtiment
                 if (arrivedWorkPed && !agent.isMovingFromPathToBuilding) {
-                    agent.hasReachedDestination = true;
-                }
-                
-                // Ne pas traiter l'arrivée si une transition vers le bâtiment est déjà en cours
-                if (!agent.isMovingFromPathToBuilding && agent.hasReachedDestination) {
-                    // À ce stade, l'agent a atteint le point final du chemin
-                    // La transition vers le bâtiment doit être initiée par updateVisual
+                    console.log(`Agent ${agent.id}: Temps d'arrivée au travail atteint - démarrage transition vers bâtiment`);
+                    
+                    // Démarrer la transition vers le bâtiment
+                    agent._enterBuilding(currentGameTime, 'WORK');
                 }
                 break;
+                
             case AgentState.IN_TRANSIT_TO_HOME:
                 // Prendre en compte les deux conditions: hasReachedDestination et/ou temps écoulé
                 const arrivedHomePed = 
                     (agent.arrivalTmeGame > 0 && currentGameTime >= agent.arrivalTmeGame) || 
                     (!agent.currentPathPoints || agent.currentPathPoints.length === 0);
                 
+                // CORRECTION: Si l'heure d'arrivée est atteinte, démarrer la transition vers le bâtiment
                 if (arrivedHomePed && !agent.isMovingFromPathToBuilding) {
-                    agent.hasReachedDestination = true;
-                }
-                
-                // Ne pas traiter l'arrivée si une transition vers le bâtiment est déjà en cours
-                if (!agent.isMovingFromPathToBuilding && agent.hasReachedDestination) {
-                    // À ce stade, l'agent a atteint le point final du chemin
-                    // La transition vers le bâtiment doit être initiée par updateVisual
+                    console.log(`Agent ${agent.id}: Temps d'arrivée à la maison atteint - démarrage transition vers bâtiment`);
+                    
+                    // Démarrer la transition vers le bâtiment
+                    agent._enterBuilding(currentGameTime, 'HOME');
                 }
                 break;
                 

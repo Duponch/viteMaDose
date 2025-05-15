@@ -408,14 +408,35 @@ export default class Agent {
             this.currentPathPoints = pathPoints.map(p => p.clone());
             this.currentPathLengthWorld = pathLengthWorld;
 
+            // --- CORRECTION: Estimer les distances de transition ---
+            // Estimer la distance de transition du bâtiment au début du chemin
+            let startTransitionDistance = 0;
+            let endTransitionDistance = 0;
+            
+            if (wasRequestingWork && this.homeBuildingPosition && this.homePosition) {
+                startTransitionDistance = this.homeBuildingPosition.distanceTo(this.homePosition);
+            } else if (wasRequestingHome && this.workBuildingPosition && this.workPosition) {
+                startTransitionDistance = this.workBuildingPosition.distanceTo(this.workPosition);
+            }
+            
+            if (wasRequestingWork && this.workBuildingPosition && this.workPosition) {
+                endTransitionDistance = this.workPosition.distanceTo(this.workBuildingPosition);
+            } else if (wasRequestingHome && this.homeBuildingPosition && this.homePosition) {
+                endTransitionDistance = this.homePosition.distanceTo(this.homeBuildingPosition);
+            }
+            
+            // Ajouter les distances de transition au chemin total
+            const totalPathLengthWithTransitions = pathLengthWorld + startTransitionDistance + endTransitionDistance;
+            // ------------------------------------------------------
+
             // --- Calcul durée trajet (utilise vehicleBehavior) ---
             const isDriving = this.vehicleBehavior?.isDriving() ?? false;
             const car = isDriving ? this.vehicleBehavior.currentVehicle : null;
             // Utilise la vitesse de la voiture si elle conduit, sinon la vitesse de base de l'agent
             const speed = isDriving ? (car?.speed ?? this.config.carSpeed) : this.agentBaseSpeed;
             // --------------------------------------------------
-            if (speed > 0 && pathLengthWorld > 0) {
-                const travelSecondsGame = pathLengthWorld / speed;
+            if (speed > 0 && totalPathLengthWithTransitions > 0) {
+                const travelSecondsGame = totalPathLengthWithTransitions / speed;
                 const dayDurationMs = this.experience.world?.environment?.dayDurationMs;
                 if (dayDurationMs > 0) {
                     const travelRatioOfDay = travelSecondsGame / (dayDurationMs / 1000);
@@ -553,6 +574,22 @@ export default class Agent {
         if (typeof currentGameTime !== 'number') {
             console.warn(`Agent ${this.id}: currentGameTime n'est pas un nombre dans Agent.update:`, currentGameTime);
             currentGameTime = this.experience.time.elapsed;
+        }
+        
+        // CORRECTION: Mécanisme de secours pour les agents bloqués en transit 
+        // dont le temps d'arrivée est dépassé
+        if ((this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
+             this.currentState === AgentState.IN_TRANSIT_TO_HOME) && 
+            this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame &&
+            !this.isMovingFromPathToBuilding) { // Ne pas interférer si une transition est déjà en cours
+            
+            console.log(`Agent ${this.id}: Mécanisme de secours - Temps d'arrivée dépassé, démarrage transition vers bâtiment`);
+            
+            if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
+                this._enterBuilding(currentGameTime, 'WORK');
+            } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
+                this._enterBuilding(currentGameTime, 'HOME');
+            }
         }
         
         // Mise à jour de la state machine (mise à jour d'état logique)
@@ -699,7 +736,7 @@ export default class Agent {
      * @param {number} currentGameTime - Temps de jeu total (ms).
      */
     updateVisual(deltaTime, currentGameTime) {
-        // --- MODIFICATION: Gestion des transitions bâtiment<->chemin ---
+        // Gestion des transitions bâtiment<->chemin
         if (this.isMovingFromBuildingToPath || this.isMovingFromPathToBuilding) {
             const transitionCompleted = this.updateBuildingTransition(currentGameTime);
             // Log pour le débogage
@@ -708,7 +745,6 @@ export default class Agent {
             }
             return;
         }
-        // ------------------------------------------------------
         
         // Vérifier si l'agent est dans un état de déplacement
         const isDriving = this.vehicleBehavior?.isDriving() ?? false;
@@ -740,7 +776,7 @@ export default class Agent {
         if (isDriving) {
             const carPosition = this.vehicleBehavior.getVehiclePosition();
             const carOrientation = this.vehicleBehavior.getVehicleOrientation();
-                this.position.copy(carPosition); 
+            this.position.copy(carPosition); 
             this.orientation.copy(carOrientation);
             
             // Met à jour les matrices d'animation
@@ -758,45 +794,36 @@ export default class Agent {
             return;
         }
 
-        // Vérifier si destination déjà atteinte
+        // === CORRECTION: Vérifier d'abord si le temps d'arrivée est atteint ===
+        // Cela garantit que l'agent entre dans le bâtiment exactement au temps calculé
+        if (!this.hasReachedDestination && this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
+            console.log(`Agent ${this.id}: Temps d'arrivée atteint dans updateVisual - entrée immédiate dans le bâtiment`);
+            
+            // Pour plus de sécurité, forcer immédiatement l'entrée dans le bâtiment
+            if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
+                this._enterBuilding(currentGameTime, 'WORK');
+            } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
+                this._enterBuilding(currentGameTime, 'HOME');
+            }
+            return;
+        }
+
+        // Vérifier si destination déjà atteinte spatialement
         const lastPoint = this.currentPathPoints[this.currentPathPoints.length - 1];
         const distanceToLastPointSq = this.position.distanceToSquared(lastPoint);
         
-        // Vérifier si l'agent est arrivé à destination pour démarrer la transition vers le bâtiment
-        if (!this.hasReachedDestination && distanceToLastPointSq <= this.reachToleranceSq) {
-            console.log(`Agent ${this.id}: A atteint la destination (distance: ${Math.sqrt(distanceToLastPointSq).toFixed(2)})`);
-            this.hasReachedDestination = true;
-            
-            // Démarrer la transition vers le bâtiment
-            if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
-                console.log(`Agent ${this.id}: Début transition vers cube WORK`);
-                this.startPathToBuildingTransition(currentGameTime, 'WORK');
-            } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
-                console.log(`Agent ${this.id}: Début transition vers cube HOME`);
-                this.startPathToBuildingTransition(currentGameTime, 'HOME');
-            }
-            
-            return;
-        }
+        // CORRECTION: Réduire la tolérance à une valeur très petite mais non nulle pour garantir une détection précise
+        const minToleranceSq = 0.01; // Valeur très petite mais non nulle
         
-        // === Cas supplémentaire: vérifier si le temps de déplacement est écoulé ===
-        if (!this.hasReachedDestination && this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
-            console.log(`Agent ${this.id}: Temps d'arrivée atteint (même si pas à la position exacte)`);
-            this.hasReachedDestination = true;
+        // Vérifier si l'agent est arrivé à destination pour entrer directement dans le bâtiment
+        if (!this.hasReachedDestination && distanceToLastPointSq <= Math.max(this.reachToleranceSq, minToleranceSq)) {
+            console.log(`Agent ${this.id}: A atteint la destination dans updateVisual (distance: ${Math.sqrt(distanceToLastPointSq).toFixed(2)})`);
             
-            // Téléporter à la position finale si trop loin
-            if (distanceToLastPointSq > this.reachToleranceSq * 4) {
-                console.log(`Agent ${this.id}: Téléportation à la fin du chemin (trop éloigné: ${Math.sqrt(distanceToLastPointSq).toFixed(2)})`);
-                this.position.copy(lastPoint).setY(this.yOffset);
-            }
-            
-            // Démarrer la transition vers le bâtiment selon l'état
+            // Force l'entrée directe dans le bâtiment sans délai
             if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
-                console.log(`Agent ${this.id}: Début transition vers cube WORK (par temps écoulé)`);
-                this.startPathToBuildingTransition(currentGameTime, 'WORK');
+                this._enterBuilding(currentGameTime, 'WORK');
             } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
-                console.log(`Agent ${this.id}: Début transition vers cube HOME (par temps écoulé)`);
-                this.startPathToBuildingTransition(currentGameTime, 'HOME');
+                this._enterBuilding(currentGameTime, 'HOME');
             }
             
             return;
@@ -910,10 +937,14 @@ export default class Agent {
         endPos.y = this.yOffset;
         this.buildingTransitionPathPoints = [startPos, endPos];
         
-        // Calculer la durée de transition
+        // Calculer la durée de transition - mais avec une durée fixe courte
         const distance = startPos.distanceTo(endPos);
-        const speed = this.agentBaseSpeed;
+        const speed = this.agentBaseSpeed * 2; // Doubler la vitesse pour une transition plus rapide
         this.buildingTransitionDuration = (distance / speed) * 1000; // en ms
+        
+        // Limiter la durée maximale de transition pour éviter les blocages
+        const maxTransitionDuration = 2000; // Maximum 2 secondes
+        this.buildingTransitionDuration = Math.min(this.buildingTransitionDuration, maxTransitionDuration);
         
         // Initialiser les états de transition
         this.isMovingFromBuildingToPath = true;
@@ -921,7 +952,7 @@ export default class Agent {
         this.buildingTransitionProgress = 0;
         this.buildingTransitionStartTime = currentGameTime;
         
-        // Rendre l'agent visible
+        // Rendre l'agent visible immédiatement
         this.isVisible = true;
         
         return true;
@@ -962,10 +993,15 @@ export default class Agent {
         endPos.y = this.yOffset;
         this.buildingTransitionPathPoints = [startPos, endPos];
         
-        // Calculer la durée de transition
+        // Calculer la durée de transition - mais maintenant avec une durée fixe courte
+        // pour garantir une animation visible mais rapide
         const distance = startPos.distanceTo(endPos);
-        const speed = this.agentBaseSpeed;
+        const speed = this.agentBaseSpeed * 2; // Doubler la vitesse pour une transition plus rapide
         this.buildingTransitionDuration = (distance / speed) * 1000; // en ms
+        
+        // Limiter la durée maximale de transition pour éviter les blocages
+        const maxTransitionDuration = 2000; // Maximum 2 secondes
+        this.buildingTransitionDuration = Math.min(this.buildingTransitionDuration, maxTransitionDuration);
         
         // Initialiser les états de transition
         this.isMovingFromBuildingToPath = false;
@@ -1010,8 +1046,10 @@ export default class Agent {
         const endPos = this.buildingTransitionPathPoints[1];
         this.position.lerpVectors(startPos, endPos, this.buildingTransitionProgress);
         
-        // Si la transition est terminée
-        if (this.buildingTransitionProgress >= 1.0) {
+        // Si la transition est terminée ou si on a dépassé le temps maximum
+        if (this.buildingTransitionProgress >= 1.0 || 
+            elapsedTime > this.buildingTransitionDuration * 1.5) { // 50% de marge pour éviter les blocages
+            
             console.log(`Agent ${this.id}: Transition terminée! Type: ${this.isMovingFromBuildingToPath ? 'Building->Path' : 'Path->Building'}`);
             
             if (this.isMovingFromBuildingToPath) {
@@ -1105,6 +1143,19 @@ export default class Agent {
         // --- OPTIMISATION: Calculer le prochain check ---
         this._calculateAndSetNextCheckTime(currentGameTime);
         // --- FIN OPTIMISATION ---
+    }
+
+    /**
+     * Fait entrer l'agent dans le bâtiment en démarrant une transition visuelle
+     * @param {number} currentGameTime - Le temps de jeu actuel
+     * @param {string} goal - "WORK" ou "HOME" pour indiquer la destination
+     * @private
+     */
+    _enterBuilding(currentGameTime, goal) {
+        console.log(`Agent ${this.id}: Démarrage transition vers bâtiment ${goal}`);
+        
+        // Utiliser startPathToBuildingTransition pour gérer la transition visuelle
+        this.startPathToBuildingTransition(currentGameTime, goal);
     }
 }
 
