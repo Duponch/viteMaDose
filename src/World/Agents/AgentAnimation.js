@@ -83,6 +83,91 @@ export default class AgentAnimation {
     }
 
     /**
+     * Met à jour les matrices d'animation pour un agent en voiture.
+     * Position les mains comme sur un volant et les jambes en position assise.
+     * @param {boolean} isLodActive - Indique si le LOD est actif.
+     * @returns {object} - L'objet `this.animationMatrices` mis à jour.
+     */
+    updateCar(isLodActive) {
+        // Si le LOD est actif, réinitialiser toutes les matrices à l'identité
+        if (isLodActive) {
+            this.resetMatrices();
+            return this.animationMatrices;
+        }
+
+        // Position assise pour le corps
+        let pos = { x: 0, y: 0, z: 0 }, rot = { x: 0, y: 0, z: 0 };
+
+        // Torso - légèrement vers l'avant pour position assise
+        pos.y = 0;
+        pos.z = -0.3;
+        rot.x = -0.2; // Légère inclinaison vers l'avant
+        this.animationMatrices.torso.compose(
+            _tempPos.set(pos.x, pos.y, pos.z), 
+            _tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), 
+            _tempScale
+        );
+
+        // Head - légèrement relevée pour regarder la route
+        pos.y = 0.1;
+        pos.z = -0.2;
+        rot.x = -0.1; // Légère inclinaison
+        this.animationMatrices.head.compose(
+            _tempPos.set(pos.x, pos.y, pos.z), 
+            _tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), 
+            _tempScale
+        );
+
+        // Left Foot - position pédale
+        pos.z = -0.8;
+        pos.y = -0.4;
+        rot.x = -1.2; // Pied sur pédale
+        this.animationMatrices.leftFoot.compose(
+            _tempPos.set(pos.x, pos.y, pos.z), 
+            _tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), 
+            _tempScale
+        );
+
+        // Right Foot - position pédale
+        pos.z = -0.8;
+        pos.y = -0.4;
+        rot.x = -1.2; // Pied sur pédale
+        this.animationMatrices.rightFoot.compose(
+            _tempPos.set(pos.x, pos.y, pos.z), 
+            _tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), 
+            _tempScale
+        );
+
+        // Left Hand - main sur le volant (gauche)
+        pos.z = 0.5;
+        pos.y = 0.5;
+        pos.x = -0.5;
+        rot.x = 0.7; // Main tendue
+        rot.y = 0;
+        rot.z = 0;
+        this.animationMatrices.leftHand.compose(
+            _tempPos.set(pos.x, pos.y, pos.z), 
+            _tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), 
+            _tempScale
+        );
+
+        // Right Hand - main sur le volant (droite)
+        pos.z = 0.5;
+        pos.y = 0.5;
+        pos.x = 0.5; 
+        rot.x = 0.7; // Main tendue
+        rot.y = 0;
+        rot.z = 0;
+        this.animationMatrices.rightHand.compose(
+            _tempPos.set(pos.x, pos.y, pos.z), 
+            _tempQuat.setFromEuler(new THREE.Euler(rot.x, rot.y, rot.z, 'XYZ')), 
+            _tempScale
+        );
+
+        return this.animationMatrices;
+    }
+
+    /**
      * Réinitialise toutes les matrices d'animation à l'identité.
      */
     resetMatrices() {
