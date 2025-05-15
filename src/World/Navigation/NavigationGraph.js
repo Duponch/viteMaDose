@@ -554,4 +554,31 @@ export default class NavigationGraph {
         }
         //console.log("NavigationGraph: Grille PF.Grid mise à jour");
     }
+
+    /**
+     * Trouve un nœud de grille aléatoire qui est marchable.
+     * @param {number} maxAttempts - Nombre maximum de tentatives pour trouver un nœud marchable.
+     * @returns {{x: number, y: number} | null} Un nœud marchable ou null si aucun n'est trouvé.
+     */
+    getRandomWalkableNode(maxAttempts = 500) {
+        if (!this.gridWalkableMap || this.gridWidth <= 0 || this.gridHeight <= 0) {
+            console.error("NavigationGraph: Grille non initialisée ou invalide pour getRandomWalkableNode.");
+            return null;
+        }
+
+        let attempts = 0;
+        while (attempts < maxAttempts) {
+            const randomX = Math.floor(Math.random() * this.gridWidth);
+            const randomY = Math.floor(Math.random() * this.gridHeight);
+
+            if (this.isWalkableAt(randomX, randomY)) {
+                // console.log(`NavigationGraph: Random Walkable Node Found: (${randomX}, ${randomY})`);
+                return { x: randomX, y: randomY };
+            }
+            attempts++;
+        }
+
+        console.warn(`NavigationGraph: Impossible de trouver un nœud marchable aléatoire après ${maxAttempts} tentatives.`);
+        return null; // Retourne null si aucun nœud n'est trouvé
+    }
 }
