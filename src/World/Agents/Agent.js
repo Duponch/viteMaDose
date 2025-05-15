@@ -198,7 +198,7 @@ export default class Agent {
             currentHour >= this.departureWorkHour && 
             timeWithinDay >= this.exactWorkDepartureTimeGame) {
             
-            console.log(`Agent ${this.id}: Correction d'état - En retard pour le travail, synchronisation`);
+            //console.log(`Agent ${this.id}: Correction d'état - En retard pour le travail, synchronisation`);
             
             // Si l'agent doit déjà être arrivé au travail (après 9h par exemple)
             if (currentHour >= 9) {
@@ -263,7 +263,7 @@ export default class Agent {
                 currentHour >= this.departureHomeHour && 
                 timeWithinDay >= this.exactHomeDepartureTimeGame) {
             
-            console.log(`Agent ${this.id}: Correction d'état - En retard pour rentrer, synchronisation`);
+            //console.log(`Agent ${this.id}: Correction d'état - En retard pour rentrer, synchronisation`);
             
             // Si l'agent doit déjà être arrivé à la maison (après 19h par exemple)
             if (currentHour >= 19) {
@@ -330,7 +330,7 @@ export default class Agent {
                  this.currentState === AgentState.DRIVING_HOME) && 
                 this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
             
-            console.log(`Agent ${this.id}: Correction d'état - Temps d'arrivée dépassé, synchronisation`);
+            //console.log(`Agent ${this.id}: Correction d'état - Temps d'arrivée dépassé, synchronisation`);
             
             // Placer l'agent directement à destination
             if (this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
@@ -373,7 +373,7 @@ export default class Agent {
                 // Synchroniser la position visuelle
                 this.syncVisualPositionWithProgress(progressRatio);
                 
-                console.log(`Agent ${this.id}: Synchronisation de position intermédiaire, progression ${(progressRatio * 100).toFixed(1)}%`);
+                //console.log(`Agent ${this.id}: Synchronisation de position intermédiaire, progression ${(progressRatio * 100).toFixed(1)}%`);
             }
         }
         
@@ -382,7 +382,7 @@ export default class Agent {
                 currentHour >= 9 && currentHour < this.departureHomeHour &&
                 this.workPosition && this.shouldBeAtWork(currentHour)) {
             
-            console.log(`Agent ${this.id}: Correction d'état - Devrait être au travail à ${currentHour}h`);
+            //console.log(`Agent ${this.id}: Correction d'état - Devrait être au travail à ${currentHour}h`);
             
             this.currentState = AgentState.AT_WORK;
             this.isVisible = false;
@@ -393,7 +393,7 @@ export default class Agent {
         else if (this.currentState === AgentState.AT_WORK && 
                 ((currentHour >= 19) || (currentHour < 7))) {
             
-            console.log(`Agent ${this.id}: Correction d'état - Devrait être à la maison à ${currentHour}h`);
+            //console.log(`Agent ${this.id}: Correction d'état - Devrait être à la maison à ${currentHour}h`);
             
             this.currentState = AgentState.AT_HOME;
             this.isVisible = false;
@@ -452,7 +452,7 @@ export default class Agent {
             if (this.experience?.timeScheduler?.isInitialized) {
                 this._scheduleAgentDailyEvents();
             } else {
-                console.log(`Agent ${this.id}: TimeScheduler pas encore initialisé, report de la planification.`);
+                //console.log(`Agent ${this.id}: TimeScheduler pas encore initialisé, report de la planification.`);
                 // On pourrait programmer un retry plus tard si nécessaire
             }
         } catch (error) {
@@ -581,11 +581,11 @@ export default class Agent {
      * @private
      */
     _handlePrepareForWork(eventData) {
-        console.log(`Agent ${this.id}: Préparation au départ pour le travail`);
+        //console.log(`Agent ${this.id}: Préparation au départ pour le travail`);
         
         // Vérifier que l'agent est à la maison
         if (this.currentState !== AgentState.AT_HOME) {
-            console.log(`Agent ${this.id}: Ne peut pas se préparer pour le travail - n'est pas à la maison (état actuel: ${this.currentState})`);
+            //console.log(`Agent ${this.id}: Ne peut pas se préparer pour le travail - n'est pas à la maison (état actuel: ${this.currentState})`);
             return;
         }
 
@@ -615,18 +615,18 @@ export default class Agent {
      * @private
      */
     _handleDepartForWork(eventData) {
-        console.log(`Agent ${this.id}: Départ pour le travail`);
+        //console.log(`Agent ${this.id}: Départ pour le travail`);
         
         // Vérifier que l'agent est prêt à partir
         if (this.currentState !== AgentState.READY_TO_LEAVE_FOR_WORK && 
             this.currentState !== AgentState.PREPARING_FOR_WORK) {
-            console.log(`Agent ${this.id}: Ne peut pas partir pour le travail - n'est pas prêt (état actuel: ${this.currentState})`);
+            //console.log(`Agent ${this.id}: Ne peut pas partir pour le travail - n'est pas prêt (état actuel: ${this.currentState})`);
             return;
         }
 
         // Si l'agent est en attente d'un chemin, on force le départ quand même
         if (this.currentState === AgentState.PREPARING_FOR_WORK) {
-            console.log(`Agent ${this.id}: Forçage du départ pour le travail (était encore en préparation)`);
+            //console.log(`Agent ${this.id}: Forçage du départ pour le travail (était encore en préparation)`);
             
             // Si le chemin n'a pas été reçu, on en demande un nouveau
             if (!this.currentPathPoints || this.currentPathPoints.length === 0) {
@@ -652,7 +652,7 @@ export default class Agent {
             this.departureTimeGame = eventData.currentGameTime;
             this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
             
-            console.log(`Agent ${this.id}: Départ pour le travail à ${new Date(this.departureTimeGame).toISOString()}, arrivée prévue à ${new Date(this.arrivalTmeGame).toISOString()}`);
+            //console.log(`Agent ${this.id}: Départ pour le travail à ${new Date(this.departureTimeGame).toISOString()}, arrivée prévue à ${new Date(this.arrivalTmeGame).toISOString()}`);
             
             // Cette transition déclenchera automatiquement le changement d'état vers IN_TRANSIT_TO_WORK
             // une fois terminée (via updateBuildingTransition)
@@ -680,11 +680,11 @@ export default class Agent {
      * @private
      */
     _handlePrepareForHome(eventData) {
-        console.log(`Agent ${this.id}: Préparation au départ pour la maison`);
+        //console.log(`Agent ${this.id}: Préparation au départ pour la maison`);
         
         // Vérifier que l'agent est au travail
         if (this.currentState !== AgentState.AT_WORK) {
-            console.log(`Agent ${this.id}: Ne peut pas se préparer pour la maison - n'est pas au travail (état actuel: ${this.currentState})`);
+            //console.log(`Agent ${this.id}: Ne peut pas se préparer pour la maison - n'est pas au travail (état actuel: ${this.currentState})`);
             return;
         }
 
@@ -714,18 +714,18 @@ export default class Agent {
      * @private
      */
     _handleDepartForHome(eventData) {
-        console.log(`Agent ${this.id}: Départ pour la maison`);
+        //console.log(`Agent ${this.id}: Départ pour la maison`);
         
         // Vérifier que l'agent est prêt à partir
         if (this.currentState !== AgentState.READY_TO_LEAVE_FOR_HOME && 
             this.currentState !== AgentState.PREPARING_FOR_HOME) {
-            console.log(`Agent ${this.id}: Ne peut pas partir pour la maison - n'est pas prêt (état actuel: ${this.currentState})`);
+            //console.log(`Agent ${this.id}: Ne peut pas partir pour la maison - n'est pas prêt (état actuel: ${this.currentState})`);
             return;
         }
 
         // Si l'agent est en attente d'un chemin, on force le départ quand même
         if (this.currentState === AgentState.PREPARING_FOR_HOME) {
-            console.log(`Agent ${this.id}: Forçage du départ pour la maison (était encore en préparation)`);
+            //console.log(`Agent ${this.id}: Forçage du départ pour la maison (était encore en préparation)`);
             
             // Si le chemin n'a pas été reçu, on en demande un nouveau
             if (!this.currentPathPoints || this.currentPathPoints.length === 0) {
@@ -751,7 +751,7 @@ export default class Agent {
             this.departureTimeGame = eventData.currentGameTime;
             this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
             
-            console.log(`Agent ${this.id}: Départ pour la maison à ${new Date(this.departureTimeGame).toISOString()}, arrivée prévue à ${new Date(this.arrivalTmeGame).toISOString()}`);
+            //console.log(`Agent ${this.id}: Départ pour la maison à ${new Date(this.departureTimeGame).toISOString()}, arrivée prévue à ${new Date(this.arrivalTmeGame).toISOString()}`);
             
             // Cette transition déclenchera automatiquement le changement d'état vers IN_TRANSIT_TO_HOME
             // une fois terminée (via updateBuildingTransition)
@@ -856,7 +856,7 @@ export default class Agent {
                 return false;
             }
 
-            //console.log(`Agent ${this.id}: NavigationManager initialisé avec succès. Mode: ${isVehicle ? 'véhicule' : 'piéton'}`);
+            ////console.log(`Agent ${this.id}: NavigationManager initialisé avec succès. Mode: ${isVehicle ? 'véhicule' : 'piéton'}`);
         }
 
         return true;
@@ -978,7 +978,7 @@ export default class Agent {
 
         // --- LOG AVANT WORKER (INCHANGÉ) ---
         // ... (log des positions/nœuds) ...
-         //console.log(`[AGENT ${this.id} PATH_REQ] Mode: ${isVehicle ? 'Veh' : 'Ped'}, StartW: (${startPosWorld?.x.toFixed(1)}, ${startPosWorld?.z.toFixed(1)}), EndW: (${endPosWorld?.x.toFixed(1)}, ${endPosWorld?.z.toFixed(1)}), StartN: (${startNode.x},${startNode.y}), EndN: (${endNode.x},${endNode.y}), NextState: ${nextStateIfSuccess}`);
+         ////console.log(`[AGENT ${this.id} PATH_REQ] Mode: ${isVehicle ? 'Veh' : 'Ped'}, StartW: (${startPosWorld?.x.toFixed(1)}, ${startPosWorld?.z.toFixed(1)}), EndW: (${endPosWorld?.x.toFixed(1)}, ${endPosWorld?.z.toFixed(1)}), StartN: (${startNode.x},${startNode.y}), EndN: (${endNode.x},${endNode.y}), NextState: ${nextStateIfSuccess}`);
 
         // --- Envoi de la Requête au Worker (INCHANGÉ - passe bien isVehicle) ---
         agentManager.requestPathFromWorker(this.id, startNode, endNode, isVehicle);
@@ -991,7 +991,7 @@ export default class Agent {
      * @param {number} pathLengthWorld - Longueur calculée du chemin en unités monde.
      */
     setPath(pathPoints, pathLengthWorld) {
-        //console.log(`[Agent ${this.id} DEBUG] Entrée dans setPath. État actuel: ${this.currentState}. Longueur reçue: ${pathLengthWorld}`);
+        ////console.log(`[Agent ${this.id} DEBUG] Entrée dans setPath. État actuel: ${this.currentState}. Longueur reçue: ${pathLengthWorld}`);
 
         const currentStateAtCall = this.currentState;
         const wasRequestingWork = currentStateAtCall === AgentState.REQUESTING_PATH_FOR_WORK;
@@ -1015,10 +1015,10 @@ export default class Agent {
                 this.currentPathPoints = null; this.currentPathLengthWorld = 0; this.calculatedTravelDurationGame = 0;
                 this.departureTimeGame = -1; this.arrivalTmeGame = -1; this.hasReachedDestination = false;
                 this.isVisible = false; this._pathRequestTimeout = null;
-                //console.log(`[Agent ${this.id} DEBUG] Arrivée instantanée détectée. État final : ${this.currentState}`);
+                ////console.log(`[Agent ${this.id} DEBUG] Arrivée instantanée détectée. État final : ${this.currentState}`);
                 return;
             }
-            //console.log(`[Agent ${this.id} DEBUG] setPath: Chemin VALIDE reçu (${pathPoints.length} points, longueur ${pathLengthWorld.toFixed(2)}).`);
+            ////console.log(`[Agent ${this.id} DEBUG] setPath: Chemin VALIDE reçu (${pathPoints.length} points, longueur ${pathLengthWorld.toFixed(2)}).`);
 
             if (currentStateAtCall === AgentState.REQUESTING_PATH_FOR_HOME && this.weekendBehavior.weekendWalkEndTime > 0 && pathPoints.length > 0) {
                 const startPoint = pathPoints[0]; const distanceToStartSq = this.position.distanceToSquared(startPoint);
@@ -1098,10 +1098,10 @@ export default class Agent {
                 console.warn(`[Agent ${this.id} WARN] setPath: Chemin valide reçu mais état initial (${currentStateAtCall}) non géré.`);
                 nextState = this.currentState; // Garder l'état actuel
             }
-            //console.log(`[Agent ${this.id} DEBUG] setPath: Changement d'état de ${currentStateAtCall} vers ${nextState}`);
+            ////console.log(`[Agent ${this.id} DEBUG] setPath: Changement d'état de ${currentStateAtCall} vers ${nextState}`);
             this.currentState = nextState;
 
-            //console.log(`[Agent ${this.id} DEBUG] setPath (succès): Annulation du _pathRequestTimeout.`);
+            ////console.log(`[Agent ${this.id} DEBUG] setPath (succès): Annulation du _pathRequestTimeout.`);
             this._pathRequestTimeout = null; // Annuler le timer car le chemin est reçu
 
         }
@@ -1144,11 +1144,11 @@ export default class Agent {
                          if (this.weekendBehavior.parkSidewalkPosition) {
                              this.position.copy(this.weekendBehavior.parkSidewalkPosition).setY(this.yOffset);
                              this.weekendBehavior.isInsidePark = false; forceVisibilityFalse = false;
-                             //console.log(`[Agent ${this.id}] Téléporté au trottoir. Redemande chemin maison.`);
+                             ////console.log(`[Agent ${this.id}] Téléporté au trottoir. Redemande chemin maison.`);
                              fallbackState = AgentState.REQUESTING_PATH_FOR_HOME; this._pathRequestTimeout = this.experience.time.elapsed;
                              const currentGridNode = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(false)?.getClosestWalkableNode(this.position);
                              this.requestPath(this.position, this.homePosition, currentGridNode, this.homeGridNode, AgentState.READY_TO_LEAVE_FOR_HOME, this.experience.time.elapsed);
-                             //console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après requête retour maison.`); return;
+                             ////console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après requête retour maison.`); return;
                          } else {
                              console.warn(`[Agent ${this.id}] Position trottoir inconnue. Forçage maison.`); this.forceReturnHome(this.experience.time.elapsed);
                              fallbackState = AgentState.AT_HOME; teleportPosition = this.homePosition;
@@ -1160,7 +1160,7 @@ export default class Agent {
                              console.warn(`[Agent ${this.id}] Impossible de trouver une autre destination. Retour AT_HOME.`);
                              fallbackState = AgentState.AT_HOME; teleportPosition = this.homePosition;
                          } else { 
-							//console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après nouvelle requête promenade.`);
+							////console.log(`[Agent ${this.id} DEBUG] Sortie anticipée de setPath après nouvelle requête promenade.`);
 							return; 
 						}
                     }
@@ -1176,13 +1176,15 @@ export default class Agent {
             }
 
             // --- Appliquer l'état et la téléportation ---
-            //console.log(`[Agent ${this.id} DEBUG] setPath (échec): Changement d'état vers ${fallbackState}.`); this.currentState = fallbackState;
-            if (teleportPosition) { console.log(`[Agent ${this.id} DEBUG] Téléportation vers ${fallbackState}.`); this.position.copy(teleportPosition).setY(this.yOffset); }
+            ////console.log(`[Agent ${this.id} DEBUG] setPath (échec): Changement d'état vers ${fallbackState}.`); this.currentState = fallbackState;
+            if (teleportPosition) { 
+				//console.log(`[Agent ${this.id} DEBUG] Téléportation vers ${fallbackState}.`); this.position.copy(teleportPosition).setY(this.yOffset); 
+			}
             if (forceVisibilityFalse) { this.isVisible = false; }
 
-            //console.log(`[Agent ${this.id} DEBUG] setPath (échec): Annulation du _pathRequestTimeout.`); this._pathRequestTimeout = null;
+            ////console.log(`[Agent ${this.id} DEBUG] setPath (échec): Annulation du _pathRequestTimeout.`); this._pathRequestTimeout = null;
         }
-        //console.log(`[Agent ${this.id} DEBUG] Sortie de setPath. État final: ${this.currentState}`);
+        ////console.log(`[Agent ${this.id} DEBUG] Sortie de setPath. État final: ${this.currentState}`);
     }
 
     /**
@@ -1258,7 +1260,7 @@ export default class Agent {
             
             // Pour les véhicules, arrêter le véhicule et changer l'état directement
             if (this.currentState === AgentState.DRIVING_TO_WORK) {
-                console.log(`Agent ${this.id}: Arrivée en voiture au travail`);
+                //console.log(`Agent ${this.id}: Arrivée en voiture au travail`);
                 this.vehicleBehavior?.exitVehicle();
                 this.currentState = AgentState.AT_WORK;
                 this.isVisible = false;
@@ -1268,7 +1270,7 @@ export default class Agent {
                 this.lastArrivalTimeWork = currentGameTime;
                 this.currentPathPoints = null;
             } else if (this.currentState === AgentState.DRIVING_HOME) {
-                console.log(`Agent ${this.id}: Arrivée en voiture à la maison`);
+                //console.log(`Agent ${this.id}: Arrivée en voiture à la maison`);
                 this.vehicleBehavior?.exitVehicle();
                 this.currentState = AgentState.AT_HOME;
                 this.isVisible = false;
@@ -1339,7 +1341,7 @@ export default class Agent {
                     targetState = AgentState.AT_WORK;
                     teleportPosition = this.workPosition;
                     this.lastArrivalTimeWork = currentGameTime;
-                    //console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
+                    ////console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
                 }
                 break;
             
@@ -1352,7 +1354,7 @@ export default class Agent {
                     targetState = AgentState.AT_HOME;
                     teleportPosition = this.homePosition;
                     this.lastArrivalTimeHome = currentGameTime;
-                    //console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
+                    ////console.log(`Agent ${this.id}: Récupération -> ${targetState}`);
                 }
                 break;
 
@@ -1364,7 +1366,7 @@ export default class Agent {
                 if (this.homePosition) {
                     targetState = AgentState.AT_HOME;
                     teleportPosition = this.homePosition;
-                    //console.log(`Agent ${this.id}: Récupération (échec/blocage achat) -> ${targetState}`);
+                    ////console.log(`Agent ${this.id}: Récupération (échec/blocage achat) -> ${targetState}`);
                 }
                 break;
                 
@@ -1378,7 +1380,7 @@ export default class Agent {
                     teleportPosition = this.homePosition;
                     // Réinitialiser l'état de weekend
                     this.weekendBehavior?.resetWeekendState();
-                    //console.log(`Agent ${this.id}: Récupération (état weekend) -> ${targetState}`);
+                    ////console.log(`Agent ${this.id}: Récupération (état weekend) -> ${targetState}`);
                 }
                 break;
                 
@@ -1387,12 +1389,12 @@ export default class Agent {
                 if (this.homePosition) {
                     targetState = AgentState.AT_HOME;
                     teleportPosition = this.homePosition;
-                    //console.log(`Agent ${this.id}: Récupération (état autre) -> ${targetState}`);
+                    ////console.log(`Agent ${this.id}: Récupération (état autre) -> ${targetState}`);
                 } else if (this.workPosition) {
                     // Fallback si pas de homePosition
                     targetState = AgentState.AT_WORK;
                     teleportPosition = this.workPosition;
-                    //console.log(`Agent ${this.id}: Récupération (sans maison) -> ${targetState}`);
+                    ////console.log(`Agent ${this.id}: Récupération (sans maison) -> ${targetState}`);
                 } else {
                     // Cas catastrophique: ni domicile ni travail. Laisser en IDLE.
                     targetState = AgentState.IDLE;
@@ -1417,7 +1419,7 @@ export default class Agent {
         // Réinitialiser le timer d'état
         this._stateStartTime = null;
         
-        //console.log(`Agent ${this.id}: forceRecoverFromTimeout TERMINÉ (nouvel état=${this.currentState}).`);
+        ////console.log(`Agent ${this.id}: forceRecoverFromTimeout TERMINÉ (nouvel état=${this.currentState}).`);
     }
 
 	/**
@@ -1435,7 +1437,7 @@ export default class Agent {
             const transitionCompleted = this.updateBuildingTransition(currentGameTime);
             // Log pour le débogage
             if (transitionCompleted) {
-                console.log(`Agent ${this.id}: Transition complétée. isMovingFromBuildingToPath=${this.isMovingFromBuildingToPath}, isMovingFromPathToBuilding=${this.isMovingFromPathToBuilding}`);
+                //console.log(`Agent ${this.id}: Transition complétée. isMovingFromBuildingToPath=${this.isMovingFromBuildingToPath}, isMovingFromPathToBuilding=${this.isMovingFromPathToBuilding}`);
             }
             return;
         }
@@ -1491,7 +1493,7 @@ export default class Agent {
         // === CORRECTION: Vérifier d'abord si le temps d'arrivée est atteint ===
         // Cela garantit que l'agent entre dans le bâtiment exactement au temps calculé
         if (!this.hasReachedDestination && this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
-            console.log(`Agent ${this.id}: Temps d'arrivée atteint dans updateVisual - entrée immédiate dans le bâtiment`);
+            //console.log(`Agent ${this.id}: Temps d'arrivée atteint dans updateVisual - entrée immédiate dans le bâtiment`);
             
             // Pour plus de sécurité, forcer immédiatement l'entrée dans le bâtiment
             if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
@@ -1511,7 +1513,7 @@ export default class Agent {
         
         // Vérifier si l'agent est arrivé à destination pour entrer directement dans le bâtiment
         if (!this.hasReachedDestination && distanceToLastPointSq <= Math.max(this.reachToleranceSq, minToleranceSq)) {
-            console.log(`Agent ${this.id}: A atteint la destination dans updateVisual (distance: ${Math.sqrt(distanceToLastPointSq).toFixed(2)})`);
+            //console.log(`Agent ${this.id}: A atteint la destination dans updateVisual (distance: ${Math.sqrt(distanceToLastPointSq).toFixed(2)})`);
             
             // Force l'entrée directe dans le bâtiment sans délai
             if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
@@ -1622,9 +1624,9 @@ export default class Agent {
         }
         
         // Logs de débogage détaillés
-        console.log(`Agent ${this.id}: startTransitionFromBuildingToPath - 
+        /* console.log(`Agent ${this.id}: startTransitionFromBuildingToPath - 
             De: ${startPos.x.toFixed(2)},${startPos.y.toFixed(2)},${startPos.z.toFixed(2)} 
-            Vers: ${endPos.x.toFixed(2)},${endPos.y.toFixed(2)},${endPos.z.toFixed(2)}`);
+            Vers: ${endPos.x.toFixed(2)},${endPos.y.toFixed(2)},${endPos.z.toFixed(2)}`); */
         
         // Créer un chemin simple
         startPos.y = this.yOffset;
@@ -1678,9 +1680,9 @@ export default class Agent {
         }
         
         // Logs de débogage détaillés
-        console.log(`Agent ${this.id}: startPathToBuildingTransition - 
+        /* console.log(`Agent ${this.id}: startPathToBuildingTransition - 
             De: ${startPos.x.toFixed(2)},${startPos.y.toFixed(2)},${startPos.z.toFixed(2)} 
-            Vers: ${endPos.x.toFixed(2)},${endPos.y.toFixed(2)},${endPos.z.toFixed(2)}`);
+            Vers: ${endPos.x.toFixed(2)},${endPos.y.toFixed(2)},${endPos.z.toFixed(2)}`); */
         
         // Créer un chemin simple
         startPos.y = this.yOffset;
@@ -1728,9 +1730,9 @@ export default class Agent {
         
         // Logs détaillés pour le débogage
         if (Math.random() < 0.05) { // Limiter les logs à 5% des frames pour éviter de surcharger la console
-            console.log(`Agent ${this.id}: updateBuildingTransition - 
+            /* console.log(`Agent ${this.id}: updateBuildingTransition - 
                 Temps écoulé: ${elapsedTime.toFixed(2)}ms / ${this.buildingTransitionDuration.toFixed(2)}ms 
-                (${(elapsedTime/this.buildingTransitionDuration*100).toFixed(1)}%)`);
+                (${(elapsedTime/this.buildingTransitionDuration*100).toFixed(1)}%)`); */
         }
         
         this.buildingTransitionProgress = Math.min(1.0, elapsedTime / this.buildingTransitionDuration);
@@ -1744,7 +1746,7 @@ export default class Agent {
         if (this.buildingTransitionProgress >= 1.0 || 
             elapsedTime > this.buildingTransitionDuration * 1.5) { // 50% de marge pour éviter les blocages
             
-            console.log(`Agent ${this.id}: Transition terminée! Type: ${this.isMovingFromBuildingToPath ? 'Building->Path' : 'Path->Building'}`);
+            //console.log(`Agent ${this.id}: Transition terminée! Type: ${this.isMovingFromBuildingToPath ? 'Building->Path' : 'Path->Building'}`);
             
             if (this.isMovingFromBuildingToPath) {
                 // Transition du bâtiment au chemin terminée, commencer le chemin principal
@@ -1752,10 +1754,10 @@ export default class Agent {
                 
                 // Démarrer le chemin principal selon l'état
                 if (this.currentState === AgentState.READY_TO_LEAVE_FOR_WORK) {
-                    console.log(`Agent ${this.id}: Fin transition bâtiment->chemin, passage à IN_TRANSIT_TO_WORK`);
+                    //console.log(`Agent ${this.id}: Fin transition bâtiment->chemin, passage à IN_TRANSIT_TO_WORK`);
                     this.currentState = AgentState.IN_TRANSIT_TO_WORK;
                 } else if (this.currentState === AgentState.READY_TO_LEAVE_FOR_HOME) {
-                    console.log(`Agent ${this.id}: Fin transition bâtiment->chemin, passage à IN_TRANSIT_TO_HOME`);
+                    //console.log(`Agent ${this.id}: Fin transition bâtiment->chemin, passage à IN_TRANSIT_TO_HOME`);
                     this.currentState = AgentState.IN_TRANSIT_TO_HOME;
                 }
                 
@@ -1767,11 +1769,11 @@ export default class Agent {
                 
                 // Changer l'état selon la destination
                 if (this._currentPathRequestGoal === 'WORK') {
-                    console.log(`Agent ${this.id}: Fin transition chemin->bâtiment, passage à AT_WORK`);
+                    //console.log(`Agent ${this.id}: Fin transition chemin->bâtiment, passage à AT_WORK`);
                     this.currentState = AgentState.AT_WORK;
                     this.lastArrivalTimeWork = currentGameTime;
                 } else if (this._currentPathRequestGoal === 'HOME') {
-                    console.log(`Agent ${this.id}: Fin transition chemin->bâtiment, passage à AT_HOME`);
+                    //console.log(`Agent ${this.id}: Fin transition chemin->bâtiment, passage à AT_HOME`);
                     this.currentState = AgentState.AT_HOME;
                     this.lastArrivalTimeHome = currentGameTime;
                 }
@@ -1866,7 +1868,7 @@ export default class Agent {
      * @private
      */
     _enterBuilding(currentGameTime, goal) {
-        console.log(`Agent ${this.id}: Démarrage transition vers bâtiment ${goal}`);
+        //console.log(`Agent ${this.id}: Démarrage transition vers bâtiment ${goal}`);
         
         // Utiliser startPathToBuildingTransition pour gérer la transition visuelle
         this.startPathToBuildingTransition(currentGameTime, goal);
@@ -1942,7 +1944,7 @@ export default class Agent {
                 // S'assurer que le véhicule est visible
                 vehicle.isVisible = true;
                 
-                console.log(`Agent ${this.id}: Véhicule synchronisé avec la progression ${(clampedRatio * 100).toFixed(1)}%`);
+                //console.log(`Agent ${this.id}: Véhicule synchronisé avec la progression ${(clampedRatio * 100).toFixed(1)}%`);
             }
             
             // Forcer la visibilité
@@ -1960,7 +1962,7 @@ export default class Agent {
             );
         }
         
-        console.log(`Agent ${this.id}: Position synchronisée avec la progression ${(clampedRatio * 100).toFixed(1)}%`);
+        //console.log(`Agent ${this.id}: Position synchronisée avec la progression ${(clampedRatio * 100).toFixed(1)}%`);
     }
 }
 
