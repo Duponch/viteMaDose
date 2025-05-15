@@ -132,17 +132,32 @@ export default class CityAssetLoader {
                 //console.log(`-> Préparation de la génération procédurale pour ${this.config.proceduralBuildingVariants ?? 10} variants d'immeubles (50/50)...`);
                 const promises = [];
                 const numVariants = this.config.proceduralBuildingVariants ?? 10; // Make it configurable? Default 10.
-                for (let i = 0; i < numVariants; i++) {
-                    // Alternate between renderers, aiming for roughly 50/50
-                    const rendererTypeHint = (i % 2 === 0) ? 'new' : 'old';
+                
+                // Pour garantir une distribution 50/50, générons exactement moitié/moitié
+                const halfVariants = Math.ceil(numVariants / 2);
+                
+                // Première moitié avec NewBuildingRenderer
+                for (let i = 0; i < halfVariants; i++) {
                     promises.push(
-                        this.loadAssetModel(null, type, width, height, depth, 1.0, rendererTypeHint) // Pass hint
+                        this.loadAssetModel(null, type, width, height, depth, 1.0, 'new')
                             .catch(error => {
-                                console.error(`Echec génération procédurale ${type} (variant ${i}, renderer: ${rendererTypeHint}):`, error);
+                                console.error(`Echec génération procédurale ${type} (variant ${i}, renderer: new):`, error);
                                 return null;
                             })
                     );
                 }
+                
+                // Deuxième moitié avec BuildingRenderer
+                for (let i = 0; i < numVariants - halfVariants; i++) {
+                    promises.push(
+                        this.loadAssetModel(null, type, width, height, depth, 1.0, 'old')
+                            .catch(error => {
+                                console.error(`Echec génération procédurale ${type} (variant ${i}, renderer: old):`, error);
+                                return null;
+                            })
+                    );
+                }
+                
                 return promises; // Return array of promises
             }
             if (type === 'industrial') { //
