@@ -21,9 +21,9 @@ export default class BuildingFacadeHelper {
         
         // Créer le matériau pour les flèches
         this.arrowMaterial = new THREE.MeshBasicMaterial({
-            color: 0xff0000,      // Rouge vif pour être bien visible
+            color: 0xff3333,      // Rouge plus vif
             transparent: true,
-            opacity: 0.75,
+            opacity: 0.9,         // Plus opaque
             depthWrite: false,    // Pour éviter les problèmes de rendu avec d'autres objets transparents
             side: THREE.DoubleSide
         });
@@ -42,8 +42,8 @@ export default class BuildingFacadeHelper {
      */
     addFacadeHelper(position, rotationY, buildingWidth = 5, buildingDepth = 5) {
         // Calculer la taille de la flèche en fonction de la taille du bâtiment
-        const arrowSize = Math.min(buildingWidth, buildingDepth) * 0.5;
-        const arrowLength = arrowSize * 1.2;
+        const arrowSize = Math.min(buildingWidth, buildingDepth) * 0.8;
+        const arrowLength = arrowSize * 1.5; // Flèche plus longue
         
         // Créer une géométrie de flèche personnalisée
         const arrowGeometry = this.createArrowGeometry(arrowSize, arrowLength);
@@ -53,7 +53,7 @@ export default class BuildingFacadeHelper {
         
         // Position
         arrowMesh.position.copy(position);
-        arrowMesh.position.y += 0.5; // Légèrement au-dessus du sol
+        arrowMesh.position.y += 1.2; // Plus haut au-dessus du sol pour être bien visible
         
         // Rotation
         arrowMesh.rotation.y = rotationY;
