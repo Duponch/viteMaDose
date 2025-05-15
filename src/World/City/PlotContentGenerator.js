@@ -329,6 +329,18 @@ export default class PlotContentGenerator {
     }
 
     /**
+     * Active ou désactive les helpers visuels pour les façades des bâtiments.
+     * Si aucun paramètre n'est fourni, bascule l'état de visibilité actuel.
+     * @param {boolean} [isVisible=null] - État de visibilité souhaité (null pour basculer)
+     */
+    toggleBuildingFacadeHelpers(isVisible = null) {
+        // Si la stratégie de placement des bâtiments a un helper de façade, l'utiliser
+        if (this.zoneStrategies && this.zoneStrategies['building'] && this.zoneStrategies['building'].facadeHelper) {
+            this.zoneStrategies['building'].facadeHelper.toggleVisibility(isVisible);
+        }
+    }
+
+    /**
      * Retourne les groupes de scène contenant le contenu généré.
      * @returns {{sidewalkGroup: THREE.Group, buildingGroup: THREE.Group, groundGroup: THREE.Group}}
      */

@@ -1623,7 +1623,7 @@ export default class Experience extends EventTarget {
     // --- Gestionnaire pour les contrôles de temps globaux ---
     _handleTimeControls(event) {
         // Empêcher le comportement par défaut pour les touches de contrôle du temps
-        if (['KeyE', 'KeyR', 'KeyF'].includes(event.code)) {
+        if (['KeyE', 'KeyR', 'KeyF', 'KeyH'].includes(event.code)) {
             event.preventDefault();
             event.stopPropagation();
         }
@@ -1635,6 +1635,12 @@ export default class Experience extends EventTarget {
             this.time.increaseSpeed();
         } else if (event.code === 'KeyF') {
             this.time.togglePause();
+        } else if (event.code === 'KeyH') {
+            // Activer/désactiver les helpers de façade des bâtiments
+            if (this.world && this.world.contentGenerator) {
+                this.world.contentGenerator.toggleBuildingFacadeHelpers();
+                console.log("Affichage des flèches d'orientation des façades de bâtiments basculé");
+            }
         }
     }
 

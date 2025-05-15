@@ -1,6 +1,7 @@
 // src/World/Strategies/BuildingPlacementStrategy.js
 import * as THREE from 'three';
 import IZonePlacementStrategy from './IZonePlacementStrategy.js';
+import BuildingFacadeHelper from '../Buildings/BuildingFacadeHelper.js';
 
 /**
  * @typedef {import('../Plot.js').default} Plot
@@ -25,8 +26,13 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
         if (!this.renderers.buildingRenderer) {
             throw new Error("BuildingPlacementStrategy requires 'buildingRenderer' in specificRenderers.");
         }
-         // Raccourci pratique
-         this.buildingRenderer = this.renderers.buildingRenderer;
+        // Raccourci pratique
+        this.buildingRenderer = this.renderers.buildingRenderer;
+        
+        // Créer le helper de visualisation des façades
+        if (experience && experience.scene) {
+            this.facadeHelper = new BuildingFacadeHelper(config, experience.scene);
+        }
     }
 
     /**
@@ -92,44 +98,29 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
                 const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
                 
                 // Déterminer la rotation en fonction de la position par rapport aux trottoirs
-                let targetRotationY = 0;
                 const sidewalkWidth = this.config.sidewalkWidth ?? 0;
                 
-                // Calculer les distances aux bords de la parcelle
-                const distToLeft = cellCenterX - plot.x;
-                const distToRight = (plot.x + plot.width) - cellCenterX;
-                const distToTop = cellCenterZ - plot.z;
-                const distToBottom = (plot.z + plot.depth) - cellCenterZ;
-                
-                // Vérifier si le bâtiment est adjacent à un trottoir
-                const isNearSidewalk = (distToLeft <= sidewalkWidth) || 
-                                     (distToRight <= sidewalkWidth) || 
-                                     (distToTop <= sidewalkWidth) || 
-                                     (distToBottom <= sidewalkWidth);
-                
-                if (isNearSidewalk) {
-                    // Si le bâtiment est près d'un trottoir, l'orienter vers ce trottoir
-                    const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-                    const tolerance = 0.1;
-                    
-                    if (Math.abs(minDist - distToLeft) < tolerance)
-                        targetRotationY = Math.PI / 2; // Face avant vers la gauche (-X)
-                    else if (Math.abs(minDist - distToRight) < tolerance)
-                        targetRotationY = -Math.PI / 2; // Face avant vers la droite (+X)
-                    else if (Math.abs(minDist - distToTop) < tolerance)
-                        targetRotationY = Math.PI; // Face avant vers le haut (-Z)
-                    else
-                        targetRotationY = 0; // Face avant vers le bas (+Z)
-                } else {
-                    // Si le bâtiment n'est pas près d'un trottoir, l'orienter vers le bord le plus proche
-                    if (rowIndex === 0)
-                        targetRotationY = Math.PI; // Face avant vers le haut (-Z)
-                    else if (rowIndex === numItemsY - 1)
-                        targetRotationY = 0; // Face avant vers le bas (+Z)
-                    else if (colIndex === 0)
-                        targetRotationY = Math.PI / 2; // Face avant vers la gauche (-X)
-                    else if (colIndex === numItemsX - 1)
-                        targetRotationY = -Math.PI / 2; // Face avant vers la droite (+X)
+                // --- MODIFICATION: Amélioration de la détection de la façade avant ---
+                let targetRotationY = this.determineOrientationTowardsSidewalk(
+                    cellCenterX, 
+                    cellCenterZ, 
+                    plot, 
+                    sidewalkWidth, 
+                    rowIndex, 
+                    colIndex, 
+                    numItemsX, 
+                    numItemsY
+                );
+
+                // --- NOUVEAU: Ajouter un helper de façade si disponible ---
+                if (this.facadeHelper) {
+                    const buildingPosition = new THREE.Vector3(cellCenterX, sidewalkHeight, cellCenterZ);
+                    this.facadeHelper.addFacadeHelper(
+                        buildingPosition, 
+                        targetRotationY, 
+                        targetBuildingWidth, 
+                        targetBuildingDepth
+                    );
                 }
 
                 const assetInfo = this.assetLoader.getRandomAssetData('building');
@@ -182,5 +173,83 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
                  }
             } // Fin boucle colIndex
         } // Fin boucle rowIndex
+    }
+    
+    /**
+     * Détermine l'orientation optimale d'un bâtiment pour qu'il soit face à un trottoir.
+     * Tient compte des coins qui peuvent avoir deux façades donnant sur des trottoirs.
+     * @param {number} cellCenterX - Position X du centre de la cellule
+     * @param {number} cellCenterZ - Position Z du centre de la cellule
+     * @param {Plot} plot - La parcelle contenant le bâtiment
+     * @param {number} sidewalkWidth - Largeur du trottoir
+     * @param {number} rowIndex - Indice de ligne dans la grille
+     * @param {number} colIndex - Indice de colonne dans la grille
+     * @param {number} numItemsX - Nombre total de colonnes
+     * @param {number} numItemsY - Nombre total de lignes
+     * @returns {number} L'angle de rotation Y en radians
+     */
+    determineOrientationTowardsSidewalk(cellCenterX, cellCenterZ, plot, sidewalkWidth, rowIndex, colIndex, numItemsX, numItemsY) {
+        // Distances aux bords de la parcelle
+        const distToLeft = cellCenterX - plot.x;
+        const distToRight = (plot.x + plot.width) - cellCenterX;
+        const distToTop = cellCenterZ - plot.z;
+        const distToBottom = (plot.z + plot.depth) - cellCenterZ;
+        
+        // Déterminer si le bâtiment est dans un coin
+        const isCorner = (
+            (rowIndex === 0 && colIndex === 0) || // Coin haut gauche
+            (rowIndex === 0 && colIndex === numItemsX - 1) || // Coin haut droit
+            (rowIndex === numItemsY - 1 && colIndex === 0) || // Coin bas gauche
+            (rowIndex === numItemsY - 1 && colIndex === numItemsX - 1) // Coin bas droit
+        );
+        
+        if (isCorner) {
+            // Pour les coins, choisir l'orientation en fonction de la façade la plus exposée
+            // On privilégie l'orientation qui donne sur le côté le plus visible de la parcelle
+            
+            if (rowIndex === 0 && colIndex === 0) {
+                // Coin haut gauche: deux orientations possibles (vers le haut ou vers la gauche)
+                return distToTop < distToLeft ? Math.PI : Math.PI / 2; // Si plus proche du haut, orienter vers le haut (-Z), sinon vers la gauche (-X)
+            } 
+            else if (rowIndex === 0 && colIndex === numItemsX - 1) {
+                // Coin haut droit: deux orientations possibles (vers le haut ou vers la droite)
+                return distToTop < distToRight ? Math.PI : -Math.PI / 2; // Si plus proche du haut, orienter vers le haut (-Z), sinon vers la droite (+X)
+            }
+            else if (rowIndex === numItemsY - 1 && colIndex === 0) {
+                // Coin bas gauche: deux orientations possibles (vers le bas ou vers la gauche)
+                return distToBottom < distToLeft ? 0 : Math.PI / 2; // Si plus proche du bas, orienter vers le bas (+Z), sinon vers la gauche (-X)
+            }
+            else if (rowIndex === numItemsY - 1 && colIndex === numItemsX - 1) {
+                // Coin bas droit: deux orientations possibles (vers le bas ou vers la droite)
+                return distToBottom < distToRight ? 0 : -Math.PI / 2; // Si plus proche du bas, orienter vers le bas (+Z), sinon vers la droite (+X)
+            }
+        }
+        
+        // Pour les bâtiments non situés dans les coins mais en bordure
+        // Si le bâtiment est à gauche de la parcelle et n'est pas un coin
+        if (colIndex === 0 && !isCorner) {
+            return Math.PI / 2; // Face avant vers la gauche (-X)
+        }
+        // Si le bâtiment est à droite de la parcelle et n'est pas un coin
+        else if (colIndex === numItemsX - 1 && !isCorner) {
+            return -Math.PI / 2; // Face avant vers la droite (+X)
+        }
+        // Si le bâtiment est en haut de la parcelle et n'est pas un coin
+        else if (rowIndex === 0 && !isCorner) {
+            return Math.PI; // Face avant vers le haut (-Z)
+        }
+        // Si le bâtiment est en bas de la parcelle et n'est pas un coin
+        else if (rowIndex === numItemsY - 1 && !isCorner) {
+            return 0; // Face avant vers le bas (+Z)
+        }
+        
+        // Si nous arrivons ici, c'est un bâtiment qui n'est pas en bordure
+        // Cela ne devrait pas arriver avec le filtrage actuel, mais gérons ce cas
+        const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+        
+        if (minDist === distToLeft) return Math.PI / 2;      // Vers la gauche (-X)
+        else if (minDist === distToRight) return -Math.PI / 2; // Vers la droite (+X)
+        else if (minDist === distToTop) return Math.PI;        // Vers le haut (-Z)
+        else return 0;                                         // Vers le bas (+Z)
     }
 }

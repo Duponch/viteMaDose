@@ -85,52 +85,40 @@ export default class IZonePlacementStrategy {
 
         return instanceMatrix;
     }
+    
+    /**
+     * Détermine l'orientation optimale d'un bâtiment en fonction de sa position par rapport aux bords de la parcelle.
+     * Cette méthode est utilisée par les classes filles pour orienter les bâtiments vers les trottoirs.
+     * @param {number} cellCenterX - Coordonnée X du centre de la cellule.
+     * @param {number} cellCenterZ - Coordonnée Z du centre de la cellule.
+     * @param {Plot} plot - La parcelle contenant le bâtiment.
+     * @returns {number} L'angle de rotation Y en radians.
+     */
+    determineBuildingRotation(cellCenterX, cellCenterZ, plot) {
+        return this.determineOrientationTowardsSidewalk(cellCenterX, cellCenterZ, plot);
+    }
 
-     /**
-      * Détermine la rotation cible pour un bâtiment en fonction de sa position dans la parcelle.
-      * Vise à orienter la "façade" (souvent le côté le plus proche d'un bord) vers l'extérieur.
-      * @param {number} cellCenterX - Position X du centre de la cellule/bâtiment.
-      * @param {number} cellCenterZ - Position Z du centre de la cellule/bâtiment.
-      * @param {Plot} plot - La parcelle contenant la cellule.
-      * @returns {number} L'angle de rotation Y en radians.
-      */
-     determineBuildingRotation(cellCenterX, cellCenterZ, plot) {
-        // Calculer la position relative du bâtiment dans la parcelle (0 à 1)
-        const relativeX = (cellCenterX - plot.x) / plot.width;
-        const relativeZ = (cellCenterZ - plot.z) / plot.depth;
-
-        // Déterminer si le bâtiment est sur un bord
-        const isOnEdge = relativeX < 0.1 || relativeX > 0.9 || relativeZ < 0.1 || relativeZ > 0.9;
+    /**
+     * Détermine l'orientation optimale d'un bâtiment pour qu'il soit face à un trottoir.
+     * @param {number} cellCenterX - Position X du centre de la cellule
+     * @param {number} cellCenterZ - Position Z du centre de la cellule
+     * @param {Plot} plot - La parcelle contenant le bâtiment
+     * @returns {number} L'angle de rotation Y en radians
+     */
+    determineOrientationTowardsSidewalk(cellCenterX, cellCenterZ, plot) {
+        // Distances aux bords de la parcelle
+        const distToLeft = cellCenterX - plot.x;
+        const distToRight = (plot.x + plot.width) - cellCenterX;
+        const distToTop = cellCenterZ - plot.z;
+        const distToBottom = (plot.z + plot.depth) - cellCenterZ;
         
-        if (!isOnEdge) {
-            // Si le bâtiment n'est pas sur un bord, on le fait face au bord le plus proche
-            const distToLeft = relativeX;
-            const distToRight = 1 - relativeX;
-            const distToTop = relativeZ;
-            const distToBottom = 1 - relativeZ;
-
-            const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
-            const tolerance = 0.05;
-
-            if (Math.abs(minDist - distToLeft) < tolerance)
-                return Math.PI / 2; // Face avant vers la gauche (-X)
-            else if (Math.abs(minDist - distToRight) < tolerance)
-                return -Math.PI / 2; // Face avant vers la droite (+X)
-            else if (Math.abs(minDist - distToTop) < tolerance)
-                return Math.PI; // Face avant vers le haut (-Z)
-            else
-                return 0; // Face avant vers le bas (+Z)
-        } else {
-            // Si le bâtiment est sur un bord, on le fait face à l'extérieur
-            if (relativeX < 0.1)
-                return Math.PI / 2; // Face avant vers la gauche (-X)
-            else if (relativeX > 0.9)
-                return -Math.PI / 2; // Face avant vers la droite (+X)
-            else if (relativeZ < 0.1)
-                return Math.PI; // Face avant vers le haut (-Z)
-            else
-                return 0; // Face avant vers le bas (+Z)
-        }
+        // Déterminer la distance la plus courte pour orienter le bâtiment vers le trottoir le plus proche
+        const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+        
+        if (minDist === distToLeft) return Math.PI / 2;      // Vers la gauche (-X)
+        else if (minDist === distToRight) return -Math.PI / 2; // Vers la droite (+X)
+        else if (minDist === distToTop) return Math.PI;        // Vers le haut (-Z)
+        else return 0;                                         // Vers le bas (+Z)
     }
 
     /**
