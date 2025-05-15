@@ -1527,4 +1527,160 @@ export default class AgentManager {
             }, 3000);
         });
     }
+
+    /**
+     * Force tous les agents à synchroniser leur état avec l'heure actuelle.
+     * À appeler après une forte accélération du temps ou lorsque le jeu est mis en pause.
+     * 
+     * @param {number} currentGameTime - Temps de jeu actuel
+     * @param {number} currentHour - Heure actuelle du jeu (0-23)
+     * @param {Object} calendarDate - Date actuelle du jeu
+     */
+    forceSyncAllAgentsWithGameTime(currentGameTime, currentHour, calendarDate) {
+        console.log(`AgentManager: Synchronisation forcée de tous les agents à ${currentHour}h...`);
+        
+        // Le nombre d'agents à traiter à chaque frame pour éviter les gels
+        const batchSize = 50;
+        let processed = 0;
+        
+        const syncBatch = () => {
+            const endIndex = Math.min(processed + batchSize, this.agents.length);
+            
+            for (let i = processed; i < endIndex; i++) {
+                const agent = this.agents[i];
+                
+                // Analyser l'état actuel et l'heure pour détecter les incohérences
+                if (agent.currentState === AgentState.READY_TO_LEAVE_FOR_WORK && currentHour >= agent.departureWorkHour) {
+                    const environment = this.experience.world?.environment;
+                    const dayDurationMs = environment?.dayDurationMs || (24 * 60 * 60 * 1000);
+                    const timeWithinCurrentDayCycle = currentGameTime % dayDurationMs;
+                    const exactWorkDepartureTimeMs = agent.exactWorkDepartureTimeGame;
+                    const timeElapsedSinceDeparture = timeWithinCurrentDayCycle - exactWorkDepartureTimeMs;
+                    
+                    // Si l'agent aurait dû partir depuis plus de 5 minutes
+                    if (timeElapsedSinceDeparture > 5 * 60 * 1000) {
+                        // Calculer la progression temporelle attendue
+                        const expectedProgress = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
+                        
+                        // Si l'agent devrait déjà être arrivé
+                        if (expectedProgress >= 1.0 || currentHour >= 9) {
+                            console.log(`AgentManager: Agent ${agent.id} devrait déjà être au travail, passage direct à AT_WORK`);
+                            agent.currentState = AgentState.AT_WORK;
+                            agent.isVisible = false;
+                            if (agent.workBuildingPosition) {
+                                agent.position.copy(agent.workBuildingPosition).setY(agent.yOffset);
+                            }
+                        } 
+                        // Sinon, l'agent devrait être sur le chemin
+                        else {
+                            console.log(`AgentManager: Agent ${agent.id} devrait être en chemin vers le travail avec une progression de ${(expectedProgress * 100).toFixed(1)}%`);
+                            agent.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                            agent.isVisible = true;
+                            agent.departureTimeGame = currentGameTime - timeElapsedSinceDeparture;
+                            agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
+                            agent.syncVisualPositionWithProgress(expectedProgress);
+                        }
+                    }
+                }
+                
+                // Même logique pour le retour à la maison
+                else if (agent.currentState === AgentState.READY_TO_LEAVE_FOR_HOME && currentHour >= agent.departureHomeHour) {
+                    const environment = this.experience.world?.environment;
+                    const dayDurationMs = environment?.dayDurationMs || (24 * 60 * 60 * 1000);
+                    const timeWithinCurrentDayCycle = currentGameTime % dayDurationMs;
+                    const exactHomeDepartureTimeMs = agent.exactHomeDepartureTimeGame;
+                    const timeElapsedSinceDeparture = timeWithinCurrentDayCycle - exactHomeDepartureTimeMs;
+                    
+                    // Si l'agent aurait dû partir depuis plus de 5 minutes
+                    if (timeElapsedSinceDeparture > 5 * 60 * 1000) {
+                        // Calculer la progression temporelle attendue
+                        const expectedProgress = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
+                        
+                        // Si l'agent devrait déjà être arrivé
+                        if (expectedProgress >= 1.0 || currentHour >= agent.departureHomeHour + 1) {
+                            console.log(`AgentManager: Agent ${agent.id} devrait déjà être à la maison, passage direct à AT_HOME`);
+                            agent.currentState = AgentState.AT_HOME;
+                            agent.isVisible = false;
+                            if (agent.homeBuildingPosition) {
+                                agent.position.copy(agent.homeBuildingPosition).setY(agent.yOffset);
+                            }
+                        } 
+                        // Sinon, l'agent devrait être sur le chemin
+                        else {
+                            console.log(`AgentManager: Agent ${agent.id} devrait être en chemin vers la maison avec une progression de ${(expectedProgress * 100).toFixed(1)}%`);
+                            agent.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                            agent.isVisible = true;
+                            agent.departureTimeGame = currentGameTime - timeElapsedSinceDeparture;
+                            agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
+                            agent.syncVisualPositionWithProgress(expectedProgress);
+                        }
+                    }
+                }
+            }
+            
+            processed = endIndex;
+            
+            // Si tous les agents n'ont pas été traités, continuer au prochain tick
+            if (processed < this.agents.length) {
+                setTimeout(syncBatch, 0);
+            } else {
+                console.log(`AgentManager: Synchronisation forcée terminée pour ${this.agents.length} agents.`);
+            }
+        };
+        
+        // Démarrer le processus de synchronisation
+        syncBatch();
+    }
+
+    /**
+     * Vérifie et reprogramme les événements pour tous les agents après une forte accélération du temps.
+     * Cette version plus légère remplace l'ancien mécanisme de synchronisation forcée.
+     * 
+     * @param {number} currentGameTime - Temps de jeu actuel
+     */
+    checkAgentsEventsAfterTimeAcceleration(currentGameTime) {
+        console.log(`AgentManager: Vérification des événements après accélération du temps...`);
+        
+        // Vérifier si le TimeScheduler est disponible
+        const scheduler = this.experience?.timeScheduler;
+        if (!scheduler) {
+            console.warn("AgentManager: Impossible de vérifier les événements - TimeScheduler non disponible");
+            return;
+        }
+        
+        // Pour chaque agent, traiter en lots pour ne pas bloquer le thread principal
+        const batchSize = 20;
+        const processBatch = (startIndex) => {
+            const endIndex = Math.min(startIndex + batchSize, this.agents.length);
+            
+            for (let i = startIndex; i < endIndex; i++) {
+                const agent = this.agents[i];
+                if (!agent) continue;
+                
+                try {
+                    // Annuler les événements actuels
+                    if (typeof agent._cancelScheduledEvents === 'function') {
+                        agent._cancelScheduledEvents();
+                    }
+                    
+                    // Recalculer les heures et replanifier les événements
+                    if (typeof agent._calculateScheduledTimes === 'function') {
+                        agent._calculateScheduledTimes();
+                    }
+                } catch (error) {
+                    console.error(`AgentManager: Erreur lors de la mise à jour des événements pour l'agent ${agent.id}:`, error);
+                }
+            }
+            
+            // Si tous les agents n'ont pas été traités, planifier le prochain lot
+            if (endIndex < this.agents.length) {
+                setTimeout(() => processBatch(endIndex), 0);
+            } else {
+                console.log(`AgentManager: Vérification des événements terminée pour ${this.agents.length} agents.`);
+            }
+        };
+        
+        // Démarrer le traitement par lots
+        processBatch(0);
+    }
 }

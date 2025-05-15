@@ -115,6 +115,14 @@ export default class Agent {
         // Matrice de transformation pour le rendu (toujours utile pour AgentManager)
         this.matrix = new THREE.Matrix4();
 
+        // --- Événements planifiés --- (Déplacé avant _calculateScheduledTimes pour assurer l'initialisation avant utilisation)
+        this.scheduledEvents = {
+            prepareForWork: null,
+            departForWork: null,
+            prepareForHome: null,
+            departForHome: null
+        };
+
         this._calculateScheduledTimes();
 
         this.sidewalkHeight = experience.world?.cityManager?.getNavigationGraph(false)?.sidewalkHeight || 0.2;
@@ -129,25 +137,351 @@ export default class Agent {
     }
 
 	_calculateScheduledTimes() {
-        const environment = this.experience.world?.environment;
+        const environment = this.experience?.world?.environment;
         if (!environment || !environment.isInitialized || environment.dayDurationMs <= 0) {
-            // console.warn(`Agent ${this.id}: Impossible de calculer les heures planifiées (env non prêt).`); // Moins verbeux
+            console.warn(`Agent ${this.id}: Impossible de calculer les heures planifiées (environnement non prêt).`);
             return;
         }
-        const dayDurationMs = environment.dayDurationMs;
-        const msPerHour = dayDurationMs / 24;
-        const msPerMinute = msPerHour / 60;
+        
+        try {
+            const dayDurationMs = environment.dayDurationMs;
+            const msPerHour = dayDurationMs / 24;
+            const msPerMinute = msPerHour / 60;
+    
+            this.exactWorkDepartureTimeGame = this.departureWorkHour * msPerHour;
+            this.prepareWorkDepartureTimeGame = this.exactWorkDepartureTimeGame - (this.anticipationMinutes * msPerMinute);
+            if (this.prepareWorkDepartureTimeGame < 0) {
+                this.prepareWorkDepartureTimeGame += dayDurationMs;
+            }
+    
+            this.exactHomeDepartureTimeGame = this.departureHomeHour * msPerHour;
+            this.prepareHomeDepartureTimeGame = this.exactHomeDepartureTimeGame - (this.anticipationMinutes * msPerMinute);
+            if (this.prepareHomeDepartureTimeGame < 0) {
+                this.prepareHomeDepartureTimeGame += dayDurationMs;
+            }
+            
+            // Planifier les événements quotidiens
+            if (this.experience?.timeScheduler?.isInitialized) {
+                this._scheduleAgentDailyEvents();
+            } else {
+                console.log(`Agent ${this.id}: TimeScheduler pas encore initialisé, report de la planification.`);
+                // On pourrait programmer un retry plus tard si nécessaire
+            }
+        } catch (error) {
+            console.error(`Agent ${this.id}: Erreur lors du calcul des heures planifiées:`, error);
+        }
+    }
 
-        this.exactWorkDepartureTimeGame = this.departureWorkHour * msPerHour;
-        this.prepareWorkDepartureTimeGame = this.exactWorkDepartureTimeGame - (this.anticipationMinutes * msPerMinute);
-        if (this.prepareWorkDepartureTimeGame < 0) {
-            this.prepareWorkDepartureTimeGame += dayDurationMs;
+    /**
+     * Planifie les événements quotidiens pour cet agent
+     * @private
+     */
+    _scheduleAgentDailyEvents() {
+        // Vérifier que le scheduler existe
+        const scheduler = this.experience?.timeScheduler;
+        if (!scheduler) {
+            console.warn(`Agent ${this.id}: Impossible de planifier les événements - scheduler non disponible`);
+            return;
         }
 
-        this.exactHomeDepartureTimeGame = this.departureHomeHour * msPerHour;
-        this.prepareHomeDepartureTimeGame = this.exactHomeDepartureTimeGame - (this.anticipationMinutes * msPerMinute);
-        if (this.prepareHomeDepartureTimeGame < 0) {
-            this.prepareHomeDepartureTimeGame += dayDurationMs;
+        // S'assurer que this.scheduledEvents est initialisé
+        if (!this.scheduledEvents || typeof this.scheduledEvents !== 'object') {
+            this.scheduledEvents = {
+                prepareForWork: null,
+                departForWork: null,
+                prepareForHome: null,
+                departForHome: null
+            };
+        } else {
+            // Annuler les événements existants seulement si this.scheduledEvents existe
+            this._cancelScheduledEvents();
+        }
+
+        try {
+            // Planifier l'événement de préparation au départ pour le travail
+            this.scheduledEvents.prepareForWork = scheduler.scheduleDailyEvent(
+                this.departureWorkHour - 1, // Une heure avant l'heure de départ
+                60 - this.anticipationMinutes, // Minutes avant l'heure pleine
+                this._handlePrepareForWork,
+                this,
+                { agentId: this.id },
+                `agent_${this.id}_prepare_work`
+            );
+    
+            // Planifier l'événement de départ pour le travail
+            this.scheduledEvents.departForWork = scheduler.scheduleDailyEvent(
+                this.departureWorkHour,
+                0,
+                this._handleDepartForWork,
+                this,
+                { agentId: this.id },
+                `agent_${this.id}_depart_work`
+            );
+    
+            // Planifier l'événement de préparation au départ pour la maison
+            this.scheduledEvents.prepareForHome = scheduler.scheduleDailyEvent(
+                this.departureHomeHour - 1, // Une heure avant l'heure de départ
+                60 - this.anticipationMinutes, // Minutes avant l'heure pleine
+                this._handlePrepareForHome,
+                this,
+                { agentId: this.id },
+                `agent_${this.id}_prepare_home`
+            );
+    
+            // Planifier l'événement de départ pour la maison
+            this.scheduledEvents.departForHome = scheduler.scheduleDailyEvent(
+                this.departureHomeHour,
+                0,
+                this._handleDepartForHome,
+                this,
+                { agentId: this.id },
+                `agent_${this.id}_depart_home`
+            );
+        } catch (error) {
+            console.error(`Agent ${this.id}: Erreur lors de la planification des événements:`, error);
+            // Assurer que scheduledEvents est toujours dans un état valide
+            this.scheduledEvents = {
+                prepareForWork: null,
+                departForWork: null,
+                prepareForHome: null,
+                departForHome: null
+            };
+        }
+    }
+
+    /**
+     * Annule tous les événements planifiés
+     * @private
+     */
+    _cancelScheduledEvents() {
+        const scheduler = this.experience.timeScheduler;
+        if (!scheduler) return;
+
+        // Vérifier que scheduledEvents est défini et est un objet
+        if (!this.scheduledEvents || typeof this.scheduledEvents !== 'object') {
+            console.warn(`Agent ${this.id}: scheduledEvents n'est pas défini ou n'est pas un objet`);
+            // Initialiser l'objet s'il n'existe pas
+            this.scheduledEvents = {
+                prepareForWork: null,
+                departForWork: null,
+                prepareForHome: null,
+                departForHome: null
+            };
+            return;
+        }
+
+        // Annuler chaque événement s'il existe
+        Object.keys(this.scheduledEvents).forEach(key => {
+            const eventId = this.scheduledEvents[key];
+            if (eventId) {
+                scheduler.cancelEvent(eventId);
+            }
+        });
+
+        // Réinitialiser les identifiants
+        this.scheduledEvents = {
+            prepareForWork: null,
+            departForWork: null,
+            prepareForHome: null,
+            departForHome: null
+        };
+    }
+
+    /**
+     * Gestionnaire d'événement pour la préparation au départ pour le travail
+     * @param {Object} eventData - Données de l'événement
+     * @private
+     */
+    _handlePrepareForWork(eventData) {
+        console.log(`Agent ${this.id}: Préparation au départ pour le travail`);
+        
+        // Vérifier que l'agent est à la maison
+        if (this.currentState !== AgentState.AT_HOME) {
+            console.log(`Agent ${this.id}: Ne peut pas se préparer pour le travail - n'est pas à la maison (état actuel: ${this.currentState})`);
+            return;
+        }
+
+        // Changer l'état pour indiquer que l'agent se prépare
+        this.currentState = AgentState.PREPARING_FOR_WORK;
+        
+        // Vérifier si un trajet vers le travail est possible
+        if (!this.workPosition || !this.homePosition) {
+            console.warn(`Agent ${this.id}: Impossible de préparer le trajet vers le travail - positions manquantes`);
+            return;
+        }
+
+        // Initialiser la demande de chemin
+        this.requestPath(
+            this.homePosition,
+            this.workPosition,
+            this.homeGridNode,
+            this.workGridNode,
+            AgentState.READY_TO_LEAVE_FOR_WORK,
+            eventData.currentGameTime
+        );
+    }
+
+    /**
+     * Gestionnaire d'événement pour le départ vers le travail
+     * @param {Object} eventData - Données de l'événement
+     * @private
+     */
+    _handleDepartForWork(eventData) {
+        console.log(`Agent ${this.id}: Départ pour le travail`);
+        
+        // Vérifier que l'agent est prêt à partir
+        if (this.currentState !== AgentState.READY_TO_LEAVE_FOR_WORK && 
+            this.currentState !== AgentState.PREPARING_FOR_WORK) {
+            console.log(`Agent ${this.id}: Ne peut pas partir pour le travail - n'est pas prêt (état actuel: ${this.currentState})`);
+            return;
+        }
+
+        // Si l'agent est en attente d'un chemin, on force le départ quand même
+        if (this.currentState === AgentState.PREPARING_FOR_WORK) {
+            console.log(`Agent ${this.id}: Forçage du départ pour le travail (était encore en préparation)`);
+            
+            // Si le chemin n'a pas été reçu, on en demande un nouveau
+            if (!this.currentPathPoints || this.currentPathPoints.length === 0) {
+                this.requestPath(
+                    this.homePosition,
+                    this.workPosition,
+                    this.homeGridNode,
+                    this.workGridNode,
+                    AgentState.READY_TO_LEAVE_FOR_WORK,
+                    eventData.currentGameTime
+                );
+                
+                // On attendra la prochaine mise à jour pour partir
+                return;
+            }
+        }
+
+        // Démarrer la transition du bâtiment vers le chemin
+        const transitionStarted = this.startTransitionFromBuildingToPath(eventData.currentGameTime, 'WORK');
+        
+        if (transitionStarted) {
+            // Définir les temps de départ et d'arrivée
+            this.departureTimeGame = eventData.currentGameTime;
+            this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
+            
+            console.log(`Agent ${this.id}: Départ pour le travail à ${new Date(this.departureTimeGame).toISOString()}, arrivée prévue à ${new Date(this.arrivalTmeGame).toISOString()}`);
+            
+            // Cette transition déclenchera automatiquement le changement d'état vers IN_TRANSIT_TO_WORK
+            // une fois terminée (via updateBuildingTransition)
+        } else {
+            console.warn(`Agent ${this.id}: Impossible de démarrer la transition pour le travail`);
+            
+            // Forcer le changement d'état sans transition visuelle
+            this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+            this.isVisible = true;
+            this.departureTimeGame = eventData.currentGameTime;
+            this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
+        }
+
+        // Enregistrer le jour de départ
+        const environment = this.experience.world?.environment;
+        if (environment) {
+            const currentDayNumber = Math.floor(eventData.currentGameTime / environment.dayDurationMs);
+            this.lastDepartureDayWork = currentDayNumber;
+        }
+    }
+
+    /**
+     * Gestionnaire d'événement pour la préparation au départ pour la maison
+     * @param {Object} eventData - Données de l'événement
+     * @private
+     */
+    _handlePrepareForHome(eventData) {
+        console.log(`Agent ${this.id}: Préparation au départ pour la maison`);
+        
+        // Vérifier que l'agent est au travail
+        if (this.currentState !== AgentState.AT_WORK) {
+            console.log(`Agent ${this.id}: Ne peut pas se préparer pour la maison - n'est pas au travail (état actuel: ${this.currentState})`);
+            return;
+        }
+
+        // Changer l'état pour indiquer que l'agent se prépare
+        this.currentState = AgentState.PREPARING_FOR_HOME;
+        
+        // Vérifier si un trajet vers la maison est possible
+        if (!this.workPosition || !this.homePosition) {
+            console.warn(`Agent ${this.id}: Impossible de préparer le trajet vers la maison - positions manquantes`);
+            return;
+        }
+
+        // Initialiser la demande de chemin
+        this.requestPath(
+            this.workPosition,
+            this.homePosition,
+            this.workGridNode,
+            this.homeGridNode,
+            AgentState.READY_TO_LEAVE_FOR_HOME,
+            eventData.currentGameTime
+        );
+    }
+
+    /**
+     * Gestionnaire d'événement pour le départ vers la maison
+     * @param {Object} eventData - Données de l'événement
+     * @private
+     */
+    _handleDepartForHome(eventData) {
+        console.log(`Agent ${this.id}: Départ pour la maison`);
+        
+        // Vérifier que l'agent est prêt à partir
+        if (this.currentState !== AgentState.READY_TO_LEAVE_FOR_HOME && 
+            this.currentState !== AgentState.PREPARING_FOR_HOME) {
+            console.log(`Agent ${this.id}: Ne peut pas partir pour la maison - n'est pas prêt (état actuel: ${this.currentState})`);
+            return;
+        }
+
+        // Si l'agent est en attente d'un chemin, on force le départ quand même
+        if (this.currentState === AgentState.PREPARING_FOR_HOME) {
+            console.log(`Agent ${this.id}: Forçage du départ pour la maison (était encore en préparation)`);
+            
+            // Si le chemin n'a pas été reçu, on en demande un nouveau
+            if (!this.currentPathPoints || this.currentPathPoints.length === 0) {
+                this.requestPath(
+                    this.workPosition,
+                    this.homePosition,
+                    this.workGridNode,
+                    this.homeGridNode,
+                    AgentState.READY_TO_LEAVE_FOR_HOME,
+                    eventData.currentGameTime
+                );
+                
+                // On attendra la prochaine mise à jour pour partir
+                return;
+            }
+        }
+
+        // Démarrer la transition du bâtiment vers le chemin
+        const transitionStarted = this.startTransitionFromBuildingToPath(eventData.currentGameTime, 'HOME');
+        
+        if (transitionStarted) {
+            // Définir les temps de départ et d'arrivée
+            this.departureTimeGame = eventData.currentGameTime;
+            this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
+            
+            console.log(`Agent ${this.id}: Départ pour la maison à ${new Date(this.departureTimeGame).toISOString()}, arrivée prévue à ${new Date(this.arrivalTmeGame).toISOString()}`);
+            
+            // Cette transition déclenchera automatiquement le changement d'état vers IN_TRANSIT_TO_HOME
+            // une fois terminée (via updateBuildingTransition)
+        } else {
+            console.warn(`Agent ${this.id}: Impossible de démarrer la transition pour la maison`);
+            
+            // Forcer le changement d'état sans transition visuelle
+            this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+            this.isVisible = true;
+            this.departureTimeGame = eventData.currentGameTime;
+            this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
+        }
+
+        // Enregistrer le jour de départ
+        const environment = this.experience.world?.environment;
+        if (environment) {
+            const currentDayNumber = Math.floor(eventData.currentGameTime / environment.dayDurationMs);
+            this.lastDepartureDayHome = currentDayNumber;
         }
     }
 
@@ -206,6 +540,7 @@ export default class Agent {
             this.workBuildingPosition = null;
         }
 
+        // Calculer les heures programmées et planifier les événements
         this._calculateScheduledTimes();
     }
 
@@ -576,22 +911,6 @@ export default class Agent {
             currentGameTime = this.experience.time.elapsed;
         }
         
-        // CORRECTION: Mécanisme de secours pour les agents bloqués en transit 
-        // dont le temps d'arrivée est dépassé
-        if ((this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
-             this.currentState === AgentState.IN_TRANSIT_TO_HOME) && 
-            this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame &&
-            !this.isMovingFromPathToBuilding) { // Ne pas interférer si une transition est déjà en cours
-            
-            console.log(`Agent ${this.id}: Mécanisme de secours - Temps d'arrivée dépassé, démarrage transition vers bâtiment`);
-            
-            if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
-                this._enterBuilding(currentGameTime, 'WORK');
-            } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
-                this._enterBuilding(currentGameTime, 'HOME');
-            }
-        }
-        
         // Mise à jour de la state machine (mise à jour d'état logique)
         if (this.stateMachine) {
             this.stateMachine.update(deltaTime, currentHour, calendarDate, currentGameTime);
@@ -608,6 +927,22 @@ export default class Agent {
             this.isLodActive = false;
         }
         // ---------------------------------------
+
+        // CORRECTION: Mécanisme de secours pour les agents bloqués en transit 
+        // dont le temps d'arrivée est dépassé
+        if ((this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
+             this.currentState === AgentState.IN_TRANSIT_TO_HOME) && 
+            this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame &&
+            !this.isMovingFromPathToBuilding) { // Ne pas interférer si une transition est déjà en cours
+            
+            console.log(`Agent ${this.id}: Mécanisme de secours - Temps d'arrivée dépassé, démarrage transition vers bâtiment`);
+            
+            if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
+                this._enterBuilding(currentGameTime, 'WORK');
+            } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
+                this._enterBuilding(currentGameTime, 'HOME');
+            }
+        }
 
         // Utiliser la nouvelle méthode updateVisual pour gérer le déplacement et l'animation
         this.updateVisual(deltaTime, currentGameTime);
@@ -1097,6 +1432,15 @@ export default class Agent {
     }
 
     destroy() {
+        // Annuler tous les événements planifiés
+        this._cancelScheduledEvents();
+        
+        // Nettoyer également tous les événements potentiellement associés à cet agent
+        const scheduler = this.experience?.timeScheduler;
+        if (scheduler) {
+            scheduler.cancelEventsForContext(this);
+        }
+        
         this.path = null;
         this.homePosition = null;
         this.workPosition = null;
@@ -1156,6 +1500,41 @@ export default class Agent {
         
         // Utiliser startPathToBuildingTransition pour gérer la transition visuelle
         this.startPathToBuildingTransition(currentGameTime, goal);
+    }
+
+    /**
+     * Synchronise la position visuelle d'un agent avec sa progression temporelle calculée.
+     * Utile lorsque le temps a été fortement accéléré pour s'assurer que la position est cohérente.
+     * 
+     * @param {number} progressRatio - Ratio de progression dans le trajet (0 à 1)
+     */
+    syncVisualPositionWithProgress(progressRatio) {
+        if (!this.currentPathPoints || this.currentPathPoints.length < 2 || !this.movementHandler) {
+            console.warn(`Agent ${this.id}: Impossible de synchroniser la position, chemin ou handler manquant`);
+            return;
+        }
+        
+        // Assurer que le ratio est dans l'intervalle [0,1]
+        const clampedRatio = Math.min(1.0, Math.max(0.0, progressRatio));
+        
+        // Mettre à jour la progression visuelle
+        this.visualInterpolationProgress = clampedRatio;
+        
+        // Calculer l'index approximatif du segment de chemin 
+        const lastIndex = this.currentPathPoints.length - 1;
+        const approximateIndex = Math.floor(clampedRatio * lastIndex);
+        this.currentPathIndexVisual = Math.min(lastIndex - 1, approximateIndex);
+        
+        // Forcer la mise à jour de la position en utilisant le handler de mouvement
+        this.movementHandler.updatePedestrianMovement(
+            0, // deltaTime non significatif ici
+            this.currentPathPoints,
+            this.currentPathLengthWorld,
+            clampedRatio,
+            this.currentPathIndexVisual
+        );
+        
+        console.log(`Agent ${this.id}: Position synchronisée avec la progression ${(clampedRatio * 100).toFixed(1)}%`);
     }
 }
 

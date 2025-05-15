@@ -217,7 +217,20 @@ export default class AgentStateMachine {
                 break;
 
             case AgentState.READY_TO_LEAVE_FOR_WORK:
-                if (timeWithinCurrentDayCycle >= agent.exactWorkDepartureTimeGame) {
+                // CORRECTION: Comparaison plus robuste pour gérer les vitesses de temps élevées
+                // Vérifier si on a atteint ou dépassé l'heure de départ
+                const shouldDepartNow = timeWithinCurrentDayCycle >= agent.exactWorkDepartureTimeGame || 
+                    (currentHour >= agent.departureWorkHour && currentHour < agent.departureHomeHour);
+                
+                if (shouldDepartNow) {
+                    // Si le temps a avancé bien au-delà de l'heure de départ, on calcule la position attendue
+                    const timeElapsedSinceDeparture = timeWithinCurrentDayCycle - agent.exactWorkDepartureTimeGame;
+                    const isSignificantTimeElapsed = timeElapsedSinceDeparture > 10 * 60 * 1000; // Plus de 10 minutes de jeu
+                    
+                    // Log détaillé pour comprendre le comportement
+                    console.log(`Agent ${agent.id}: Départ travail - Heure actuelle=${currentHour}h, exactWorkDepartureTimeGame=${agent.exactWorkDepartureTimeGame}, 
+                        timeWithinCurrentDayCycle=${timeWithinCurrentDayCycle}, timeElapsedSinceDeparture=${timeElapsedSinceDeparture}ms`);
+                    
                     let departureSuccessful = false;
                     const isDriving = agent.vehicleBehavior?.isDriving() ?? false;
 
@@ -228,22 +241,50 @@ export default class AgentStateMachine {
                             car.setPath(agent.currentPathPoints);
                             agent.currentState = AgentState.DRIVING_TO_WORK;
                             agent.isVisible = false; 
-                            agent.departureTimeGame = currentGameTime;
+                            
+                            // Mettre à jour le temps de départ au temps exact ou à l'heure actuelle si on a dépassé significativement
+                            agent.departureTimeGame = isSignificantTimeElapsed ? 
+                                (currentGameTime - timeElapsedSinceDeparture) : currentGameTime;
+                                
                             const carSpeed = car.speed;
-                            agent.calculatedTravelDurationGame = (carSpeed > 0 && agent.currentPathLengthWorld > 0) ? (agent.currentPathLengthWorld / carSpeed) * 1000 : 10 * 60 * 1000;
-                            agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                            agent.calculatedTravelDurationGame = (carSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
+                                (agent.currentPathLengthWorld / carSpeed) * 1000 : 10 * 60 * 1000;
+                            agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
                             departureSuccessful = true;
+                            
+                            // Si un temps significatif s'est écoulé, mettre à jour la position du véhicule en conséquence
+                            if (isSignificantTimeElapsed && agent.calculatedTravelDurationGame > 0) {
+                                const progressRatio = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
+                                console.log(`Agent ${agent.id}: Mise à jour de la position du véhicule - progressRatio=${progressRatio}`);
+                                // Laisser le système de véhicule gérer cela
+                            }
                         } else { 
                             console.warn(`Agent ${agent.id}: Problème départ voiture (voiture ou chemin manquant). Tentative départ piéton.`);
                             agent.vehicleBehavior.exitVehicle(); 
                             if (agent.currentPathPoints) { 
                                 // Démarrer la transition du bâtiment vers le point de départ du chemin
                                 if (agent.startTransitionFromBuildingToPath(currentGameTime, 'WORK')) {
-                                    agent.departureTimeGame = currentGameTime;
+                                    // Mettre à jour le temps de départ au temps exact ou à l'heure actuelle si on a dépassé significativement
+                                    agent.departureTimeGame = isSignificantTimeElapsed ? 
+                                        (currentGameTime - timeElapsedSinceDeparture) : currentGameTime;
+                                        
                                     agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
                                         (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
-                                    agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                                    agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
                                     departureSuccessful = true;
+                                    
+                                    // Si un temps significatif s'est écoulé, on passera directement à IN_TRANSIT_TO_WORK
+                                    // avec une position mise à jour après la transition
+                                    if (isSignificantTimeElapsed) {
+                                        agent.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                                        console.log(`Agent ${agent.id}: Passage direct à IN_TRANSIT_TO_WORK en raison du temps écoulé`);
+                                        
+                                        // Synchroniser la position visuelle de l'agent avec sa progression temporelle
+                                        if (agent.calculatedTravelDurationGame > 0) {
+                                            const progressRatio = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
+                                            agent.syncVisualPositionWithProgress(progressRatio);
+                                        }
+                                    }
                                 } else {
                                     agent.currentState = AgentState.AT_HOME; 
                                     agent.isVisible = false;
@@ -258,19 +299,39 @@ export default class AgentStateMachine {
                         if (agent.currentPathPoints) {
                             // Démarrer la transition du bâtiment vers le point de départ du chemin
                             if (agent.startTransitionFromBuildingToPath(currentGameTime, 'WORK')) {
-                                agent.departureTimeGame = currentGameTime;
+                                // Mettre à jour le temps de départ au temps exact ou à l'heure actuelle si on a dépassé significativement
+                                agent.departureTimeGame = isSignificantTimeElapsed ? 
+                                    (currentGameTime - timeElapsedSinceDeparture) : currentGameTime;
+                                    
                                 agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
                                     (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
-                                agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                                agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
                                 departureSuccessful = true;
+                                
+                                // Si un temps significatif s'est écoulé, on passera directement à IN_TRANSIT_TO_WORK
+                                // avec une position mise à jour après la transition
+                                if (isSignificantTimeElapsed) {
+                                    agent.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                                    console.log(`Agent ${agent.id}: Passage direct à IN_TRANSIT_TO_WORK en raison du temps écoulé`);
+                                    
+                                    // Synchroniser la position visuelle de l'agent avec sa progression temporelle
+                                    if (agent.calculatedTravelDurationGame > 0) {
+                                        const progressRatio = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
+                                        agent.syncVisualPositionWithProgress(progressRatio);
+                                    }
+                                }
                             } else {
                                 // Fallback au comportement original si la transition échoue
                                 agent.currentState = AgentState.IN_TRANSIT_TO_WORK; 
                                 agent.isVisible = true;
-                                agent.departureTimeGame = currentGameTime;
+                                
+                                // Mettre à jour le temps de départ au temps exact ou à l'heure actuelle si on a dépassé significativement
+                                agent.departureTimeGame = isSignificantTimeElapsed ? 
+                                    (currentGameTime - timeElapsedSinceDeparture) : currentGameTime;
+                                    
                                 agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
                                     (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
-                                agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                                agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
                                 departureSuccessful = true;
                             }
                         } else {
@@ -287,32 +348,26 @@ export default class AgentStateMachine {
                         //console.log(`Agent ${agent.id}: Départ travail à ${new Date(currentHourMs).toISOString().substr(11, 8)}`);
                     }
                 } else {
-                    // Ajout de log pour déboguer - si l'heure actuelle est 8h00 ou plus mais la condition n'est pas remplie
-                    if (currentHour >= 8) {
-                        console.log(`Agent ${agent.id} bloqué en READY_TO_LEAVE_FOR_WORK:
-                            - timeWithinCurrentDayCycle: ${timeWithinCurrentDayCycle}
-                            - exactWorkDepartureTimeGame: ${agent.exactWorkDepartureTimeGame}
-                            - currentHour: ${currentHour}
-                            - currentGameTime: ${currentGameTime}`);
-                        
-                        // Forcer le départ si l'heure est bonne mais la condition numérique échoue
-                        if (currentHour >= agent.departureWorkHour) {
-                            console.log(`Agent ${agent.id}: Forçage du départ (heure correcte)`);
-                            // Déclencher la transition du bâtiment au chemin
-                            if (agent.currentPathPoints && agent.startTransitionFromBuildingToPath(currentGameTime, 'WORK')) {
-                                agent.departureTimeGame = currentGameTime;
-                                agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
-                                    (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
-                                agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
-                                agent.lastDepartureDayWork = calendarDate?.jour ?? 0;
-                            }
-                        }
-                    }
+                    // On est avant l'heure de départ - comportement normal
+                    // Aucun changement n'est nécessaire ici
                 }
                 break;
 
             case AgentState.READY_TO_LEAVE_FOR_HOME:
-                if (timeWithinCurrentDayCycle >= agent.exactHomeDepartureTimeGame) {
+                // CORRECTION: Comparaison plus robuste pour gérer les vitesses de temps élevées
+                // Vérifier si on a atteint ou dépassé l'heure de départ
+                const shouldDepartHomeNow = timeWithinCurrentDayCycle >= agent.exactHomeDepartureTimeGame || 
+                    currentHour >= agent.departureHomeHour;
+                
+                if (shouldDepartHomeNow) {
+                    // Si le temps a avancé bien au-delà de l'heure de départ, on calcule la position attendue
+                    const timeElapsedSinceDeparture = timeWithinCurrentDayCycle - agent.exactHomeDepartureTimeGame;
+                    const isSignificantTimeElapsed = timeElapsedSinceDeparture > 10 * 60 * 1000; // Plus de 10 minutes de jeu
+                    
+                    // Log détaillé pour comprendre le comportement
+                    console.log(`Agent ${agent.id}: Départ maison - Heure actuelle=${currentHour}h, exactHomeDepartureTimeGame=${agent.exactHomeDepartureTimeGame}, 
+                        timeWithinCurrentDayCycle=${timeWithinCurrentDayCycle}, timeElapsedSinceDeparture=${timeElapsedSinceDeparture}ms`);
+                    
                     let departureSuccessful = false;
                     const isDriving = agent.vehicleBehavior?.isDriving() ?? false;
 
@@ -323,22 +378,50 @@ export default class AgentStateMachine {
                             car.setPath(agent.currentPathPoints);
                             agent.currentState = AgentState.DRIVING_HOME;
                             agent.isVisible = false; 
-                            agent.departureTimeGame = currentGameTime;
+                            
+                            // Mettre à jour le temps de départ au temps exact ou à l'heure actuelle si on a dépassé significativement
+                            agent.departureTimeGame = isSignificantTimeElapsed ? 
+                                (currentGameTime - timeElapsedSinceDeparture) : currentGameTime;
+                                
                             const carSpeed = car.speed;
-                            agent.calculatedTravelDurationGame = (carSpeed > 0 && agent.currentPathLengthWorld > 0) ? (agent.currentPathLengthWorld / carSpeed) * 1000 : 10 * 60 * 1000;
-                            agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                            agent.calculatedTravelDurationGame = (carSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
+                                (agent.currentPathLengthWorld / carSpeed) * 1000 : 10 * 60 * 1000;
+                            agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
                             departureSuccessful = true;
+                            
+                            // Si un temps significatif s'est écoulé, mettre à jour la position du véhicule en conséquence
+                            if (isSignificantTimeElapsed && agent.calculatedTravelDurationGame > 0) {
+                                const progressRatio = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
+                                console.log(`Agent ${agent.id}: Mise à jour de la position du véhicule - progressRatio=${progressRatio}`);
+                                // Laisser le système de véhicule gérer cela
+                            }
                         } else { 
                             console.warn(`Agent ${agent.id}: Problème départ voiture pour retour (voiture ou chemin manquant). Tentative départ piéton.`);
                             agent.vehicleBehavior.exitVehicle();
                             if (agent.currentPathPoints) { 
                                 // Démarrer la transition du bâtiment vers le point de départ du chemin
                                 if (agent.startTransitionFromBuildingToPath(currentGameTime, 'HOME')) {
-                                    agent.departureTimeGame = currentGameTime;
+                                    // Mettre à jour le temps de départ au temps exact ou à l'heure actuelle si on a dépassé significativement
+                                    agent.departureTimeGame = isSignificantTimeElapsed ? 
+                                        (currentGameTime - timeElapsedSinceDeparture) : currentGameTime;
+                                        
                                     agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
                                         (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
-                                    agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                                    agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
                                     departureSuccessful = true;
+                                    
+                                    // Si un temps significatif s'est écoulé, on passera directement à IN_TRANSIT_TO_HOME
+                                    // avec une position mise à jour après la transition
+                                    if (isSignificantTimeElapsed) {
+                                        agent.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                                        console.log(`Agent ${agent.id}: Passage direct à IN_TRANSIT_TO_HOME en raison du temps écoulé`);
+                                        
+                                        // Synchroniser la position visuelle de l'agent avec sa progression temporelle
+                                        if (agent.calculatedTravelDurationGame > 0) {
+                                            const progressRatio = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
+                                            agent.syncVisualPositionWithProgress(progressRatio);
+                                        }
+                                    }
                                 } else {
                                     agent.currentState = AgentState.AT_WORK; 
                                     agent.isVisible = false;
@@ -353,19 +436,39 @@ export default class AgentStateMachine {
                         if (agent.currentPathPoints) {
                             // Démarrer la transition du bâtiment vers le point de départ du chemin
                             if (agent.startTransitionFromBuildingToPath(currentGameTime, 'HOME')) {
-                                agent.departureTimeGame = currentGameTime;
+                                // Mettre à jour le temps de départ au temps exact ou à l'heure actuelle si on a dépassé significativement
+                                agent.departureTimeGame = isSignificantTimeElapsed ? 
+                                    (currentGameTime - timeElapsedSinceDeparture) : currentGameTime;
+                                    
                                 agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
                                     (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
-                                agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                                agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
                                 departureSuccessful = true;
+                                
+                                // Si un temps significatif s'est écoulé, on passera directement à IN_TRANSIT_TO_HOME
+                                // avec une position mise à jour après la transition
+                                if (isSignificantTimeElapsed) {
+                                    agent.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                                    console.log(`Agent ${agent.id}: Passage direct à IN_TRANSIT_TO_HOME en raison du temps écoulé`);
+                                    
+                                    // Synchroniser la position visuelle de l'agent avec sa progression temporelle
+                                    if (agent.calculatedTravelDurationGame > 0) {
+                                        const progressRatio = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
+                                        agent.syncVisualPositionWithProgress(progressRatio);
+                                    }
+                                }
                             } else {
                                 // Fallback au comportement original si la transition échoue
                                 agent.currentState = AgentState.IN_TRANSIT_TO_HOME; 
                                 agent.isVisible = true;
-                                agent.departureTimeGame = currentGameTime;
+                                
+                                // Mettre à jour le temps de départ au temps exact ou à l'heure actuelle si on a dépassé significativement
+                                agent.departureTimeGame = isSignificantTimeElapsed ? 
+                                    (currentGameTime - timeElapsedSinceDeparture) : currentGameTime;
+                                    
                                 agent.calculatedTravelDurationGame = (agent.agentBaseSpeed > 0 && agent.currentPathLengthWorld > 0) ? 
                                     (agent.currentPathLengthWorld / agent.agentBaseSpeed) * 1000 : 10 * 60 * 1000;
-                                agent.arrivalTmeGame = currentGameTime + agent.calculatedTravelDurationGame;
+                                agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
                                 departureSuccessful = true;
                             }
                         } else {
@@ -381,6 +484,9 @@ export default class AgentStateMachine {
                         const currentHourMs = timeWithinCurrentDayCycle;
                         //console.log(`Agent ${agent.id}: Départ maison à ${new Date(currentHourMs).toISOString().substr(11, 8)}`);
                     }
+                } else {
+                    // On est avant l'heure de départ - comportement normal
+                    // Aucun changement n'est nécessaire ici
                 }
                 break;
             

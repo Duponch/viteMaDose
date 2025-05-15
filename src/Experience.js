@@ -23,6 +23,7 @@ import AgentUI from './UI/AgentUI.js';
 // Import du pool d'objets
 import ObjectPool from './Utils/ObjectPool.js';
 import { defaultUIStates, saveUIStates, loadUIStates } from './config/uiConfig.js';
+import TimeScheduler from './World/TimeScheduler.js';
 
 let instance = null;
 
@@ -191,6 +192,9 @@ export default class Experience extends EventTarget {
         window.objectPool = this.objectPool;
 
         this.agentUI = new AgentUI(this);
+
+        // Initialiser le scheduler en même temps que les autres composants
+        this.timeScheduler = new TimeScheduler(this);
     }
 
     /**
@@ -1405,6 +1409,11 @@ export default class Experience extends EventTarget {
             this.renderer.update();
         }
 
+        // Mettre à jour le scheduler avec le temps actuel
+        if (this.timeScheduler) {
+            this.timeScheduler.update(this.time.elapsed);
+        }
+
         // End stats measurement
         this.stats.end();
     }
@@ -1522,6 +1531,12 @@ export default class Experience extends EventTarget {
         if (this.objectPool) {
             this.objectPool.clear();
             this.objectPool = null;
+        }
+
+        // Détruire le scheduler
+        if (this.timeScheduler) {
+            this.timeScheduler.destroy();
+            this.timeScheduler = null;
         }
 
         instance = null;
