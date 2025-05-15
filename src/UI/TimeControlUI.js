@@ -35,9 +35,12 @@ export default class TimeControlUI {
 
     createButtons() {
         // --- Boutons Temps (inchangés) ---
-        this.elements.pausePlayButton = this._createButton('pause-play-button', this.time.isPaused ? '▶' : '⏸');
         this.elements.decreaseButton = this._createButton('decrease-speed-button', '⏮');
         this.elements.increaseButton = this._createButton('increase-speed-button', '⏭');
+        
+        // Utiliser la nouvelle méthode pour créer le bouton pause
+        this.elements.pausePlayButton = this._createPauseButton();
+        
         this.elements.speedDisplay = document.createElement('span');
         this.elements.speedDisplay.id = 'speed-display';
         this.elements.speedDisplay.textContent = `${this.time.timeScale}x`;
@@ -173,7 +176,9 @@ export default class TimeControlUI {
 
     setupEventListeners() {
         // --- Listeners Temps (inchangés) ---
-        this.elements.pausePlayButton.addEventListener('click', () => this.time.togglePause());
+        // Supprimer l'écouteur du bouton pause car il est déjà défini dans _createPauseButton
+        // this.elements.pausePlayButton.addEventListener('click', () => this.time.togglePause());
+        
         this.elements.increaseButton.addEventListener('click', () => {
             this.time.increaseSpeed();
         });
@@ -529,5 +534,43 @@ export default class TimeControlUI {
         this.experience?.removeEventListener('citymapvisibilitychanged', this.syncUIButtonStates);
 
         console.log("TimeControlUI destroyed.");
+    }
+
+    _createPauseButton() {
+        const pauseButton = document.createElement('button');
+        pauseButton.className = 'time-control-button';
+        pauseButton.id = 'time-pause-button';
+        pauseButton.title = 'Pause / Resume';
+        
+        const pauseIcon = document.createElement('div');
+        pauseIcon.className = 'time-pause-icon';
+        pauseButton.appendChild(pauseIcon);
+        
+        pauseButton.addEventListener('click', () => {
+            const wasPaused = this.experience.time.isPaused;
+            this.experience.time.togglePause();
+            this.updateButtonStates();
+            
+            // Si le jeu vient d'être repris après une pause, synchroniser les agents
+            if (wasPaused && !this.experience.time.isPaused) {
+                this._synchronizeAgentsAfterPause();
+            }
+        });
+        
+        return pauseButton;
+    }
+
+    /**
+     * Synchronise les agents après une pause
+     * @private
+     */
+    _synchronizeAgentsAfterPause() {
+        if (this.experience._synchronizeAgentsAfterPause) {
+            this.experience._synchronizeAgentsAfterPause();
+        } else if (this.experience.world?.agentManager) {
+            console.log("TimeControlUI: Synchronisation des agents après reprise...");
+            const currentGameTime = this.experience.time.elapsed;
+            this.experience.world.agentManager.checkAgentsEventsAfterTimeAcceleration(currentGameTime);
+        }
     }
 }

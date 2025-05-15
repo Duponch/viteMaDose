@@ -54,7 +54,7 @@ export default class AgentStateMachine {
         const currentDayNumber = calendarDate.annee * 10000 + (calendarDate.mois) * 100 + calendarDate.jour;
 
         // --- VÉRIFICATION SÉCURITÉ ÉTAT BLOQUÉ ---
-        const MAX_TRANSIT_DURATION_FACTOR = 2.0;
+        const MAX_TRANSIT_DURATION_FACTOR = 1.5; // Réduit de 2.0 à 1.5 pour une détection plus précoce
         const maxTransitTime = dayDurationMs * MAX_TRANSIT_DURATION_FACTOR;
         const isStuckCheckState =
             agent.currentState === AgentState.IN_TRANSIT_TO_WORK || agent.currentState === AgentState.DRIVING_TO_WORK ||
@@ -72,8 +72,41 @@ export default class AgentStateMachine {
             return;
         }
 
+        // --- Vérification spécifique pour READY_TO_LEAVE_FOR_WORK/HOME ---
+        if (agent.currentState === AgentState.READY_TO_LEAVE_FOR_WORK && 
+            currentHour >= agent.departureWorkHour && 
+            timeWithinCurrentDayCycle >= agent.exactWorkDepartureTimeGame) {
+            // Si l'agent est bloqué en READY_TO_LEAVE depuis plus de 30 minutes après l'heure prévue
+            const timeElapsedSinceDeparture = timeWithinCurrentDayCycle - agent.exactWorkDepartureTimeGame;
+            if (timeElapsedSinceDeparture > 30 * 60 * 1000) { // 30 minutes
+                console.warn(`[AGENT ${agent.id} SAFETY] Bloqué en état READY_TO_LEAVE_FOR_WORK ${timeElapsedSinceDeparture/60000} minutes après l'heure de départ. Forçage AT_WORK.`);
+                agent.currentState = AgentState.AT_WORK;
+                agent.isVisible = false;
+                if (agent.workBuildingPosition) {
+                    agent.position.copy(agent.workBuildingPosition).setY(agent.yOffset);
+                }
+                agent.lastArrivalTimeWork = currentGameTime;
+                return;
+            }
+        } else if (agent.currentState === AgentState.READY_TO_LEAVE_FOR_HOME && 
+                  currentHour >= agent.departureHomeHour && 
+                  timeWithinCurrentDayCycle >= agent.exactHomeDepartureTimeGame) {
+            // Si l'agent est bloqué en READY_TO_LEAVE depuis plus de 30 minutes après l'heure prévue
+            const timeElapsedSinceDeparture = timeWithinCurrentDayCycle - agent.exactHomeDepartureTimeGame;
+            if (timeElapsedSinceDeparture > 30 * 60 * 1000) { // 30 minutes
+                console.warn(`[AGENT ${agent.id} SAFETY] Bloqué en état READY_TO_LEAVE_FOR_HOME ${timeElapsedSinceDeparture/60000} minutes après l'heure de départ. Forçage AT_HOME.`);
+                agent.currentState = AgentState.AT_HOME;
+                agent.isVisible = false;
+                if (agent.homeBuildingPosition) {
+                    agent.position.copy(agent.homeBuildingPosition).setY(agent.yOffset);
+                }
+                agent.lastArrivalTimeHome = currentGameTime;
+                return;
+            }
+        }
+
         // --- Vérification Timeout Path Request ---
-        const PATH_REQUEST_TIMEOUT_MS = 100000; // 100 secondes
+        const PATH_REQUEST_TIMEOUT_MS = 60000; // Réduit à 60 secondes au lieu de 100
         if (agent._pathRequestTimeout && (agent.currentState.startsWith('REQUESTING_') || agent.currentState === AgentState.WAITING_FOR_PATH) && (currentGameTime - agent._pathRequestTimeout > PATH_REQUEST_TIMEOUT_MS)) {
             console.warn(`Agent ${agent.id}: Path request timed out in state ${agent.currentState}. Forcing recovery.`);
             agent.forceRecoverFromTimeout(currentGameTime);

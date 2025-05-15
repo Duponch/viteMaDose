@@ -1649,13 +1649,48 @@ export default class Experience extends EventTarget {
         } else if (event.code === 'KeyR') {
             this.time.increaseSpeed();
         } else if (event.code === 'KeyF') {
+            const wasPaused = this.time.isPaused;
             this.time.togglePause();
+            
+            // Si le jeu vient d'être repris après une pause, synchroniser les agents
+            if (wasPaused && !this.time.isPaused) {
+                this._synchronizeAgentsAfterPause();
+            }
         } else if (event.code === 'KeyH') {
             // Activer/désactiver les helpers de façade des bâtiments
             if (this.world && this.world.contentGenerator) {
                 this.world.contentGenerator.toggleBuildingFacadeHelpers();
                 console.log("Affichage des flèches d'orientation des façades de bâtiments basculé");
             }
+        }
+    }
+
+    /**
+     * Synchronise les agents après une pause ou une forte accélération du temps
+     * @private
+     */
+    _synchronizeAgentsAfterPause() {
+        if (this.world?.agentManager) {
+            console.log("Experience: Synchronisation forcée des agents après reprise...");
+            const currentGameTime = this.time.elapsed;
+            const currentHour = this.world.environment?.getCurrentHour() || 0;
+            const environment = this.world.environment;
+            const calendarDate = environment?.getCurrentCalendarDate();
+            
+            // Si disponible, utiliser la méthode de synchronisation du AgentManager
+            if (typeof this.world.agentManager.forceSyncAllAgentsWithGameTime === 'function') {
+                this.world.agentManager.forceSyncAllAgentsWithGameTime(currentGameTime, currentHour, calendarDate);
+            } else if (typeof this.world.agentManager.checkAgentsEventsAfterTimeAcceleration === 'function') {
+                this.world.agentManager.checkAgentsEventsAfterTimeAcceleration(currentGameTime);
+            }
+            
+            // Notifier le scheduler pour qu'il traite immédiatement tous les événements en attente
+            if (this.timeScheduler) {
+                console.log("Experience: Forçage du traitement des événements planifiés...");
+                this.timeScheduler.processPendingEvents(currentGameTime);
+            }
+        } else {
+            console.warn("Experience: Impossible de synchroniser les agents - AgentManager non disponible");
         }
     }
 

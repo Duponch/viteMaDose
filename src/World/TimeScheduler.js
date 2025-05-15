@@ -292,6 +292,99 @@ export default class TimeScheduler {
     }
 
     /**
+     * Force le traitement de tous les événements en attente jusqu'à l'heure actuelle
+     * Utile après une pause ou une forte accélération du temps
+     * @param {number} currentGameTime - Temps actuel du jeu
+     */
+    processPendingEvents(currentGameTime) {
+        if (!this.isInitialized) {
+            if (!this.initialize()) {
+                console.warn("TimeScheduler: Impossible de traiter les événements - non initialisé");
+                return;
+            }
+        }
+        
+        if (this.scheduledEvents.length === 0) {
+            return;
+        }
+        
+        console.log(`TimeScheduler: Traitement forcé des événements jusqu'à ${new Date(currentGameTime).toISOString().substr(11, 8)} (${this.scheduledEvents.length} événements au total)`);
+        
+        // Variables pour suivre les événements traités et à replanifier
+        const eventsToReschedule = [];
+        let processedCount = 0;
+        
+        // Copier la liste actuelle des événements pour éviter les modifications pendant l'itération
+        const eventsCopy = [...this.scheduledEvents];
+        
+        // Trier par temps programmé pour traiter dans l'ordre chronologique
+        eventsCopy.sort((a, b) => a.scheduledTime - b.scheduledTime);
+        
+        // Traiter tous les événements arrivés à échéance
+        for (const event of eventsCopy) {
+            // Ne traiter que les événements arrivés à échéance
+            if (event.scheduledTime <= currentGameTime && !event.isProcessed) {
+                try {
+                    // Marquer l'événement comme traité
+                    event.isProcessed = true;
+                    
+                    // Exécuter la callback avec le contexte et les données
+                    if (event.callback && event.context) {
+                        event.callback.call(event.context, { 
+                            ...event.data,
+                            scheduledTime: event.scheduledTime,
+                            currentTime: currentGameTime,
+                            id: event.id
+                        });
+                    } else if (event.callback) {
+                        event.callback({
+                            ...event.data,
+                            scheduledTime: event.scheduledTime,
+                            currentTime: currentGameTime,
+                            id: event.id
+                        });
+                    }
+                    
+                    processedCount++;
+                    
+                    // Si c'est un événement quotidien, le replanifier pour le lendemain
+                    if (event.data && event.data.isDaily) {
+                        // Calculer le temps pour le lendemain
+                        const nextDayTime = this.getGameTimeFromHour(
+                            event.data.hour, 
+                            event.data.minute, 
+                            currentGameTime + (this.dayDurationMs * 0.1) // Ajouter un peu de temps pour être sûr d'être dans le jour suivant
+                        );
+                        
+                        // Créer un nouvel événement avec les mêmes paramètres mais une nouvelle heure
+                        eventsToReschedule.push({
+                            ...event,
+                            scheduledTime: nextDayTime,
+                            isProcessed: false
+                        });
+                    }
+                } catch (error) {
+                    console.error(`TimeScheduler: Erreur lors du traitement de l'événement ${event.id}:`, error);
+                }
+            } else if (event.scheduledTime > currentGameTime) {
+                // Garder les événements futurs
+                eventsToReschedule.push(event);
+            }
+        }
+        
+        // Remplacer la liste des événements par les événements à conserver/replanifier
+        this.scheduledEvents = eventsToReschedule;
+        
+        // Trier la liste mise à jour
+        this.scheduledEvents.sort((a, b) => a.scheduledTime - b.scheduledTime);
+        
+        // Mettre à jour le temps de dernier traitement
+        this.lastProcessedTime = currentGameTime;
+        
+        console.log(`TimeScheduler: ${processedCount} événements traités, ${this.scheduledEvents.length} événements restants ou replanifiés`);
+    }
+
+    /**
      * Nettoie toutes les ressources lors de la destruction
      */
     destroy() {

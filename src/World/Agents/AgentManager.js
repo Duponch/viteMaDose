@@ -1,6 +1,7 @@
 // src/World/AgentManager.js
 import * as THREE from 'three';
 import Agent from './Agent.js';
+import AgentState from './AgentState.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import WorkScheduleStrategy from '../Strategies/WorkScheduleStrategy.js';
 import WeekendWalkStrategy from '../Strategies/WeekendWalkStrategy.js';
@@ -97,6 +98,12 @@ export default class AgentManager {
 		this._initializeStats();
 
 		this._initializeMeshes();
+		
+		// Planifier une synchronisation initiale différée pour laisser le temps aux agents de s'initialiser
+		setTimeout(() => {
+			this._synchronizeAgentsOnStartup();
+		}, 2000); // 2 secondes après l'initialisation
+		
 		//console.log("AgentManager initialisé (Worker non démarré).");
 	}
 
@@ -1531,6 +1538,7 @@ export default class AgentManager {
     /**
      * Force tous les agents à synchroniser leur état avec l'heure actuelle.
      * À appeler après une forte accélération du temps ou lorsque le jeu est mis en pause.
+     * Cette méthode utilise la nouvelle approche basée sur les événements intégrée directement dans les agents.
      * 
      * @param {number} currentGameTime - Temps de jeu actuel
      * @param {number} currentHour - Heure actuelle du jeu (0-23)
@@ -1539,7 +1547,35 @@ export default class AgentManager {
     forceSyncAllAgentsWithGameTime(currentGameTime, currentHour, calendarDate) {
         console.log(`AgentManager: Synchronisation forcée de tous les agents à ${currentHour}h...`);
         
-        // Le nombre d'agents à traiter à chaque frame pour éviter les gels
+        // Déclencher la synchronisation sur chaque agent
+        this.agents.forEach(agent => {
+            if (agent && typeof agent._synchronizeWithGameTime === 'function') {
+                agent._synchronizeWithGameTime(currentGameTime);
+            }
+        });
+        
+        console.log(`AgentManager: Synchronisation forcée terminée pour ${this.agents.length} agents.`);
+    }
+
+    /**
+     * Vérifie et reprogramme les événements pour tous les agents après une forte accélération du temps.
+     * Utilise le mécanisme de synchronisation basé sur les événements dans les agents.
+     * 
+     * @param {number} currentGameTime - Temps de jeu actuel
+     */
+    checkAgentsEventsAfterTimeAcceleration(currentGameTime) {
+        console.log(`AgentManager: Vérification des événements après accélération du temps...`);
+        
+        // Obtenir l'heure actuelle du jeu
+        const environment = this.experience?.world?.environment;
+        if (!environment) {
+            console.warn("AgentManager: Impossible d'obtenir l'environnement");
+            return;
+        }
+        
+        const currentHour = environment.getCurrentHour ? environment.getCurrentHour() : 0;
+        
+        // Synchroniser les agents par lots pour éviter de bloquer le thread principal
         const batchSize = 50;
         let processed = 0;
         
@@ -1548,73 +1584,20 @@ export default class AgentManager {
             
             for (let i = processed; i < endIndex; i++) {
                 const agent = this.agents[i];
+                if (!agent) continue;
                 
-                // Analyser l'état actuel et l'heure pour détecter les incohérences
-                if (agent.currentState === AgentState.READY_TO_LEAVE_FOR_WORK && currentHour >= agent.departureWorkHour) {
-                    const environment = this.experience.world?.environment;
-                    const dayDurationMs = environment?.dayDurationMs || (24 * 60 * 60 * 1000);
-                    const timeWithinCurrentDayCycle = currentGameTime % dayDurationMs;
-                    const exactWorkDepartureTimeMs = agent.exactWorkDepartureTimeGame;
-                    const timeElapsedSinceDeparture = timeWithinCurrentDayCycle - exactWorkDepartureTimeMs;
-                    
-                    // Si l'agent aurait dû partir depuis plus de 5 minutes
-                    if (timeElapsedSinceDeparture > 5 * 60 * 1000) {
-                        // Calculer la progression temporelle attendue
-                        const expectedProgress = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
-                        
-                        // Si l'agent devrait déjà être arrivé
-                        if (expectedProgress >= 1.0 || currentHour >= 9) {
-                            console.log(`AgentManager: Agent ${agent.id} devrait déjà être au travail, passage direct à AT_WORK`);
-                            agent.currentState = AgentState.AT_WORK;
-                            agent.isVisible = false;
-                            if (agent.workBuildingPosition) {
-                                agent.position.copy(agent.workBuildingPosition).setY(agent.yOffset);
-                            }
-                        } 
-                        // Sinon, l'agent devrait être sur le chemin
-                        else {
-                            console.log(`AgentManager: Agent ${agent.id} devrait être en chemin vers le travail avec une progression de ${(expectedProgress * 100).toFixed(1)}%`);
-                            agent.currentState = AgentState.IN_TRANSIT_TO_WORK;
-                            agent.isVisible = true;
-                            agent.departureTimeGame = currentGameTime - timeElapsedSinceDeparture;
-                            agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
-                            agent.syncVisualPositionWithProgress(expectedProgress);
-                        }
+                try {
+                    // 1. Synchroniser la position et l'état de l'agent en fonction de l'heure
+                    if (typeof agent._synchronizeWithGameTime === 'function') {
+                        agent._synchronizeWithGameTime(currentGameTime);
                     }
-                }
-                
-                // Même logique pour le retour à la maison
-                else if (agent.currentState === AgentState.READY_TO_LEAVE_FOR_HOME && currentHour >= agent.departureHomeHour) {
-                    const environment = this.experience.world?.environment;
-                    const dayDurationMs = environment?.dayDurationMs || (24 * 60 * 60 * 1000);
-                    const timeWithinCurrentDayCycle = currentGameTime % dayDurationMs;
-                    const exactHomeDepartureTimeMs = agent.exactHomeDepartureTimeGame;
-                    const timeElapsedSinceDeparture = timeWithinCurrentDayCycle - exactHomeDepartureTimeMs;
                     
-                    // Si l'agent aurait dû partir depuis plus de 5 minutes
-                    if (timeElapsedSinceDeparture > 5 * 60 * 1000) {
-                        // Calculer la progression temporelle attendue
-                        const expectedProgress = Math.min(1.0, timeElapsedSinceDeparture / agent.calculatedTravelDurationGame);
-                        
-                        // Si l'agent devrait déjà être arrivé
-                        if (expectedProgress >= 1.0 || currentHour >= agent.departureHomeHour + 1) {
-                            console.log(`AgentManager: Agent ${agent.id} devrait déjà être à la maison, passage direct à AT_HOME`);
-                            agent.currentState = AgentState.AT_HOME;
-                            agent.isVisible = false;
-                            if (agent.homeBuildingPosition) {
-                                agent.position.copy(agent.homeBuildingPosition).setY(agent.yOffset);
-                            }
-                        } 
-                        // Sinon, l'agent devrait être sur le chemin
-                        else {
-                            console.log(`AgentManager: Agent ${agent.id} devrait être en chemin vers la maison avec une progression de ${(expectedProgress * 100).toFixed(1)}%`);
-                            agent.currentState = AgentState.IN_TRANSIT_TO_HOME;
-                            agent.isVisible = true;
-                            agent.departureTimeGame = currentGameTime - timeElapsedSinceDeparture;
-                            agent.arrivalTmeGame = agent.departureTimeGame + agent.calculatedTravelDurationGame;
-                            agent.syncVisualPositionWithProgress(expectedProgress);
-                        }
+                    // 2. Recalculer les événements planifiés
+                    if (typeof agent._calculateScheduledTimes === 'function') {
+                        agent._calculateScheduledTimes();
                     }
+                } catch (error) {
+                    console.error(`AgentManager: Erreur lors de la mise à jour de l'agent ${agent.id}:`, error);
                 }
             }
             
@@ -1624,7 +1607,7 @@ export default class AgentManager {
             if (processed < this.agents.length) {
                 setTimeout(syncBatch, 0);
             } else {
-                console.log(`AgentManager: Synchronisation forcée terminée pour ${this.agents.length} agents.`);
+                console.log(`AgentManager: Vérification des événements terminée pour ${this.agents.length} agents.`);
             }
         };
         
@@ -1633,54 +1616,31 @@ export default class AgentManager {
     }
 
     /**
-     * Vérifie et reprogramme les événements pour tous les agents après une forte accélération du temps.
-     * Cette version plus légère remplace l'ancien mécanisme de synchronisation forcée.
-     * 
-     * @param {number} currentGameTime - Temps de jeu actuel
+     * Synchronise tous les agents au démarrage du jeu
+     * @private
      */
-    checkAgentsEventsAfterTimeAcceleration(currentGameTime) {
-        console.log(`AgentManager: Vérification des événements après accélération du temps...`);
-        
-        // Vérifier si le TimeScheduler est disponible
-        const scheduler = this.experience?.timeScheduler;
-        if (!scheduler) {
-            console.warn("AgentManager: Impossible de vérifier les événements - TimeScheduler non disponible");
+    _synchronizeAgentsOnStartup() {
+        if (!this.experience?.world?.environment) {
+            console.warn("AgentManager: Impossible de synchroniser les agents au démarrage - environnement non prêt");
             return;
         }
         
-        // Pour chaque agent, traiter en lots pour ne pas bloquer le thread principal
-        const batchSize = 20;
-        const processBatch = (startIndex) => {
-            const endIndex = Math.min(startIndex + batchSize, this.agents.length);
-            
-            for (let i = startIndex; i < endIndex; i++) {
-                const agent = this.agents[i];
-                if (!agent) continue;
-                
-                try {
-                    // Annuler les événements actuels
-                    if (typeof agent._cancelScheduledEvents === 'function') {
-                        agent._cancelScheduledEvents();
-                    }
-                    
-                    // Recalculer les heures et replanifier les événements
-                    if (typeof agent._calculateScheduledTimes === 'function') {
-                        agent._calculateScheduledTimes();
-                    }
-                } catch (error) {
-                    console.error(`AgentManager: Erreur lors de la mise à jour des événements pour l'agent ${agent.id}:`, error);
-                }
-            }
-            
-            // Si tous les agents n'ont pas été traités, planifier le prochain lot
-            if (endIndex < this.agents.length) {
-                setTimeout(() => processBatch(endIndex), 0);
-            } else {
-                console.log(`AgentManager: Vérification des événements terminée pour ${this.agents.length} agents.`);
-            }
-        };
+        const currentGameTime = this.experience.time.elapsed;
+        console.log(`AgentManager: Synchronisation initiale des agents au démarrage...`);
         
-        // Démarrer le traitement par lots
-        processBatch(0);
+        // Synchroniser tous les agents en utilisant leur propre méthode
+        for (const agent of this.agents) {
+            if (!agent) continue;
+            
+            try {
+                if (typeof agent._synchronizeWithGameTime === 'function') {
+                    agent._synchronizeWithGameTime(currentGameTime);
+                }
+            } catch (error) {
+                console.error(`AgentManager: Erreur lors de la synchronisation initiale de l'agent ${agent.id}:`, error);
+            }
+        }
+        
+        console.log(`AgentManager: Synchronisation initiale terminée pour ${this.agents.length} agents.`);
     }
 }

@@ -134,6 +134,222 @@ export default class Agent {
         this._stateStartTime = null;
 
         this._nextStateCheckTime = -1;
+        
+        // Écouter les événements de changement de vitesse de temps pour synchroniser dynamiquement
+        this._setupTimeEventListeners();
+    }
+
+    /**
+     * Configure les écouteurs d'événements liés au temps
+     * @private
+     */
+    _setupTimeEventListeners() {
+        // Écouter les événements de changement de vitesse du jeu
+        if (this.experience && this.experience.time) {
+            // Changement de vitesse - vérifier la synchronisation si vitesse élevée
+            this._speedChangeHandler = (event) => {
+                const newSpeed = event.detail.scale;
+                // Si la vitesse est très élevée (>= 256x), synchroniser immédiatement
+                if (newSpeed >= 256 && this.experience.time.elapsed > 0) {
+                    this._synchronizeWithGameTime(this.experience.time.elapsed);
+                }
+            };
+            
+            // Reprise après pause - vérifier la synchronisation
+            this._playedHandler = () => {
+                if (this.experience.time.elapsed > 0) {
+                    this._synchronizeWithGameTime(this.experience.time.elapsed);
+                }
+            };
+            
+            // Ajouter les écouteurs avec les références stockées
+            this.experience.time.addEventListener('speedchange', this._speedChangeHandler);
+            this.experience.time.addEventListener('played', this._playedHandler);
+        }
+    }
+
+    /**
+     * Synchronise l'état de l'agent avec l'heure de jeu actuelle
+     * @param {number} currentGameTime - Temps de jeu actuel
+     * @private
+     */
+    _synchronizeWithGameTime(currentGameTime) {
+        if (!this.experience || !this.experience.world?.environment) return;
+        
+        const environment = this.experience.world.environment;
+        const dayDurationMs = environment.dayDurationMs;
+        const timeWithinCurrentDayCycle = currentGameTime % dayDurationMs;
+        const currentHour = environment.getCurrentHour ? environment.getCurrentHour() : Math.floor((timeWithinCurrentDayCycle / dayDurationMs) * 24);
+        
+        // Vérifier et corriger les états incohérents
+        this._correctStateBasedOnTime(currentGameTime, currentHour, timeWithinCurrentDayCycle);
+    }
+
+    /**
+     * Corrige l'état de l'agent en fonction de l'heure actuelle
+     * @param {number} currentGameTime - Temps de jeu actuel
+     * @param {number} currentHour - Heure actuelle (0-23)
+     * @param {number} timeWithinDay - Temps dans le cycle journalier actuel
+     * @private
+     */
+    _correctStateBasedOnTime(currentGameTime, currentHour, timeWithinDay) {
+        // READY_TO_LEAVE_FOR_WORK mais après l'heure de départ
+        if (this.currentState === AgentState.READY_TO_LEAVE_FOR_WORK && 
+            currentHour >= this.departureWorkHour && 
+            timeWithinDay >= this.exactWorkDepartureTimeGame) {
+            
+            console.log(`Agent ${this.id}: Correction d'état - En retard pour le travail, synchronisation`);
+            
+            // Si l'agent doit déjà être arrivé au travail (après 9h par exemple)
+            if (currentHour >= 9) {
+                this.currentState = AgentState.AT_WORK;
+                this.isVisible = false;
+                if (this.workBuildingPosition) {
+                    this.position.copy(this.workBuildingPosition).setY(this.yOffset);
+                }
+                this.lastArrivalTimeWork = currentGameTime;
+                this.currentPathPoints = null;
+            } 
+            // Sinon, il doit être sur le chemin vers le travail
+            else if (this.currentPathPoints && this.currentPathPoints.length > 0) {
+                const timeElapsedSinceDeparture = timeWithinDay - this.exactWorkDepartureTimeGame;
+                
+                // Calculer la progression attendue
+                if (this.calculatedTravelDurationGame <= 0) {
+                    this.calculatedTravelDurationGame = (this.currentPathLengthWorld / this.agentBaseSpeed) * 1000;
+                }
+                
+                const progressRatio = Math.min(1.0, timeElapsedSinceDeparture / this.calculatedTravelDurationGame);
+                
+                this.departureTimeGame = currentGameTime - timeElapsedSinceDeparture;
+                this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
+                
+                // Mettre l'agent en transit
+                this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                this.isVisible = true;
+                
+                // Synchroniser la position visuelle
+                this.syncVisualPositionWithProgress(progressRatio);
+            }
+        }
+        
+        // READY_TO_LEAVE_FOR_HOME mais après l'heure de départ
+        else if (this.currentState === AgentState.READY_TO_LEAVE_FOR_HOME && 
+                currentHour >= this.departureHomeHour && 
+                timeWithinDay >= this.exactHomeDepartureTimeGame) {
+            
+            console.log(`Agent ${this.id}: Correction d'état - En retard pour rentrer, synchronisation`);
+            
+            // Si l'agent doit déjà être arrivé à la maison (après 19h par exemple)
+            if (currentHour >= 19) {
+                this.currentState = AgentState.AT_HOME;
+                this.isVisible = false;
+                if (this.homeBuildingPosition) {
+                    this.position.copy(this.homeBuildingPosition).setY(this.yOffset);
+                }
+                this.lastArrivalTimeHome = currentGameTime;
+                this.currentPathPoints = null;
+            } 
+            // Sinon, il doit être sur le chemin vers la maison
+            else if (this.currentPathPoints && this.currentPathPoints.length > 0) {
+                const timeElapsedSinceDeparture = timeWithinDay - this.exactHomeDepartureTimeGame;
+                
+                // Calculer la progression attendue
+                if (this.calculatedTravelDurationGame <= 0) {
+                    this.calculatedTravelDurationGame = (this.currentPathLengthWorld / this.agentBaseSpeed) * 1000;
+                }
+                
+                const progressRatio = Math.min(1.0, timeElapsedSinceDeparture / this.calculatedTravelDurationGame);
+                
+                this.departureTimeGame = currentGameTime - timeElapsedSinceDeparture;
+                this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
+                
+                // Mettre l'agent en transit
+                this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                this.isVisible = true;
+                
+                // Synchroniser la position visuelle
+                this.syncVisualPositionWithProgress(progressRatio);
+            }
+        }
+        
+        // Agent en transit avec temps d'arrivée dépassé
+        else if ((this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
+                 this.currentState === AgentState.DRIVING_TO_WORK ||
+                 this.currentState === AgentState.IN_TRANSIT_TO_HOME || 
+                 this.currentState === AgentState.DRIVING_HOME) && 
+                this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
+            
+            console.log(`Agent ${this.id}: Correction d'état - Temps d'arrivée dépassé, synchronisation`);
+            
+            // Placer l'agent directement à destination
+            if (this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
+                this.currentState === AgentState.DRIVING_TO_WORK) {
+                this.currentState = AgentState.AT_WORK;
+                this.isVisible = false;
+                if (this.workBuildingPosition) {
+                    this.position.copy(this.workBuildingPosition).setY(this.yOffset);
+                }
+                this.lastArrivalTimeWork = currentGameTime;
+            } else {
+                this.currentState = AgentState.AT_HOME;
+                this.isVisible = false;
+                if (this.homeBuildingPosition) {
+                    this.position.copy(this.homeBuildingPosition).setY(this.yOffset);
+                }
+                this.lastArrivalTimeHome = currentGameTime;
+            }
+            
+            // Nettoyer les données de chemin
+            this.currentPathPoints = null;
+            this.vehicleBehavior?.exitVehicle();
+        }
+        
+        // État AT_HOME ou AT_WORK incohérent avec l'heure
+        else if (this.currentState === AgentState.AT_HOME && 
+                currentHour >= 9 && currentHour < this.departureHomeHour &&
+                this.workPosition && this.shouldBeAtWork(currentHour)) {
+            
+            console.log(`Agent ${this.id}: Correction d'état - Devrait être au travail à ${currentHour}h`);
+            
+            this.currentState = AgentState.AT_WORK;
+            this.isVisible = false;
+            if (this.workBuildingPosition) {
+                this.position.copy(this.workBuildingPosition).setY(this.yOffset);
+            }
+        }
+        else if (this.currentState === AgentState.AT_WORK && 
+                ((currentHour >= 19) || (currentHour < 7))) {
+            
+            console.log(`Agent ${this.id}: Correction d'état - Devrait être à la maison à ${currentHour}h`);
+            
+            this.currentState = AgentState.AT_HOME;
+            this.isVisible = false;
+            if (this.homeBuildingPosition) {
+                this.position.copy(this.homeBuildingPosition).setY(this.yOffset);
+            }
+        }
+    }
+
+    /**
+     * Détermine si l'agent devrait être au travail à l'heure donnée
+     * en fonction de sa stratégie de travail
+     * @param {number} currentHour - Heure actuelle (0-23)
+     * @returns {boolean} Vrai si l'agent devrait être au travail
+     */
+    shouldBeAtWork(currentHour) {
+        // Vérifier d'abord si c'est un jour ouvrable selon la stratégie
+        const environment = this.experience.world?.environment;
+        if (!environment || !environment.calendarDate) return false;
+        
+        const calendarDate = environment.calendarDate;
+        const isWeekend = ["Samedi", "Dimanche"].includes(calendarDate?.jourSemaine);
+        
+        // Si weekend, ne devrait pas être au travail
+        if (isWeekend) return false;
+        
+        // Vérifier si l'heure est dans les heures de travail
+        return currentHour >= this.departureWorkHour && currentHour < this.departureHomeHour;
     }
 
 	_calculateScheduledTimes() {
@@ -928,15 +1144,34 @@ export default class Agent {
         }
         // ---------------------------------------
 
-        // CORRECTION: Mécanisme de secours pour les agents bloqués en transit 
-        // dont le temps d'arrivée est dépassé
+        // Si le timeScale est très élevé (> 128), synchroniser immédiatement l'état et la position
+        if (this.experience?.time?.timeScale > 128) {
+            this._correctStateBasedOnTime(currentGameTime, currentHour, currentGameTime % (this.experience.world?.environment?.dayDurationMs || 86400000));
+        }
+        // Vérifier uniquement lors de transitions critiques, basées sur l'heure
+        else if (currentHour === this.departureWorkHour || 
+                 currentHour === this.departureHomeHour || 
+                 currentHour === 9 || 
+                 currentHour === 19) {
+            
+            // Vérifier si l'état actuel est cohérent avec l'heure
+            if ((currentHour === this.departureWorkHour && this.currentState === AgentState.READY_TO_LEAVE_FOR_WORK) ||
+                (currentHour === this.departureHomeHour && this.currentState === AgentState.READY_TO_LEAVE_FOR_HOME) ||
+                (currentHour === 9 && this.currentState === AgentState.IN_TRANSIT_TO_WORK) ||
+                (currentHour === 19 && this.currentState === AgentState.IN_TRANSIT_TO_HOME)) {
+                
+                const timeWithinCurrentDayCycle = currentGameTime % (this.experience.world?.environment?.dayDurationMs || 86400000);
+                this._correctStateBasedOnTime(currentGameTime, currentHour, timeWithinCurrentDayCycle);
+            }
+        }
+
+        // Vérifier si le temps d'arrivée est dépassé 
         if ((this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
              this.currentState === AgentState.IN_TRANSIT_TO_HOME) && 
             this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame &&
-            !this.isMovingFromPathToBuilding) { // Ne pas interférer si une transition est déjà en cours
+            !this.isMovingFromPathToBuilding) {
             
-            console.log(`Agent ${this.id}: Mécanisme de secours - Temps d'arrivée dépassé, démarrage transition vers bâtiment`);
-            
+            // Démarrer la transition vers le bâtiment plutôt que téléporter directement
             if (this.currentState === AgentState.IN_TRANSIT_TO_WORK) {
                 this._enterBuilding(currentGameTime, 'WORK');
             } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
@@ -944,7 +1179,7 @@ export default class Agent {
             }
         }
 
-        // Utiliser la nouvelle méthode updateVisual pour gérer le déplacement et l'animation
+        // Utiliser la méthode updateVisual pour gérer le déplacement et l'animation
         this.updateVisual(deltaTime, currentGameTime);
     }
 
@@ -1440,6 +1675,17 @@ export default class Agent {
         if (scheduler) {
             scheduler.cancelEventsForContext(this);
         }
+
+        // Supprimer les écouteurs d'événements de temps
+        if (this.experience && this.experience.time) {
+            // Stocker les références aux fonctions de rappel pour les supprimer proprement
+            if (this._speedChangeHandler) {
+                this.experience.time.removeEventListener('speedchange', this._speedChangeHandler);
+            }
+            if (this._playedHandler) {
+                this.experience.time.removeEventListener('played', this._playedHandler);
+            }
+        }
         
         this.path = null;
         this.homePosition = null;
@@ -1509,7 +1755,7 @@ export default class Agent {
      * @param {number} progressRatio - Ratio de progression dans le trajet (0 à 1)
      */
     syncVisualPositionWithProgress(progressRatio) {
-        if (!this.currentPathPoints || this.currentPathPoints.length < 2 || !this.movementHandler) {
+        if (!this.currentPathPoints || this.currentPathPoints.length < 2) {
             console.warn(`Agent ${this.id}: Impossible de synchroniser la position, chemin ou handler manquant`);
             return;
         }
@@ -1523,16 +1769,47 @@ export default class Agent {
         // Calculer l'index approximatif du segment de chemin 
         const lastIndex = this.currentPathPoints.length - 1;
         const approximateIndex = Math.floor(clampedRatio * lastIndex);
-        this.currentPathIndexVisual = Math.min(lastIndex - 1, approximateIndex);
+        this.currentPathIndexVisual = Math.min(lastIndex - 1, Math.max(0, approximateIndex));
         
-        // Forcer la mise à jour de la position en utilisant le handler de mouvement
-        this.movementHandler.updatePedestrianMovement(
-            0, // deltaTime non significatif ici
-            this.currentPathPoints,
-            this.currentPathLengthWorld,
-            clampedRatio,
-            this.currentPathIndexVisual
-        );
+        // Positionner directement l'agent à la position correspondante sur le chemin
+        if (this.currentPathIndexVisual < lastIndex) {
+            const currentPoint = this.currentPathPoints[this.currentPathIndexVisual];
+            const nextPoint = this.currentPathPoints[this.currentPathIndexVisual + 1];
+            
+            // Calculer la progression dans le segment actuel
+            const segmentCount = lastIndex;
+            const segmentLength = 1.0 / segmentCount;
+            const segmentProgress = (clampedRatio - (this.currentPathIndexVisual / segmentCount)) / segmentLength;
+            
+            // Interpoler la position entre les deux points du segment
+            this.position.lerpVectors(currentPoint, nextPoint, segmentProgress);
+            
+            // Assurer la hauteur correcte
+            this.position.y = this.yOffset;
+            
+            // Calculer l'orientation vers le prochain point
+            if (this.currentPathIndexVisual < this.currentPathPoints.length - 1) {
+                const direction = new THREE.Vector3().subVectors(nextPoint, currentPoint).normalize();
+                if (direction.length() > 0.001) {
+                    const targetRotation = Math.atan2(direction.x, direction.z);
+                    this.orientation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotation);
+                }
+            }
+            
+            // Forcer la visibilité
+            this.isVisible = true;
+        }
+        
+        // Si nous avons également un movementHandler, synchroniser avec lui
+        if (this.movementHandler) {
+            this.movementHandler.updatePedestrianMovement(
+                0, // deltaTime non significatif ici
+                this.currentPathPoints,
+                this.currentPathLengthWorld,
+                clampedRatio,
+                this.currentPathIndexVisual
+            );
+        }
         
         console.log(`Agent ${this.id}: Position synchronisée avec la progression ${(clampedRatio * 100).toFixed(1)}%`);
     }
