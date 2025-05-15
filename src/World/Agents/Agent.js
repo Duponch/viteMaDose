@@ -209,6 +209,8 @@ export default class Agent {
                 }
                 this.lastArrivalTimeWork = currentGameTime;
                 this.currentPathPoints = null;
+                // S'assurer que l'agent n'est pas dans un véhicule
+                this.vehicleBehavior?.exitVehicle();
             } 
             // Sinon, il doit être sur le chemin vers le travail
             else if (this.currentPathPoints && this.currentPathPoints.length > 0) {
@@ -224,8 +226,31 @@ export default class Agent {
                 this.departureTimeGame = currentGameTime - timeElapsedSinceDeparture;
                 this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
                 
-                // Mettre l'agent en transit
-                this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                // Déterminer si l'agent devrait utiliser un véhicule
+                const shouldUseCar = this.vehicleBehavior?.shouldUseVehicle() ?? false;
+                
+                // Mettre l'agent dans l'état approprié
+                if (shouldUseCar) {
+                    // Vérifier si l'agent est déjà dans un véhicule
+                    if (!this.vehicleBehavior?.isDriving()) {
+                        // Demander une voiture et la placer à la position calculée
+                        const startPos = this.currentPathPoints[0].clone();
+                        const endPos = this.currentPathPoints[this.currentPathPoints.length - 1].clone();
+                        
+                        if (this.vehicleBehavior.requestCar(startPos, endPos)) {
+                            this.currentState = AgentState.DRIVING_TO_WORK;
+                            this.vehicleBehavior.enterVehicle();
+                        } else {
+                            // Si impossible d'obtenir une voiture, utiliser le mode piéton
+                            this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                        }
+                    } else {
+                        this.currentState = AgentState.DRIVING_TO_WORK;
+                    }
+                } else {
+                    this.currentState = AgentState.IN_TRANSIT_TO_WORK;
+                }
+                
                 this.isVisible = true;
                 
                 // Synchroniser la position visuelle
@@ -249,6 +274,8 @@ export default class Agent {
                 }
                 this.lastArrivalTimeHome = currentGameTime;
                 this.currentPathPoints = null;
+                // S'assurer que l'agent n'est pas dans un véhicule
+                this.vehicleBehavior?.exitVehicle();
             } 
             // Sinon, il doit être sur le chemin vers la maison
             else if (this.currentPathPoints && this.currentPathPoints.length > 0) {
@@ -264,8 +291,31 @@ export default class Agent {
                 this.departureTimeGame = currentGameTime - timeElapsedSinceDeparture;
                 this.arrivalTmeGame = this.departureTimeGame + this.calculatedTravelDurationGame;
                 
-                // Mettre l'agent en transit
-                this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                // Déterminer si l'agent devrait utiliser un véhicule
+                const shouldUseCar = this.vehicleBehavior?.shouldUseVehicle() ?? false;
+                
+                // Mettre l'agent dans l'état approprié
+                if (shouldUseCar) {
+                    // Vérifier si l'agent est déjà dans un véhicule
+                    if (!this.vehicleBehavior?.isDriving()) {
+                        // Demander une voiture et la placer à la position calculée
+                        const startPos = this.currentPathPoints[0].clone();
+                        const endPos = this.currentPathPoints[this.currentPathPoints.length - 1].clone();
+                        
+                        if (this.vehicleBehavior.requestCar(startPos, endPos)) {
+                            this.currentState = AgentState.DRIVING_HOME;
+                            this.vehicleBehavior.enterVehicle();
+                        } else {
+                            // Si impossible d'obtenir une voiture, utiliser le mode piéton
+                            this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                        }
+                    } else {
+                        this.currentState = AgentState.DRIVING_HOME;
+                    }
+                } else {
+                    this.currentState = AgentState.IN_TRANSIT_TO_HOME;
+                }
+                
                 this.isVisible = true;
                 
                 // Synchroniser la position visuelle
@@ -303,6 +353,28 @@ export default class Agent {
             // Nettoyer les données de chemin
             this.currentPathPoints = null;
             this.vehicleBehavior?.exitVehicle();
+        }
+        
+        // Agent en transit qui devrait être déjà sur le chemin mais pas encore arrivé
+        else if ((this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
+                 this.currentState === AgentState.DRIVING_TO_WORK ||
+                 this.currentState === AgentState.IN_TRANSIT_TO_HOME || 
+                 this.currentState === AgentState.DRIVING_HOME) && 
+                this.departureTimeGame > 0 && this.arrivalTmeGame > 0 && 
+                currentGameTime > this.departureTimeGame && currentGameTime < this.arrivalTmeGame) {
+            
+            // Calculer la progression attendue
+            const elapsedTimeSinceDeparture = currentGameTime - this.departureTimeGame;
+            const totalTravelTime = this.arrivalTmeGame - this.departureTimeGame;
+            
+            if (totalTravelTime > 0) {
+                const progressRatio = Math.min(1.0, elapsedTimeSinceDeparture / totalTravelTime);
+                
+                // Synchroniser la position visuelle
+                this.syncVisualPositionWithProgress(progressRatio);
+                
+                console.log(`Agent ${this.id}: Synchronisation de position intermédiaire, progression ${(progressRatio * 100).toFixed(1)}%`);
+            }
         }
         
         // État AT_HOME ou AT_WORK incohérent avec l'heure
@@ -1157,15 +1229,15 @@ export default class Agent {
             // Vérifier si l'état actuel est cohérent avec l'heure
             if ((currentHour === this.departureWorkHour && this.currentState === AgentState.READY_TO_LEAVE_FOR_WORK) ||
                 (currentHour === this.departureHomeHour && this.currentState === AgentState.READY_TO_LEAVE_FOR_HOME) ||
-                (currentHour === 9 && this.currentState === AgentState.IN_TRANSIT_TO_WORK) ||
-                (currentHour === 19 && this.currentState === AgentState.IN_TRANSIT_TO_HOME)) {
+                (currentHour === 9 && (this.currentState === AgentState.IN_TRANSIT_TO_WORK || this.currentState === AgentState.DRIVING_TO_WORK)) ||
+                (currentHour === 19 && (this.currentState === AgentState.IN_TRANSIT_TO_HOME || this.currentState === AgentState.DRIVING_HOME))) {
                 
                 const timeWithinCurrentDayCycle = currentGameTime % (this.experience.world?.environment?.dayDurationMs || 86400000);
                 this._correctStateBasedOnTime(currentGameTime, currentHour, timeWithinCurrentDayCycle);
             }
         }
 
-        // Vérifier si le temps d'arrivée est dépassé 
+        // Vérifier si le temps d'arrivée est dépassé pour les déplacements à pied
         if ((this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
              this.currentState === AgentState.IN_TRANSIT_TO_HOME) && 
             this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame &&
@@ -1176,6 +1248,58 @@ export default class Agent {
                 this._enterBuilding(currentGameTime, 'WORK');
             } else if (this.currentState === AgentState.IN_TRANSIT_TO_HOME) {
                 this._enterBuilding(currentGameTime, 'HOME');
+            }
+        }
+        
+        // Vérifier si le temps d'arrivée est dépassé pour les déplacements en véhicule
+        else if ((this.currentState === AgentState.DRIVING_TO_WORK || 
+                 this.currentState === AgentState.DRIVING_HOME) && 
+                this.arrivalTmeGame > 0 && currentGameTime >= this.arrivalTmeGame) {
+            
+            // Pour les véhicules, arrêter le véhicule et changer l'état directement
+            if (this.currentState === AgentState.DRIVING_TO_WORK) {
+                console.log(`Agent ${this.id}: Arrivée en voiture au travail`);
+                this.vehicleBehavior?.exitVehicle();
+                this.currentState = AgentState.AT_WORK;
+                this.isVisible = false;
+                if (this.workBuildingPosition) {
+                    this.position.copy(this.workBuildingPosition).setY(this.yOffset);
+                }
+                this.lastArrivalTimeWork = currentGameTime;
+                this.currentPathPoints = null;
+            } else if (this.currentState === AgentState.DRIVING_HOME) {
+                console.log(`Agent ${this.id}: Arrivée en voiture à la maison`);
+                this.vehicleBehavior?.exitVehicle();
+                this.currentState = AgentState.AT_HOME;
+                this.isVisible = false;
+                if (this.homeBuildingPosition) {
+                    this.position.copy(this.homeBuildingPosition).setY(this.yOffset);
+                }
+                this.lastArrivalTimeHome = currentGameTime;
+                this.currentPathPoints = null;
+            }
+        }
+        
+        // Vérifier si nous devons synchroniser la position en cours de route (pour les états en déplacement)
+        else if ((this.currentState === AgentState.IN_TRANSIT_TO_WORK || 
+                  this.currentState === AgentState.DRIVING_TO_WORK ||
+                  this.currentState === AgentState.IN_TRANSIT_TO_HOME || 
+                  this.currentState === AgentState.DRIVING_HOME) &&
+                 this.departureTimeGame > 0 && 
+                 this.arrivalTmeGame > 0 && 
+                 currentGameTime > this.departureTimeGame &&
+                 currentGameTime < this.arrivalTmeGame &&
+                 this.experience?.time?.timeScale > 64) { // Uniquement pour les accélérations importantes
+            
+            // Calculer la progression attendue
+            const elapsedTimeSinceDeparture = currentGameTime - this.departureTimeGame;
+            const totalTravelTime = this.arrivalTmeGame - this.departureTimeGame;
+            
+            if (totalTravelTime > 0) {
+                const progressRatio = Math.min(1.0, elapsedTimeSinceDeparture / totalTravelTime);
+                
+                // Synchroniser la position visuelle
+                this.syncVisualPositionWithProgress(progressRatio);
             }
         }
 
@@ -1771,6 +1895,10 @@ export default class Agent {
         const approximateIndex = Math.floor(clampedRatio * lastIndex);
         this.currentPathIndexVisual = Math.min(lastIndex - 1, Math.max(0, approximateIndex));
         
+        // Vérifier si l'agent est en mode conduite
+        const isDriving = this.currentState === AgentState.DRIVING_TO_WORK || 
+                         this.currentState === AgentState.DRIVING_HOME;
+        
         // Positionner directement l'agent à la position correspondante sur le chemin
         if (this.currentPathIndexVisual < lastIndex) {
             const currentPoint = this.currentPathPoints[this.currentPathIndexVisual];
@@ -1784,8 +1912,15 @@ export default class Agent {
             // Interpoler la position entre les deux points du segment
             this.position.lerpVectors(currentPoint, nextPoint, segmentProgress);
             
-            // Assurer la hauteur correcte
-            this.position.y = this.yOffset;
+            // Assurer la hauteur correcte selon le mode de transport
+            if (isDriving) {
+                // Utiliser la hauteur appropriée pour un véhicule
+                const roadHeight = this.experience.world?.cityManager?.navigationManager?.getNavigationGraph(true)?.graphHeight ?? 0.1;
+                this.position.y = roadHeight + 0.15; // Hauteur approx d'une voiture au sol
+            } else {
+                // Hauteur standard pour un piéton
+                this.position.y = this.yOffset;
+            }
             
             // Calculer l'orientation vers le prochain point
             if (this.currentPathIndexVisual < this.currentPathPoints.length - 1) {
@@ -1794,6 +1929,20 @@ export default class Agent {
                     const targetRotation = Math.atan2(direction.x, direction.z);
                     this.orientation.setFromAxisAngle(new THREE.Vector3(0, 1, 0), targetRotation);
                 }
+            }
+            
+            // Si l'agent est en mode conduite, synchroniser également le véhicule
+            if (isDriving && this.vehicleBehavior && this.vehicleBehavior.currentVehicle) {
+                const vehicle = this.vehicleBehavior.currentVehicle;
+                
+                // Positionner le véhicule à l'emplacement calculé
+                vehicle.position.copy(this.position);
+                vehicle.quaternion.copy(this.orientation);
+                
+                // S'assurer que le véhicule est visible
+                vehicle.isVisible = true;
+                
+                console.log(`Agent ${this.id}: Véhicule synchronisé avec la progression ${(clampedRatio * 100).toFixed(1)}%`);
             }
             
             // Forcer la visibilité
