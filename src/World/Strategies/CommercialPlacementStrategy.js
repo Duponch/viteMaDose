@@ -24,6 +24,9 @@ export default class CommercialPlacementStrategy extends IZonePlacementStrategy 
         // Créer le helper de visualisation des façades
         if (experience && experience.scene) {
             this.facadeHelper = new BuildingFacadeHelper(config, experience.scene);
+            console.log("CommercialPlacementStrategy: BuildingFacadeHelper initialized");
+        } else {
+            console.warn("CommercialPlacementStrategy: Cannot initialize BuildingFacadeHelper, experience or scene missing");
         }
     }
 

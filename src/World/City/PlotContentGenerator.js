@@ -287,6 +287,9 @@ export default class PlotContentGenerator {
             return []; // Type non pris en charge
         }
         
+        // Récupérer la stratégie commerciale pour l'orientation et les flèches
+        const commercialStrategy = this.zoneStrategies['commercial'];
+        
         // Utiliser CommercialManager pour placer les commerces
         return this.commercialManager.placeCommercialsOnGrid(
             plot,
@@ -296,7 +299,8 @@ export default class PlotContentGenerator {
             minSpacing,
             instanceDataManager,
             cityManager,
-            groundLevel
+            groundLevel,
+            commercialStrategy // Passer la stratégie commerciale
         );
     }
     

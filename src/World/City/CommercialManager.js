@@ -138,9 +138,10 @@ export default class CommercialManager {
      * @param {InstanceDataManager} instanceDataManager - Gestionnaire des données d'instance.
      * @param {CityManager} cityManager - Gestionnaire de la ville.
      * @param {number} groundLevel - Hauteur du sol.
+     * @param {CommercialPlacementStrategy} commercialStrategy - Stratégie de placement commercial (optionnel).
      * @returns {Array<{x: number, y: number}>} - Positions des commerces placés.
      */
-    placeCommercialsOnGrid(plot, gridInfo, targetBuildingWidth, targetBuildingDepth, minSpacing, instanceDataManager, cityManager, groundLevel) {
+    placeCommercialsOnGrid(plot, gridInfo, targetBuildingWidth, targetBuildingDepth, minSpacing, instanceDataManager, cityManager, groundLevel, commercialStrategy = null) {
         const { numItemsX, numItemsY, gapX, gapZ } = gridInfo;
         const plotGroundY = this.config.plotGroundY ?? 0.005;
         const sidewalkHeight = this.config.sidewalkHeight ?? 0.2;
@@ -163,8 +164,36 @@ export default class CommercialManager {
             const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + minSpacing)) + targetBuildingDepth / 2;
             const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
             
-            // Déterminer la rotation (à adapter selon la logique existante)
-            const targetRotationY = Math.PI * 0.5 * Math.floor(Math.random() * 4); // Rotation aléatoire
+            // Déterminer la rotation avec une logique orientée vers l'extérieur
+            let targetRotationY;
+            
+            if (commercialStrategy) {
+                // Utiliser la stratégie commerciale pour déterminer l'orientation
+                targetRotationY = commercialStrategy.determineOrientationTowardsSidewalk(
+                    cellCenterX, 
+                    cellCenterZ, 
+                    plot, 
+                    this.config.sidewalkWidth ?? 0, 
+                    rowIndex, 
+                    colIndex, 
+                    numItemsX, 
+                    numItemsY
+                );
+                
+                // Ajouter un helper de façade si disponible
+                if (commercialStrategy.facadeHelper) {
+                    const buildingPosition = new THREE.Vector3(cellCenterX, sidewalkHeight, cellCenterZ);
+                    commercialStrategy.facadeHelper.addFacadeHelper(
+                        buildingPosition, 
+                        targetRotationY, 
+                        targetBuildingWidth, 
+                        targetBuildingDepth
+                    );
+                }
+            } else {
+                // Fallback: orientation fixe par défaut si pas de stratégie
+                targetRotationY = Math.PI * 0.5 * Math.floor(Math.random() * 4);
+            }
             
             // Créer la matrice pour l'instance commerciale
             const matrix = new THREE.Matrix4();
