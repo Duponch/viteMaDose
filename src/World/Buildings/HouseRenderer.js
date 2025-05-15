@@ -412,6 +412,16 @@ export default class HouseRenderer {
             emissive: new THREE.Color(0xFFFF99),
             emissiveIntensity: 0.2
         });
+        
+        // Matériau pour le marqueur de porte
+        this.baseHouseMaterials.doorMarker = new THREE.MeshBasicMaterial({
+            color: 0x4dabf5,
+            emissive: 0x4dabf5,
+            emissiveIntensity: 0.8,
+            transparent: true,
+            opacity: 0.8,
+            name: "HouseDoorMarkerMat"
+        });
     }
 
     /**
@@ -707,6 +717,19 @@ export default class HouseRenderer {
 
         const doorPos = new THREE.Vector3(armWidth, doorHeight / 2, armLength * 0.75);
         addPartInstance('door', new THREE.Matrix4().makeTranslation(doorPos.x, doorPos.y, doorPos.z));
+        
+        // Ajouter un marqueur bleu émissif devant la porte
+        // Utilisation du matériau préexistant au lieu d'en créer un nouveau
+        
+        // Création de la géométrie du marqueur de porte
+        if (!this.baseHouseGeometries['doorMarker']) {
+            this.baseHouseGeometries['doorMarker'] = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        }
+        
+        // Position du marqueur devant la porte - déplacé plus loin
+        const doorMarkerPos = new THREE.Vector3(armWidth, 0.25, armLength * 0.75 + 0);
+        addPartInstance('doorMarker', new THREE.Matrix4().makeTranslation(doorMarkerPos.x, doorMarkerPos.y, doorMarkerPos.z));
+        
         const garagePos = new THREE.Vector3(armLength, garageDoorHeight / 2, armWidth / 2);
         addPartInstance('garageDoor', new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z));
 
@@ -770,6 +793,8 @@ export default class HouseRenderer {
                         material = this.baseHouseMaterials.door;
                     } else if (partName === 'garageDoor') {
                         material = this.baseHouseMaterials.garageDoor;
+                    } else if (partName === 'doorMarker') {
+                        material = this.baseHouseMaterials.doorMarker;
                     } else {
                         material = this.baseHouseMaterials[partName];
                     }
@@ -828,6 +853,35 @@ export default class HouseRenderer {
     generateProceduralHouse(baseWidth, baseHeight, baseDepth, userScale = 1) {
         // Regrouper les géométries de chaque partie selon leur matériau
         const materialMap = new Map();
+        
+        // Ajouter un matériau pour le marqueur de porte émissif
+        const doorMarkerMaterial = new THREE.MeshBasicMaterial({
+            color: 0x4dabf5,      // Bleu clair
+            emissive: 0x4dabf5,   // Même couleur pour l'émissif
+            emissiveIntensity: 0.8,
+            transparent: true,
+            opacity: 0.8,
+            name: "HouseDoorMarkerMat"
+        });
+        
+        // Ajouter la géométrie du marqueur de porte
+        const doorMarkerGeometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        
+        // Créer un groupe pour la maison
+        const houseGroup = new THREE.Group();
+        
+        // Récupérer les dimensions des portes depuis generateHouseInstance
+        const armLength = 2;
+        const armWidth = 1;
+        const doorPos = new THREE.Vector3(armWidth, 0.25, armLength * 0.75);
+        
+        // Créer le marqueur de porte (cube bleu émissif)
+        const doorMarker = new THREE.Mesh(doorMarkerGeometry, doorMarkerMaterial);
+        doorMarker.position.copy(doorPos);
+        doorMarker.position.y = 0.25; // Placer à mi-hauteur du cube
+        doorMarker.position.z += 0.5; // Placer devant la porte
+        houseGroup.add(doorMarker);
+        
         for (const partName in this.baseHouseGeometries) {
             if (this.baseHouseGeometries.hasOwnProperty(partName)) {
                 // Clone la géométrie de la partie
@@ -844,6 +898,21 @@ export default class HouseRenderer {
                 materialMap.get(matName).geoms.push(geomClone);
             }
         }
+        
+        // Ajouter le marqueur de porte au materialMap
+        if (!materialMap.has(doorMarkerMaterial.name)) {
+            materialMap.set(doorMarkerMaterial.name, { material: doorMarkerMaterial.clone(), geoms: [] });
+        }
+        
+        // Ajouter la géométrie du marqueur de porte au groupe correspondant
+        houseGroup.traverse(child => {
+            if (child.isMesh && child.material && child.material.name === doorMarkerMaterial.name) {
+                child.updateMatrixWorld(true);
+                const clonedGeom = child.geometry.clone();
+                clonedGeom.applyMatrix4(child.matrixWorld);
+                materialMap.get(doorMarkerMaterial.name).geoms.push(clonedGeom);
+            }
+        });
 
         // Fusionner les géométries de chaque groupe
         const parts = [];

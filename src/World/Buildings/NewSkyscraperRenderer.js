@@ -51,7 +51,12 @@ export default class NewSkyscraperRenderer {
             door: new THREE.MeshStandardMaterial({ color: 0xA0522D, roughness: 0.8, name: "NewSkyscraperDoorMat" }),
             threshold: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperThresholdMat" }),
             floor: new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 0.8, name: "NewSkyscraperFloorMat" }),
-            redLight: new THREE.MeshBasicMaterial({ color: 0xff0000, name: "NewSkyscraperRedLightMat" }) // Non-lit material
+            redLight: new THREE.MeshBasicMaterial({ color: 0xff0000, name: "NewSkyscraperRedLightMat" }), // Non-lit material
+            trim: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperTrimMat" }),
+            vent: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperVentMat" }),
+            balconyWall: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperBalconyWallMat" }),
+            frame: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperFrameMat" }),
+            balconyWindow: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperBalconyWindowMat" })
         };
 
         // Ajustement des paramètres de répétition pour les poutres
@@ -288,7 +293,27 @@ export default class NewSkyscraperRenderer {
 			[-1, 1].forEach(sideZ => { const zPos = (depth / 2 - pillarSize / 2) * sideZ; const zPosWindow = zPos - windowRecess * sideZ; const isFrontFace = sideZ === 1;
 				if (isGroundFloor && isFrontFace && doorWidth > 0 && doorHeight > 0) { const sectionWidthLeft = doorXPos - doorWidth / 2 - (-horizontalSectionLength / 2); const sectionWidthRight = (horizontalSectionLength / 2) - (doorXPos + doorWidth / 2); if (sectionWidthLeft > 0.01) { const leftSectionGeo = new THREE.BoxGeometry(sectionWidthLeft, horizontalBeamSize, pillarSize); const leftSection = new THREE.Mesh(leftSectionGeo, horizontalBeamMaterial); leftSection.position.set((-horizontalSectionLength / 2 + sectionWidthLeft / 2), horizontalBeamSize / 2, zPos); floorGroup.add(leftSection); leftSectionGeo.dispose(); } if (sectionWidthRight > 0.01) { const rightSectionGeo = new THREE.BoxGeometry(sectionWidthRight, horizontalBeamSize, pillarSize); const rightSection = new THREE.Mesh(rightSectionGeo, horizontalBeamMaterial); rightSection.position.set((horizontalSectionLength / 2 - sectionWidthRight / 2), horizontalBeamSize / 2, zPos); floorGroup.add(rightSection); rightSectionGeo.dispose(); } const thresholdGeo = new THREE.BoxGeometry(doorWidth, horizontalBeamSize * 0.5, pillarSize); const thresholdMesh = new THREE.Mesh(thresholdGeo, thresholdMaterial); thresholdMesh.position.set(doorXPos, horizontalBeamSize * 0.25, zPos); floorGroup.add(thresholdMesh); thresholdGeo.dispose(); } else { const bottomSection = new THREE.Mesh(horizontalSectionGeo, horizontalBeamMaterial); bottomSection.position.set(0, horizontalBeamSize / 2, zPos); floorGroup.add(bottomSection); }
 				const topSection = new THREE.Mesh(horizontalSectionGeo, horizontalBeamMaterial); topSection.position.set(0, floorH - horizontalBeamSize / 2, zPos); floorGroup.add(topSection);
-				if (windowGeoFB && mullionGeoFB && windowPanelWidthFB > 0) { let currentX = -horizontalSectionLength / 2; const windowBaseY = horizontalBeamSize + floorThickness; const windowCenterY = windowBaseY + windowHeight / 2; for (let i = 0; i < numPanels; i++) { const isDoorPanel = isGroundFloor && isFrontFace && i >= doorPanelIndex && i < doorPanelIndex + doorPanelCount && doorWidth > 0 && doorHeight > 0; const isFirstDoorPanel = isDoorPanel && i === doorPanelIndex; const isMiddleDoorMullionToSkip = (doorPanelCount === 2) && i === doorPanelIndex; if (isDoorPanel) { if (isFirstDoorPanel) { const doorGeo = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth); const doorMesh = new THREE.Mesh(doorGeo, doorMaterial); doorMesh.position.set(doorXPos, doorYPos, zPosWindow); floorGroup.add(doorMesh); doorGeo.dispose(); } currentX += windowPanelWidthFB; } else { const windowX = currentX + windowPanelWidthFB / 2; const windowMesh = new THREE.Mesh(windowGeoFB, windowMaterial); windowMesh.position.set(windowX, windowCenterY, zPosWindow); floorGroup.add(windowMesh); currentX += windowPanelWidthFB; } if (i < numMullions && !isMiddleDoorMullionToSkip) { const mullionX = currentX + mullionSize / 2; const mullionMesh = new THREE.Mesh(mullionGeoFB, structureMaterial); mullionMesh.position.set(mullionX, windowCenterY, zPosWindow); floorGroup.add(mullionMesh); currentX += mullionSize; } else if (i < numMullions) { currentX += mullionSize; } } }
+				if (windowGeoFB && mullionGeoFB && windowPanelWidthFB > 0) { let currentX = -horizontalSectionLength / 2; const windowBaseY = horizontalBeamSize + floorThickness; const windowCenterY = windowBaseY + windowHeight / 2; for (let i = 0; i < numPanels; i++) { const isDoorPanel = isGroundFloor && isFrontFace && i >= doorPanelIndex && i < doorPanelIndex + doorPanelCount && doorWidth > 0 && doorHeight > 0; const isFirstDoorPanel = isDoorPanel && i === doorPanelIndex; const isMiddleDoorMullionToSkip = (doorPanelCount === 2) && i === doorPanelIndex; if (isDoorPanel) { if (isFirstDoorPanel) { const doorGeo = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth); const doorMesh = new THREE.Mesh(doorGeo, doorMaterial); doorMesh.position.set(doorXPos, doorYPos, zPosWindow); floorGroup.add(doorMesh); doorGeo.dispose(); 
+					
+					// Ajouter un marqueur bleu émissif devant la porte pour indiquer l'orientation
+					// Seulement pour la porte principale au rez-de-chaussée
+					if (isGroundFloor && isFrontFace) {
+						const doorMarkerMaterial = new THREE.MeshBasicMaterial({
+							color: 0x4dabf5,      // Bleu clair
+							emissive: 0x4dabf5,   // Même couleur pour l'émissif
+							emissiveIntensity: 0.8,
+							transparent: true,
+							opacity: 0.8,
+							name: "NewSkyscraperDoorMarkerMat"
+						});
+						const doorMarkerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+						const doorMarker = new THREE.Mesh(doorMarkerGeo, doorMarkerMaterial);
+						// Positionner devant la porte principale, légèrement au-dessus du sol
+						doorMarker.position.set(doorXPos, 0.5, zPosWindow + doorDepth + 0.5);
+						floorGroup.add(doorMarker);
+						doorMarkerGeo.dispose();
+					}
+					} currentX += windowPanelWidthFB; } else { const windowX = currentX + windowPanelWidthFB / 2; const windowMesh = new THREE.Mesh(windowGeoFB, windowMaterial); windowMesh.position.set(windowX, windowCenterY, zPosWindow); floorGroup.add(windowMesh); currentX += windowPanelWidthFB; } if (i < numMullions && !isMiddleDoorMullionToSkip) { const mullionX = currentX + mullionSize / 2; const mullionMesh = new THREE.Mesh(mullionGeoFB, structureMaterial); mullionMesh.position.set(mullionX, windowCenterY, zPosWindow); floorGroup.add(mullionMesh); currentX += mullionSize; } else if (i < numMullions) { currentX += mullionSize; } } }
 			}); if(windowGeoFB) windowGeoFB.dispose(); if(mullionGeoFB) mullionGeoFB.dispose(); horizontalSectionGeo.dispose();
 			let windowPanelWidthLR = 0; if (numPanels > 0 && verticalSectionLength > numMullions * mullionSize) { windowPanelWidthLR = (verticalSectionLength - numMullions * mullionSize) / numPanels; } else if (numPanels > 0) { windowPanelWidthLR = 0.01; } const windowGeoLR = windowHeight > 0 ? new THREE.BoxGeometry(pillarSize - windowRecess * 2, windowHeight, windowPanelWidthLR) : null; const mullionGeoLR = windowHeight > 0 ? new THREE.BoxGeometry(pillarSize - windowRecess * 2, windowHeight, mullionSize) : null; const verticalSectionGeo = new THREE.BoxGeometry(pillarSize, horizontalBeamSize, verticalSectionLength);
 			[-1, 1].forEach(sideX => { const xPos = (width / 2 - pillarSize / 2) * sideX; const xPosWindow = xPos - windowRecess * sideX; const bottomSectionVert = new THREE.Mesh(verticalSectionGeo, horizontalBeamMaterial); bottomSectionVert.position.set(xPos, horizontalBeamSize / 2, 0); floorGroup.add(bottomSectionVert); const topSectionVert = new THREE.Mesh(verticalSectionGeo, horizontalBeamMaterial); topSectionVert.position.set(xPos, floorH - horizontalBeamSize / 2, 0); floorGroup.add(topSectionVert); if (windowGeoLR && mullionGeoLR && windowPanelWidthLR > 0) { let currentZ = -verticalSectionLength / 2; const windowBaseY = horizontalBeamSize + floorThickness; const windowCenterY = windowBaseY + windowHeight / 2; for (let i = 0; i < numPanels; i++) { const windowZ = currentZ + windowPanelWidthLR / 2; const windowMesh = new THREE.Mesh(windowGeoLR, windowMaterial); windowMesh.position.set(xPosWindow, windowCenterY, windowZ); floorGroup.add(windowMesh); currentZ += windowPanelWidthLR; if (i < numMullions) { const mullionZ = currentZ + mullionSize / 2; const mullionMesh = new THREE.Mesh(mullionGeoLR, structureMaterial); mullionMesh.position.set(xPosWindow, windowCenterY, mullionZ); floorGroup.add(mullionMesh); currentZ += mullionSize; } } } });
@@ -364,6 +389,19 @@ export default class NewSkyscraperRenderer {
 		const allGeoms = [];
 		const materialMap = new Map();
 		Object.values(this.localMaterials).forEach(mat => { if (mat) { materialMap.set(mat.name, { material: mat.clone(), geoms: [] }); } });
+		
+		// Ajouter le matériau du marqueur de porte (créé spécifiquement pour ce bâtiment)
+		materialMap.set("NewSkyscraperDoorMarkerMat", { 
+			material: new THREE.MeshBasicMaterial({
+				color: 0x4dabf5,      // Bleu clair
+				emissive: 0x4dabf5,   // Même couleur pour l'émissif
+				emissiveIntensity: 0.8,
+				transparent: true,
+				opacity: 0.8,
+				name: "NewSkyscraperDoorMarkerMat"
+			}),
+			geoms: [] 
+		});
 
 		skyscraperGroup.traverse((child) => {
 			if (child.isMesh && child.geometry && child.material) {

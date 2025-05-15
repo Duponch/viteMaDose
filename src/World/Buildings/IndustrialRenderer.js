@@ -361,6 +361,21 @@ export default class IndustrialRenderer {
         const doorMesh = new THREE.Mesh(warehouseDoorGeom, doorPanelMat);
         doorMesh.position.set(0, doorHeight / 2, factoryDepth / 2 - placementOffset);
         industrialGroup.add(doorMesh);
+        
+        // Ajout d'un marqueur bleu émissif devant la porte pour indiquer l'orientation
+        const doorMarkerGeom = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const doorMarkerMaterial = new THREE.MeshBasicMaterial({
+            color: 0x4dabf5,      // Bleu clair
+            emissive: 0x4dabf5,   // Même couleur pour l'émissif
+            emissiveIntensity: 0.8,
+            transparent: true,
+            opacity: 0.8,
+            name: "IndustrialDoorMarkerMat"
+        });
+        const doorMarker = new THREE.Mesh(doorMarkerGeom, doorMarkerMaterial);
+        // Placer le marqueur juste devant la porte, légèrement au-dessus du sol
+        doorMarker.position.set(0, 0.5, factoryDepth / 2 + 0.5);
+        industrialGroup.add(doorMarker);
 
         // 5. Fenêtres (créer un groupe par fenêtre pour gérer les 2 matériaux)
         const createWindowInstance = (x, y, z, rotationY = 0) => {
@@ -425,6 +440,8 @@ export default class IndustrialRenderer {
 
         // --- Regroupement final par matériau pour l'asset ---
         const materialMap = new Map();
+        // Ajouter explicitement le matériau du marqueur de porte
+        materialMap.set("IndustrialDoorMarkerMat", { material: doorMarkerMaterial, geoms: [] });
         const allGeometries = []; // Pour calculer la BBox globale
 
         industrialGroup.traverse((child) => {
@@ -589,6 +606,7 @@ export default class IndustrialRenderer {
 
         // Nettoyer toutes les géométries initiales de allGeometries car elles ont été clonées/fusionnées
         allGeometries.forEach(g => g.dispose());
+        if (doorMarkerGeom) doorMarkerGeom.dispose();
 
         // Créer l'objet asset final
         const asset = {

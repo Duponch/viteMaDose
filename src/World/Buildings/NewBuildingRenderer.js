@@ -469,6 +469,25 @@ export default class NewBuildingRenderer {
         pizzaWindowMesh.position.set(mainWidth / 2 + recessWidth / 2 - pizzaWindowWidth / 2 - doorWidthPlaceholder * 0.25, groundFloorY, -(mainDepth - recessDepth) / 2 + recessDepth / 2 + 0.06);
         buildingGroup.add(pizzaWindowMesh);
 
+        // Ajouter un marqueur bleu émissif devant la porte pour indiquer l'orientation
+        const doorMarkerMaterial = new THREE.MeshBasicMaterial({
+            color: 0x4dabf5,      // Bleu clair
+            emissive: 0x4dabf5,   // Même couleur pour l'émissif
+            emissiveIntensity: 0.8,
+            transparent: true,
+            opacity: 0.8,
+            name: "NewBuildingDoorMarkerMat"
+        });
+        const doorMarkerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const doorMarker = new THREE.Mesh(doorMarkerGeo, doorMarkerMaterial);
+        // Positionner devant la porte du rez-de-chaussée (légèrement à côté de la vitrine, près de doorWidthPlaceholder)
+        doorMarker.position.set(
+            mainWidth / 2 + recessWidth / 2 - pizzaWindowWidth - doorWidthPlaceholder / 2, 
+            0.5, // Légèrement au-dessus du sol
+            -(mainDepth - recessDepth) / 2 + recessDepth / 2 + 0.5 // Devant le bâtiment
+        );
+        buildingGroup.add(doorMarker);
+
         const downtownWindowWidth = mainWidth * 0.5;
         const downtownWindowHeight = 2.5;
         const downtownWindowGeo = new THREE.BoxGeometry(downtownWindowWidth, downtownWindowHeight, 0.1);
@@ -488,6 +507,9 @@ export default class NewBuildingRenderer {
                 materialMap.set(mat.name, { material: mat, geoms: [] });
             }
         });
+
+        // Ajouter le matériau du marqueur de porte
+        materialMap.set("NewBuildingDoorMarkerMat", { material: doorMarkerMaterial, geoms: [] });
 
         buildingGroup.traverse((child) => {
             if (child.isMesh && child.geometry && child.material) {
@@ -513,7 +535,7 @@ export default class NewBuildingRenderer {
              windowGeo.dispose(); balconyFrameGeo.dispose(); balconyWindowGeo.dispose(); dividerGeo.dispose();
              balconyWallGeo.dispose(); balconySideWallGeo.dispose(); pizzaWindowGeo.dispose(); downtownWindowGeo.dispose();
              frontRoofGeo.dispose(); frontLedgeFrontGeo.dispose(); frontLedgeBackGeo.dispose(); frontLedgeLeftGeo.dispose();
-             frontLedgeRightGeo.dispose(); frontBandGeo.dispose(); rearBandGeo.dispose();
+             frontLedgeRightGeo.dispose(); frontBandGeo.dispose(); rearBandGeo.dispose(); doorMarkerGeo.dispose();
             return null;
         }
 
@@ -566,7 +588,7 @@ export default class NewBuildingRenderer {
         windowGeo.dispose(); balconyFrameGeo.dispose(); balconyWindowGeo.dispose(); dividerGeo.dispose();
         balconyWallGeo.dispose(); balconySideWallGeo.dispose(); pizzaWindowGeo.dispose(); downtownWindowGeo.dispose();
         frontRoofGeo.dispose(); frontLedgeFrontGeo.dispose(); frontLedgeBackGeo.dispose(); frontLedgeLeftGeo.dispose();
-        frontLedgeRightGeo.dispose(); frontBandGeo.dispose(); rearBandGeo.dispose();
+        frontLedgeRightGeo.dispose(); frontBandGeo.dispose(); rearBandGeo.dispose(); doorMarkerGeo.dispose();
 
 
         const asset = {
