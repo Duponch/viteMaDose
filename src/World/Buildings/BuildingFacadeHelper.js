@@ -42,7 +42,7 @@ export default class BuildingFacadeHelper {
      */
     addFacadeHelper(position, rotationY, buildingWidth = 5, buildingDepth = 5) {
         // Calculer la taille de la flèche en fonction de la taille du bâtiment
-        const arrowSize = Math.min(buildingWidth, buildingDepth) * 0.8;
+        const arrowSize = Math.min(buildingWidth, buildingDepth) * 0.1; // Réduit la taille de la flèche
         const arrowLength = arrowSize * 1.5; // Flèche plus longue
         
         // Créer une géométrie de flèche personnalisée
@@ -51,9 +51,36 @@ export default class BuildingFacadeHelper {
         // Créer le mesh de la flèche
         const arrowMesh = new THREE.Mesh(arrowGeometry, this.arrowMaterial);
         
-        // Position
+        // Calculer l'offset pour placer la flèche à l'emplacement de la porte
+        // La porte est généralement au milieu de la façade
+        // Pour les immeubles, la porte est généralement dans l'aile latérale
+        const isBuilding = buildingWidth >= 7 && buildingDepth >= 7; // Heuristique pour détecter les immeubles
+        
+        // Position de base
         arrowMesh.position.copy(position);
-        arrowMesh.position.y += 1.2; // Plus haut au-dessus du sol pour être bien visible
+        
+        // Hauteur de la flèche, légèrement au-dessus du sol mais à hauteur de porte
+        arrowMesh.position.y = 1.5; // Hauteur standard pour être au niveau de la porte
+        
+        // Calculer l'offset en fonction de la rotation et du type de bâtiment
+        let offsetX = 0;
+        let offsetZ = 0;
+        
+        if (isBuilding) {
+            // Pour les immeubles, la porte est souvent sur l'aile latérale
+            // Utiliser une heuristique basée sur l'angle pour déterminer la position de la porte
+            offsetX = Math.sin(rotationY) * (buildingWidth / 3); // Décalage vers l'aile latérale
+            offsetZ = Math.cos(rotationY) * (buildingDepth / 3);
+        } else {
+            // Pour les autres bâtiments, la porte est généralement au centre de la façade avant
+            // Nous plaçons la flèche légèrement en avant du bâtiment pour qu'elle soit bien visible
+            offsetX = Math.sin(rotationY) * (buildingWidth / 2 + 0.2);
+            offsetZ = Math.cos(rotationY) * (buildingDepth / 2 + 0.2);
+        }
+        
+        // Appliquer l'offset
+        arrowMesh.position.x += offsetX;
+        arrowMesh.position.z += offsetZ;
         
         // Rotation
         arrowMesh.rotation.y = rotationY;

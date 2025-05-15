@@ -355,6 +355,23 @@ export default class BuildingRenderer {
         door.position.z = sideBlock.position.z + sideDepthDim / 2 + 0.05;
         buildingGroup.add(door);
 
+        // Ajout d'un marqueur bleu émissif devant la porte pour indiquer l'orientation
+        const doorMarkerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+        const doorMarkerMaterial = new THREE.MeshBasicMaterial({
+            color: 0x4dabf5,      // Bleu clair
+            emissive: 0x4dabf5,   // Même couleur pour l'émissif
+            emissiveIntensity: 0.8,
+            transparent: true,
+            opacity: 0.8,
+            name: "BuildingDoorMarkerMat"
+        });
+        const doorMarker = new THREE.Mesh(doorMarkerGeo, doorMarkerMaterial);
+        // Placer le marqueur juste devant la porte, légèrement au-dessus du sol
+        doorMarker.position.x = door.position.x;
+        doorMarker.position.y = 0.5; // Placer à mi-hauteur du cube
+        doorMarker.position.z = door.position.z + 0.5; // Placer devant la porte
+        buildingGroup.add(doorMarker);
+
         // Équipements toit
         const roofEquipmentY = mainRoofY + totalRoofHeight + 0.1;
         const antennaGeo1 = new THREE.CylinderGeometry(antennaRadius, antennaRadius, antennaHeight1, 8);
@@ -388,6 +405,7 @@ export default class BuildingRenderer {
         buildingMaterialMap.set(windowMaterial.name, { material: windowMaterial.clone(), geoms: [] });
         buildingMaterialMap.set(doorMaterial.name, { material: doorMaterial.clone(), geoms: [] });
         buildingMaterialMap.set(equipmentMaterial.name, { material: equipmentMaterial.clone(), geoms: [] });
+        buildingMaterialMap.set(doorMarkerMaterial.name, { material: doorMarkerMaterial.clone(), geoms: [] });
         //buildingMaterialMap.set(frontMarkerMaterial.name, { material: frontMarkerMaterial.clone(), geoms: [] });
 
         buildingGroup.traverse(child => {
@@ -456,6 +474,7 @@ export default class BuildingRenderer {
         sideRoofTopGeo.dispose();
         windowGeo.dispose();
         doorGeo.dispose();
+        doorMarkerGeo.dispose();
         antennaGeo1.dispose();
         antennaGeo2.dispose();
         boxGeo1.dispose();
