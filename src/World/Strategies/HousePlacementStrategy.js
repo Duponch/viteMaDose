@@ -90,7 +90,7 @@ export default class HousePlacementStrategy extends IZonePlacementStrategy {
                 const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
 
                 // Déterminer la rotation en fonction de la position par rapport aux trottoirs
-                const targetRotationY = this.determineOrientationTowardsSidewalk(
+                const arrowRotationY = this.determineOrientationTowardsSidewalk(
                     cellCenterX, 
                     cellCenterZ, 
                     plot, 
@@ -106,11 +106,15 @@ export default class HousePlacementStrategy extends IZonePlacementStrategy {
                     const buildingPosition = new THREE.Vector3(cellCenterX, sidewalkHeight, cellCenterZ);
                     this.facadeHelper.addFacadeHelper(
                         buildingPosition, 
-                        targetRotationY, 
+                        arrowRotationY, 
                         targetBuildingWidth, 
                         targetBuildingDepth
                     );
                 }
+
+                // Ajuster la rotation pour la maison (soustraire 90° par rapport à la flèche)
+                // car le modèle de maison a sa façade à -90° par rapport à la direction vers laquelle pointe la flèche
+                const targetRotationY = arrowRotationY - Math.PI/2;
 
                 // Générer les données d'instance pour une maison
                 // HouseRenderer retourne un objet { partName: [matrix, ...], ... }
