@@ -360,7 +360,7 @@ export default class NewHouseRenderer {
         houseGroup.add(doorMesh);
 
         // Ajouter un marqueur bleu émissif devant la porte pour indiquer l'orientation
-        const doorMarkerMaterial = new THREE.MeshBasicMaterial({
+        /*const doorMarkerMaterial = new THREE.MeshBasicMaterial({
             color: 0x4dabf5,      // Bleu clair
             emissive: 0x4dabf5,   // Même couleur pour l'émissif
             emissiveIntensity: 0.8,
@@ -372,7 +372,7 @@ export default class NewHouseRenderer {
         const doorMarker = new THREE.Mesh(doorMarkerGeo, doorMarkerMaterial);
         // Positionner devant la porte principale
         doorMarker.position.set(0, 0.5, wallDepth / 2 + doorDepth + 0.5);
-        houseGroup.add(doorMarker);
+        houseGroup.add(doorMarker);*/
 
         // Porte de garage
         const garageDoorWidth = 2.5; const garageDoorHeight = 2.2; const garageDoorDepth = 0.1;
@@ -459,7 +459,7 @@ export default class NewHouseRenderer {
              });
         }
         // Ajouter le matériau du marqueur de porte
-        materialMap.set("NewHouseDoorMarkerMat", { material: doorMarkerMaterial, geoms: [] });
+        //materialMap.set("NewHouseDoorMarkerMat", { material: doorMarkerMaterial, geoms: [] });
 
 
         houseGroup.traverse((child) => {
@@ -511,7 +511,7 @@ export default class NewHouseRenderer {
             console.error("[NewHouse Proc] Aucune géométrie valide trouvée après parcours.");
             // Nettoyer les géométries locales
              wallGeometry.dispose(); gableGeometry.dispose(); roofPaneGeometry.dispose();
-             chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose(); doorMarkerGeo.dispose();
+             chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose(); //doorMarkerGeo.dispose();
              // Nettoyer géométries fenêtres
              houseGroup.traverse(obj => { if (obj.isMesh) obj.geometry?.dispose(); });
             return null;
@@ -571,7 +571,7 @@ export default class NewHouseRenderer {
         allGeometries.forEach(g => g.dispose());
         // Nettoyer les géométries de base qui ont été utilisées pour les clones
         wallGeometry.dispose(); gableGeometry.dispose(); roofPaneGeometry.dispose();
-        chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose(); doorMarkerGeo.dispose();
+        chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose(); //doorMarkerGeo.dispose();
         garageDoorGeometry.dispose();
         // Nettoyer les géométries de fenêtres
         houseGroup.traverse(obj => { if (obj.isMesh) obj.geometry?.dispose(); });

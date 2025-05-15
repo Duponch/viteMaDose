@@ -459,43 +459,7 @@ export default class NewBuildingRenderer {
             }
         }
 
-        // --- Rez-de-chaussée ---
-        const groundFloorY = floorHeight / 2;
-        const doorWidthPlaceholder = 1;
-        const pizzaWindowWidth = Math.max(0.1, recessWidth - doorWidthPlaceholder * 0.5); // Assurer largeur min
-        const pizzaWindowHeight = 2.5;
-        const pizzaWindowGeo = new THREE.BoxGeometry(pizzaWindowWidth, pizzaWindowHeight, 0.1);
-        const pizzaWindowMesh = new THREE.Mesh(pizzaWindowGeo, windowMaterial);
-        pizzaWindowMesh.position.set(mainWidth / 2 + recessWidth / 2 - pizzaWindowWidth / 2 - doorWidthPlaceholder * 0.25, groundFloorY, -(mainDepth - recessDepth) / 2 + recessDepth / 2 + 0.06);
-        buildingGroup.add(pizzaWindowMesh);
-
-        // Ajouter un marqueur bleu émissif devant la porte pour indiquer l'orientation
-        const doorMarkerMaterial = new THREE.MeshBasicMaterial({
-            color: 0x4dabf5,      // Bleu clair
-            emissive: 0x4dabf5,   // Même couleur pour l'émissif
-            emissiveIntensity: 0.8,
-            transparent: true,
-            opacity: 0.8,
-            name: "NewBuildingDoorMarkerMat"
-        });
-        const doorMarkerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-        const doorMarker = new THREE.Mesh(doorMarkerGeo, doorMarkerMaterial);
-        // Positionner devant la porte du rez-de-chaussée (légèrement à côté de la vitrine, près de doorWidthPlaceholder)
-        doorMarker.position.set(
-            mainWidth / 2 + recessWidth / 2 - pizzaWindowWidth - doorWidthPlaceholder / 2, 
-            0.5, // Légèrement au-dessus du sol
-            -(mainDepth - recessDepth) / 2 + recessDepth / 2 + 0.5 // Devant le bâtiment
-        );
-        buildingGroup.add(doorMarker);
-
-        const downtownWindowWidth = mainWidth * 0.5;
-        const downtownWindowHeight = 2.5;
-        const downtownWindowGeo = new THREE.BoxGeometry(downtownWindowWidth, downtownWindowHeight, 0.1);
-        const downtownWindowMesh = new THREE.Mesh(downtownWindowGeo, windowMaterial);
-        downtownWindowMesh.position.set(-(recessWidth / 2) - mainWidth / 2 + downtownWindowWidth / 2 + windowSpacingMain, groundFloorY, mainDepth / 2 + 0.06);
-        buildingGroup.add(downtownWindowMesh);
-
-        // ----- Fin Création Géométries -----
+                // --- Rez-de-chaussée ---        const groundFloorY = floorHeight / 2;        const doorWidthPlaceholder = 1;        const pizzaWindowWidth = Math.max(0.1, recessWidth - doorWidthPlaceholder * 0.5); // Assurer largeur min        const pizzaWindowHeight = 2.5;        const pizzaWindowGeo = new THREE.BoxGeometry(pizzaWindowWidth, pizzaWindowHeight, 0.1);        const pizzaWindowMesh = new THREE.Mesh(pizzaWindowGeo, windowMaterial);        pizzaWindowMesh.position.set(mainWidth / 2 + recessWidth / 2 - pizzaWindowWidth / 2 - doorWidthPlaceholder * 0.25, groundFloorY, -(mainDepth - recessDepth) / 2 + recessDepth / 2 + 0.06);        buildingGroup.add(pizzaWindowMesh);        const downtownWindowWidth = mainWidth * 0.5;        const downtownWindowHeight = 2.5;        const downtownWindowGeo = new THREE.BoxGeometry(downtownWindowWidth, downtownWindowHeight, 0.1);        const downtownWindowMesh = new THREE.Mesh(downtownWindowGeo, windowMaterial);        downtownWindowMesh.position.set(-(recessWidth / 2) - mainWidth / 2 + downtownWindowWidth / 2 + windowSpacingMain, groundFloorY, mainDepth / 2 + 0.06);        buildingGroup.add(downtownWindowMesh);        // Ajouter un marqueur bleu émissif devant la porte pour indiquer l'orientation        /*const doorMarkerMaterial = new THREE.MeshBasicMaterial({            color: 0x4dabf5,      // Bleu clair            emissive: 0x4dabf5,   // Même couleur pour l'émissif            emissiveIntensity: 0.8,            transparent: true,            opacity: 0.8,            name: "NewBuildingDoorMarkerMat"        });        const doorMarkerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);        const doorMarker = new THREE.Mesh(doorMarkerGeo, doorMarkerMaterial);        // Positionner devant la porte du rez-de-chaussée (légèrement à côté de la vitrine, près de doorWidthPlaceholder)        doorMarker.position.set(            mainWidth / 2 + recessWidth / 2 - pizzaWindowWidth - doorWidthPlaceholder / 2,             0.5, // Légèrement au-dessus du sol            -(mainDepth - recessDepth) / 2 + recessDepth / 2 + 0.5 // Devant le bâtiment        );        buildingGroup.add(doorMarker);*/        // ----- Fin Création Géométries -----
 
         // ----- Regroupement par matériau pour l'asset final -----
         const allGeometries = []; // Pour calculer la BBox globale
@@ -509,7 +473,7 @@ export default class NewBuildingRenderer {
         });
 
         // Ajouter le matériau du marqueur de porte
-        materialMap.set("NewBuildingDoorMarkerMat", { material: doorMarkerMaterial, geoms: [] });
+        //materialMap.set("NewBuildingDoorMarkerMat", { material: doorMarkerMaterial, geoms: [] });
 
         buildingGroup.traverse((child) => {
             if (child.isMesh && child.geometry && child.material) {

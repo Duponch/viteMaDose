@@ -320,23 +320,6 @@ export default class SkyscraperRenderer {
             }
         }
 
-        // Ajout d'un marqueur bleu émissif devant la porte pour indiquer l'orientation
-        const doorMarkerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-        const doorMarkerMaterial = new THREE.MeshBasicMaterial({
-            color: 0x4dabf5,      // Bleu clair
-            emissive: 0x4dabf5,   // Même couleur pour l'émissif
-            emissiveIntensity: 0.8,
-            transparent: true,
-            opacity: 0.8,
-            name: "SkyscraperDoorMarkerMat"
-        });
-        
-        // Placer le marqueur devant l'entrée principale du gratte-ciel
-        const doorMarker = new THREE.Mesh(doorMarkerGeo, doorMarkerMaterial);
-        // Position au centre de la face avant du bâtiment, légèrement au-dessus du sol
-        doorMarker.position.set(0, 0.5, mainDepth / 2 + 0.5); // Placer devant la porte
-        skyscraper.add(doorMarker);
-
         // --- Structure intermédiaire ---
         const intermediateWidth = mainWidth + 2 * intermediateOverhang;
         const intermediateDepth = mainDepth + 2 * intermediateOverhang;
@@ -560,7 +543,7 @@ export default class SkyscraperRenderer {
         materialMap.set(floorMaterial.name, { material: floorMaterial.clone(), geoms: [] });
         materialMap.set(skyscraperWindowMaterial.name, { material: skyscraperWindowMaterial.clone(), geoms: [] });
         materialMap.set(redLightMaterial.name, { material: redLightMaterial.clone(), geoms: [] });
-        materialMap.set(doorMarkerMaterial.name, { material: doorMarkerMaterial.clone(), geoms: [] });
+        //materialMap.set(doorMarkerMaterial.name, { material: doorMarkerMaterial.clone(), geoms: [] });
 
         skyscraper.traverse(child => {
             if (child.isMesh && child.geometry && child.material) {
@@ -649,7 +632,7 @@ export default class SkyscraperRenderer {
         if (doorGeomX) doorGeomX.dispose();
         if (doorGeomZ) doorGeomZ.dispose();
         if (redLightGeom) redLightGeom.dispose();
-        if (doorMarkerGeo) doorMarkerGeo.dispose();
+        //if (doorMarkerGeo) doorMarkerGeo.dispose();
 
         const asset = {
             id: `skyscraper_procedural_${this.assetIdCounter++}`,

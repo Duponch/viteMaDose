@@ -533,7 +533,7 @@ export default class CommercialRenderer {
         );
         
         // Ajout d'un marqueur bleu émissif devant la porte pour indiquer l'orientation
-        const doorMarkerMaterial = new THREE.MeshBasicMaterial({
+        /*const doorMarkerMaterial = new THREE.MeshBasicMaterial({
             color: 0x4dabf5,      // Bleu clair
             emissive: 0x4dabf5,   // Même couleur pour l'émissif
             emissiveIntensity: 0.8,
@@ -545,7 +545,7 @@ export default class CommercialRenderer {
             0.5 * scale, 0.5 * scale, 0.5 * scale,
             doorMarkerMaterial,
             doorX, 0.25 * scale + baseHeight, doorZ + 0.5 * scale
-        );
+        );*/
         
         // Petite fenêtre sur la porte
         const doorWindow = createBox(
@@ -672,7 +672,7 @@ export default class CommercialRenderer {
         });
 
         // Ajouter le matériau du marqueur de porte
-        materialMap.set("CommercialDoorMarkerMat", { material: doorMarkerMaterial, geoms: [] });
+        //materialMap.set("CommercialDoorMarkerMat", { material: doorMarkerMaterial, geoms: [] });
 
         buildingGroup.traverse((child) => {
             if (child.isMesh && child.geometry && child.material) {

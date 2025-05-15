@@ -297,7 +297,7 @@ export default class NewSkyscraperRenderer {
 					
 					// Ajouter un marqueur bleu émissif devant la porte pour indiquer l'orientation
 					// Seulement pour la porte principale au rez-de-chaussée
-					if (isGroundFloor && isFrontFace) {
+					/*if (isGroundFloor && isFrontFace) {
 						const doorMarkerMaterial = new THREE.MeshBasicMaterial({
 							color: 0x4dabf5,      // Bleu clair
 							emissive: 0x4dabf5,   // Même couleur pour l'émissif
@@ -312,7 +312,7 @@ export default class NewSkyscraperRenderer {
 						doorMarker.position.set(doorXPos, 0.5, zPosWindow + doorDepth + 0.5);
 						floorGroup.add(doorMarker);
 						doorMarkerGeo.dispose();
-					}
+					}*/
 					} currentX += windowPanelWidthFB; } else { const windowX = currentX + windowPanelWidthFB / 2; const windowMesh = new THREE.Mesh(windowGeoFB, windowMaterial); windowMesh.position.set(windowX, windowCenterY, zPosWindow); floorGroup.add(windowMesh); currentX += windowPanelWidthFB; } if (i < numMullions && !isMiddleDoorMullionToSkip) { const mullionX = currentX + mullionSize / 2; const mullionMesh = new THREE.Mesh(mullionGeoFB, structureMaterial); mullionMesh.position.set(mullionX, windowCenterY, zPosWindow); floorGroup.add(mullionMesh); currentX += mullionSize; } else if (i < numMullions) { currentX += mullionSize; } } }
 			}); if(windowGeoFB) windowGeoFB.dispose(); if(mullionGeoFB) mullionGeoFB.dispose(); horizontalSectionGeo.dispose();
 			let windowPanelWidthLR = 0; if (numPanels > 0 && verticalSectionLength > numMullions * mullionSize) { windowPanelWidthLR = (verticalSectionLength - numMullions * mullionSize) / numPanels; } else if (numPanels > 0) { windowPanelWidthLR = 0.01; } const windowGeoLR = windowHeight > 0 ? new THREE.BoxGeometry(pillarSize - windowRecess * 2, windowHeight, windowPanelWidthLR) : null; const mullionGeoLR = windowHeight > 0 ? new THREE.BoxGeometry(pillarSize - windowRecess * 2, windowHeight, mullionSize) : null; const verticalSectionGeo = new THREE.BoxGeometry(pillarSize, horizontalBeamSize, verticalSectionLength);
@@ -391,7 +391,7 @@ export default class NewSkyscraperRenderer {
 		Object.values(this.localMaterials).forEach(mat => { if (mat) { materialMap.set(mat.name, { material: mat.clone(), geoms: [] }); } });
 		
 		// Ajouter le matériau du marqueur de porte (créé spécifiquement pour ce bâtiment)
-		materialMap.set("NewSkyscraperDoorMarkerMat", { 
+		/*materialMap.set("NewSkyscraperDoorMarkerMat", { 
 			material: new THREE.MeshBasicMaterial({
 				color: 0x4dabf5,      // Bleu clair
 				emissive: 0x4dabf5,   // Même couleur pour l'émissif
@@ -401,7 +401,7 @@ export default class NewSkyscraperRenderer {
 				name: "NewSkyscraperDoorMarkerMat"
 			}),
 			geoms: [] 
-		});
+		});*/
 
 		skyscraperGroup.traverse((child) => {
 			if (child.isMesh && child.geometry && child.material) {

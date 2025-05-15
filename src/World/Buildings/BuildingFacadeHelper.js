@@ -17,7 +17,7 @@ export default class BuildingFacadeHelper {
         this.helpersGroup = new THREE.Group();
         this.helpersGroup.name = "BuildingFacadeHelpers";
         this.arrowHelpers = [];
-        this.isVisible = true;
+        this.isVisible = false;
         
         // Créer le matériau pour les flèches
         this.arrowMaterial = new THREE.MeshBasicMaterial({
@@ -41,7 +41,11 @@ export default class BuildingFacadeHelper {
      * @param {number} buildingDepth - Profondeur du bâtiment
      */
     addFacadeHelper(position, rotationY, buildingWidth = 5, buildingDepth = 5) {
-        // Calculer la taille de la flèche en fonction de la taille du bâtiment
+        // Cette méthode est désactivée pour supprimer les flèches rouges du rendu
+        // Les flèches étaient utilisées uniquement pour le débogage
+        return;
+        
+        /*// Calculer la taille de la flèche en fonction de la taille du bâtiment
         const arrowSize = Math.min(buildingWidth, buildingDepth) * 0.1; // Réduit la taille de la flèche
         const arrowLength = arrowSize * 1.5; // Flèche plus longue
         
@@ -87,7 +91,7 @@ export default class BuildingFacadeHelper {
         
         // Ajouter la flèche au groupe
         this.helpersGroup.add(arrowMesh);
-        this.arrowHelpers.push(arrowMesh);
+        this.arrowHelpers.push(arrowMesh);*/
     }
     
     /**
