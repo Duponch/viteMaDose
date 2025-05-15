@@ -875,6 +875,12 @@ export default class Agent {
      * @param {string} goal - "WORK" ou "HOME" pour indiquer la direction
      */
     startTransitionFromBuildingToPath(currentGameTime, goal) {
+        // Si une transition est déjà en cours, ne pas la réinitialiser
+        if (this.isMovingFromBuildingToPath || this.isMovingFromPathToBuilding) {
+            // Déjà en transition, renvoyer true pour indiquer que la transition est en cours
+            return true;
+        }
+        
         // Déterminer les points de départ et d'arrivée
         let startPos, endPos;
         
