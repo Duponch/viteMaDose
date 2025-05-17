@@ -59,22 +59,11 @@ export default class BirdSystem {
      */
     async initialize() {
         try {
-            // Chargement des shaders
-            const [vertexResponse, fragmentResponse, positionResponse, velocityResponse] = await Promise.all([
-                fetch(ShaderLoader.getShaderPath('birdVertex.glsl')),
-                fetch(ShaderLoader.getShaderPath('birdFragment.glsl')),
-                fetch(ShaderLoader.getShaderPath('birdPositionShader.glsl')),
-                fetch(ShaderLoader.getShaderPath('birdVelocityShader.glsl'))
-            ]);
-            
-            if (!vertexResponse.ok || !fragmentResponse.ok || !positionResponse.ok || !velocityResponse.ok) {
-                throw new Error(`Erreur chargement shaders: VS=${vertexResponse.status}, FS=${fragmentResponse.status}, PS=${positionResponse.status}, VS=${velocityResponse.status}`);
-            }
-            
-            const vertexShader = await vertexResponse.text();
-            const fragmentShader = await fragmentResponse.text();
-            const positionShader = await positionResponse.text();
-            const velocityShader = await velocityResponse.text();
+            // Chargement des shaders avec la nouvelle méthode
+            const vertexShader = await ShaderLoader.loadShader('birdVertex.glsl');
+            const fragmentShader = await ShaderLoader.loadShader('birdFragment.glsl');
+            const positionShader = await ShaderLoader.loadShader('birdPositionShader.glsl');
+            const velocityShader = await ShaderLoader.loadShader('birdVelocityShader.glsl');
             
             // Créer le rendu GPU
             this.gpuCompute = new GPUComputationRenderer(WIDTH, WIDTH, this.renderer);

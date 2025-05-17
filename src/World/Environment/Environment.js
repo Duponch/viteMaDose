@@ -186,14 +186,12 @@ export default class Environment {
     async initialize() {
         //console.log("Environment: Initialisation asynchrone...");
         try {
-            // --- Chargement Shaders --- (UTILISATION DE LA CLASSE UTILITAIRE)
-            const [vertexResponse, fragmentResponse] = await Promise.all([
-                fetch(ShaderLoader.getShaderPath('SkyVertex.glsl')),
-                fetch(ShaderLoader.getShaderPath('skyFragment.glsl'))
-            ]);
-            if (!vertexResponse.ok || !fragmentResponse.ok) { throw new Error(`Erreur chargement shaders: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`); }
-            this.vertexShaderCode = await vertexResponse.text();
-            this.fragmentShaderCode = await fragmentResponse.text();
+            // --- Chargement Shaders --- (UTILISATION DE LA CLASSE UTILITAIRE VITE)
+            const vertexShaderCode = await ShaderLoader.loadShader('SkyVertex.glsl');
+            const fragmentShaderCode = await ShaderLoader.loadShader('skyFragment.glsl');
+            
+            this.vertexShaderCode = vertexShaderCode;
+            this.fragmentShaderCode = fragmentShaderCode;
             //console.log("Environment: Shaders chargés.");
 
             // --- Création Éléments Scène ---

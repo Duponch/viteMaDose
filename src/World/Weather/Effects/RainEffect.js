@@ -72,18 +72,9 @@ export default class RainEffect {
      * Initialise l'effet de pluie avec un système de particules
      */
     async initializeRain() {
-        // Chargement des shaders
-        const [vertexResponse, fragmentResponse] = await Promise.all([
-            fetch(ShaderLoader.getShaderPath('RainVertex.glsl')),
-            fetch(ShaderLoader.getShaderPath('RainFragment.glsl'))
-        ]);
-        
-        if (!vertexResponse.ok || !fragmentResponse.ok) {
-            throw new Error(`Erreur chargement shaders: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`);
-        }
-        
-        const vertexShader = await vertexResponse.text();
-        const fragmentShader = await fragmentResponse.text();
+        // Chargement des shaders avec la nouvelle méthode
+        const vertexShader = await ShaderLoader.loadShader('RainVertex.glsl');
+        const fragmentShader = await ShaderLoader.loadShader('RainFragment.glsl');
         
         // Créer la géométrie
         this.rainGeometry = new THREE.BufferGeometry();
@@ -197,18 +188,9 @@ export default class RainEffect {
      * Initialise le système d'impacts de gouttes de pluie
      */
     async initializeSplashes() {
-        // Chargement des shaders
-        const [vertexResponse, fragmentResponse] = await Promise.all([
-            fetch(ShaderLoader.getShaderPath('RainSplashVertex.glsl')),
-            fetch(ShaderLoader.getShaderPath('RainSplashFragment.glsl'))
-        ]);
-        
-        if (!vertexResponse.ok || !fragmentResponse.ok) {
-            throw new Error(`Erreur chargement shaders splashes: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`);
-        }
-        
-        const vertexShader = await vertexResponse.text();
-        const fragmentShader = await fragmentResponse.text();
+        // Chargement des shaders avec la nouvelle méthode
+        const vertexShader = await ShaderLoader.loadShader('RainSplashVertex.glsl');
+        const fragmentShader = await ShaderLoader.loadShader('RainSplashFragment.glsl');
         
         // Créer la texture des impacts
         const splashTexture = this.createSplashTexture();

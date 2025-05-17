@@ -32,18 +32,9 @@ export default class RainbowEffect {
      */
     async init() {
         try {
-            // Chargement des shaders
-            const [vertexResponse, fragmentResponse] = await Promise.all([
-                fetch(ShaderLoader.getShaderPath('RainbowVertex.glsl')),
-                fetch(ShaderLoader.getShaderPath('RainbowFragment.glsl'))
-            ]);
-            
-            if (!vertexResponse.ok || !fragmentResponse.ok) {
-                throw new Error(`Erreur chargement shaders: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`);
-            }
-            
-            const vertexShader = await vertexResponse.text();
-            const fragmentShader = await fragmentResponse.text();
+            // Chargement des shaders avec la nouvelle méthode
+            const vertexShader = await ShaderLoader.loadShader('RainbowVertex.glsl');
+            const fragmentShader = await ShaderLoader.loadShader('RainbowFragment.glsl');
             
             // Création des uniforms pour le shader
             this.uniforms = {

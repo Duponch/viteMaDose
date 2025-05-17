@@ -1,30 +1,52 @@
 /**
- * Utilitaire pour gérer les chemins des shaders en fonction de l'environnement
+ * Utilitaire pour gérer les chemins des shaders
+ * Utilise import.meta.glob de Vite pour charger les shaders pendant la compilation
  */
 export default class ShaderLoader {
+    static shaderCache = {};
+    static isInitialized = false;
+    static shaderModules = {};
+
     /**
-     * Détecte si nous sommes en environnement de production (Netlify)
-     * @returns {boolean} true si nous sommes sur Netlify, false sinon
+     * Initialise le cache des shaders
      */
-    static isProduction() {
-        return window.location.hostname.includes('netlify') || 
-               window.location.hostname.includes('vitemadose');
+    static async initialize() {
+        if (this.isInitialized) return;
+        
+        // Utiliser Vite import.meta.glob pour charger tous les shaders
+        this.shaderModules = import.meta.glob('/src/World/Shaders/*.glsl', { as: 'raw' });
+        this.isInitialized = true;
     }
 
     /**
-     * Retourne le chemin de base pour charger les shaders
-     * @returns {string} Le chemin de base
-     */
-    static getShaderBasePath() {
-        return this.isProduction() ? '/World/Shaders/' : '../src/World/Shaders/';
-    }
-
-    /**
-     * Construit le chemin complet pour un shader
+     * Charge un shader par son nom
      * @param {string} shaderName - Nom du fichier shader
-     * @returns {string} Le chemin complet
+     * @returns {Promise<string>} - Contenu du shader
      */
-    static getShaderPath(shaderName) {
-        return `${this.getShaderBasePath()}${shaderName}`;
+    static async loadShader(shaderName) {
+        await this.initialize();
+        
+        // Vérifier si le shader est déjà en cache
+        if (this.shaderCache[shaderName]) {
+            return this.shaderCache[shaderName];
+        }
+        
+        const shaderPath = `/src/World/Shaders/${shaderName}`;
+        
+        // Vérifier si le shader est disponible via import.meta.glob
+        if (this.shaderModules[shaderPath]) {
+            try {
+                const shaderContent = await this.shaderModules[shaderPath]();
+                this.shaderCache[shaderName] = shaderContent;
+                return shaderContent;
+            } catch (error) {
+                console.error(`Erreur lors du chargement du shader ${shaderName}:`, error);
+                throw error;
+            }
+        } else {
+            throw new Error(`Shader ${shaderName} non trouvé dans les modules importés.`);
+        }
     }
+
+    
 } 
