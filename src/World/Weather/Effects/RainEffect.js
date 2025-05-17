@@ -4,6 +4,8 @@
  * Version refaite basée sur le système de codepen.io
  */
 import * as THREE from 'three';
+import { SimplexNoise } from 'three/examples/jsm/math/SimplexNoise.js';
+import ShaderLoader from '../../../Utils/ShaderLoader.js';
 
 export default class RainEffect {
     /**
@@ -72,8 +74,8 @@ export default class RainEffect {
     async initializeRain() {
         // Chargement des shaders
         const [vertexResponse, fragmentResponse] = await Promise.all([
-            fetch('../src/World/Shaders/RainVertex.glsl'),
-            fetch('../src/World/Shaders/RainFragment.glsl')
+            fetch(ShaderLoader.getShaderPath('RainVertex.glsl')),
+            fetch(ShaderLoader.getShaderPath('RainFragment.glsl'))
         ]);
         
         if (!vertexResponse.ok || !fragmentResponse.ok) {
@@ -197,8 +199,8 @@ export default class RainEffect {
     async initializeSplashes() {
         // Chargement des shaders
         const [vertexResponse, fragmentResponse] = await Promise.all([
-            fetch('../src/World/Shaders/RainSplashVertex.glsl'),
-            fetch('../src/World/Shaders/RainSplashFragment.glsl')
+            fetch(ShaderLoader.getShaderPath('RainSplashVertex.glsl')),
+            fetch(ShaderLoader.getShaderPath('RainSplashFragment.glsl'))
         ]);
         
         if (!vertexResponse.ok || !fragmentResponse.ok) {

@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three';
 import { GPUComputationRenderer } from 'three/examples/jsm/misc/GPUComputationRenderer.js';
+import ShaderLoader from '../../Utils/ShaderLoader.js';
 
 // Constantes
 const WIDTH = 32;
@@ -60,10 +61,10 @@ export default class BirdSystem {
         try {
             // Chargement des shaders
             const [vertexResponse, fragmentResponse, positionResponse, velocityResponse] = await Promise.all([
-                fetch('../src/World/Shaders/birdVertex.glsl'),
-                fetch('../src/World/Shaders/birdFragment.glsl'),
-                fetch('../src/World/Shaders/birdPositionShader.glsl'),
-                fetch('../src/World/Shaders/birdVelocityShader.glsl')
+                fetch(ShaderLoader.getShaderPath('birdVertex.glsl')),
+                fetch(ShaderLoader.getShaderPath('birdFragment.glsl')),
+                fetch(ShaderLoader.getShaderPath('birdPositionShader.glsl')),
+                fetch(ShaderLoader.getShaderPath('birdVelocityShader.glsl'))
             ]);
             
             if (!vertexResponse.ok || !fragmentResponse.ok || !positionResponse.ok || !velocityResponse.ok) {

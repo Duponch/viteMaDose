@@ -3,6 +3,7 @@
  * Utilise un shader pour créer un arc-en-ciel semi-transparent
  */
 import * as THREE from 'three';
+import ShaderLoader from '../../../Utils/ShaderLoader.js';
 
 export default class RainbowEffect {
     constructor(weatherSystem) {
@@ -33,8 +34,8 @@ export default class RainbowEffect {
         try {
             // Chargement des shaders
             const [vertexResponse, fragmentResponse] = await Promise.all([
-                fetch('../src/World/Shaders/RainbowVertex.glsl'),
-                fetch('../src/World/Shaders/RainbowFragment.glsl')
+                fetch(ShaderLoader.getShaderPath('RainbowVertex.glsl')),
+                fetch(ShaderLoader.getShaderPath('RainbowFragment.glsl'))
             ]);
             
             if (!vertexResponse.ok || !fragmentResponse.ok) {
