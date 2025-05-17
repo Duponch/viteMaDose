@@ -187,8 +187,8 @@ export default class Environment {
         try {
             // --- Chargement Shaders --- (MODIFIÉ POUR NETLIFY)
             const [vertexResponse, fragmentResponse] = await Promise.all([
-                fetch('../src/World/Shaders/SkyVertex.glsl'),
-                fetch('../src/World/Shaders/skyFragment.glsl')
+                fetch('/src/World/Shaders/SkyVertex.glsl'),
+                fetch('/src/World/Shaders/skyFragment.glsl')
             ]);
             if (!vertexResponse.ok || !fragmentResponse.ok) { throw new Error(`Erreur chargement shaders: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`); }
             this.vertexShaderCode = await vertexResponse.text();
