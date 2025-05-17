@@ -185,10 +185,16 @@ export default class Environment {
     async initialize() {
         //console.log("Environment: Initialisation asynchrone...");
         try {
-            // --- Chargement Shaders --- (MODIFIÉ POUR NETLIFY)
+            // --- Chargement Shaders --- (MODIFIÉ POUR NETLIFY ET LOCAL)
+            // Détection de l'environnement (développement local vs production)
+            const isProduction = window.location.hostname.includes('netlify') || 
+                                window.location.hostname.includes('vitemadose');
+            
+            const shaderBasePath = isProduction ? '/World/Shaders/' : '../src/World/Shaders/';
+            
             const [vertexResponse, fragmentResponse] = await Promise.all([
-                fetch('/src/World/Shaders/SkyVertex.glsl'),
-                fetch('/src/World/Shaders/skyFragment.glsl')
+                fetch(`${shaderBasePath}SkyVertex.glsl`),
+                fetch(`${shaderBasePath}skyFragment.glsl`)
             ]);
             if (!vertexResponse.ok || !fragmentResponse.ok) { throw new Error(`Erreur chargement shaders: VS=${vertexResponse.status}, FS=${fragmentResponse.status}`); }
             this.vertexShaderCode = await vertexResponse.text();
