@@ -55,6 +55,24 @@ Voici les specs du citoyen :
 
 
 
+- Pathfinding : faire qu'on peut aller de n'importe ou à n'importe ou (et non uniquement de X vers maison ou maison vers X)
+- Ajouter horaires de travail de base à chaque agent, et chaque X et Y d'horaire a un intervalle d'aléa (plus ou moins une demi heure avant ou après X et Y par exemple)
+- Si pour aller par exemple à la pharmacie, le temps d'y aller ça sera fermé, alors il ne doit pas y aller pour rien.
+- Ajouter notion de priorité des Strategies / Routines
+- Ajouter attribut divertissement (jauge 0 à 100)
+- Ajouter statut burnout oui / non
+- Ajouter type de besoin décompresser : dépend du statut burnout
+	-> si Oui : changer priorité des Strategies / Routines (en priorisant routines divertissements sur le reste (à voir ce que veux dire le reste))
+
+
+
+
+
+
+
+
+
+
 
 - ajouter condition, ne pas acheter médoc si il en possède déjà
 - vérifier si il gagne pas un salaire le weekend
