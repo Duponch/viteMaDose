@@ -5,7 +5,7 @@ import InstancedMeshManager from '../Rendering/InstancedMeshManager.js';
 import SidewalkGenerator from './SidewalkGenerator.js'; // Placeholder import
 import PlotGroundGenerator from './PlotGroundGenerator.js'; // Placeholder import
 import CrosswalkInstancer from './CrosswalkInstancer.js'; // Placeholder import
-import GrassInstancer from '../Vegetation/GrassInstancer.js';
+import ShaderGrassInstancer from '../Vegetation/ShaderGrassInstancer.js'; // Nouvelle implémentation d'herbe
 import CommercialManager from './CommercialManager.js'; // Import du nouveau gestionnaire
 
 // Stratégies de placement
@@ -54,7 +54,7 @@ export default class PlotContentGenerator {
         this.sidewalkGenerator = new SidewalkGenerator(config, materials);
         this.plotGroundGenerator = new PlotGroundGenerator(config, materials);
         this.crosswalkInstancer = new CrosswalkInstancer(config, materials);
-        this.grassInstancer = new GrassInstancer(config);
+        this.grassInstancer = new ShaderGrassInstancer(config, experience);
         this.grassInstancer.setCamera(this.experience.camera.instance);
 
         // --- Stratégies (seront créées dans generateContent) ---
@@ -397,7 +397,7 @@ export default class PlotContentGenerator {
         // La logique de mise à jour est maintenant dans InstancedMeshManager
         this.instancedMeshManager?.updateWindows(currentHour);
         // Mettre à jour l'animation de l'herbe
-        this.grassInstancer.update();
+        this.grassInstancer?.update();
     }
 
     // --- Les anciennes méthodes spécifiques (generatePlotPrimaryContent, placeTreesForPlot, etc.) sont supprimées ---

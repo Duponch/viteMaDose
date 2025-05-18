@@ -159,7 +159,11 @@ export default class CityManager {
             lampPostSpacing: 20, // Ajout config lampadaire
             lampPostLightConeRadiusBottom: 5.0,
             lampPostLightConeOpacity: 0.0023,
-            lampPostLightConeColor: 0xFFFF99
+            lampPostLightConeColor: 0xFFFF99,
+            // Herbe avec shader
+            grassInstanceCount: 5000, // Nombre d'instances d'herbe par parcelle
+            grassWindStrength: 0.8,   // Force du vent dans l'animation de l'herbe
+            grassShadowDensity: 0.7   // Densité des ombres sur l'herbe
         };
 
         // Fusion de configuration externe
