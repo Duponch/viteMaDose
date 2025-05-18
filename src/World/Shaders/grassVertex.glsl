@@ -1,6 +1,12 @@
 varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vWorldPosition;
+
 uniform float time;
 uniform float windStrength;
+
+// Activation des lumières
+#define USE_LIGHTS
 
 void main() {
   vUv = uv;
@@ -22,6 +28,14 @@ void main() {
   float displacementZ = cos(mvPosition.x + time * 7.0) * (0.05 * dispPower * windStrength);
   mvPosition.z += displacementZ;
   
+  // Calculer la normale (simplifiée pour l'herbe - pointe principalement vers le haut)
+  vNormal = normalize(vec3(0.0, 1.0, 0.0));
+  
+  // Position dans l'espace monde pour les calculs d'éclairage
+  vec4 worldPosition = modelMatrix * mvPosition;
+  vWorldPosition = worldPosition.xyz;
+  
+  // Position finale
   vec4 modelViewPosition = modelViewMatrix * mvPosition;
   gl_Position = projectionMatrix * modelViewPosition;
 } 

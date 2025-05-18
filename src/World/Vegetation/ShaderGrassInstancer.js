@@ -6,7 +6,7 @@ export default class ShaderGrassInstancer {
         this.config = config;
         this.experience = experience;
         this.scene = experience.scene;
-        this.instanceNumber = config.grassInstanceCount || 10000;
+        this.instanceNumber = config.grassInstanceCount;
         this.dummy = new THREE.Object3D();
         this.clock = new THREE.Clock();
         this.instancedMeshes = [];
@@ -144,7 +144,8 @@ export default class ShaderGrassInstancer {
         );
         
         instancedMesh.frustumCulled = true;
-        instancedMesh.receiveShadow = true;
+        instancedMesh.castShadow = false; // L'herbe ne projette pas d'ombre (pour des raisons de performance)
+        instancedMesh.receiveShadow = true; // L'herbe reçoit des ombres
         
         // Position du centre de la parcelle
         const centerX = plot.x + plot.width / 2;
@@ -198,31 +199,185 @@ export default class ShaderGrassInstancer {
         if (this.leavesMaterial && this.leavesMaterial.uniforms) {
             this.leavesMaterial.uniforms.time.value = this.clock.getElapsedTime();
             
-            // Mettre à jour la direction du soleil si disponible dans l'expérience
-            if (this.experience && this.experience.world && this.experience.world.dayNightCycle) {
-                const sunPosition = this.experience.world.dayNightCycle.getSunPosition();
-                if (sunPosition) {
-                    this.leavesMaterial.uniforms.sunDirection.value.copy(sunPosition).normalize();
+            // Récupérer directement la lumière directionnelle principale (soleil) et la lumière ambiante
+            const directionalLight = this._getMainDirectionalLight();
+            const ambientLight = this._getAmbientLight();
+            
+            // DEBUG: afficher des infos sur les lumières récupérées (à enlever après débogage)
+            if (!this._debugLogShown) {
+                if (directionalLight) {
+                    console.log("ShaderGrassInstancer: Lumière directionnelle trouvée:", 
+                        directionalLight.name, 
+                        "position:", directionalLight.position.toArray().map(v => v.toFixed(2)),
+                        "couleur:", directionalLight.color.getHexString(),
+                        "intensité:", directionalLight.intensity
+                    );
+                } else {
+                    console.warn("ShaderGrassInstancer: Aucune lumière directionnelle trouvée!");
                 }
                 
-                // Mettre à jour les couleurs de lumière en fonction du cycle jour/nuit
-                const sunLight = this.experience.world.dayNightCycle.getSunLight();
-                if (sunLight) {
-                    this.leavesMaterial.uniforms.sunColor.value.copy(sunLight.color);
-                    
-                    // Ajuster l'intensité de l'ombre en fonction de l'heure
-                    const shadowIntensity = this.shadowDensity * sunLight.intensity;
-                    this.leavesMaterial.uniforms.receiveShadow.value = shadowIntensity;
-                }
-                
-                // Ajuster la lumière ambiante
-                const ambientLight = this.experience.world.dayNightCycle.getAmbientLight();
                 if (ambientLight) {
-                    this.leavesMaterial.uniforms.ambientLight.value.copy(ambientLight.color)
-                        .multiplyScalar(ambientLight.intensity);
+                    console.log("ShaderGrassInstancer: Lumière ambiante trouvée:",
+                        ambientLight.name,
+                        "couleur:", ambientLight.color.getHexString(),
+                        "intensité:", ambientLight.intensity
+                    );
+                } else {
+                    console.warn("ShaderGrassInstancer: Aucune lumière ambiante trouvée!");
+                }
+                
+                this._debugLogShown = true; // N'afficher qu'une fois pour éviter de spammer la console
+            }
+            
+            if (directionalLight) {
+                // Synchroniser avec la position du soleil/lune réelle
+                const sunDirection = new THREE.Vector3();
+                directionalLight.getWorldDirection(sunDirection).multiplyScalar(-1); // Inverser car la direction de la lumière est OPPOSÉe à sa position
+                this.leavesMaterial.uniforms.sunDirection.value.copy(sunDirection);
+                
+                // Synchroniser avec la couleur et l'intensité exactes de la lumière directionnelle
+                const sunColorWithIntensity = new THREE.Color()
+                    .copy(directionalLight.color)
+                    .multiplyScalar(directionalLight.intensity);
+                
+                this.leavesMaterial.uniforms.sunColor.value.copy(sunColorWithIntensity);
+                
+                // Calculer l'intensité des ombres proportionnellement à l'intensité de la lumière directionnelle
+                const shadowIntensity = Math.max(0.1, Math.min(1.0, directionalLight.intensity));
+                this.leavesMaterial.uniforms.receiveShadow.value = shadowIntensity;
+            }
+            
+            if (ambientLight) {
+                // Synchroniser avec la couleur et l'intensité exactes de la lumière ambiante
+                const ambientColorWithIntensity = new THREE.Color()
+                    .copy(ambientLight.color)
+                    .multiplyScalar(ambientLight.intensity);
+                
+                this.leavesMaterial.uniforms.ambientLight.value.copy(ambientColorWithIntensity);
+            }
+        }
+    }
+    
+    /**
+     * Récupère la lumière directionnelle principale (soleil/lune) de la scène
+     * @returns {THREE.DirectionalLight|null} La lumière directionnelle ou null si non trouvée
+     * @private
+     */
+    _getMainDirectionalLight() {
+        // Méthode 1: Utiliser la référence directe si disponible dans environment
+        if (this.experience?.world?.environment) {
+            // Essayer toutes les méthodes possibles
+            const sunLight = this.experience.world.environment.getSunLight?.();
+            if (sunLight) return sunLight;
+            
+            // Recherche par attributs directs
+            if (this.experience.world.environment.sunLight) return this.experience.world.environment.sunLight;
+            if (this.experience.world.environment.directionalLight) return this.experience.world.environment.directionalLight;
+            if (this.experience.world.environment.moonLight) return this.experience.world.environment.moonLight;
+            
+            // Rechercher dans dayNightCycle s'il existe
+            if (this.experience.world.environment.dayNightCycle) {
+                if (typeof this.experience.world.environment.dayNightCycle.getSunLight === 'function') {
+                    const dnCycleSunLight = this.experience.world.environment.dayNightCycle.getSunLight();
+                    if (dnCycleSunLight) return dnCycleSunLight;
+                }
+                
+                // Accès direct aux propriétés
+                if (this.experience.world.environment.dayNightCycle.sunLight) {
+                    return this.experience.world.environment.dayNightCycle.sunLight;
+                }
+                if (this.experience.world.environment.dayNightCycle.moonLight) {
+                    return this.experience.world.environment.dayNightCycle.moonLight;
+                }
+                if (this.experience.world.environment.dayNightCycle.directionalLight) {
+                    return this.experience.world.environment.dayNightCycle.directionalLight;
                 }
             }
         }
+        
+        // Méthode 2: Chercher dans la scène entière
+        if (this.experience?.scene) {
+            let mainLight = null;
+            let bestMatch = null;
+            
+            this.experience.scene.traverse((object) => {
+                // Chercher une lumière directionnelle
+                if (object.type === 'DirectionalLight') {
+                    // Sauvegarder la première lumière trouvée comme fallback
+                    if (!mainLight) mainLight = object;
+                    
+                    // Priorité aux lumières avec un nom significatif
+                    const lowerName = object.name.toLowerCase();
+                    if (lowerName.includes('sun') || lowerName.includes('directional')) {
+                        bestMatch = object;
+                    } else if (lowerName.includes('moon') && !bestMatch) {
+                        bestMatch = object; // Priorité moindre pour la lune
+                    }
+                }
+            });
+            
+            // Retourner la meilleure correspondance ou la première lumière trouvée
+            return bestMatch || mainLight;
+        }
+        
+        // Méthode 3: Créer une lumière par défaut si rien n'est trouvé
+        console.warn("ShaderGrassInstancer: Aucune lumière directionnelle trouvée dans la scène, création d'une lumière par défaut");
+        const defaultLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        defaultLight.position.set(0.5, 1, 0.5).normalize();
+        defaultLight.name = "DefaultDirectionalLight";
+        this.scene.add(defaultLight);
+        return defaultLight;
+    }
+    
+    /**
+     * Récupère la lumière ambiante de la scène
+     * @returns {THREE.AmbientLight|null} La lumière ambiante ou null si non trouvée
+     * @private
+     */
+    _getAmbientLight() {
+        // Méthode 1: Utiliser la référence directe si disponible dans environment
+        if (this.experience?.world?.environment) {
+            // Essayer toutes les méthodes possibles
+            const ambientLight = this.experience.world.environment.getAmbientLight?.();
+            if (ambientLight) return ambientLight;
+            
+            // Recherche par attributs directs
+            if (this.experience.world.environment.ambientLight) return this.experience.world.environment.ambientLight;
+            
+            // Rechercher dans dayNightCycle s'il existe
+            if (this.experience.world.environment.dayNightCycle) {
+                if (typeof this.experience.world.environment.dayNightCycle.getAmbientLight === 'function') {
+                    const dnCycleAmbLight = this.experience.world.environment.dayNightCycle.getAmbientLight();
+                    if (dnCycleAmbLight) return dnCycleAmbLight;
+                }
+                
+                // Accès direct aux propriétés
+                if (this.experience.world.environment.dayNightCycle.ambientLight) {
+                    return this.experience.world.environment.dayNightCycle.ambientLight;
+                }
+            }
+        }
+        
+        // Méthode 2: Chercher dans la scène entière
+        if (this.experience?.scene) {
+            let ambientLight = null;
+            
+            this.experience.scene.traverse((object) => {
+                if (object.type === 'AmbientLight') {
+                    ambientLight = object;
+                    return; // Sortir au premier AmbientLight trouvé
+                }
+            });
+            
+            if (ambientLight) return ambientLight;
+        }
+        
+        // Méthode 3: Créer une lumière par défaut si rien n'est trouvé
+        console.warn("ShaderGrassInstancer: Aucune lumière ambiante trouvée dans la scène, création d'une lumière par défaut");
+        const defaultAmbient = new THREE.AmbientLight(0x303030, 0.3);
+        defaultAmbient.name = "DefaultAmbientLight";
+        this.scene.add(defaultAmbient);
+        return defaultAmbient;
     }
     
     reset() {

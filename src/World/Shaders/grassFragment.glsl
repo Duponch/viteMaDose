@@ -1,4 +1,6 @@
 varying vec2 vUv;
+varying vec3 vNormal;
+varying vec3 vWorldPosition;
 
 // Lumières et ombres
 uniform vec3 sunDirection;
@@ -14,19 +16,22 @@ void main() {
   // Nuances plus sombres à la base de l'herbe, plus claires aux extrémités
   float clarity = (vUv.y * 0.5) + 0.5;
   
-  // Calcul simple d'éclairage
-  vec3 normal = vec3(0.0, 1.0, 0.0); // Normale simplifiée pointant vers le haut
-  float lightIntensity = max(0.0, dot(normal, normalize(sunDirection)));
+  // Calcul simple de l'éclairage
+  float directionalLightIntensity = max(0.0, dot(vNormal, normalize(sunDirection)));
+  vec3 directionalLight = sunColor * directionalLightIntensity * receiveShadow;
+  vec3 lighting = ambientLight + directionalLight;
   
-  // Mélanger la lumière ambiante et directionnelle
-  vec3 lighting = ambientLight + (sunColor * lightIntensity * receiveShadow);
-  
-  // Couleur finale
+  // Couleur finale avec éclairage
   vec3 finalColor = baseColor * clarity * lighting;
   
-  // Ajout d'une légère variation aléatoire basée sur la position UV pour éviter l'uniformité
+  // Ajout d'une légère variation aléatoire basée sur la position UV
   float randomVariation = fract(sin(vUv.x * 100.0) * 10000.0) * 0.05 + 0.95;
   finalColor *= randomVariation;
+  
+  // En nocturne, ajouter une légère teinte bleue pour simuler le clair de lune
+  float dayFactor = max(0.0, min(1.0, sunDirection.y * 2.0 + 0.5));
+  vec3 nightTint = vec3(0.7, 0.8, 1.0);
+  finalColor = mix(finalColor * nightTint * 0.4, finalColor, dayFactor);
   
   gl_FragColor = vec4(finalColor, 1.0);
 } 
