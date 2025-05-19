@@ -29,104 +29,138 @@ export default class ShaderGrassInstancer {
     
     async initShaderMaterial() {
         try {
-            // Charger les shaders
-            let vertexShader, fragmentShader;
+            // Préparer le matériau de Three.js avec support des ombres
+            const grassTexture = this._createGrassTexture();
             
-            try {
-                vertexShader = await ShaderLoader.loadShader('grassVertex.glsl');
-                fragmentShader = await ShaderLoader.loadShader('grassFragment.glsl');
-                console.log("Shaders d'herbe chargés depuis les fichiers");
-            } catch (loadError) {
-                console.warn("Impossible de charger les shaders depuis les fichiers, utilisation des shaders par défaut:", loadError);
-                
-                // Shaders par défaut en cas d'échec du chargement
-                vertexShader = `
-                varying vec2 vUv;
-                uniform float time;
-                uniform float windStrength;
-                
-                void main() {
-                  vUv = uv;
-                  
-                  // VERTEX POSITION
-                  vec4 mvPosition = vec4(position, 1.0);
-                  #ifdef USE_INSTANCING
-                    mvPosition = instanceMatrix * mvPosition;
-                  #endif
-                  
-                  // DISPLACEMENT
-                  // L'effet est plus fort au bout des brins d'herbe
-                  float dispPower = 1.0 - cos(uv.y * 3.1416 / 2.0);
-                  
-                  float displacement = sin(mvPosition.z + time * 5.0) * (0.1 * dispPower * windStrength);
-                  mvPosition.x += displacement;
-                  
-                  // Légère variation sur l'axe z pour plus de naturalité
-                  float displacementZ = cos(mvPosition.x + time * 7.0) * (0.05 * dispPower * windStrength);
-                  mvPosition.z += displacementZ;
-                  
-                  vec4 modelViewPosition = modelViewMatrix * mvPosition;
-                  gl_Position = projectionMatrix * modelViewPosition;
-                }`;
-                
-                fragmentShader = `
-                varying vec2 vUv;
-                
-                // Lumières et ombres
-                uniform vec3 sunDirection;
-                uniform vec3 sunColor;
-                uniform vec3 ambientLight;
-                uniform vec3 grassColor;
-                uniform float receiveShadow;
-                
-                void main() {
-                  // Couleur de base de l'herbe
-                  vec3 baseColor = grassColor;
-                  
-                  // Nuances plus sombres à la base de l'herbe, plus claires aux extrémités
-                  float clarity = (vUv.y * 0.5) + 0.5;
-                  
-                  // Calcul simple d'éclairage
-                  vec3 normal = vec3(0.0, 1.0, 0.0); // Normale simplifiée pointant vers le haut
-                  float lightIntensity = max(0.0, dot(normal, normalize(sunDirection)));
-                  
-                  // Mélanger la lumière ambiante et directionnelle
-                  vec3 lighting = ambientLight + (sunColor * lightIntensity * receiveShadow);
-                  
-                  // Couleur finale
-                  vec3 finalColor = baseColor * clarity * lighting;
-                  
-                  // Ajout d'une légère variation aléatoire basée sur la position UV pour éviter l'uniformité
-                  float randomVariation = fract(sin(vUv.x * 100.0) * 10000.0) * 0.05 + 0.95;
-                  finalColor *= randomVariation;
-                  
-                  gl_FragColor = vec4(finalColor, 1.0);
-                }`;
-            }
-            
-            // Créer les uniformes pour le shader
-            this.uniforms = {
-                time: { value: 0 },
-                windStrength: { value: this.windStrength },
-                sunDirection: { value: new THREE.Vector3(0.5, 1, 0.3).normalize() },
-                sunColor: { value: new THREE.Color(1, 1, 0.9) },
-                ambientLight: { value: new THREE.Color(0.3, 0.3, 0.3) },
-                grassColor: { value: this.grassColor },
-                receiveShadow: { value: 1.0 }
-            };
-            
-            // Créer le matériau avec les shaders
-            this.leavesMaterial = new THREE.ShaderMaterial({
-                vertexShader,
-                fragmentShader,
-                uniforms: this.uniforms,
-                side: THREE.DoubleSide
+            // Créer un matériau MeshPhongMaterial standard qui supporte les ombres
+            this.leavesMaterial = new THREE.MeshPhongMaterial({
+                color: this.grassColor,
+                side: THREE.DoubleSide,
+                map: grassTexture,
+                transparent: true,
+                // Les propriétés importantes pour les ombres
+                shadowSide: THREE.DoubleSide,
+                receiveShadow: true
             });
             
-            console.log("Shaders d'herbe initialisés avec succès");
+            // Ajouter des uniformes personnalisés au shader standard de Three.js
+            this.leavesMaterial.onBeforeCompile = (shader) => {
+                // Ajouter nos uniformes personnalisés
+                shader.uniforms.time = { value: 0 };
+                shader.uniforms.windStrength = { value: this.windStrength };
+                
+                // Stocker une référence au shader pour la mise à jour
+                this.materialShader = shader;
+                
+                // 1. D'abord déclarer les uniformes dans le vertex shader
+                shader.vertexShader = shader.vertexShader.replace(
+                    'void main() {',
+                    `
+                    uniform float time;
+                    uniform float windStrength;
+                    varying vec2 vUv;
+                    
+                    void main() {
+                        vUv = uv;
+                    `
+                );
+                
+                // 2. Ensuite ajouter le code d'animation
+                shader.vertexShader = shader.vertexShader.replace(
+                    '#include <begin_vertex>',
+                    `
+                    #include <begin_vertex>
+                    
+                    // DISPLACEMENT pour l'herbe
+                    float dispPower = 1.0 - cos(uv.y * 3.1416 / 2.0);
+                    float displacement = sin(position.z + time * 5.0) * (0.1 * dispPower * windStrength);
+                    transformed.x += displacement;
+                    
+                    // Légère variation sur l'axe z pour plus de naturalité
+                    float displacementZ = cos(position.x + time * 7.0) * (0.05 * dispPower * windStrength);
+                    transformed.z += displacementZ;
+                    `
+                );
+                
+                // 3. Déclarer la varying dans le fragment shader
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    'void main() {',
+                    `
+                    varying vec2 vUv;
+                    
+                    void main() {
+                    `
+                );
+                
+                // 4. Améliorer le calcul de la couleur
+                shader.fragmentShader = shader.fragmentShader.replace(
+                    '#include <color_fragment>',
+                    `
+                    #include <color_fragment>
+                    
+                    // Nuances plus sombres à la base de l'herbe, plus claires aux extrémités
+                    float clarity = (vUv.y * 0.5) + 0.5;
+                    diffuseColor.rgb *= clarity;
+                    
+                    // Ajout d'une légère variation aléatoire
+                    float randomVariation = fract(sin(vUv.x * 100.0) * 10000.0) * 0.05 + 0.95;
+                    diffuseColor.rgb *= randomVariation;
+                    `
+                );
+            };
+            
+            console.log("Matériau d'herbe initialisé avec succès en mode compatible ombres");
         } catch (error) {
-            console.error("Erreur lors de l'initialisation des shaders d'herbe:", error);
+            console.error("Erreur lors de l'initialisation du matériau d'herbe:", error);
         }
+    }
+    
+    /**
+     * Crée une texture procédurale pour l'herbe
+     * @returns {THREE.Texture} La texture générée
+     * @private
+     */
+    _createGrassTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        
+        // Fond transparent
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Dessiner un brin d'herbe avec un dégradé
+        const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+        gradient.addColorStop(0, 'rgba(72, 94, 60, 1)'); // Couleur de base à la racine
+        gradient.addColorStop(0.7, 'rgba(82, 104, 65, 1)'); // Légèrement plus clair
+        gradient.addColorStop(1, 'rgba(97, 117, 75, 0.8)'); // Plus clair aux pointes avec transparence
+        
+        // Forme du brin avec un léger flou aux bords
+        ctx.fillStyle = gradient;
+        
+        // Dessiner la forme de base (triangle arrondi)
+        ctx.beginPath();
+        ctx.moveTo(canvas.width * 0.5, canvas.height); // Base au milieu
+        ctx.bezierCurveTo(
+            canvas.width * 0.1, canvas.height * 0.7, // Point de contrôle
+            canvas.width * 0.1, canvas.height * 0.3, // Point de contrôle
+            canvas.width * 0.5, 0                    // Sommet du brin
+        );
+        ctx.bezierCurveTo(
+            canvas.width * 0.9, canvas.height * 0.3, // Point de contrôle
+            canvas.width * 0.9, canvas.height * 0.7, // Point de contrôle
+            canvas.width * 0.5, canvas.height        // Retour à la base
+        );
+        ctx.fill();
+        
+        // Créer la texture Three.js à partir du canvas
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.magFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearFilter;
+        
+        return texture;
     }
     
     createGrassInstances(plot) {
@@ -195,189 +229,11 @@ export default class ShaderGrassInstancer {
     }
     
     update() {
-        // Mettre à jour l'uniform de temps pour l'animation
-        if (this.leavesMaterial && this.leavesMaterial.uniforms) {
-            this.leavesMaterial.uniforms.time.value = this.clock.getElapsedTime();
-            
-            // Récupérer directement la lumière directionnelle principale (soleil) et la lumière ambiante
-            const directionalLight = this._getMainDirectionalLight();
-            const ambientLight = this._getAmbientLight();
-            
-            // DEBUG: afficher des infos sur les lumières récupérées (à enlever après débogage)
-            if (!this._debugLogShown) {
-                if (directionalLight) {
-                    console.log("ShaderGrassInstancer: Lumière directionnelle trouvée:", 
-                        directionalLight.name, 
-                        "position:", directionalLight.position.toArray().map(v => v.toFixed(2)),
-                        "couleur:", directionalLight.color.getHexString(),
-                        "intensité:", directionalLight.intensity
-                    );
-                } else {
-                    console.warn("ShaderGrassInstancer: Aucune lumière directionnelle trouvée!");
-                }
-                
-                if (ambientLight) {
-                    console.log("ShaderGrassInstancer: Lumière ambiante trouvée:",
-                        ambientLight.name,
-                        "couleur:", ambientLight.color.getHexString(),
-                        "intensité:", ambientLight.intensity
-                    );
-                } else {
-                    console.warn("ShaderGrassInstancer: Aucune lumière ambiante trouvée!");
-                }
-                
-                this._debugLogShown = true; // N'afficher qu'une fois pour éviter de spammer la console
-            }
-            
-            if (directionalLight) {
-                // Synchroniser avec la position du soleil/lune réelle
-                const sunDirection = new THREE.Vector3();
-                directionalLight.getWorldDirection(sunDirection).multiplyScalar(-1); // Inverser car la direction de la lumière est OPPOSÉe à sa position
-                this.leavesMaterial.uniforms.sunDirection.value.copy(sunDirection);
-                
-                // Synchroniser avec la couleur et l'intensité exactes de la lumière directionnelle
-                const sunColorWithIntensity = new THREE.Color()
-                    .copy(directionalLight.color)
-                    .multiplyScalar(directionalLight.intensity);
-                
-                this.leavesMaterial.uniforms.sunColor.value.copy(sunColorWithIntensity);
-                
-                // Calculer l'intensité des ombres proportionnellement à l'intensité de la lumière directionnelle
-                const shadowIntensity = Math.max(0.1, Math.min(1.0, directionalLight.intensity));
-                this.leavesMaterial.uniforms.receiveShadow.value = shadowIntensity;
-            }
-            
-            if (ambientLight) {
-                // Synchroniser avec la couleur et l'intensité exactes de la lumière ambiante
-                const ambientColorWithIntensity = new THREE.Color()
-                    .copy(ambientLight.color)
-                    .multiplyScalar(ambientLight.intensity);
-                
-                this.leavesMaterial.uniforms.ambientLight.value.copy(ambientColorWithIntensity);
-            }
+        // Mettre à jour l'uniform de temps pour l'animation si le shader est compilé
+        if (this.materialShader) {
+            this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
+            this.materialShader.uniforms.windStrength.value = this.windStrength;
         }
-    }
-    
-    /**
-     * Récupère la lumière directionnelle principale (soleil/lune) de la scène
-     * @returns {THREE.DirectionalLight|null} La lumière directionnelle ou null si non trouvée
-     * @private
-     */
-    _getMainDirectionalLight() {
-        // Méthode 1: Utiliser la référence directe si disponible dans environment
-        if (this.experience?.world?.environment) {
-            // Essayer toutes les méthodes possibles
-            const sunLight = this.experience.world.environment.getSunLight?.();
-            if (sunLight) return sunLight;
-            
-            // Recherche par attributs directs
-            if (this.experience.world.environment.sunLight) return this.experience.world.environment.sunLight;
-            if (this.experience.world.environment.directionalLight) return this.experience.world.environment.directionalLight;
-            if (this.experience.world.environment.moonLight) return this.experience.world.environment.moonLight;
-            
-            // Rechercher dans dayNightCycle s'il existe
-            if (this.experience.world.environment.dayNightCycle) {
-                if (typeof this.experience.world.environment.dayNightCycle.getSunLight === 'function') {
-                    const dnCycleSunLight = this.experience.world.environment.dayNightCycle.getSunLight();
-                    if (dnCycleSunLight) return dnCycleSunLight;
-                }
-                
-                // Accès direct aux propriétés
-                if (this.experience.world.environment.dayNightCycle.sunLight) {
-                    return this.experience.world.environment.dayNightCycle.sunLight;
-                }
-                if (this.experience.world.environment.dayNightCycle.moonLight) {
-                    return this.experience.world.environment.dayNightCycle.moonLight;
-                }
-                if (this.experience.world.environment.dayNightCycle.directionalLight) {
-                    return this.experience.world.environment.dayNightCycle.directionalLight;
-                }
-            }
-        }
-        
-        // Méthode 2: Chercher dans la scène entière
-        if (this.experience?.scene) {
-            let mainLight = null;
-            let bestMatch = null;
-            
-            this.experience.scene.traverse((object) => {
-                // Chercher une lumière directionnelle
-                if (object.type === 'DirectionalLight') {
-                    // Sauvegarder la première lumière trouvée comme fallback
-                    if (!mainLight) mainLight = object;
-                    
-                    // Priorité aux lumières avec un nom significatif
-                    const lowerName = object.name.toLowerCase();
-                    if (lowerName.includes('sun') || lowerName.includes('directional')) {
-                        bestMatch = object;
-                    } else if (lowerName.includes('moon') && !bestMatch) {
-                        bestMatch = object; // Priorité moindre pour la lune
-                    }
-                }
-            });
-            
-            // Retourner la meilleure correspondance ou la première lumière trouvée
-            return bestMatch || mainLight;
-        }
-        
-        // Méthode 3: Créer une lumière par défaut si rien n'est trouvé
-        console.warn("ShaderGrassInstancer: Aucune lumière directionnelle trouvée dans la scène, création d'une lumière par défaut");
-        const defaultLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        defaultLight.position.set(0.5, 1, 0.5).normalize();
-        defaultLight.name = "DefaultDirectionalLight";
-        this.scene.add(defaultLight);
-        return defaultLight;
-    }
-    
-    /**
-     * Récupère la lumière ambiante de la scène
-     * @returns {THREE.AmbientLight|null} La lumière ambiante ou null si non trouvée
-     * @private
-     */
-    _getAmbientLight() {
-        // Méthode 1: Utiliser la référence directe si disponible dans environment
-        if (this.experience?.world?.environment) {
-            // Essayer toutes les méthodes possibles
-            const ambientLight = this.experience.world.environment.getAmbientLight?.();
-            if (ambientLight) return ambientLight;
-            
-            // Recherche par attributs directs
-            if (this.experience.world.environment.ambientLight) return this.experience.world.environment.ambientLight;
-            
-            // Rechercher dans dayNightCycle s'il existe
-            if (this.experience.world.environment.dayNightCycle) {
-                if (typeof this.experience.world.environment.dayNightCycle.getAmbientLight === 'function') {
-                    const dnCycleAmbLight = this.experience.world.environment.dayNightCycle.getAmbientLight();
-                    if (dnCycleAmbLight) return dnCycleAmbLight;
-                }
-                
-                // Accès direct aux propriétés
-                if (this.experience.world.environment.dayNightCycle.ambientLight) {
-                    return this.experience.world.environment.dayNightCycle.ambientLight;
-                }
-            }
-        }
-        
-        // Méthode 2: Chercher dans la scène entière
-        if (this.experience?.scene) {
-            let ambientLight = null;
-            
-            this.experience.scene.traverse((object) => {
-                if (object.type === 'AmbientLight') {
-                    ambientLight = object;
-                    return; // Sortir au premier AmbientLight trouvé
-                }
-            });
-            
-            if (ambientLight) return ambientLight;
-        }
-        
-        // Méthode 3: Créer une lumière par défaut si rien n'est trouvé
-        console.warn("ShaderGrassInstancer: Aucune lumière ambiante trouvée dans la scène, création d'une lumière par défaut");
-        const defaultAmbient = new THREE.AmbientLight(0x303030, 0.3);
-        defaultAmbient.name = "DefaultAmbientLight";
-        this.scene.add(defaultAmbient);
-        return defaultAmbient;
     }
     
     reset() {
@@ -398,15 +254,9 @@ export default class ShaderGrassInstancer {
     // Fonction pour ajuster le paramètre de force du vent
     setWindStrength(strength) {
         this.windStrength = strength;
-        if (this.leavesMaterial && this.leavesMaterial.uniforms) {
-            this.leavesMaterial.uniforms.windStrength.value = strength;
-        }
+        // Sera mis à jour dans la méthode update
     }
     
-    /**
-     * Définit la caméra pour l'instance
-     * @param {THREE.Camera} camera - La caméra à utiliser
-     */
     setCamera(camera) {
         this.camera = camera;
     }

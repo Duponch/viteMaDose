@@ -1,9 +1,11 @@
 varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
+varying vec4 vWorldPosition_forShadows;
 
 uniform float time;
 uniform float windStrength;
+uniform mat4 shadowMatrix;
 
 // Activation des lumières
 #define USE_LIGHTS
@@ -34,6 +36,9 @@ void main() {
   // Position dans l'espace monde pour les calculs d'éclairage
   vec4 worldPosition = modelMatrix * mvPosition;
   vWorldPosition = worldPosition.xyz;
+  
+  // Coordonnées pour les shadow maps
+  vWorldPosition_forShadows = shadowMatrix * worldPosition;
   
   // Position finale
   vec4 modelViewPosition = modelViewMatrix * mvPosition;
