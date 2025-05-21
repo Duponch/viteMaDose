@@ -22,6 +22,11 @@ export default class ShaderGrassInstancer {
         // Nouveau: Force de l'inclinaison statique des brins d'herbe
         this.bendStrength = 0.0; // 0 = vertical, 1.5 = presque horizontal
         
+        // Nouveau: Force d'inclinaison globale (rotation des brins sans courbure)
+        this.inclinationStrength = 0.0; // 0 = vertical, 1.0 = complètement incliné (90 degrés)
+        // Direction d'inclinaison (par défaut même direction que le vent)
+        this.inclinationDirection = new THREE.Vector2(1.0, 0.0).normalize();
+        
         // Pour la réception des ombres
         this.shadowDensity = config.grassShadowDensity || 0.6;
         
@@ -84,7 +89,9 @@ export default class ShaderGrassInstancer {
                 shader.uniforms.time = { value: 0 };
                 shader.uniforms.windStrength = { value: this.windStrength };
                 shader.uniforms.windDirection = { value: this.windDirection };
-                shader.uniforms.bendStrength = { value: this.bendStrength }; // Nouvel uniform pour l'inclinaison statique
+                shader.uniforms.bendStrength = { value: this.bendStrength }; // Uniform pour les plis
+                shader.uniforms.inclinationStrength = { value: this.inclinationStrength }; // Nouvel uniform pour l'inclinaison
+                shader.uniforms.inclinationDirection = { value: this.inclinationDirection }; // Direction d'inclinaison
                 
                 // Stocker une référence au shader pour la mise à jour
                 this.materialShader = shader;
@@ -96,7 +103,9 @@ export default class ShaderGrassInstancer {
                     uniform float time;
                     uniform float windStrength;
                     uniform vec2 windDirection;
-                    uniform float bendStrength; // Nouvel uniform pour l'inclinaison statique
+                    uniform float bendStrength; // Uniform pour les plis
+                    uniform float inclinationStrength; // Nouvel uniform pour l'inclinaison
+                    uniform vec2 inclinationDirection; // Direction de l'inclinaison
                     varying vec2 vUv;
                     
                     // Fonction pour créer un bruit de vent plus naturel
@@ -148,16 +157,58 @@ export default class ShaderGrassInstancer {
                     float angleVariation = windNoiseValue * 0.2; // Petite variation pour le tremblement
                     float inclinationAngle = baseAngle + (angleVariation * windStrength);
                     
-                    // Calculer l'inclinaison statique (plis)
-                    // Utiliser une direction fixe (vers la droite dans l'espace mondial)
-                    vec3 bendDir = vec3(1.0, 0.0, 0.0);
-                    
-                    // Calcul de l'inclinaison sans perte de longueur
-                    // Nous appliquons une rotation autour de l'axe perpendiculaire à la direction du vent
-                    // L'angle de rotation est proportionnel à la hauteur et à la force du vent
-                    
                     if (effectIntensity > 0.0) {
-                        // Appliquer d'abord l'inclinaison statique (bendStrength)
+                        // 1. Appliquer d'abord l'inclinaison globale simple (rotation entière du brin sans courbure)
+                        if (inclinationStrength > 0.0) {
+                            // Utiliser la direction d'inclinaison spécifiée
+                            vec2 normalizedInclinationDir = normalize(inclinationDirection);
+                            vec3 worldInclinationDir = vec3(normalizedInclinationDir.x, 0.0, normalizedInclinationDir.y);
+                            
+                            // Calculer l'angle d'inclinaison (0 à 90 degrés)
+                            float maxAngle = 1.5707; // 90 degrés en radians
+                            float inclinationAngle = inclinationStrength * maxAngle;
+                            
+                            // Appliquer la rotation entière du brin
+                            if (heightFactor > 0.0) {
+                                // Hauteur initiale du point (avant inclinaison)
+                                float originalHeight = transformed.y;
+                                
+                                // La longueur du brin d'herbe depuis sa base jusqu'à ce point
+                                float distanceFromBase = heightFactor * 1.5; // 1.5 est la hauteur maximale du brin
+                                
+                                // Calcul du déplacement horizontal (plus le brin s'incline, plus le déplacement est important)
+                                float horizontalDisplacement = sin(inclinationAngle) * distanceFromBase;
+                                
+                                // Nouvelle hauteur après inclinaison (préserve la longueur du brin)
+                                float newHeight = cos(inclinationAngle) * distanceFromBase;
+                                
+                                // Déterminer la position de la base du brin
+                                vec3 basePosition = vec3(
+                                    #ifdef USE_INSTANCING
+                                    instanceMatrix[3][0], 
+                                    instanceMatrix[3][1], 
+                                    instanceMatrix[3][2]
+                                    #else
+                                    0.0, 0.0, 0.0
+                                    #endif
+                                );
+                                
+                                // Hauteur de la base
+                                float baseHeight = transformed.y - originalHeight;
+                                
+                                if (heightFactor > 0.01) {
+                                    // Déplacement horizontal dans la direction d'inclinaison
+                                    transformed.x += normalizedInclinationDir.x * horizontalDisplacement;
+                                    transformed.z += normalizedInclinationDir.y * horizontalDisplacement;
+                                    
+                                    // Ajuster la hauteur (Y) en préservant la longueur du brin
+                                    // et en empêchant qu'il descende sous le niveau du sol
+                                    transformed.y = max(baseHeight, baseHeight + newHeight);
+                                }
+                            }
+                        }
+                        
+                        // 2. Appliquer ensuite l'inclinaison statique (bendStrength) - effet de pli/courbure
                         if (bendStrength > 0.0) {
                             // Direction fixe pour l'inclinaison (vers X+)
                             vec3 bendRotationAxis = vec3(0.0, 0.0, 1.0); // Axe Z pour pivoter autour
@@ -183,7 +234,7 @@ export default class ShaderGrassInstancer {
                             }
                         }
                         
-                        // Ensuite appliquer l'effet de vent dynamique
+                        // 3. Enfin appliquer l'effet de vent dynamique
                         if (windStrength > 0.0) {
                             // Normaliser la direction du vent
                             vec2 normalizedWindDir = normalize(windDirection);
@@ -437,6 +488,8 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             this.materialShader.uniforms.windStrength.value = this.windStrength;
             this.materialShader.uniforms.windDirection.value = this.windDirection;
             this.materialShader.uniforms.bendStrength.value = this.bendStrength; // Mise à jour du nouvel uniform
+            this.materialShader.uniforms.inclinationStrength.value = this.inclinationStrength; // Mise à jour de l'inclinaison
+            this.materialShader.uniforms.inclinationDirection.value = this.inclinationDirection; // Mise à jour de la direction d'inclinaison
         }
         
         // Mise à jour du frustum culling
@@ -647,5 +700,23 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
     setGrassBendStrength(strength) {
         this.bendStrength = strength;
         // La mise à jour de l'uniform se fera dans la méthode update()
+    }
+    
+    // Ajouter une nouvelle méthode pour définir l'inclinaison de l'herbe
+    setGrassInclinationStrength(strength) {
+        this.inclinationStrength = strength;
+        // La mise à jour de l'uniform se fera dans la méthode update()
+    }
+    
+    // Ajouter une méthode pour définir la direction de l'inclinaison
+    setGrassInclinationDirection(direction) {
+        if (direction instanceof THREE.Vector2) {
+            this.inclinationDirection.copy(direction).normalize();
+        } else if (Array.isArray(direction) && direction.length >= 2) {
+            this.inclinationDirection.set(direction[0], direction[1]).normalize();
+        } else if (typeof direction === 'number') {
+            // Si on passe un angle en radians
+            this.inclinationDirection.set(Math.cos(direction), Math.sin(direction));
+        }
     }
 } 

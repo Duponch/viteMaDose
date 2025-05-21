@@ -36,7 +36,8 @@ export default class WeatherControlUI {
                     cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
                     fogDensity: 0.03,     // Valeur par défaut du brouillard
                     windStrength: 0,      // Valeur par défaut du vent (0-100)
-                    grassBendStrength: 0, // Valeur par défaut de l'inclinaison (0-100)
+                    grassBendStrength: 0, // Valeur par défaut des plis (0-100)
+                    grassInclinationStrength: 0, // Valeur par défaut de l'inclinaison (0-100)
                     lightningIntensity: 0, // Pas d'éclairs par défaut
                     rainbowOpacity: 0      // Pas d'arc-en-ciel par défaut
                 };
@@ -74,7 +75,8 @@ export default class WeatherControlUI {
         this.createSlider('Opacité des nuages', 'cloud-opacity', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudOpacity);
         this.createSlider('Brouillard', 'fog', 0, 1, 0.01, this.weatherSystem.fogEffect.fogDensity);
         this.createSlider('Vent', 'wind', 0, 100, 1, 0); // Nouveau curseur pour le vent (0-100)
-        this.createSlider('Plis de l\'herbe', 'grass-bend', 0, 100, 1, 0); // Nouveau curseur pour l'inclinaison de l'herbe
+        this.createSlider('Plis de l\'herbe', 'grass-bend', 0, 100, 1, 0); // Curseur pour les plis de l'herbe
+        this.createSlider('Inclinaison de l\'herbe', 'grass-inclination', 0, 100, 1, 0); // Nouveau curseur pour l'inclinaison de l'herbe
         this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
         this.createSlider('Arc-en-ciel', 'rainbow', 0, 1, 0.01, this.weatherSystem.rainbowEffect.opacity);
         
@@ -99,6 +101,7 @@ export default class WeatherControlUI {
             fog: this.container.querySelector('#slider-fog'),
             wind: this.container.querySelector('#slider-wind'),
             grassBend: this.container.querySelector('#slider-grass-bend'),
+            grassInclination: this.container.querySelector('#slider-grass-inclination'),
             lightning: this.container.querySelector('#slider-lightning'),
             rainbow: this.container.querySelector('#slider-rainbow')
         };
@@ -111,6 +114,7 @@ export default class WeatherControlUI {
             fog: this.container.querySelector('#value-fog'),
             wind: this.container.querySelector('#value-wind'),
             grassBend: this.container.querySelector('#value-grass-bend'),
+            grassInclination: this.container.querySelector('#value-grass-inclination'),
             lightning: this.container.querySelector('#value-lightning'),
             rainbow: this.container.querySelector('#value-rainbow')
         };
@@ -218,11 +222,20 @@ export default class WeatherControlUI {
                 break;
                 
             case 'grass-bend':
-                // Mettre à jour l'inclinaison de l'herbe
+                // Mettre à jour les plis de l'herbe
                 if (this.experience.world) {
-                    // Conversion de 0-100 à 0-1.5 pour l'inclinaison (1.5 étant presque horizontale)
+                    // Conversion de 0-100 à 0-1.5 pour les plis (1.5 étant presque horizontale)
                     const bendStrength = (value / 100) * 1.5;
                     this.experience.world.setGrassBendStrength(bendStrength);
+                }
+                break;
+                
+            case 'grass-inclination':
+                // Mettre à jour l'inclinaison de l'herbe (rotation sans courbure)
+                if (this.experience.world) {
+                    // Conversion de 0-100 à 0-1.0 pour l'inclinaison (1.0 = inclinaison à 90 degrés)
+                    const inclinationStrength = (value / 100);
+                    this.experience.world.setGrassInclinationStrength(inclinationStrength);
                 }
                 break;
                 
@@ -248,78 +261,81 @@ export default class WeatherControlUI {
                 case 'rainIntensity':
                     this.sliders.rain.value = value;
                     this.valueDisplays.rain.textContent = value.toFixed(2);
+                    this.sliders.rain.style.setProperty('--value', `${value * 100}%`);
                     this.weatherSystem.rainEffect.intensity = value;
-                    this.sliders.rain.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'cloudDensity':
                     this.sliders.cloudDensity.value = value;
                     this.valueDisplays.cloudDensity.textContent = value.toFixed(2);
+                    this.sliders.cloudDensity.style.setProperty('--value', `${value * 100}%`);
                     this.weatherSystem.cloudSystem.cloudDensity = value;
-                    this.sliders.cloudDensity.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'cloudColor':
                     this.sliders.cloudColor.value = value;
                     this.valueDisplays.cloudColor.textContent = value.toFixed(2);
-                    // Interpoler entre blanc (0xffffff) et noir (0x000000)
-                    const r = 1 - value;  // Blanc (1) vers noir (0)
+                    this.sliders.cloudColor.style.setProperty('--value', `${value * 100}%`);
+                    const r = 1 - value;
                     const g = 1 - value;
                     const b = 1 - value;
                     const color = new THREE.Color(r, g, b);
-                    //console.log(`Réinitialisation de la couleur des nuages: ${r}, ${g}, ${b}`);
                     this.weatherSystem.cloudSystem.cloudColor = color;
-                    this.sliders.cloudColor.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'cloudOpacity':
                     this.sliders.cloudOpacity.value = value;
                     this.valueDisplays.cloudOpacity.textContent = value.toFixed(2);
+                    this.sliders.cloudOpacity.style.setProperty('--value', `${value * 100}%`);
                     this.weatherSystem.cloudSystem.cloudOpacity = value;
-                    this.sliders.cloudOpacity.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'fogDensity':
                     this.sliders.fog.value = value;
                     this.valueDisplays.fog.textContent = value.toFixed(2);
+                    this.sliders.fog.style.setProperty('--value', `${value * 100}%`);
                     this.weatherSystem.fogEffect.fogDensity = value;
-                    this.sliders.fog.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'windStrength':
                     this.sliders.wind.value = value;
-                    this.valueDisplays.wind.textContent = value.toFixed(0);
-                    if (this.experience.world) {
-                        // Conversion de 0-100 à 0-5 pour le windStrength
-                        const windStrength = (value / 100) * 5;
-                        this.experience.world.setWindStrength(windStrength);
-                    }
-                    this.sliders.wind.style.setProperty('--value', `${(value - 0) / (100 - 0) * 100}%`);
+                    this.valueDisplays.wind.textContent = value.toFixed(2);
+                    this.sliders.wind.style.setProperty('--value', `${value}%`);
+                    // Conversion de 0-100 à 0-5 pour le windStrength
+                    const windStrength = (value / 100) * 5;
+                    this.experience.world.setWindStrength(windStrength);
                     break;
                     
                 case 'grassBendStrength':
                     this.sliders.grassBend.value = value;
-                    this.valueDisplays.grassBend.textContent = value.toFixed(0);
-                    if (this.experience.world) {
-                        // Conversion de 0-100 à 0-1.5 pour l'inclinaison
-                        const bendStrength = (value / 100) * 1.5;
-                        this.experience.world.setGrassBendStrength(bendStrength);
-                    }
-                    this.sliders.grassBend.style.setProperty('--value', `${(value - 0) / (100 - 0) * 100}%`);
+                    this.valueDisplays.grassBend.textContent = value.toFixed(2);
+                    this.sliders.grassBend.style.setProperty('--value', `${value}%`);
+                    // Conversion de 0-100 à 0-1.5 pour l'inclinaison
+                    const bendStrength = (value / 100) * 1.5;
+                    this.experience.world.setGrassBendStrength(bendStrength);
+                    break;
+                    
+                case 'grassInclinationStrength':
+                    this.sliders.grassInclination.value = value;
+                    this.valueDisplays.grassInclination.textContent = value.toFixed(2);
+                    this.sliders.grassInclination.style.setProperty('--value', `${value}%`);
+                    // Conversion de 0-100 à 0-1.0 pour l'inclinaison
+                    const inclinationStrength = (value / 100);
+                    this.experience.world.setGrassInclinationStrength(inclinationStrength);
                     break;
                     
                 case 'lightningIntensity':
                     this.sliders.lightning.value = value;
                     this.valueDisplays.lightning.textContent = value.toFixed(2);
+                    this.sliders.lightning.style.setProperty('--value', `${value * 100}%`);
                     this.weatherSystem.lightningEffect.intensity = value;
-                    this.sliders.lightning.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
                     
                 case 'rainbowOpacity':
                     this.sliders.rainbow.value = value;
                     this.valueDisplays.rainbow.textContent = value.toFixed(2);
+                    this.sliders.rainbow.style.setProperty('--value', `${value * 100}%`);
                     this.weatherSystem.rainbowEffect.setOpacity(value);
-                    this.sliders.rainbow.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
                     break;
             }
         }

@@ -808,4 +808,42 @@ export default class World {
             this.environment.shaderGrassSystem.setGrassBendStrength(strength);
         }
     }
+    
+    /**
+     * Définit la force d'inclinaison globale de l'herbe (rotation sans courbure)
+     * @param {number} strength - Force d'inclinaison globale (0-1)
+     */
+    setGrassInclinationStrength(strength) {
+        // Utiliser le contentGenerator qui contient le grassInstancer
+        if (this.cityManager && this.cityManager.contentGenerator) {
+            this.cityManager.contentGenerator.setGrassInclinationStrength(strength);
+        }
+        
+        // Pour compatibilité, essayer aussi les références directes via environment
+        if (this.environment && this.environment.grassSystem) {
+            this.environment.grassSystem.setGrassInclinationStrength(strength);
+        }
+        if (this.environment && this.environment.shaderGrassSystem) {
+            this.environment.shaderGrassSystem.setGrassInclinationStrength(strength);
+        }
+    }
+    
+    /**
+     * Définit la direction de l'inclinaison globale de l'herbe
+     * @param {THREE.Vector2|Array|number} direction - Direction d'inclinaison (Vector2, tableau [x,y] ou angle en radians)
+     */
+    setGrassInclinationDirection(direction) {
+        // Utiliser le contentGenerator qui contient le grassInstancer
+        if (this.cityManager && this.cityManager.contentGenerator) {
+            this.cityManager.contentGenerator.setGrassInclinationDirection(direction);
+        }
+        
+        // Pour compatibilité, essayer aussi les références directes via environment
+        if (this.environment && this.environment.shaderGrassSystem) {
+            this.environment.shaderGrassSystem.setGrassInclinationDirection(direction);
+        }
+        if (this.environment && this.environment.grassSystem) {
+            this.environment.grassSystem.setGrassInclinationDirection(direction);
+        }
+    }
 }

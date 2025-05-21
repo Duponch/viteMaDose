@@ -429,6 +429,26 @@ export default class PlotContentGenerator {
             this.grassInstancer.setGrassBendStrength(strength);
         }
     }
+    
+    /**
+     * Définit la force d'inclinaison globale de l'herbe (rotation sans courbure)
+     * @param {number} strength - Force d'inclinaison globale (0-1.0)
+     */
+    setGrassInclinationStrength(strength) {
+        if (this.grassInstancer) {
+            this.grassInstancer.setGrassInclinationStrength(strength);
+        }
+    }
+    
+    /**
+     * Définit la direction de l'inclinaison globale de l'herbe
+     * @param {THREE.Vector2|Array|number} direction - Direction d'inclinaison (Vector2, tableau [x,y] ou angle en radians)
+     */
+    setGrassInclinationDirection(direction) {
+        if (this.grassInstancer) {
+            this.grassInstancer.setGrassInclinationDirection(direction);
+        }
+    }
 
     // --- Les anciennes méthodes spécifiques (generatePlotPrimaryContent, placeTreesForPlot, etc.) sont supprimées ---
 }

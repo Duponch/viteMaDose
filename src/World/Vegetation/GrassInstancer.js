@@ -117,6 +117,10 @@ export default class GrassInstancer {
 
         // Nouveau: Paramètre d'inclinaison statique de l'herbe
         this.bendStrength = 0.0; // 0 = vertical, 1.5 = presque horizontal
+        
+        // Nouveau: Paramètre d'inclinaison globale de l'herbe (rotation sans courbure)
+        this.inclinationStrength = 0.0; // 0 = vertical, 1.0 = complètement incliné
+        this.inclinationDirection = new THREE.Vector2(1.0, 0.0).normalize(); // Direction de l'inclinaison
     }
 
     setCamera(camera) {
@@ -656,5 +660,25 @@ export default class GrassInstancer {
         // mais n'a pas d'effet ici car cette classe utilise des matrices de transformation
         // et non des shaders pour positionner l'herbe
         console.log("GrassInstancer: setGrassBendStrength appelé, mais n'a pas d'effet dans cette implémentation.");
+    }
+    
+    // Nouvelle méthode pour l'inclinaison globale de l'herbe
+    setGrassInclinationStrength(strength) {
+        this.inclinationStrength = strength;
+        // Cette méthode est ajoutée pour la cohérence avec ShaderGrassInstancer
+        console.log("GrassInstancer: setGrassInclinationStrength appelé, mais n'a pas d'effet dans cette implémentation.");
+    }
+    
+    // Nouvelle méthode pour définir la direction de l'inclinaison
+    setGrassInclinationDirection(direction) {
+        if (direction instanceof THREE.Vector2) {
+            this.inclinationDirection.copy(direction).normalize();
+        } else if (Array.isArray(direction) && direction.length >= 2) {
+            this.inclinationDirection.set(direction[0], direction[1]).normalize();
+        } else if (typeof direction === 'number') {
+            // Si on passe un angle en radians
+            this.inclinationDirection.set(Math.cos(direction), Math.sin(direction));
+        }
+        console.log("GrassInstancer: setGrassInclinationDirection appelé, mais n'a pas d'effet dans cette implémentation.");
     }
 } 

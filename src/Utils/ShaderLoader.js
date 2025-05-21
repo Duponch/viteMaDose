@@ -48,5 +48,35 @@ export default class ShaderLoader {
         }
     }
 
-    
+    /**
+     * Charge un shader et le modifie avec des paramètres personnalisés
+     * @param {string} shaderName - Nom du fichier shader
+     * @param {Object} customParams - Paramètres personnalisés à inclure
+     * @returns {Promise<string>} - Contenu du shader modifié
+     */
+    static async loadShaderWithCustomParams(shaderName, customParams = {}) {
+        // Charger le shader de base
+        let shaderContent = await this.loadShader(shaderName);
+        
+        // Ajouter les uniformes personnalisés si nécessaire
+        if (customParams.uniforms && customParams.uniforms.length > 0) {
+            const uniformsDeclaration = customParams.uniforms
+                .map(uniform => `uniform ${uniform.type} ${uniform.name};${uniform.comment ? ' // ' + uniform.comment : ''}`)
+                .join('\n');
+            
+            // Chercher où insérer les nouveaux uniformes
+            const lastUniformIndex = shaderContent.lastIndexOf('uniform ');
+            const lastUniformEndLine = shaderContent.indexOf('\n', lastUniformIndex);
+            
+            if (lastUniformIndex !== -1 && lastUniformEndLine !== -1) {
+                // Insérer après le dernier uniform existant
+                shaderContent = 
+                    shaderContent.substring(0, lastUniformEndLine + 1) + 
+                    uniformsDeclaration + '\n' + 
+                    shaderContent.substring(lastUniformEndLine + 1);
+            }
+        }
+        
+        return shaderContent;
+    }
 } 

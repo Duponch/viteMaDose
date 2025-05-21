@@ -7,6 +7,8 @@ uniform float time;
 uniform float windStrength;
 uniform mat4 shadowMatrix;
 uniform vec2 windDirection; // Direction du vent normalisée (x, z)
+uniform float inclinationStrength; // Nouvelle uniform pour l'inclinaison globale
+uniform vec2 inclinationDirection; // Direction de l'inclinaison
 
 // Activation des lumières
 #define USE_LIGHTS
@@ -46,6 +48,42 @@ void main() {
   float windTime = time * 1.2; // Vitesse du vent plus lente pour un effet plus constant
   float windNoiseValue = windNoise(windTime + mvPosition.x * 0.1 + mvPosition.z * 0.1);
   
+  // Nouveau: Appliquer l'inclinaison globale (qui couche progressivement l'herbe sur le sol)
+  if (inclinationStrength > 0.0 && heightFactor > 0.0) {
+    // Normaliser la direction d'inclinaison
+    vec2 normalizedInclinationDir = normalize(inclinationDirection);
+    
+    // Hauteur initiale du point (avant inclinaison)
+    float originalHeight = mvPosition.y;
+    
+    // Calculer l'angle d'inclinaison basé sur la force (0 à 90 degrés)
+    // 0 = vertical, 1 = couché sur le sol (90 degrés)
+    float maxAngle = 1.5707; // 90 degrés en radians
+    float inclinationAngle = inclinationStrength * maxAngle;
+    
+    // La longueur du brin d'herbe depuis sa base jusqu'à ce point
+    float distanceFromBase = heightFactor * 1.5; // 1.5 est la hauteur maximale du brin
+    
+    // Calcul du déplacement horizontal (plus le brin s'incline, plus le déplacement est important)
+    float horizontalDisplacement = sin(inclinationAngle) * distanceFromBase;
+    
+    // Nouvelle hauteur après inclinaison (préserve la longueur du brin)
+    float newHeight = cos(inclinationAngle) * distanceFromBase;
+    
+    // Appliquer le déplacement horizontal dans la direction d'inclinaison
+    // et ajuster la hauteur pour ne pas traverser le sol
+    if (heightFactor > 0.01) { // Ne pas modifier la base du brin
+      // Déplacement horizontal dans la direction d'inclinaison
+      mvPosition.x += normalizedInclinationDir.x * horizontalDisplacement;
+      mvPosition.z += normalizedInclinationDir.y * horizontalDisplacement;
+      
+      // Ajuster la hauteur (Y) en préservant la longueur du brin
+      // et en empêchant qu'il descende sous le niveau du sol
+      float baseHeight = mvPosition.y - originalHeight; // Hauteur de la base du brin
+      mvPosition.y = max(baseHeight, baseHeight + newHeight); // Empêche de descendre sous le sol
+    }
+  }
+  
   // 1. Effet d'inclinaison constant (le brin reste incliné)
   vec2 baseTilt = windDirection * 2.0; // Inclinaison de base constante
   vec2 tiltEffect = baseTilt + (windDirection * windNoiseValue * tiltPower * windStrength * 2.0);
@@ -74,6 +112,26 @@ void main() {
   
   // Mélanger la normale verticale avec la normale du vent
   vNormal = mix(vec3(0.0, 1.0, 0.0), windNormal, heightFactor * windStrength * 1.5);
+  
+  // Ajuster la normale en fonction de l'inclinaison globale
+  if (inclinationStrength > 0.0) {
+    vec2 normalizedInclinationDir = normalize(inclinationDirection);
+    
+    // Angle d'inclinaison (0 à 90 degrés)
+    float maxAngle = 1.5707; // 90 degrés en radians
+    float inclinationAngle = inclinationStrength * maxAngle;
+    
+    // Calculer la normale en fonction de l'angle d'inclinaison
+    // Plus l'angle est grand, plus la normale s'incline vers l'horizontale
+    vec3 inclinationNormal = normalize(vec3(
+      normalizedInclinationDir.x * sin(inclinationAngle),
+      cos(inclinationAngle), // Composante verticale diminue avec l'inclinaison
+      normalizedInclinationDir.y * sin(inclinationAngle)
+    ));
+    
+    // Mélanger avec la normale actuelle
+    vNormal = mix(vNormal, inclinationNormal, inclinationStrength);
+  }
   
   // Position dans l'espace monde pour les calculs d'éclairage
   vec4 worldPosition = modelMatrix * mvPosition;
