@@ -44,7 +44,7 @@ export default class ShaderGrassInstancer {
         this.plotData = [];
         
         // Distance maximale de visibilité (en unités)
-        this.maxVisibilityDistance = 300;
+        this.maxVisibilityDistance = 400;
         this.maxVisibilityDistanceSquared = this.maxVisibilityDistance * this.maxVisibilityDistance;
         
         // Paramètres de mise à jour

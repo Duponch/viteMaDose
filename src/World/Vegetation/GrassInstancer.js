@@ -12,13 +12,13 @@ export default class GrassInstancer {
         
         // Paramètres de LOD - Optimisés pour les performances
         this.lodDistances = {
-            high: 20,     // Distance pour la haute densité
-            medium: 100,  // Distance pour la densité moyenne
-            low: 300      // Distance pour la basse densité
+            high: 500,     // Distance pour la haute densité
+            medium: 500,  // Distance pour la densité moyenne
+            low: 500      // Distance pour la basse densité
         };
         
         // Distance maximale de visibilité (en unités)
-        this.maxVisibilityDistance = 300;
+        this.maxVisibilityDistance = 1000;
         
         // Facteur de visibilité pour les parcelles (pour une transition plus douce)
         this.visibilityFactor = config.visibilityFactor || 1.2;
