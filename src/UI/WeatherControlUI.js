@@ -80,6 +80,13 @@ export default class WeatherControlUI {
         this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
         this.createSlider('Arc-en-ciel', 'rainbow', 0, 1, 0.01, this.weatherSystem.rainbowEffect.opacity);
         
+        // S'assurer que l'herbe est bien droite dès l'initialisation en définissant la force du vent à 0
+        if (this.experience.world) {
+            this.experience.world.setWindStrength(0);
+            this.experience.world.setGrassBendStrength(0);
+            this.experience.world.setGrassInclinationStrength(0);
+        }
+        
         // Bouton pour réinitialiser les valeurs par défaut
         const resetButton = document.createElement('button');
         resetButton.textContent = '↻ Défaut';
