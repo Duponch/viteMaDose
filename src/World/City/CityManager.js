@@ -162,7 +162,7 @@ export default class CityManager {
             lampPostLightConeColor: 0xFFFF99,
             // Herbe avec shader
             grassInstanceCount: 50000, // Nombre d'instances d'herbe par parcelle
-            grassWindStrength: 0.8,   // Force du vent dans l'animation de l'herbe
+            grassWindStrength: 8,   // Force du vent dans l'animation de l'herbe
             grassShadowDensity: 0.7   // Densité des ombres sur l'herbe
         };
 

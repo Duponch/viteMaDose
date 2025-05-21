@@ -14,17 +14,18 @@ export default class ShaderGrassInstancer {
         
         // Paramètres de la végétation
         this.grassColor = new THREE.Color(0x485e3c); // Même couleur que dans l'ancien GrassInstancer
+        
+        // Paramètres d'animation simplifiés
+        this.animationEnabled = false; // Animation désactivée par défaut
+        this.animationSpeed = 1.0;    // Vitesse normale de l'animation
+        this.torsionAmplitude = 1.0;  // Amplitude normale de torsion/plis
+        this.inclinationAmplitude = 1.0; // Amplitude normale d'inclinaison
+        
+        // Paramètres hérités (pour compatibilité)
         this.windStrength = config.grassWindStrength || 0.0; // Force du vent initialisée à 0 par défaut
-        
-        // Nouveau: Direction du vent
         this.windDirection = new THREE.Vector2(1.0, 0.0).normalize(); // Vent par défaut vers l'est
-        
-        // Nouveau: Force de l'inclinaison statique des brins d'herbe
         this.bendStrength = 0.0; // 0 = vertical, 1.5 = presque horizontal
-        
-        // Nouveau: Force d'inclinaison globale (rotation des brins sans courbure)
         this.inclinationStrength = 0.0; // 0 = vertical, 1.0 = complètement incliné (90 degrés)
-        // Direction d'inclinaison (par défaut même direction que le vent)
         this.inclinationDirection = new THREE.Vector2(1.0, 0.0).normalize();
         
         // Pour la réception des ombres
@@ -65,6 +66,14 @@ export default class ShaderGrassInstancer {
         this.initShaderMaterial();
     }
     
+    /**
+     * Définit la caméra utilisée pour le frustum culling
+     * @param {THREE.Camera} camera - La caméra
+     */
+    setCamera(camera) {
+        this.camera = camera;
+    }
+    
     async initShaderMaterial() {
         try {
             // Créer le matériau de base qui supporte l'éclairage et les ombres
@@ -87,11 +96,16 @@ export default class ShaderGrassInstancer {
             this.leavesMaterial.onBeforeCompile = (shader) => {
                 // Ajouter nos uniformes personnalisés
                 shader.uniforms.time = { value: 0 };
-                shader.uniforms.windStrength = { value: this.windStrength };
+                
+                // Paramètres d'animation simplifiés
+                shader.uniforms.animationEnabled = { value: this.animationEnabled ? 1.0 : 0.0 };
+                shader.uniforms.animationSpeed = { value: this.animationSpeed };
+                shader.uniforms.torsionAmplitude = { value: this.torsionAmplitude };
+                shader.uniforms.inclinationAmplitude = { value: this.inclinationAmplitude };
+                
+                // Direction du vent et de l'inclinaison
                 shader.uniforms.windDirection = { value: this.windDirection };
-                shader.uniforms.bendStrength = { value: this.bendStrength }; // Uniform pour les plis
-                shader.uniforms.inclinationStrength = { value: this.inclinationStrength }; // Nouvel uniform pour l'inclinaison
-                shader.uniforms.inclinationDirection = { value: this.inclinationDirection }; // Direction d'inclinaison
+                shader.uniforms.inclinationDirection = { value: this.inclinationDirection };
                 
                 // Stocker une référence au shader pour la mise à jour
                 this.materialShader = shader;
@@ -101,28 +115,38 @@ export default class ShaderGrassInstancer {
                     'void main() {',
                     `
                     uniform float time;
-                    uniform float windStrength;
-                    uniform vec2 windDirection;
-                    uniform float bendStrength; // Uniform pour les plis
-                    uniform float inclinationStrength; // Nouvel uniform pour l'inclinaison
-                    uniform vec2 inclinationDirection; // Direction de l'inclinaison
+                    
+                    // Paramètres d'animation simplifiés
+                    uniform float animationEnabled; // 0.0 = désactivé, 1.0 = activé
+                    uniform float animationSpeed;   // Vitesse de l'animation
+                    uniform float torsionAmplitude; // Amplitude de torsion/plis
+                    uniform float inclinationAmplitude; // Amplitude d'inclinaison
+                    
+                    // Directions
+                    uniform vec2 windDirection;    // Direction du vent
+                    uniform vec2 inclinationDirection; // Direction d'inclinaison
+                    
                     varying vec2 vUv;
                     
-                    // Fonction pour créer un bruit de vent plus naturel
-                    float windNoise(float t) {
-                        return sin(t) * 0.5 + sin(t * 2.1) * 0.25 + sin(t * 4.2) * 0.125;
-                    }
-                    
-                    // Fonction pour l'effet d'inclinaison
-                    float tiltCurve(float height) {
-                        // Inclinaison constante et très prononcée
-                        return pow(height, 0.4) * 4.0;
-                    }
-                    
-                    // Fonction pour l'effet de courbure
-                    float bendCurve(float height) {
-                        // Courbure extrême en haut du brin
-                        return pow(height, 1.5) * 6.0;
+                    // Fonction pour créer un mouvement d'herbe réaliste et continu
+                    float grassAnimation(float t, vec3 pos) {
+                        // Variation spatiale - chaque brin bouge différemment
+                        float spatialOffset = pos.x * 0.1 + pos.z * 0.1;
+                        
+                        // Ajuster le temps selon la vitesse d'animation
+                        t = t * animationSpeed;
+                        
+                        // Variations de fréquences pour créer un effet plus naturel
+                        // Ondulation principale
+                        float wave1 = sin(t * 1.0 + spatialOffset) * 0.3;
+                        // Oscillation secondaire plus rapide
+                        float wave2 = sin(t * 2.3 + spatialOffset * 1.5) * 0.15;
+                        // Micro-variations à haute fréquence
+                        float wave3 = sin(t * 4.7 + spatialOffset * 2.0) * 0.05;
+                        // Mouvement très lent pour un effet de "respiration"
+                        float wave4 = sin(t * 0.3 + spatialOffset * 0.7) * 0.1;
+                        
+                        return (wave1 + wave2 + wave3 + wave4);
                     }
                     
                     void main() {
@@ -130,7 +154,7 @@ export default class ShaderGrassInstancer {
                     `
                 );
                 
-                // 2. Ensuite ajouter le code d'animation amélioré avec prise en compte de l'inclinaison statique
+                // 2. Ensuite ajouter le code d'animation simplifié
                 shader.vertexShader = shader.vertexShader.replace(
                     '#include <begin_vertex>',
                     `
@@ -139,138 +163,87 @@ export default class ShaderGrassInstancer {
                     // Calcul des facteurs de hauteur
                     float heightFactor = uv.y; // 0 à la base, 1 au sommet
                     
-                    // Bruit de vent avec plusieurs fréquences pour les tremblements
-                    float windTime = time * 1.2;
-                    
-                    #ifdef USE_INSTANCING
-                    float windNoiseValue = windNoise(windTime + instanceMatrix[3][0] * 0.05 + instanceMatrix[3][2] * 0.05);
-                    #else
-                    float windNoiseValue = windNoise(windTime + position.x * 0.05 + position.z * 0.05);
-                    #endif
-                    
                     // Effet seulement proportionnel à la hauteur (pas d'effet à la base)
-                    // Plus le point est haut sur le brin d'herbe, plus il est affecté
-                    float effectIntensity = heightFactor * heightFactor; // Effet quadratique pour une meilleure courbe
+                    float effectIntensity = heightFactor * heightFactor; // Effet quadratique
                     
-                    // Calcul de l'angle d'inclinaison basé sur la force du vent
-                    float baseAngle = windStrength * 1.5; // Angle de base proportionnel à la force
-                    float angleVariation = windNoiseValue * 0.2; // Petite variation pour le tremblement
-                    float inclinationAngle = baseAngle + (angleVariation * windStrength);
-                    
-                    if (effectIntensity > 0.0) {
-                        // 1. Appliquer d'abord l'inclinaison globale simple (rotation entière du brin sans courbure)
-                        if (inclinationStrength > 0.0) {
-                            // Utiliser la direction d'inclinaison spécifiée
+                    // Si l'animation est activée et qu'on n'est pas à la base du brin
+                    if (animationEnabled > 0.5 && effectIntensity > 0.0) {
+                        // Temps actuel pour l'animation
+                        float currentTime = time;
+                        
+                        // Calculer la valeur d'animation de base
+                        #ifdef USE_INSTANCING
+                        vec3 instPosition = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+                        float animValue = grassAnimation(currentTime, instPosition);
+                        #else
+                        float animValue = grassAnimation(currentTime, position);
+                        #endif
+                        
+                        // Direction du vent (normalisée) - utilisée pour l'inclinaison et la torsion
+                        vec2 normalizedWindDir = normalize(windDirection);
+                        vec3 worldWindDir = vec3(normalizedWindDir.x, 0.0, normalizedWindDir.y);
+                        
+                        // 1. Appliquer l'inclinaison (mouvement d'oscillation)
+                        if (inclinationAmplitude > 0.1 && effectIntensity > 0.0) {
+                            // Direction d'inclinaison (utiliser windDirection par défaut)
                             vec2 normalizedInclinationDir = normalize(inclinationDirection);
-                            vec3 worldInclinationDir = vec3(normalizedInclinationDir.x, 0.0, normalizedInclinationDir.y);
+                            vec3 inclinationDir = vec3(normalizedInclinationDir.x, 0.0, normalizedInclinationDir.y);
                             
-                            // Calculer l'angle d'inclinaison (0 à 90 degrés)
-                            float maxAngle = 1.5707; // 90 degrés en radians
-                            float inclinationAngle = inclinationStrength * maxAngle;
+                            // Axe de rotation perpendiculaire à la direction d'inclinaison
+                            vec3 rotationAxis = vec3(-normalizedInclinationDir.y, 0.0, normalizedInclinationDir.x);
                             
-                            // Appliquer la rotation entière du brin
-                            if (heightFactor > 0.0) {
-                                // Hauteur initiale du point (avant inclinaison)
-                                float originalHeight = transformed.y;
-                                
-                                // La longueur du brin d'herbe depuis sa base jusqu'à ce point
-                                float distanceFromBase = heightFactor * 1.5; // 1.5 est la hauteur maximale du brin
-                                
-                                // Calcul du déplacement horizontal (plus le brin s'incline, plus le déplacement est important)
-                                float horizontalDisplacement = sin(inclinationAngle) * distanceFromBase;
-                                
-                                // Nouvelle hauteur après inclinaison (préserve la longueur du brin)
-                                float newHeight = cos(inclinationAngle) * distanceFromBase;
-                                
-                                // Déterminer la position de la base du brin
-                                vec3 basePosition = vec3(
-                                    #ifdef USE_INSTANCING
-                                    instanceMatrix[3][0], 
-                                    instanceMatrix[3][1], 
-                                    instanceMatrix[3][2]
-                                    #else
-                                    0.0, 0.0, 0.0
-                                    #endif
-                                );
-                                
-                                // Hauteur de la base
-                                float baseHeight = transformed.y - originalHeight;
-                                
-                                if (heightFactor > 0.01) {
-                                    // Déplacement horizontal dans la direction d'inclinaison
-                                    transformed.x += normalizedInclinationDir.x * horizontalDisplacement;
-                                    transformed.z += normalizedInclinationDir.y * horizontalDisplacement;
-                                    
-                                    // Ajuster la hauteur (Y) en préservant la longueur du brin
-                                    // et en empêchant qu'il descende sous le niveau du sol
-                                    transformed.y = max(baseHeight, baseHeight + newHeight);
-                                }
-                            }
-                        }
-                        
-                        // 2. Appliquer ensuite l'inclinaison statique (bendStrength) - effet de pli/courbure
-                        if (bendStrength > 0.0) {
-                            // Direction fixe pour l'inclinaison (vers X+)
-                            vec3 bendRotationAxis = vec3(0.0, 0.0, 1.0); // Axe Z pour pivoter autour
+                            // Angle d'inclinaison basé sur la hauteur et l'animation
+                            float inclinationAngle = animValue * inclinationAmplitude * effectIntensity * 0.3;
                             
-                            // Calculer l'angle basé sur la hauteur et la force de l'inclinaison
-                            float bendAngle = bendStrength * 1.5 * effectIntensity; // 1.5 rad ~ 86 degrés maximum
-                            
-                            // Aucun déplacement à la base (y=0)
+                            // Si on est suffisamment haut sur le brin
                             if (heightFactor > 0.0) {
                                 // Vecteur de déplacement vers le haut (à rotationner)
                                 vec3 upVector = vec3(0.0, heightFactor * 1.5, 0.0);
                                 
-                                // Appliquer la rotation de Rodrigues pour préserver la longueur
-                                float cosA = cos(bendAngle);
-                                float sinA = sin(bendAngle);
+                                // Appliquer la rotation de Rodrigues
+                                float cosA = cos(inclinationAngle);
+                                float sinA = sin(inclinationAngle);
                                 
                                 vec3 rotatedVector = upVector * cosA + 
-                                                  cross(bendRotationAxis, upVector) * sinA + 
-                                                  bendRotationAxis * dot(bendRotationAxis, upVector) * (1.0 - cosA);
+                                                  cross(rotationAxis, upVector) * sinA + 
+                                                  rotationAxis * dot(rotationAxis, upVector) * (1.0 - cosA);
                                 
-                                // Calculer et appliquer le déplacement
+                                // Appliquer le déplacement
                                 transformed += rotatedVector - upVector;
                             }
                         }
                         
-                        // 3. Enfin appliquer l'effet de vent dynamique
-                        if (windStrength > 0.0) {
-                            // Normaliser la direction du vent
-                            vec2 normalizedWindDir = normalize(windDirection);
+                        // 2. Appliquer la torsion/plis (courbure des brins)
+                        if (torsionAmplitude > 0.1 && effectIntensity > 0.0) {
+                            // Direction fixe pour la torsion (utiliser windDirection)
+                            vec3 torsionDir = worldWindDir;
                             
-                            // Direction du vent dans le plan XZ (world space)
-                            vec3 worldWindDir = vec3(normalizedWindDir.x, 0.0, normalizedWindDir.y);
+                            // Axe perpendiculaire à la direction du vent
+                            vec3 torsionAxis = vec3(-normalizedWindDir.y, 0.0, normalizedWindDir.x);
                             
-                            // Axe de rotation perpendiculaire à la direction du vent (world space)
-                            vec3 worldRotationAxis = vec3(-normalizedWindDir.y, 0.0, normalizedWindDir.x);
+                            // Angle de torsion basé sur la hauteur et l'animation
+                            float torsionAngle = animValue * torsionAmplitude * pow(effectIntensity, 1.2) * 0.4;
                             
-                            // Calculer l'angle basé sur la hauteur et la force du vent
-                            float windAngle = windStrength * 1.5 * effectIntensity;
-                            
-                            // Ajouter le tremblement au vent
-                            windAngle += windNoiseValue * 0.2 * windStrength * effectIntensity;
-                            
-                            // Aucun déplacement à la base (y=0)
-                            if (heightFactor > 0.0) {
-                                // Vecteur de déplacement vers le haut (à rotationner)
+                            // Si on est suffisamment haut sur le brin
+                            if (heightFactor > 0.3) { // Effet plus prononcé vers le haut
+                                // Vecteur de déplacement vers le haut
                                 vec3 upVector = vec3(0.0, heightFactor * 1.5, 0.0);
                                 
-                                // Appliquer la rotation de Rodrigues pour préserver la longueur
-                                float cosA = cos(windAngle);
-                                float sinA = sin(windAngle);
+                                // Appliquer la rotation de Rodrigues
+                                float cosA = cos(torsionAngle);
+                                float sinA = sin(torsionAngle);
                                 
                                 vec3 rotatedVector = upVector * cosA + 
-                                                  cross(worldRotationAxis, upVector) * sinA + 
-                                                  worldRotationAxis * dot(worldRotationAxis, upVector) * (1.0 - cosA);
+                                                  cross(torsionAxis, upVector) * sinA + 
+                                                  torsionAxis * dot(torsionAxis, upVector) * (1.0 - cosA);
                                 
-                                // Calculer et appliquer le déplacement
+                                // Appliquer le déplacement
                                 transformed += rotatedVector - upVector;
                                 
-                                // Ajouter un léger tremblement
-                                float trembleAmount = windNoiseValue * 0.05 * windStrength * heightFactor;
-                                transformed.x += trembleAmount * worldWindDir.x;
-                                transformed.z += trembleAmount * worldWindDir.z;
+                                // Ajouter un léger tremblement latéral
+                                float trembleAmount = animValue * 0.05 * torsionAmplitude * heightFactor * heightFactor;
+                                transformed.x += trembleAmount * torsionDir.x;
+                                transformed.z += trembleAmount * torsionDir.z;
                             }
                         }
                     }
@@ -485,11 +458,16 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         // Mettre à jour l'uniform de temps pour l'animation si le shader est compilé
         if (this.materialShader) {
             this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
-            this.materialShader.uniforms.windStrength.value = this.windStrength;
+            
+            // Mettre à jour les paramètres d'animation simplifiés
+            this.materialShader.uniforms.animationEnabled.value = this.animationEnabled ? 1.0 : 0.0;
+            this.materialShader.uniforms.animationSpeed.value = this.animationSpeed;
+            this.materialShader.uniforms.torsionAmplitude.value = this.torsionAmplitude;
+            this.materialShader.uniforms.inclinationAmplitude.value = this.inclinationAmplitude;
+            
+            // Mettre à jour les directions
             this.materialShader.uniforms.windDirection.value = this.windDirection;
-            this.materialShader.uniforms.bendStrength.value = this.bendStrength; // Mise à jour du nouvel uniform
-            this.materialShader.uniforms.inclinationStrength.value = this.inclinationStrength; // Mise à jour de l'inclinaison
-            this.materialShader.uniforms.inclinationDirection.value = this.inclinationDirection; // Mise à jour de la direction d'inclinaison
+            this.materialShader.uniforms.inclinationDirection.value = this.inclinationDirection;
         }
         
         // Mise à jour du frustum culling
@@ -637,86 +615,122 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         this.plotData = [];
     }
     
-    // Fonction pour ajuster le paramètre de force du vent
+    /**
+     * Réinitialise tous les paramètres d'herbe à leurs valeurs par défaut
+     */
+    resetGrass() {
+        // Réinitialiser les paramètres d'animation
+        this.animationEnabled = false;
+        this.animationSpeed = 1.0;
+        this.torsionAmplitude = 1.0;
+        this.inclinationAmplitude = 1.0;
+        
+        // Réinitialiser les anciens paramètres pour compatibilité
+        this.windStrength = 0.0;
+        this.bendStrength = 0.0;
+        this.inclinationStrength = 0.0;
+    }
+    
+    /**
+     * Active ou désactive l'animation de l'herbe
+     * @param {boolean} enabled - true pour activer, false pour désactiver
+     */
+    setAnimationEnabled(enabled) {
+        this.animationEnabled = enabled;
+    }
+    
+    /**
+     * Définit la vitesse de l'animation de l'herbe
+     * @param {number} speed - Vitesse de l'animation (0.1-2.0)
+     */
+    setAnimationSpeed(speed) {
+        this.animationSpeed = Math.max(0.1, Math.min(2.0, speed));
+    }
+    
+    /**
+     * Définit l'amplitude de l'animation de l'herbe
+     * @param {number} amplitude - Amplitude de l'animation (0.1-2.0)
+     */
+    setAnimationAmplitude(amplitude) {
+        // Pour simplifier, on applique la même amplitude aux deux effets
+        this.torsionAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
+        this.inclinationAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
+    }
+    
+    /**
+     * Définit l'amplitude de torsion/plis des brins d'herbe
+     * @param {number} amplitude - Amplitude de torsion (0.1-2.0)
+     */
+    setTorsionAmplitude(amplitude) {
+        this.torsionAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
+    }
+    
+    /**
+     * Définit l'amplitude d'inclinaison des brins d'herbe
+     * @param {number} amplitude - Amplitude d'inclinaison (0.1-2.0)
+     */
+    setInclinationAmplitude(amplitude) {
+        this.inclinationAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
+    }
+    
+    // --- Anciennes méthodes conservées pour compatibilité ---
+    
+    /**
+     * @deprecated Utiliser les nouvelles méthodes setTorsionAmplitude et setInclinationAmplitude
+     */
     setWindStrength(strength) {
         this.windStrength = strength;
-        // Sera mis à jour dans la méthode update
-    }
-    
-    // Nouvelle méthode pour créer un vent fort
-    setStrongWind() {
-        this.windStrength = 4.0; // Force du vent très élevée
-        // Sera mis à jour dans la méthode update
-    }
-    
-    // Nouvelle méthode pour définir la direction du vent
-    setWindDirection(direction) {
-        if (direction instanceof THREE.Vector2) {
-            this.windDirection.copy(direction).normalize();
-        } else if (Array.isArray(direction) && direction.length >= 2) {
-            this.windDirection.set(direction[0], direction[1]).normalize();
-        } else if (typeof direction === 'number') {
-            // Si on passe un angle en radians
-            this.windDirection.set(Math.cos(direction), Math.sin(direction));
+        
+        // Convertir en paramètres d'animation
+        if (strength > 0.01) {
+            this.animationEnabled = true;
+            const normalizedStrength = Math.min(5.0, Math.max(0.0, strength));
+            this.torsionAmplitude = normalizedStrength / 5.0 * 2.0;
+            this.inclinationAmplitude = normalizedStrength / 5.0 * 2.0;
+        } else {
+            this.animationEnabled = false;
         }
-        
-        // Sera mis à jour dans la méthode update lors du prochain frame
     }
     
-    // Nouvelle méthode pour visualiser la direction du vent (aide au débogage)
-    visualizeWindDirection() {
-        // Supprimer toute visualisation précédente
-        if (this.windArrow) {
-            this.scene.remove(this.windArrow);
-        }
-        
-        // Créer une flèche pour représenter la direction du vent
-        const origin = new THREE.Vector3(0, 2, 0);
-        const direction = new THREE.Vector3(
-            this.windDirection.x * 5, 
-            0, 
-            this.windDirection.y * 5
-        );
-        const arrowHelper = new THREE.ArrowHelper(
-            direction.clone().normalize(),
-            origin,
-            direction.length(),
-            0xff0000,
-            1,
-            0.5
-        );
-        
-        this.windArrow = arrowHelper;
-        this.scene.add(this.windArrow);
-        
-        return arrowHelper;
-    }
-    
-    setCamera(camera) {
-        this.camera = camera;
-    }
-    
-    // Ajouter une nouvelle méthode pour définir l'inclinaison de l'herbe
+    /**
+     * @deprecated Utiliser setTorsionAmplitude à la place
+     */
     setGrassBendStrength(strength) {
         this.bendStrength = strength;
-        // La mise à jour de l'uniform se fera dans la méthode update()
+        
+        // Convertir en amplitude de torsion
+        if (strength > 0.01) {
+            this.animationEnabled = true;
+            this.torsionAmplitude = strength / 1.5 * 2.0;
+        }
     }
     
-    // Ajouter une nouvelle méthode pour définir l'inclinaison de l'herbe
+    /**
+     * @deprecated Utiliser setInclinationAmplitude à la place
+     */
     setGrassInclinationStrength(strength) {
         this.inclinationStrength = strength;
-        // La mise à jour de l'uniform se fera dans la méthode update()
+        
+        // Convertir en amplitude d'inclinaison
+        if (strength > 0.01) {
+            this.animationEnabled = true;
+            this.inclinationAmplitude = strength * 2.0;
+        }
     }
     
-    // Ajouter une méthode pour définir la direction de l'inclinaison
-    setGrassInclinationDirection(direction) {
-        if (direction instanceof THREE.Vector2) {
-            this.inclinationDirection.copy(direction).normalize();
-        } else if (Array.isArray(direction) && direction.length >= 2) {
-            this.inclinationDirection.set(direction[0], direction[1]).normalize();
-        } else if (typeof direction === 'number') {
-            // Si on passe un angle en radians
-            this.inclinationDirection.set(Math.cos(direction), Math.sin(direction));
-        }
+    /**
+     * @deprecated Utiliser setTorsionAmplitude à la place
+     */
+    setTwistFactor(factor) {
+        // Convertir en amplitude de torsion
+        this.torsionAmplitude = factor;
+    }
+    
+    /**
+     * @deprecated Utiliser setInclinationAmplitude à la place
+     */
+    setInclinationFactor(factor) {
+        // Convertir en amplitude d'inclinaison
+        this.inclinationAmplitude = factor;
     }
 } 

@@ -419,7 +419,7 @@ export default class PlotContentGenerator {
             this.grassInstancer.setWindDirection(direction);
         }
     }
-
+    
     /**
      * Définit la force d'inclinaison statique de l'herbe
      * @param {number} strength - Force d'inclinaison (0-1.5)
@@ -432,7 +432,7 @@ export default class PlotContentGenerator {
     
     /**
      * Définit la force d'inclinaison globale de l'herbe (rotation sans courbure)
-     * @param {number} strength - Force d'inclinaison globale (0-1.0)
+     * @param {number} strength - Force d'inclinaison globale (0-1)
      */
     setGrassInclinationStrength(strength) {
         if (this.grassInstancer) {
@@ -447,6 +447,46 @@ export default class PlotContentGenerator {
     setGrassInclinationDirection(direction) {
         if (this.grassInstancer) {
             this.grassInstancer.setGrassInclinationDirection(direction);
+        }
+    }
+    
+    /**
+     * Définit le facteur de torsion du brin d'herbe
+     * @param {number} factor - Facteur de torsion (0.1-2.0)
+     */
+    setGrassTwistFactor(factor) {
+        if (this.grassInstancer) {
+            this.grassInstancer.setTwistFactor(factor);
+        }
+    }
+    
+    /**
+     * Définit le facteur d'inclinaison du brin d'herbe
+     * @param {number} factor - Facteur d'inclinaison (0.1-2.0)
+     */
+    setGrassInclinationFactor(factor) {
+        if (this.grassInstancer) {
+            this.grassInstancer.setInclinationFactor(factor);
+        }
+    }
+    
+    /**
+     * Définit la vitesse d'animation de l'herbe sous l'effet du vent
+     * @param {number} speed - Vitesse de l'animation (0.1-2.0)
+     */
+    setGrassAnimationSpeed(speed) {
+        if (this.grassInstancer) {
+            this.grassInstancer.setAnimationSpeed(speed);
+        }
+    }
+    
+    /**
+     * Définit l'amplitude de l'animation de l'herbe sous l'effet du vent
+     * @param {number} amplitude - Amplitude de l'animation (0.1-2.0)
+     */
+    setGrassAnimationAmplitude(amplitude) {
+        if (this.grassInstancer) {
+            this.grassInstancer.setAnimationAmplitude(amplitude);
         }
     }
 

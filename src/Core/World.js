@@ -756,21 +756,98 @@ export default class World {
     }
 
     /**
-     * Définit la force du vent pour l'animation de l'herbe
-     * @param {number} strength - Force du vent (0-5, 0 étant pas de vent, 5 étant un vent très fort)
+     * Réinitialise tous les paramètres d'herbe à leurs valeurs par défaut
+     * L'herbe sera parfaitement droite et immobile
      */
-    setWindStrength(strength) {
-        // Utiliser le contentGenerator qui contient le grassInstancer
-        if (this.cityManager && this.cityManager.contentGenerator) {
-            this.cityManager.contentGenerator.setWindStrength(strength);
+    resetGrass() {
+        // Réinitialiser les paramètres internes
+        if (this.cityManager && this.cityManager.contentGenerator && this.cityManager.contentGenerator.grassInstancer) {
+            const grassInstancer = this.cityManager.contentGenerator.grassInstancer;
+            
+            // Réinitialiser les paramètres de base
+            grassInstancer.windStrength = 0;
+            grassInstancer.bendStrength = 0;
+            grassInstancer.inclinationStrength = 0;
+            
+            // Réinitialiser les paramètres d'animation
+            grassInstancer.animationEnabled = false; // Désactiver l'animation
+            grassInstancer.animationSpeed = 1.0;
+            grassInstancer.torsionAmplitude = 1.0;
+            grassInstancer.inclinationAmplitude = 1.0;
         }
         
         // Pour compatibilité, essayer aussi les références directes via environment
-        if (this.environment && this.environment.grassSystem) {
-            this.environment.grassSystem.setWindStrength(strength);
-        }
         if (this.environment && this.environment.shaderGrassSystem) {
-            this.environment.shaderGrassSystem.setWindStrength(strength);
+            this.environment.shaderGrassSystem.resetGrass();
+        }
+    }
+
+    /**
+     * Définit la vitesse d'animation de l'herbe 
+     * @param {number} speed - Vitesse de l'animation (0.1-2.0)
+     */
+    setGrassAnimationSpeed(speed) {
+        // Activer l'animation avec la nouvelle vitesse
+        const normalizedSpeed = Math.max(0.1, Math.min(2.0, speed));
+        
+        // Activer l'animation si la vitesse est > 0
+        const animationEnabled = normalizedSpeed > 0.1;
+        
+        // Appliquer les paramètres
+        if (this.cityManager && this.cityManager.contentGenerator) {
+            const grassInstancer = this.cityManager.contentGenerator.grassInstancer;
+            if (grassInstancer) {
+                grassInstancer.animationEnabled = animationEnabled;
+                grassInstancer.animationSpeed = normalizedSpeed;
+            }
+        }
+        
+        // Pour compatibilité, essayer aussi les références directes via environment
+        if (this.environment && this.environment.shaderGrassSystem) {
+            this.environment.shaderGrassSystem.setAnimationEnabled(animationEnabled);
+            this.environment.shaderGrassSystem.setAnimationSpeed(normalizedSpeed);
+        }
+    }
+
+    /**
+     * Définit l'amplitude de torsion/plis des brins d'herbe
+     * @param {number} amplitude - Amplitude de torsion (0.1-2.0)
+     */
+    setGrassTorsionAmplitude(amplitude) {
+        const normalizedAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
+        
+        // Appliquer les paramètres
+        if (this.cityManager && this.cityManager.contentGenerator) {
+            const grassInstancer = this.cityManager.contentGenerator.grassInstancer;
+            if (grassInstancer) {
+                grassInstancer.torsionAmplitude = normalizedAmplitude;
+            }
+        }
+        
+        // Pour compatibilité, essayer aussi les références directes via environment
+        if (this.environment && this.environment.shaderGrassSystem) {
+            this.environment.shaderGrassSystem.setTorsionAmplitude(normalizedAmplitude);
+        }
+    }
+
+    /**
+     * Définit l'amplitude d'inclinaison des brins d'herbe
+     * @param {number} amplitude - Amplitude d'inclinaison (0.1-2.0)
+     */
+    setGrassInclinationAmplitude(amplitude) {
+        const normalizedAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
+        
+        // Appliquer les paramètres
+        if (this.cityManager && this.cityManager.contentGenerator) {
+            const grassInstancer = this.cityManager.contentGenerator.grassInstancer;
+            if (grassInstancer) {
+                grassInstancer.inclinationAmplitude = normalizedAmplitude;
+            }
+        }
+        
+        // Pour compatibilité, essayer aussi les références directes via environment
+        if (this.environment && this.environment.shaderGrassSystem) {
+            this.environment.shaderGrassSystem.setInclinationAmplitude(normalizedAmplitude);
         }
     }
 
@@ -789,43 +866,14 @@ export default class World {
             this.environment.shaderGrassSystem.setWindDirection(direction);
         }
     }
-
-    /**
-     * Définit la force d'inclinaison statique de l'herbe
-     * @param {number} strength - Force d'inclinaison (0-1.5)
-     */
-    setGrassBendStrength(strength) {
-        // Utiliser le contentGenerator qui contient le grassInstancer
-        if (this.cityManager && this.cityManager.contentGenerator) {
-            this.cityManager.contentGenerator.setGrassBendStrength(strength);
-        }
-        
-        // Pour compatibilité, essayer aussi les références directes via environment
-        if (this.environment && this.environment.grassSystem) {
-            this.environment.grassSystem.setGrassBendStrength(strength);
-        }
-        if (this.environment && this.environment.shaderGrassSystem) {
-            this.environment.shaderGrassSystem.setGrassBendStrength(strength);
-        }
-    }
     
     /**
      * Définit la force d'inclinaison globale de l'herbe (rotation sans courbure)
      * @param {number} strength - Force d'inclinaison globale (0-1)
      */
     setGrassInclinationStrength(strength) {
-        // Utiliser le contentGenerator qui contient le grassInstancer
-        if (this.cityManager && this.cityManager.contentGenerator) {
-            this.cityManager.contentGenerator.setGrassInclinationStrength(strength);
-        }
-        
-        // Pour compatibilité, essayer aussi les références directes via environment
-        if (this.environment && this.environment.grassSystem) {
-            this.environment.grassSystem.setGrassInclinationStrength(strength);
-        }
-        if (this.environment && this.environment.shaderGrassSystem) {
-            this.environment.shaderGrassSystem.setGrassInclinationStrength(strength);
-        }
+        console.warn("setGrassInclinationStrength est déprécié. Utiliser setGrassInclinationAmplitude à la place.");
+        this.setGrassInclinationAmplitude(strength * 2); // Convertir 0-1 en 0-2
     }
     
     /**
@@ -845,5 +893,32 @@ export default class World {
         if (this.environment && this.environment.grassSystem) {
             this.environment.grassSystem.setGrassInclinationDirection(direction);
         }
+    }
+    
+    /**
+     * Définit le facteur de torsion du brin d'herbe
+     * @param {number} factor - Facteur de torsion (0.1-2.0)
+     */
+    setGrassTwistFactor(factor) {
+        console.warn("setGrassTwistFactor est déprécié. Utiliser setGrassTorsionAmplitude à la place.");
+        this.setGrassTorsionAmplitude(factor);
+    }
+
+    /**
+     * Définit le facteur d'inclinaison du brin d'herbe
+     * @param {number} factor - Facteur d'inclinaison (0.1-2.0)
+     */
+    setGrassInclinationFactor(factor) {
+        console.warn("setGrassInclinationFactor est déprécié. Utiliser setGrassInclinationAmplitude à la place.");
+        this.setGrassInclinationAmplitude(factor);
+    }
+
+    /**
+     * Définit l'amplitude de l'animation de l'herbe sous l'effet du vent
+     * @param {number} amplitude - Amplitude de l'animation (0.1-2.0)
+     */
+    setGrassAnimationAmplitude(amplitude) {
+        console.warn("setGrassAnimationAmplitude est déprécié. La vitesse et l'amplitude sont maintenant séparées.");
+        // On ne fait rien pour éviter la confusion
     }
 }

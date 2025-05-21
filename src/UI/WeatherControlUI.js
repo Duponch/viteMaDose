@@ -35,11 +35,14 @@ export default class WeatherControlUI {
                     cloudColor: 0, // Valeur 0 = blanc (défaut), 1 = noir
                     cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
                     fogDensity: 0.03,     // Valeur par défaut du brouillard
-                    windStrength: 0,      // Valeur par défaut du vent (0-100)
-                    grassBendStrength: 0, // Valeur par défaut des plis (0-100)
-                    grassInclinationStrength: 0, // Valeur par défaut de l'inclinaison (0-100)
+                    
+                    // Nouveaux paramètres simplifiés
+                    grassAnimationSpeed: 1.0,     // Vitesse d'animation (1.0 = normale)
+                    grassTorsionAmplitude: 1.0,   // Amplitude de torsion/plis (1.0 = normale)
+                    grassInclinationAmplitude: 1.0, // Amplitude d'inclinaison (1.0 = normale)
+                    
                     lightningIntensity: 0, // Pas d'éclairs par défaut
-                    rainbowOpacity: 0      // Pas d'arc-en-ciel par défaut
+                    rainbowOpacity: 0,      // Pas d'arc-en-ciel par défaut
                 };
                 
                 this.init();
@@ -74,17 +77,24 @@ export default class WeatherControlUI {
         this.createSlider('Couleur des nuages', 'cloud-color', 0, 1, 0.01, 0); // 0 = blanc, 1 = noir
         this.createSlider('Opacité des nuages', 'cloud-opacity', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudOpacity);
         this.createSlider('Brouillard', 'fog', 0, 1, 0.01, this.weatherSystem.fogEffect.fogDensity);
-        this.createSlider('Vent', 'wind', 0, 100, 1, 0); // Nouveau curseur pour le vent (0-100)
-        this.createSlider('Plis de l\'herbe', 'grass-bend', 0, 100, 1, 0); // Curseur pour les plis de l'herbe
-        this.createSlider('Inclinaison de l\'herbe', 'grass-inclination', 0, 100, 1, 0); // Nouveau curseur pour l'inclinaison de l'herbe
+        
+        // Nouveaux curseurs simplifiés pour l'animation de l'herbe
+        this.createSlider('Vitesse animation', 'grass-animation-speed', 0, 200, 1, 100); // 0-200% (100% = vitesse normale)
+        this.createSlider('Torsion/plis', 'grass-torsion-amplitude', 0, 200, 1, 100); // 0-200% (100% = amplitude normale)
+        this.createSlider('Inclinaison', 'grass-inclination-amplitude', 0, 200, 1, 100); // 0-200% (100% = amplitude normale)
+        
         this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
         this.createSlider('Arc-en-ciel', 'rainbow', 0, 1, 0.01, this.weatherSystem.rainbowEffect.opacity);
         
-        // S'assurer que l'herbe est bien droite dès l'initialisation en définissant la force du vent à 0
+        // S'assurer que l'herbe est bien droite dès l'initialisation
         if (this.experience.world) {
-            this.experience.world.setWindStrength(0);
-            this.experience.world.setGrassBendStrength(0);
-            this.experience.world.setGrassInclinationStrength(0);
+            // Réinitialiser tous les paramètres d'herbe
+            this.experience.world.resetGrass();
+            
+            // Appliquer les valeurs initiales des nouveaux paramètres simplifiés
+            this.experience.world.setGrassAnimationSpeed(1.0);
+            this.experience.world.setGrassTorsionAmplitude(1.0);
+            this.experience.world.setGrassInclinationAmplitude(1.0);
         }
         
         // Bouton pour réinitialiser les valeurs par défaut
@@ -106,9 +116,12 @@ export default class WeatherControlUI {
             cloudColor: this.container.querySelector('#slider-cloud-color'),
             cloudOpacity: this.container.querySelector('#slider-cloud-opacity'),
             fog: this.container.querySelector('#slider-fog'),
-            wind: this.container.querySelector('#slider-wind'),
-            grassBend: this.container.querySelector('#slider-grass-bend'),
-            grassInclination: this.container.querySelector('#slider-grass-inclination'),
+            
+            // Nouveaux sliders simplifiés
+            grassAnimationSpeed: this.container.querySelector('#slider-grass-animation-speed'),
+            grassTorsionAmplitude: this.container.querySelector('#slider-grass-torsion-amplitude'),
+            grassInclinationAmplitude: this.container.querySelector('#slider-grass-inclination-amplitude'),
+            
             lightning: this.container.querySelector('#slider-lightning'),
             rainbow: this.container.querySelector('#slider-rainbow')
         };
@@ -119,9 +132,12 @@ export default class WeatherControlUI {
             cloudColor: this.container.querySelector('#value-cloud-color'),
             cloudOpacity: this.container.querySelector('#value-cloud-opacity'),
             fog: this.container.querySelector('#value-fog'),
-            wind: this.container.querySelector('#value-wind'),
-            grassBend: this.container.querySelector('#value-grass-bend'),
-            grassInclination: this.container.querySelector('#value-grass-inclination'),
+            
+            // Nouveaux value displays simplifiés
+            grassAnimationSpeed: this.container.querySelector('#value-grass-animation-speed'),
+            grassTorsionAmplitude: this.container.querySelector('#value-grass-torsion-amplitude'),
+            grassInclinationAmplitude: this.container.querySelector('#value-grass-inclination-amplitude'),
+            
             lightning: this.container.querySelector('#value-lightning'),
             rainbow: this.container.querySelector('#value-rainbow')
         };
@@ -219,30 +235,27 @@ export default class WeatherControlUI {
                 this.weatherSystem.fogEffect.fogDensity = value;
                 break;
                 
-            case 'wind':
-                // Mettre à jour la force du vent dans toutes les instances d'herbe
+            case 'grass-animation-speed':
                 if (this.experience.world) {
-                    // Conversion de 0-100 à 0-5 pour le windStrength (5 étant une valeur très forte)
-                    const windStrength = (value / 100) * 5;
-                    this.experience.world.setWindStrength(windStrength);
+                    // Conversion de 0-200 à 0.1-2.0 pour la vitesse d'animation
+                    const speed = value / 100;
+                    this.experience.world.setGrassAnimationSpeed(speed);
                 }
                 break;
                 
-            case 'grass-bend':
-                // Mettre à jour les plis de l'herbe
+            case 'grass-torsion-amplitude':
                 if (this.experience.world) {
-                    // Conversion de 0-100 à 0-1.5 pour les plis (1.5 étant presque horizontale)
-                    const bendStrength = (value / 100) * 1.5;
-                    this.experience.world.setGrassBendStrength(bendStrength);
+                    // Conversion de 0-200 à 0.1-2.0 pour l'amplitude de torsion
+                    const amplitude = value / 100;
+                    this.experience.world.setGrassTorsionAmplitude(amplitude);
                 }
                 break;
                 
-            case 'grass-inclination':
-                // Mettre à jour l'inclinaison de l'herbe (rotation sans courbure)
+            case 'grass-inclination-amplitude':
                 if (this.experience.world) {
-                    // Conversion de 0-100 à 0-1.0 pour l'inclinaison (1.0 = inclinaison à 90 degrés)
-                    const inclinationStrength = (value / 100);
-                    this.experience.world.setGrassInclinationStrength(inclinationStrength);
+                    // Conversion de 0-200 à 0.1-2.0 pour l'amplitude d'inclinaison
+                    const amplitude = value / 100;
+                    this.experience.world.setGrassInclinationAmplitude(amplitude);
                 }
                 break;
                 
@@ -303,32 +316,26 @@ export default class WeatherControlUI {
                     this.sliders.fog.style.setProperty('--value', `${value * 100}%`);
                     this.weatherSystem.fogEffect.fogDensity = value;
                     break;
-                    
-                case 'windStrength':
-                    this.sliders.wind.value = value;
-                    this.valueDisplays.wind.textContent = value.toFixed(2);
-                    this.sliders.wind.style.setProperty('--value', `${value}%`);
-                    // Conversion de 0-100 à 0-5 pour le windStrength
-                    const windStrength = (value / 100) * 5;
-                    this.experience.world.setWindStrength(windStrength);
+                
+                case 'grassAnimationSpeed':
+                    this.sliders.grassAnimationSpeed.value = value * 100; // Convertir en pourcentage
+                    this.valueDisplays.grassAnimationSpeed.textContent = (value * 100).toFixed(0);
+                    this.sliders.grassAnimationSpeed.style.setProperty('--value', `${value * 100}%`);
+                    this.experience.world.setGrassAnimationSpeed(value);
                     break;
                     
-                case 'grassBendStrength':
-                    this.sliders.grassBend.value = value;
-                    this.valueDisplays.grassBend.textContent = value.toFixed(2);
-                    this.sliders.grassBend.style.setProperty('--value', `${value}%`);
-                    // Conversion de 0-100 à 0-1.5 pour l'inclinaison
-                    const bendStrength = (value / 100) * 1.5;
-                    this.experience.world.setGrassBendStrength(bendStrength);
+                case 'grassTorsionAmplitude':
+                    this.sliders.grassTorsionAmplitude.value = value * 100; // Convertir en pourcentage
+                    this.valueDisplays.grassTorsionAmplitude.textContent = (value * 100).toFixed(0);
+                    this.sliders.grassTorsionAmplitude.style.setProperty('--value', `${value * 100}%`);
+                    this.experience.world.setGrassTorsionAmplitude(value);
                     break;
                     
-                case 'grassInclinationStrength':
-                    this.sliders.grassInclination.value = value;
-                    this.valueDisplays.grassInclination.textContent = value.toFixed(2);
-                    this.sliders.grassInclination.style.setProperty('--value', `${value}%`);
-                    // Conversion de 0-100 à 0-1.0 pour l'inclinaison
-                    const inclinationStrength = (value / 100);
-                    this.experience.world.setGrassInclinationStrength(inclinationStrength);
+                case 'grassInclinationAmplitude':
+                    this.sliders.grassInclinationAmplitude.value = value * 100; // Convertir en pourcentage
+                    this.valueDisplays.grassInclinationAmplitude.textContent = (value * 100).toFixed(0);
+                    this.sliders.grassInclinationAmplitude.style.setProperty('--value', `${value * 100}%`);
+                    this.experience.world.setGrassInclinationAmplitude(value);
                     break;
                     
                 case 'lightningIntensity':
