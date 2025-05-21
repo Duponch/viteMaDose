@@ -20,8 +20,8 @@ export default class ShaderGrassInstancer {
         this.shadowDensity = config.grassShadowDensity || 0.6;
         
         // Géométrie de base pour un brin d'herbe
-        this.geometry = new THREE.PlaneGeometry(0.1, 1, 1, 4);
-        this.geometry.translate(0, 0.5, 0); // Déplacer le point le plus bas à 0
+        this.geometry = new THREE.PlaneGeometry(0.2, 1.5, 1, 4);
+        this.geometry.translate(0, 0.75, 0); // Ajustement de la translation pour la nouvelle hauteur
         
         // Nouveau: Système de frustum culling
         this._frustum = new THREE.Frustum();
@@ -65,6 +65,7 @@ export default class ShaderGrassInstancer {
                 side: THREE.DoubleSide,
                 map: grassTexture,
                 transparent: true,
+                alphaTest: 0.1, // Ajout d'un test alpha pour éviter les artefacts de transparence
                 // Les propriétés importantes pour les ombres
                 shadowSide: THREE.DoubleSide,
                 receiveShadow: true
@@ -168,17 +169,24 @@ export default class ShaderGrassInstancer {
         // Dessiner la forme de base (triangle arrondi)
         ctx.beginPath();
         ctx.moveTo(canvas.width * 0.5, canvas.height); // Base au milieu
+        
+        // Créer une forme plus ovale avec des bords plus doux
         ctx.bezierCurveTo(
-            canvas.width * 0.1, canvas.height * 0.7, // Point de contrôle
-            canvas.width * 0.1, canvas.height * 0.3, // Point de contrôle
+            canvas.width * 0.2, canvas.height * 0.8, // Point de contrôle gauche bas
+            canvas.width * 0.1, canvas.height * 0.4, // Point de contrôle gauche haut
             canvas.width * 0.5, 0                    // Sommet du brin
         );
         ctx.bezierCurveTo(
-            canvas.width * 0.9, canvas.height * 0.3, // Point de contrôle
-            canvas.width * 0.9, canvas.height * 0.7, // Point de contrôle
+            canvas.width * 0.9, canvas.height * 0.4, // Point de contrôle droit haut
+            canvas.width * 0.8, canvas.height * 0.8, // Point de contrôle droit bas
             canvas.width * 0.5, canvas.height        // Retour à la base
         );
         ctx.fill();
+        
+        // Ajouter un effet de flou sur les bords pour une transition plus douce
+        ctx.filter = 'blur(1px)';
+        ctx.drawImage(canvas, 0, 0);
+        ctx.filter = 'none';
         
         // Créer la texture Three.js à partir du canvas
         const texture = new THREE.CanvasTexture(canvas);
@@ -261,8 +269,8 @@ export default class ShaderGrassInstancer {
             // Positionner, échelonner et orienter le dummy
             this.dummy.position.set(adjustedX, 0, adjustedZ);
             
-            // Variation de taille
-            const scale = (0.3 + Math.random() * 0.5) * density;
+            // Variation de taille avec une échelle plus grande
+            const scale = (0.5 + Math.random() * 0.8) * density; // Augmentation de l'échelle de base et de la variation
             this.dummy.scale.setScalar(scale);
             
             // Rotation aléatoire

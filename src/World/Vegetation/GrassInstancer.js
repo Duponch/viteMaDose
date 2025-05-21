@@ -60,8 +60,8 @@ export default class GrassInstancer {
         this.minFovDistanceSquared = this.minFovDistance * this.minFovDistance;
         
         // Création de la géométrie de base pour une brin d'herbe
-        this.geometry = new THREE.PlaneGeometry(0.1, 1, 1, 4);
-        this.geometry.translate(0, 0.5, 0); // Déplacer le point le plus bas à 0
+        this.geometry = new THREE.PlaneGeometry(0.2, 1.5, 1, 4);
+        this.geometry.translate(0, 0.75, 0);
 
         // Création du matériau standard qui réagira naturellement à la lumière
         this.leavesMaterial = new THREE.MeshStandardMaterial({
