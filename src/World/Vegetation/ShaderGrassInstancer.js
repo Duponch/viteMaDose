@@ -59,61 +59,7 @@ export default class ShaderGrassInstancer {
     
     async initShaderMaterial() {
         try {
-            // Essayer de charger le shader depuis le fichier externe
-            // Passer uniquement le nom du fichier et non le chemin complet
-            const vertexShader = await ShaderLoader.loadShader('grassVertex.glsl');
-            
-            if (vertexShader) {
-                // Créer un matériau avec le shader externe
-                this.leavesMaterial = new THREE.ShaderMaterial({
-                    vertexShader: vertexShader,
-                    fragmentShader: `
-                        varying vec2 vUv;
-                        varying vec3 vNormal;
-                        varying vec3 vWorldPosition;
-                        
-                        uniform vec3 diffuse;
-                        uniform float opacity;
-                        
-                        void main() {
-                            // Nuances plus sombres à la base de l'herbe, plus claires aux extrémités
-                            float clarity = (vUv.y * 0.5) + 0.5;
-                            vec3 color = diffuse * clarity;
-                            
-                            // Ajout d'une légère variation aléatoire
-                            float randomVariation = fract(sin(vUv.x * 100.0) * 10000.0) * 0.05 + 0.95;
-                            color *= randomVariation;
-                            
-                            gl_FragColor = vec4(color, opacity);
-                        }
-                    `,
-                    uniforms: {
-                        time: { value: 0 },
-                        windStrength: { value: this.windStrength },
-                        windDirection: { value: this.windDirection },
-                        shadowMatrix: { value: new THREE.Matrix4() },
-                        diffuse: { value: this.grassColor },
-                        opacity: { value: 1.0 }
-                    },
-                    side: THREE.DoubleSide,
-                    transparent: true
-                });
-                
-                this.materialShader = this.leavesMaterial;
-                console.log("Matériau d'herbe initialisé avec succès en utilisant le shader externe");
-            } else {
-                // Fallback à l'ancien matériau si le shader n'est pas chargé
-                fallbackMaterial();
-            }
-        } catch (error) {
-            console.error("Erreur lors du chargement du shader externe:", error);
-            fallbackMaterial();
-        }
-        
-        // Fonction interne pour créer un matériau de fallback
-        const fallbackMaterial = () => {
-            console.log("Utilisation du matériau de fallback pour l'herbe");
-            // Préparer le matériau de Three.js avec support des ombres
+            // Créer le matériau de base qui supporte l'éclairage et les ombres
             const grassTexture = this._createGrassTexture();
             
             // Créer un matériau MeshPhongMaterial standard qui supporte les ombres
@@ -129,12 +75,12 @@ export default class ShaderGrassInstancer {
                 receiveShadow: true
             });
             
-            // Ajouter des uniformes personnalisés au shader standard de Three.js
+            // Modifier le shader standard de Three.js via onBeforeCompile
             this.leavesMaterial.onBeforeCompile = (shader) => {
                 // Ajouter nos uniformes personnalisés
                 shader.uniforms.time = { value: 0 };
                 shader.uniforms.windStrength = { value: this.windStrength };
-                shader.uniforms.windDirection = { value: this.windDirection }; // Nouveau: Direction du vent
+                shader.uniforms.windDirection = { value: this.windDirection };
                 
                 // Stocker une référence au shader pour la mise à jour
                 this.materialShader = shader;
@@ -176,27 +122,26 @@ export default class ShaderGrassInstancer {
                     `
                     #include <begin_vertex>
                     
-                    // Courbure naturelle du brin d'herbe (indépendant du vent)
-                    float bendStrength = 0.2; // Force de la courbure naturelle
-                    float heightFactor = pow(uv.y, 4.0); // Facteur de hauteur
+                    // Calcul des facteurs de hauteur
+                    float heightFactor = uv.y; // 0 à la base, 1 au sommet
+                    float tiltPower = tiltCurve(heightFactor); // Pour l'inclinaison
+                    float bendPower = bendCurve(heightFactor); // Pour la courbure
                     
-                    // Appliquer une courbure naturelle dans une direction aléatoire mais constante
-                    float bendAngle = fract(sin(instanceMatrix[3][0] * 100.0 + instanceMatrix[3][2] * 100.0) * 43758.5453) * 6.28; // Angle aléatoire entre 0 et 2π
-                    float bendX = cos(bendAngle) * bendStrength * heightFactor;
-                    float bendZ = sin(bendAngle) * bendStrength * heightFactor;
-                    transformed.x += bendX;
-                    transformed.z += bendZ;
-                    
-                    // Calcul des facteurs pour l'animation de vent
+                    // Bruit de vent avec plusieurs fréquences
                     float windTime = time * 1.2; // Vitesse du vent plus lente pour un effet plus constant
+                    
+                    #ifdef USE_INSTANCING
                     float windNoiseValue = windNoise(windTime + instanceMatrix[3][0] * 0.1 + instanceMatrix[3][2] * 0.1);
+                    #else
+                    float windNoiseValue = windNoise(windTime + position.x * 0.1 + position.z * 0.1);
+                    #endif
                     
                     // 1. Effet d'inclinaison constant (le brin reste incliné)
-                    vec2 baseTilt = windDirection * 2.0; // Inclinaison de base constante 
-                    vec2 tiltEffect = baseTilt + (windDirection * windNoiseValue * tiltCurve(heightFactor) * windStrength * 2.0);
+                    vec2 baseTilt = windDirection * 2.0; // Inclinaison de base constante
+                    vec2 tiltEffect = baseTilt + (windDirection * windNoiseValue * tiltPower * windStrength * 2.0);
                     
                     // 2. Effet de courbure (le brin se courbe sous son propre poids)
-                    float bendAmount = length(tiltEffect) * bendCurve(heightFactor);
+                    float bendAmount = length(tiltEffect) * bendPower;
                     vec2 bendEffect = windDirection * bendAmount * windStrength;
                     
                     // Combiner les effets avec une pondération différente
@@ -238,7 +183,11 @@ export default class ShaderGrassInstancer {
                     `
                 );
             };
-        };
+            
+            console.log("Matériau d'herbe initialisé avec succès en mode compatible ombres");
+        } catch (error) {
+            console.error("Erreur lors de l'initialisation du matériau d'herbe:", error);
+        }
     }
     
     /**
@@ -415,24 +364,9 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
     update() {
         // Mettre à jour l'uniform de temps pour l'animation si le shader est compilé
         if (this.materialShader) {
-            // Vérifier si c'est un ShaderMaterial ou un matériau compilé
-            if (this.materialShader.uniforms) {
-                // ShaderMaterial
-                this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
-                this.materialShader.uniforms.windStrength.value = this.windStrength;
-                this.materialShader.uniforms.windDirection.value = this.windDirection;
-                
-                // Mettre à jour la matrice d'ombre si nécessaire
-                if (this.experience.scene && this.experience.scene.directionalLight) {
-                    const light = this.experience.scene.directionalLight;
-                    this.materialShader.uniforms.shadowMatrix.value.copy(light.shadow.matrix);
-                }
-            } else {
-                // Matériau compilé (via onBeforeCompile)
-                this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
-                this.materialShader.uniforms.windStrength.value = this.windStrength;
-                this.materialShader.uniforms.windDirection.value = this.windDirection;
-            }
+            this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
+            this.materialShader.uniforms.windStrength.value = this.windStrength;
+            this.materialShader.uniforms.windDirection.value = this.windDirection;
         }
         
         // Mise à jour du frustum culling
@@ -603,10 +537,7 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             this.windDirection.set(Math.cos(direction), Math.sin(direction));
         }
         
-        // Mettre à jour le shader si disponible
-        if (this.materialShader) {
-            this.materialShader.uniforms.windDirection.value = this.windDirection;
-        }
+        // Sera mis à jour dans la méthode update lors du prochain frame
     }
     
     setCamera(camera) {
