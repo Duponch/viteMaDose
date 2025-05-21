@@ -32,8 +32,8 @@ export default class ShaderGrassInstancer {
         this.shadowDensity = config.grassShadowDensity || 0.6;
         
         // Géométrie de base pour un brin d'herbe
-        this.geometry = new THREE.PlaneGeometry(0.2, 1.5, 1, 4);
-        this.geometry.translate(0, 0.75, 0); // Ajustement de la translation pour la nouvelle hauteur
+        this.geometry = new THREE.PlaneGeometry(0.2, 1.0, 1, 4);
+        this.geometry.translate(0, 0.5, 0); // Ajustement de la translation pour la nouvelle hauteur (moitié de 1.0)
         
         // Nouveau: Système de frustum culling
         this._frustum = new THREE.Frustum();
@@ -402,10 +402,14 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         
         // Déterminer la densité d'herbe en fonction du type de zone
         let density = 1.0;
+        let heightMultiplier = 1.0; // Multiplicateur de hauteur par défaut
+        
         if (plot.zoneType === 'park') {
             density = 1.2; // Plus dense dans les parcs
+            heightMultiplier = 0.55; // Plus haute dans les parcs
         } else if (plot.zoneType === 'house') {
-            density = 0.7; // Moins dense dans les zones résidentielles
+            density = 1.2; // Moins dense dans les zones résidentielles
+            heightMultiplier = 0.5; // Plus courte dans les zones résidentielles
         }
         
         // Stocker les matrices originales et les informations de visibilité
@@ -427,11 +431,11 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             const adjustedZ = Math.max(plot.z + margin, Math.min(plot.z + plot.depth - margin, z));
             
             // Positionner, échelonner et orienter le dummy
-            this.dummy.position.set(adjustedX, 0, adjustedZ);
+            this.dummy.position.set(adjustedX, 0.15, adjustedZ);
             
             // Variation de taille avec une échelle plus grande
             const scale = (0.5 + Math.random() * 0.8) * density; // Augmentation de l'échelle de base et de la variation
-            this.dummy.scale.setScalar(scale);
+            this.dummy.scale.set(scale, scale * heightMultiplier, scale); // Appliquer le multiplicateur de hauteur
             
             // Rotation aléatoire
             this.dummy.rotation.y = Math.random() * Math.PI * 2;
