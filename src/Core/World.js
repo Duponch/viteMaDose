@@ -890,9 +890,6 @@ export default class World {
         if (this.environment && this.environment.shaderGrassSystem) {
             this.environment.shaderGrassSystem.setGrassInclinationDirection(direction);
         }
-        if (this.environment && this.environment.grassSystem) {
-            this.environment.grassSystem.setGrassInclinationDirection(direction);
-        }
     }
     
     /**
@@ -914,8 +911,7 @@ export default class World {
     }
 
     /**
-     * Définit l'amplitude de l'animation de l'herbe sous l'effet du vent
-     * @param {number} amplitude - Amplitude de l'animation (0.1-2.0)
+     * @deprecated Ne fait rien, méthode conservée pour compatibilité
      */
     setGrassAnimationAmplitude(amplitude) {
         console.warn("setGrassAnimationAmplitude est déprécié. La vitesse et l'amplitude sont maintenant séparées.");
