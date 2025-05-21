@@ -400,5 +400,25 @@ export default class PlotContentGenerator {
         this.grassInstancer?.update();
     }
 
+    /**
+     * Définit la force du vent pour l'animation de l'herbe
+     * @param {number} strength - Force du vent (0-5, 0 étant pas de vent, 5 étant un vent très fort)
+     */
+    setWindStrength(strength) {
+        if (this.grassInstancer) {
+            this.grassInstancer.setWindStrength(strength);
+        }
+    }
+
+    /**
+     * Définit la direction du vent pour l'animation de l'herbe
+     * @param {THREE.Vector2|Array|number} direction - Direction du vent (Vector2, tableau [x,y] ou angle en radians)
+     */
+    setWindDirection(direction) {
+        if (this.grassInstancer) {
+            this.grassInstancer.setWindDirection(direction);
+        }
+    }
+
     // --- Les anciennes méthodes spécifiques (generatePlotPrimaryContent, placeTreesForPlot, etc.) sont supprimées ---
 }

@@ -754,4 +754,24 @@ export default class World {
     get roadNavigationGraph() {
         return this.cityManager.navigationManager?.roadNavigationGraph;
     }
+
+    /**
+     * Définit la force du vent pour l'animation de l'herbe
+     * @param {number} strength - Force du vent (0-5, 0 étant pas de vent, 5 étant un vent très fort)
+     */
+    setWindStrength(strength) {
+        if (this.cityManager && this.cityManager.contentGenerator) {
+            this.cityManager.contentGenerator.setWindStrength(strength);
+        }
+    }
+
+    /**
+     * Définit la direction du vent pour l'animation de l'herbe
+     * @param {THREE.Vector2|Array|number} direction - Direction du vent (Vector2, tableau [x,y] ou angle en radians)
+     */
+    setWindDirection(direction) {
+        if (this.cityManager && this.cityManager.contentGenerator) {
+            this.cityManager.contentGenerator.setWindDirection(direction);
+        }
+    }
 }

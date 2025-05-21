@@ -14,7 +14,10 @@ export default class ShaderGrassInstancer {
         
         // Paramètres de la végétation
         this.grassColor = new THREE.Color(0x485e3c); // Même couleur que dans l'ancien GrassInstancer
-        this.windStrength = config.grassWindStrength || 1.0;
+        this.windStrength = config.grassWindStrength || 0.0; // Force du vent initialisée à 0 par défaut
+        
+        // Nouveau: Direction du vent
+        this.windDirection = new THREE.Vector2(1.0, 0.0).normalize(); // Vent par défaut vers l'est
         
         // Pour la réception des ombres
         this.shadowDensity = config.grassShadowDensity || 0.6;
@@ -56,6 +59,60 @@ export default class ShaderGrassInstancer {
     
     async initShaderMaterial() {
         try {
+            // Essayer de charger le shader depuis le fichier externe
+            // Passer uniquement le nom du fichier et non le chemin complet
+            const vertexShader = await ShaderLoader.loadShader('grassVertex.glsl');
+            
+            if (vertexShader) {
+                // Créer un matériau avec le shader externe
+                this.leavesMaterial = new THREE.ShaderMaterial({
+                    vertexShader: vertexShader,
+                    fragmentShader: `
+                        varying vec2 vUv;
+                        varying vec3 vNormal;
+                        varying vec3 vWorldPosition;
+                        
+                        uniform vec3 diffuse;
+                        uniform float opacity;
+                        
+                        void main() {
+                            // Nuances plus sombres à la base de l'herbe, plus claires aux extrémités
+                            float clarity = (vUv.y * 0.5) + 0.5;
+                            vec3 color = diffuse * clarity;
+                            
+                            // Ajout d'une légère variation aléatoire
+                            float randomVariation = fract(sin(vUv.x * 100.0) * 10000.0) * 0.05 + 0.95;
+                            color *= randomVariation;
+                            
+                            gl_FragColor = vec4(color, opacity);
+                        }
+                    `,
+                    uniforms: {
+                        time: { value: 0 },
+                        windStrength: { value: this.windStrength },
+                        windDirection: { value: this.windDirection },
+                        shadowMatrix: { value: new THREE.Matrix4() },
+                        diffuse: { value: this.grassColor },
+                        opacity: { value: 1.0 }
+                    },
+                    side: THREE.DoubleSide,
+                    transparent: true
+                });
+                
+                this.materialShader = this.leavesMaterial;
+                console.log("Matériau d'herbe initialisé avec succès en utilisant le shader externe");
+            } else {
+                // Fallback à l'ancien matériau si le shader n'est pas chargé
+                fallbackMaterial();
+            }
+        } catch (error) {
+            console.error("Erreur lors du chargement du shader externe:", error);
+            fallbackMaterial();
+        }
+        
+        // Fonction interne pour créer un matériau de fallback
+        const fallbackMaterial = () => {
+            console.log("Utilisation du matériau de fallback pour l'herbe");
             // Préparer le matériau de Three.js avec support des ombres
             const grassTexture = this._createGrassTexture();
             
@@ -77,6 +134,7 @@ export default class ShaderGrassInstancer {
                 // Ajouter nos uniformes personnalisés
                 shader.uniforms.time = { value: 0 };
                 shader.uniforms.windStrength = { value: this.windStrength };
+                shader.uniforms.windDirection = { value: this.windDirection }; // Nouveau: Direction du vent
                 
                 // Stocker une référence au shader pour la mise à jour
                 this.materialShader = shader;
@@ -87,23 +145,40 @@ export default class ShaderGrassInstancer {
                     `
                     uniform float time;
                     uniform float windStrength;
+                    uniform vec2 windDirection;
                     varying vec2 vUv;
+                    
+                    // Fonction pour créer un bruit de vent plus naturel
+                    float windNoise(float t) {
+                        return sin(t) * 0.5 + sin(t * 2.1) * 0.25 + sin(t * 4.2) * 0.125;
+                    }
+                    
+                    // Fonction pour l'effet d'inclinaison
+                    float tiltCurve(float height) {
+                        // Inclinaison constante et très prononcée
+                        return pow(height, 0.4) * 4.0;
+                    }
+                    
+                    // Fonction pour l'effet de courbure
+                    float bendCurve(float height) {
+                        // Courbure extrême en haut du brin
+                        return pow(height, 1.5) * 6.0;
+                    }
                     
                     void main() {
                         vUv = uv;
                     `
                 );
                 
-                // 2. Ensuite ajouter le code d'animation
+                // 2. Ensuite ajouter le code d'animation amélioré
                 shader.vertexShader = shader.vertexShader.replace(
                     '#include <begin_vertex>',
                     `
                     #include <begin_vertex>
                     
                     // Courbure naturelle du brin d'herbe (indépendant du vent)
-                    float bendStrength = 0.2; // Force de la courbure naturelle légèrement augmentée
-                    // Facteur de hauteur plus progressif pour une courbure plus prononcée dans la partie supérieure
-                    float heightFactor = pow(uv.y, 4.0); // Exposant augmenté pour accentuer l'effet en haut
+                    float bendStrength = 0.2; // Force de la courbure naturelle
+                    float heightFactor = pow(uv.y, 4.0); // Facteur de hauteur
                     
                     // Appliquer une courbure naturelle dans une direction aléatoire mais constante
                     float bendAngle = fract(sin(instanceMatrix[3][0] * 100.0 + instanceMatrix[3][2] * 100.0) * 43758.5453) * 6.28; // Angle aléatoire entre 0 et 2π
@@ -112,14 +187,28 @@ export default class ShaderGrassInstancer {
                     transformed.x += bendX;
                     transformed.z += bendZ;
                     
-                    // DISPLACEMENT pour l'herbe (effet du vent)
-                    float dispPower = 1.0 - cos(uv.y * 3.1416 / 2.0);
-                    float displacement = sin(position.z + time * 5.0) * (0.1 * dispPower * windStrength);
-                    transformed.x += displacement;
+                    // Calcul des facteurs pour l'animation de vent
+                    float windTime = time * 1.2; // Vitesse du vent plus lente pour un effet plus constant
+                    float windNoiseValue = windNoise(windTime + instanceMatrix[3][0] * 0.1 + instanceMatrix[3][2] * 0.1);
                     
-                    // Légère variation sur l'axe z pour plus de naturalité avec le vent
-                    float displacementZ = cos(position.x + time * 7.0) * (0.05 * dispPower * windStrength);
-                    transformed.z += displacementZ;
+                    // 1. Effet d'inclinaison constant (le brin reste incliné)
+                    vec2 baseTilt = windDirection * 2.0; // Inclinaison de base constante 
+                    vec2 tiltEffect = baseTilt + (windDirection * windNoiseValue * tiltCurve(heightFactor) * windStrength * 2.0);
+                    
+                    // 2. Effet de courbure (le brin se courbe sous son propre poids)
+                    float bendAmount = length(tiltEffect) * bendCurve(heightFactor);
+                    vec2 bendEffect = windDirection * bendAmount * windStrength;
+                    
+                    // Combiner les effets avec une pondération différente
+                    vec2 totalDisplacement = tiltEffect * 1.5 + bendEffect * 1.0;
+                    
+                    // Appliquer l'inclinaison et la courbure
+                    transformed.x += totalDisplacement.x;
+                    transformed.z += totalDisplacement.y;
+                    
+                    // Effet de compression très prononcé
+                    float compressionFactor = 1.0 - (windNoiseValue * 0.6 * heightFactor * windStrength);
+                    transformed.y *= compressionFactor;
                     `
                 );
                 
@@ -149,11 +238,7 @@ export default class ShaderGrassInstancer {
                     `
                 );
             };
-            
-            console.log("Matériau d'herbe initialisé avec succès en mode compatible ombres");
-        } catch (error) {
-            console.error("Erreur lors de l'initialisation du matériau d'herbe:", error);
-        }
+        };
     }
     
     /**
@@ -171,11 +256,17 @@ export default class ShaderGrassInstancer {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         // Dessiner un brin d'herbe avec un dégradé plus doux
-        const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+        /* const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
         gradient.addColorStop(0, 'rgba(72, 94, 60, 1)'); // Couleur de base à la racine
         gradient.addColorStop(0.5, 'rgba(82, 104, 65, 1)'); // Légèrement plus clair
         gradient.addColorStop(0.8, 'rgba(97, 117, 75, 1)'); // Plus clair
-        gradient.addColorStop(1, 'rgba(97, 117, 75, 1)'); // Plus clair aux pointes, mais opaque
+        gradient.addColorStop(1, 'rgba(97, 117, 75, 1)'); // Plus clair aux pointes, mais opaque */
+
+        const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+gradient.addColorStop(0, '#FFFFFF'); // Couleur de base à la racine (#7DC257)
+gradient.addColorStop(0.5, '#FFFFFF'); // Légèrement plus clair
+gradient.addColorStop(0.8, '#FFFFFF'); // Plus clair
+gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         
         // Forme du brin avec un léger flou aux bords
         ctx.fillStyle = gradient;
@@ -324,8 +415,24 @@ export default class ShaderGrassInstancer {
     update() {
         // Mettre à jour l'uniform de temps pour l'animation si le shader est compilé
         if (this.materialShader) {
-            this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
-            this.materialShader.uniforms.windStrength.value = this.windStrength;
+            // Vérifier si c'est un ShaderMaterial ou un matériau compilé
+            if (this.materialShader.uniforms) {
+                // ShaderMaterial
+                this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
+                this.materialShader.uniforms.windStrength.value = this.windStrength;
+                this.materialShader.uniforms.windDirection.value = this.windDirection;
+                
+                // Mettre à jour la matrice d'ombre si nécessaire
+                if (this.experience.scene && this.experience.scene.directionalLight) {
+                    const light = this.experience.scene.directionalLight;
+                    this.materialShader.uniforms.shadowMatrix.value.copy(light.shadow.matrix);
+                }
+            } else {
+                // Matériau compilé (via onBeforeCompile)
+                this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
+                this.materialShader.uniforms.windStrength.value = this.windStrength;
+                this.materialShader.uniforms.windDirection.value = this.windDirection;
+            }
         }
         
         // Mise à jour du frustum culling
@@ -477,6 +584,29 @@ export default class ShaderGrassInstancer {
     setWindStrength(strength) {
         this.windStrength = strength;
         // Sera mis à jour dans la méthode update
+    }
+    
+    // Nouvelle méthode pour créer un vent fort
+    setStrongWind() {
+        this.windStrength = 4.0; // Force du vent très élevée
+        // Sera mis à jour dans la méthode update
+    }
+    
+    // Nouvelle méthode pour définir la direction du vent
+    setWindDirection(direction) {
+        if (direction instanceof THREE.Vector2) {
+            this.windDirection.copy(direction).normalize();
+        } else if (Array.isArray(direction) && direction.length >= 2) {
+            this.windDirection.set(direction[0], direction[1]).normalize();
+        } else if (typeof direction === 'number') {
+            // Si on passe un angle en radians
+            this.windDirection.set(Math.cos(direction), Math.sin(direction));
+        }
+        
+        // Mettre à jour le shader si disponible
+        if (this.materialShader) {
+            this.materialShader.uniforms.windDirection.value = this.windDirection;
+        }
     }
     
     setCamera(camera) {

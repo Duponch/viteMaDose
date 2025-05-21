@@ -35,6 +35,7 @@ export default class WeatherControlUI {
                     cloudColor: 0, // Valeur 0 = blanc (défaut), 1 = noir
                     cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
                     fogDensity: 0.03,     // Valeur par défaut du brouillard
+                    windStrength: 0,      // Valeur par défaut du vent (0-100)
                     lightningIntensity: 0, // Pas d'éclairs par défaut
                     rainbowOpacity: 0      // Pas d'arc-en-ciel par défaut
                 };
@@ -71,6 +72,7 @@ export default class WeatherControlUI {
         this.createSlider('Couleur des nuages', 'cloud-color', 0, 1, 0.01, 0); // 0 = blanc, 1 = noir
         this.createSlider('Opacité des nuages', 'cloud-opacity', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudOpacity);
         this.createSlider('Brouillard', 'fog', 0, 1, 0.01, this.weatherSystem.fogEffect.fogDensity);
+        this.createSlider('Vent', 'wind', 0, 100, 1, 0); // Nouveau curseur pour le vent (0-100)
         this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
         this.createSlider('Arc-en-ciel', 'rainbow', 0, 1, 0.01, this.weatherSystem.rainbowEffect.opacity);
         
@@ -93,6 +95,7 @@ export default class WeatherControlUI {
             cloudColor: this.container.querySelector('#slider-cloud-color'),
             cloudOpacity: this.container.querySelector('#slider-cloud-opacity'),
             fog: this.container.querySelector('#slider-fog'),
+            wind: this.container.querySelector('#slider-wind'),
             lightning: this.container.querySelector('#slider-lightning'),
             rainbow: this.container.querySelector('#slider-rainbow')
         };
@@ -103,6 +106,7 @@ export default class WeatherControlUI {
             cloudColor: this.container.querySelector('#value-cloud-color'),
             cloudOpacity: this.container.querySelector('#value-cloud-opacity'),
             fog: this.container.querySelector('#value-fog'),
+            wind: this.container.querySelector('#value-wind'),
             lightning: this.container.querySelector('#value-lightning'),
             rainbow: this.container.querySelector('#value-rainbow')
         };
@@ -200,6 +204,15 @@ export default class WeatherControlUI {
                 this.weatherSystem.fogEffect.fogDensity = value;
                 break;
                 
+            case 'wind':
+                // Mettre à jour la force du vent dans toutes les instances d'herbe
+                if (this.experience.world) {
+                    // Conversion de 0-100 à 0-5 pour le windStrength (5 étant une valeur très forte)
+                    const windStrength = (value / 100) * 5;
+                    this.experience.world.setWindStrength(windStrength);
+                }
+                break;
+                
             case 'lightning':
                 this.weatherSystem.lightningEffect.intensity = value;
                 break;
@@ -258,6 +271,17 @@ export default class WeatherControlUI {
                     this.valueDisplays.fog.textContent = value.toFixed(2);
                     this.weatherSystem.fogEffect.fogDensity = value;
                     this.sliders.fog.style.setProperty('--value', `${(value - 0) / (1 - 0) * 100}%`);
+                    break;
+                    
+                case 'windStrength':
+                    this.sliders.wind.value = value;
+                    this.valueDisplays.wind.textContent = value.toFixed(0);
+                    if (this.experience.world) {
+                        // Conversion de 0-100 à 0-5 pour le windStrength
+                        const windStrength = (value / 100) * 5;
+                        this.experience.world.setWindStrength(windStrength);
+                    }
+                    this.sliders.wind.style.setProperty('--value', `${(value - 0) / (100 - 0) * 100}%`);
                     break;
                     
                 case 'lightningIntensity':
