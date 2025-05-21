@@ -109,6 +109,11 @@ export default class GrassInstancer {
         // Stocker la dernière orientation de la caméra
         this._lastCameraQuaternion = new THREE.Quaternion();
         this._cameraOrientationChanged = false;
+        
+        // Nouveau: Frustum pour vérifier la visibilité des parcelles
+        this._frustum = new THREE.Frustum();
+        this._projScreenMatrix = new THREE.Matrix4();
+        this._tempBoundingSphere = new THREE.Sphere();
     }
 
     setCamera(camera) {
@@ -141,6 +146,12 @@ export default class GrassInstancer {
             plot.z + plot.depth / 2
         );
         
+        // Nouveau: Calculer la sphère englobante pour le frustum culling
+        const boundingSphere = new THREE.Sphere(
+            plotCenter.clone(),
+            Math.sqrt((plot.width / 2) * (plot.width / 2) + (plot.depth / 2) * (plot.depth / 2))
+        );
+        
         // Stocker les données de la parcelle
         const plotInfo = {
             mesh: instancedMesh,
@@ -152,7 +163,9 @@ export default class GrassInstancer {
             isVisible: true, // Flag pour indiquer si la parcelle est visible
             isFullyVisible: true, // Flag pour indiquer si la parcelle est complètement visible
             angleToCamera: 0,
-            visibilityFactor: 1
+            visibilityFactor: 1,
+            boundingSphere: boundingSphere, // Nouveau: Sphère englobante pour le frustum culling
+            plot: plot // Référence à la parcelle originale
         };
         this.plotData.push(plotInfo);
 
@@ -198,6 +211,9 @@ export default class GrassInstancer {
         const cameraMoved = this._checkCameraMovement(cameraPosition);
         if (!cameraMoved && !this.debugMode) return;
         
+        // Nouveau: Mettre à jour le frustum de la caméra
+        this._updateCameraFrustum();
+        
         // Mettre à jour les distances pour chaque parcelle
         this._updatePlotDistances(cameraPosition);
         
@@ -235,6 +251,20 @@ export default class GrassInstancer {
         if (this.debugMode) {
             this.logDebugInfo();
         }
+    }
+    
+    // Nouveau: Mettre à jour le frustum de la caméra
+    _updateCameraFrustum() {
+        if (!this.camera) return;
+        
+        // Calculer la matrice de projection * vue
+        this._projScreenMatrix.multiplyMatrices(
+            this.camera.projectionMatrix, 
+            this.camera.matrixWorldInverse
+        );
+        
+        // Mettre à jour le frustum
+        this._frustum.setFromProjectionMatrix(this._projScreenMatrix);
     }
     
     // Optimisation: Vérifier si la caméra a bougé significativement ou changé d'orientation
@@ -303,12 +333,24 @@ export default class GrassInstancer {
                 return;
             }
             
+            // Nouveau: Test de frustum culling avec la sphère englobante
+            this._tempBoundingSphere.copy(plotInfo.boundingSphere);
+            const isInFrustum = this._frustum.intersectsSphere(this._tempBoundingSphere);
+            
             // Si la vérification du champ de vision est désactivée, toutes les parcelles sont visibles
             if (this.disableFovCheck) {
                 plotInfo.isVisible = true;
                 plotInfo.isFullyVisible = plotInfo.distanceSquared < this.lodDistancesSquared.high;
                 plotInfo.visibilityFactor = 1;
                 plotInfo.angleToCamera = 0;
+                return;
+            }
+            
+            // Si la parcelle n'est pas dans le frustum, la marquer comme invisible
+            if (!isInFrustum) {
+                plotInfo.isVisible = false;
+                plotInfo.isFullyVisible = false;
+                plotInfo.visibilityFactor = 0;
                 return;
             }
             

@@ -23,6 +23,33 @@ export default class ShaderGrassInstancer {
         this.geometry = new THREE.PlaneGeometry(0.1, 1, 1, 4);
         this.geometry.translate(0, 0.5, 0); // Déplacer le point le plus bas à 0
         
+        // Nouveau: Système de frustum culling
+        this._frustum = new THREE.Frustum();
+        this._projScreenMatrix = new THREE.Matrix4();
+        this._tempBoundingSphere = new THREE.Sphere();
+        
+        // Stockage des parcelles et leurs données
+        this.plotData = [];
+        
+        // Distance maximale de visibilité (en unités)
+        this.maxVisibilityDistance = 300;
+        this.maxVisibilityDistanceSquared = this.maxVisibilityDistance * this.maxVisibilityDistance;
+        
+        // Paramètres de mise à jour
+        this.updateFrequency = 2; // Mettre à jour tous les 2 frames
+        this.frameCount = 0;
+        this.updateInterval = 1000; // Mettre à jour toutes les secondes
+        this.lastUpdateTime = 0;
+        
+        // Stockage caméra
+        this._lastCameraPosition = null;
+        this._lastCameraQuaternion = new THREE.Quaternion();
+        this.cameraMovementThreshold = 5; // Seuil de mouvement de la caméra (au carré)
+        
+        // Vecteurs temporaires pour les calculs
+        this._tempVector = new THREE.Vector3();
+        this._directionVector = new THREE.Vector3();
+        
         // Initialiser les shaders et le matériau
         this.initShaderMaterial();
     }
@@ -184,6 +211,26 @@ export default class ShaderGrassInstancer {
         // Position du centre de la parcelle
         const centerX = plot.x + plot.width / 2;
         const centerZ = plot.z + plot.depth / 2;
+        const plotCenter = new THREE.Vector3(centerX, 0, centerZ);
+        
+        // Calculer la sphère englobante pour le frustum culling
+        const boundingSphere = new THREE.Sphere(
+            plotCenter.clone(),
+            Math.sqrt((plot.width / 2) * (plot.width / 2) + (plot.depth / 2) * (plot.depth / 2))
+        );
+        
+        // Stocker les données de la parcelle
+        const plotInfo = {
+            mesh: instancedMesh,
+            center: plotCenter,
+            distanceSquared: 0,
+            lastUpdate: 0,
+            id: plot.id || Math.random().toString(36).substr(2, 9),
+            isVisible: true,
+            boundingSphere: boundingSphere,
+            plot: plot
+        };
+        this.plotData.push(plotInfo);
         
         // Déterminer la densité d'herbe en fonction du type de zone
         let density = 1.0;
@@ -192,6 +239,13 @@ export default class ShaderGrassInstancer {
         } else if (plot.zoneType === 'house') {
             density = 0.7; // Moins dense dans les zones résidentielles
         }
+        
+        // Stocker les matrices originales et les informations de visibilité
+        instancedMesh.userData = {
+            positions: [],
+            originalMatrices: [],
+            visible: new Array(this.instanceNumber).fill(true)
+        };
         
         // Positionner et échelonner les instances d'herbe aléatoirement dans la parcelle
         for (let i = 0; i < this.instanceNumber; i++) {
@@ -217,6 +271,10 @@ export default class ShaderGrassInstancer {
             // Mettre à jour la matrice et l'appliquer à l'instance
             this.dummy.updateMatrix();
             instancedMesh.setMatrixAt(i, this.dummy.matrix);
+            
+            // Stocker la position et la matrice
+            instancedMesh.userData.positions.push(new THREE.Vector3(adjustedX, 0, adjustedZ));
+            instancedMesh.userData.originalMatrices.push(new THREE.Matrix4().copy(this.dummy.matrix));
         }
         
         // Indiquer que la matrice d'instance a été modifiée
@@ -234,6 +292,134 @@ export default class ShaderGrassInstancer {
             this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
             this.materialShader.uniforms.windStrength.value = this.windStrength;
         }
+        
+        // Mise à jour du frustum culling
+        if (!this.camera) return;
+        
+        // Optimisation: Ne mettre à jour que tous les X frames
+        this.frameCount++;
+        if (this.frameCount % this.updateFrequency !== 0) return;
+
+        const currentTime = Date.now();
+        
+        // Optimisation: Vérifier si suffisamment de temps s'est écoulé depuis la dernière mise à jour
+        if (currentTime - this.lastUpdateTime < this.updateInterval) return;
+        this.lastUpdateTime = currentTime;
+        
+        // Vérifier si la caméra a bougé significativement
+        if (!this._checkCameraMovement()) return;
+        
+        // Mettre à jour le frustum et la visibilité des parcelles
+        this._updateCameraFrustum();
+        this._updatePlotVisibility();
+    }
+    
+    // Vérifier si la caméra a bougé suffisamment pour justifier une mise à jour
+    _checkCameraMovement() {
+        if (!this.camera) return false;
+        
+        const cameraPosition = this.camera.position;
+        let shouldUpdate = false;
+        
+        // Vérifier le mouvement de position
+        if (!this._lastCameraPosition) {
+            this._lastCameraPosition = cameraPosition.clone();
+            shouldUpdate = true;
+        } else {
+            const tempVector = new THREE.Vector3().subVectors(cameraPosition, this._lastCameraPosition);
+            const distanceSquared = tempVector.lengthSq();
+            if (distanceSquared > this.cameraMovementThreshold) {
+                shouldUpdate = true;
+            }
+            this._lastCameraPosition.copy(cameraPosition);
+        }
+        
+        // Vérifier le changement d'orientation
+        if (this.camera) {
+            const currentQuaternion = this.camera.quaternion;
+            const angle = this._lastCameraQuaternion.angleTo(currentQuaternion);
+            // Mettre à jour si l'angle de rotation est significatif (plus de 5 degrés)
+            if (angle > 0.087) { // ~5 degrés en radians
+                shouldUpdate = true;
+                this._lastCameraQuaternion.copy(currentQuaternion);
+            }
+        }
+        
+        return shouldUpdate;
+    }
+    
+    // Mettre à jour le frustum de la caméra
+    _updateCameraFrustum() {
+        if (!this.camera) return;
+        
+        // Calculer la matrice de projection * vue
+        this._projScreenMatrix.multiplyMatrices(
+            this.camera.projectionMatrix, 
+            this.camera.matrixWorldInverse
+        );
+        
+        // Mettre à jour le frustum
+        this._frustum.setFromProjectionMatrix(this._projScreenMatrix);
+    }
+    
+    // Mettre à jour la visibilité des parcelles en fonction du frustum
+    _updatePlotVisibility() {
+        if (!this.camera || this.plotData.length === 0) return;
+        
+        const cameraPosition = this.camera.position;
+        
+        // Parcourir toutes les parcelles
+        this.plotData.forEach(plotInfo => {
+            // Calculer la distance au carré
+            this._tempVector.copy(plotInfo.center).sub(cameraPosition);
+            plotInfo.distanceSquared = this._tempVector.lengthSq();
+            
+            // Par défaut, considérer comme non visible
+            let isVisible = false;
+            
+            // Vérifier d'abord la distance
+            if (plotInfo.distanceSquared <= this.maxVisibilityDistanceSquared) {
+                // Ensuite vérifier le frustum
+                this._tempBoundingSphere.copy(plotInfo.boundingSphere);
+                isVisible = this._frustum.intersectsSphere(this._tempBoundingSphere);
+            }
+            
+            // Appliquer la visibilité
+            if (plotInfo.isVisible !== isVisible) {
+                plotInfo.isVisible = isVisible;
+                this._applyPlotVisibility(plotInfo);
+            }
+        });
+    }
+    
+    // Appliquer la visibilité à une parcelle
+    _applyPlotVisibility(plotInfo) {
+        const mesh = plotInfo.mesh;
+        if (!mesh || !mesh.userData) return;
+        
+        const matrix = new THREE.Matrix4();
+        
+        if (!plotInfo.isVisible) {
+            // Déplacer toutes les instances hors du champ de vision
+            for (let i = 0; i < this.instanceNumber; i++) {
+                mesh.getMatrixAt(i, matrix);
+                matrix.elements[12] = -10000; // X
+                matrix.elements[13] = -10000; // Y
+                matrix.elements[14] = -10000; // Z
+                mesh.setMatrixAt(i, matrix);
+                mesh.userData.visible[i] = false;
+            }
+        } else {
+            // Restaurer toutes les instances à leur position d'origine
+            for (let i = 0; i < this.instanceNumber; i++) {
+                if (!mesh.userData.visible[i]) {
+                    mesh.setMatrixAt(i, mesh.userData.originalMatrices[i]);
+                    mesh.userData.visible[i] = true;
+                }
+            }
+        }
+        
+        mesh.instanceMatrix.needsUpdate = true;
     }
     
     reset() {
@@ -249,6 +435,7 @@ export default class ShaderGrassInstancer {
         
         // Réinitialiser le tableau
         this.instancedMeshes = [];
+        this.plotData = [];
     }
     
     // Fonction pour ajuster le paramètre de force du vent
