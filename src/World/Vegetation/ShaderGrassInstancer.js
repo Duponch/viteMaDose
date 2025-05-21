@@ -65,7 +65,8 @@ export default class ShaderGrassInstancer {
                 side: THREE.DoubleSide,
                 map: grassTexture,
                 transparent: true,
-                alphaTest: 0.1, // Ajout d'un test alpha pour éviter les artefacts de transparence
+                alphaTest: 0.1, // Augmentation du seuil alpha pour éviter la transparence
+                depthWrite: true, // Réactivation de l'écriture en profondeur
                 // Les propriétés importantes pour les ombres
                 shadowSide: THREE.DoubleSide,
                 receiveShadow: true
@@ -150,18 +151,19 @@ export default class ShaderGrassInstancer {
      */
     _createGrassTexture() {
         const canvas = document.createElement('canvas');
-        canvas.width = 64;
-        canvas.height = 128;
+        canvas.width = 128;
+        canvas.height = 256;
         const ctx = canvas.getContext('2d');
         
         // Fond transparent
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Dessiner un brin d'herbe avec un dégradé
+        // Dessiner un brin d'herbe avec un dégradé plus doux
         const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
         gradient.addColorStop(0, 'rgba(72, 94, 60, 1)'); // Couleur de base à la racine
-        gradient.addColorStop(0.7, 'rgba(82, 104, 65, 1)'); // Légèrement plus clair
-        gradient.addColorStop(1, 'rgba(97, 117, 75, 0.8)'); // Plus clair aux pointes avec transparence
+        gradient.addColorStop(0.5, 'rgba(82, 104, 65, 1)'); // Légèrement plus clair
+        gradient.addColorStop(0.8, 'rgba(97, 117, 75, 1)'); // Plus clair
+        gradient.addColorStop(1, 'rgba(97, 117, 75, 1)'); // Plus clair aux pointes, mais opaque
         
         // Forme du brin avec un léger flou aux bords
         ctx.fillStyle = gradient;
@@ -183,10 +185,23 @@ export default class ShaderGrassInstancer {
         );
         ctx.fill();
         
-        // Ajouter un effet de flou sur les bords pour une transition plus douce
-        ctx.filter = 'blur(1px)';
-        ctx.drawImage(canvas, 0, 0);
-        ctx.filter = 'none';
+        // Créer un masque pour les bords
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = canvas.width;
+        maskCanvas.height = canvas.height;
+        const maskCtx = maskCanvas.getContext('2d');
+        
+        // Copier le contenu du canvas principal
+        maskCtx.drawImage(canvas, 0, 0);
+        
+        // Appliquer un flou sur le masque
+        maskCtx.filter = 'blur(2px)';
+        maskCtx.drawImage(maskCanvas, 0, 0);
+        
+        // Réappliquer le masque flouté sur le canvas original
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.drawImage(maskCanvas, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
         
         // Créer la texture Three.js à partir du canvas
         const texture = new THREE.CanvasTexture(canvas);
