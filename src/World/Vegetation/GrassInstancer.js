@@ -114,6 +114,9 @@ export default class GrassInstancer {
         this._frustum = new THREE.Frustum();
         this._projScreenMatrix = new THREE.Matrix4();
         this._tempBoundingSphere = new THREE.Sphere();
+
+        // Nouveau: Paramètre d'inclinaison statique de l'herbe
+        this.bendStrength = 0.0; // 0 = vertical, 1.5 = presque horizontal
     }
 
     setCamera(camera) {
@@ -645,5 +648,13 @@ export default class GrassInstancer {
             plotInfo.isVisible = true;
             plotInfo.isFullyVisible = true;
         });
+    }
+
+    setGrassBendStrength(strength) {
+        this.bendStrength = strength;
+        // Cette méthode est ajoutée pour la cohérence avec ShaderGrassInstancer
+        // mais n'a pas d'effet ici car cette classe utilise des matrices de transformation
+        // et non des shaders pour positionner l'herbe
+        console.log("GrassInstancer: setGrassBendStrength appelé, mais n'a pas d'effet dans cette implémentation.");
     }
 } 

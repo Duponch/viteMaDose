@@ -420,5 +420,15 @@ export default class PlotContentGenerator {
         }
     }
 
+    /**
+     * Définit la force d'inclinaison statique de l'herbe
+     * @param {number} strength - Force d'inclinaison (0-1.5)
+     */
+    setGrassBendStrength(strength) {
+        if (this.grassInstancer) {
+            this.grassInstancer.setGrassBendStrength(strength);
+        }
+    }
+
     // --- Les anciennes méthodes spécifiques (generatePlotPrimaryContent, placeTreesForPlot, etc.) sont supprimées ---
 }

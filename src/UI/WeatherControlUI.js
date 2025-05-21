@@ -36,6 +36,7 @@ export default class WeatherControlUI {
                     cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
                     fogDensity: 0.03,     // Valeur par défaut du brouillard
                     windStrength: 0,      // Valeur par défaut du vent (0-100)
+                    grassBendStrength: 0, // Valeur par défaut de l'inclinaison (0-100)
                     lightningIntensity: 0, // Pas d'éclairs par défaut
                     rainbowOpacity: 0      // Pas d'arc-en-ciel par défaut
                 };
@@ -73,6 +74,7 @@ export default class WeatherControlUI {
         this.createSlider('Opacité des nuages', 'cloud-opacity', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudOpacity);
         this.createSlider('Brouillard', 'fog', 0, 1, 0.01, this.weatherSystem.fogEffect.fogDensity);
         this.createSlider('Vent', 'wind', 0, 100, 1, 0); // Nouveau curseur pour le vent (0-100)
+        this.createSlider('Plis de l\'herbe', 'grass-bend', 0, 100, 1, 0); // Nouveau curseur pour l'inclinaison de l'herbe
         this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
         this.createSlider('Arc-en-ciel', 'rainbow', 0, 1, 0.01, this.weatherSystem.rainbowEffect.opacity);
         
@@ -96,6 +98,7 @@ export default class WeatherControlUI {
             cloudOpacity: this.container.querySelector('#slider-cloud-opacity'),
             fog: this.container.querySelector('#slider-fog'),
             wind: this.container.querySelector('#slider-wind'),
+            grassBend: this.container.querySelector('#slider-grass-bend'),
             lightning: this.container.querySelector('#slider-lightning'),
             rainbow: this.container.querySelector('#slider-rainbow')
         };
@@ -107,6 +110,7 @@ export default class WeatherControlUI {
             cloudOpacity: this.container.querySelector('#value-cloud-opacity'),
             fog: this.container.querySelector('#value-fog'),
             wind: this.container.querySelector('#value-wind'),
+            grassBend: this.container.querySelector('#value-grass-bend'),
             lightning: this.container.querySelector('#value-lightning'),
             rainbow: this.container.querySelector('#value-rainbow')
         };
@@ -213,6 +217,15 @@ export default class WeatherControlUI {
                 }
                 break;
                 
+            case 'grass-bend':
+                // Mettre à jour l'inclinaison de l'herbe
+                if (this.experience.world) {
+                    // Conversion de 0-100 à 0-1.5 pour l'inclinaison (1.5 étant presque horizontale)
+                    const bendStrength = (value / 100) * 1.5;
+                    this.experience.world.setGrassBendStrength(bendStrength);
+                }
+                break;
+                
             case 'lightning':
                 this.weatherSystem.lightningEffect.intensity = value;
                 break;
@@ -282,6 +295,17 @@ export default class WeatherControlUI {
                         this.experience.world.setWindStrength(windStrength);
                     }
                     this.sliders.wind.style.setProperty('--value', `${(value - 0) / (100 - 0) * 100}%`);
+                    break;
+                    
+                case 'grassBendStrength':
+                    this.sliders.grassBend.value = value;
+                    this.valueDisplays.grassBend.textContent = value.toFixed(0);
+                    if (this.experience.world) {
+                        // Conversion de 0-100 à 0-1.5 pour l'inclinaison
+                        const bendStrength = (value / 100) * 1.5;
+                        this.experience.world.setGrassBendStrength(bendStrength);
+                    }
+                    this.sliders.grassBend.style.setProperty('--value', `${(value - 0) / (100 - 0) * 100}%`);
                     break;
                     
                 case 'lightningIntensity':

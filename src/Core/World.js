@@ -760,8 +760,17 @@ export default class World {
      * @param {number} strength - Force du vent (0-5, 0 étant pas de vent, 5 étant un vent très fort)
      */
     setWindStrength(strength) {
+        // Utiliser le contentGenerator qui contient le grassInstancer
         if (this.cityManager && this.cityManager.contentGenerator) {
             this.cityManager.contentGenerator.setWindStrength(strength);
+        }
+        
+        // Pour compatibilité, essayer aussi les références directes via environment
+        if (this.environment && this.environment.grassSystem) {
+            this.environment.grassSystem.setWindStrength(strength);
+        }
+        if (this.environment && this.environment.shaderGrassSystem) {
+            this.environment.shaderGrassSystem.setWindStrength(strength);
         }
     }
 
@@ -770,8 +779,33 @@ export default class World {
      * @param {THREE.Vector2|Array|number} direction - Direction du vent (Vector2, tableau [x,y] ou angle en radians)
      */
     setWindDirection(direction) {
+        // Utiliser le contentGenerator qui contient le grassInstancer
         if (this.cityManager && this.cityManager.contentGenerator) {
             this.cityManager.contentGenerator.setWindDirection(direction);
+        }
+        
+        // Pour compatibilité, essayer aussi les références directes via environment
+        if (this.environment && this.environment.shaderGrassSystem) {
+            this.environment.shaderGrassSystem.setWindDirection(direction);
+        }
+    }
+
+    /**
+     * Définit la force d'inclinaison statique de l'herbe
+     * @param {number} strength - Force d'inclinaison (0-1.5)
+     */
+    setGrassBendStrength(strength) {
+        // Utiliser le contentGenerator qui contient le grassInstancer
+        if (this.cityManager && this.cityManager.contentGenerator) {
+            this.cityManager.contentGenerator.setGrassBendStrength(strength);
+        }
+        
+        // Pour compatibilité, essayer aussi les références directes via environment
+        if (this.environment && this.environment.grassSystem) {
+            this.environment.grassSystem.setGrassBendStrength(strength);
+        }
+        if (this.environment && this.environment.shaderGrassSystem) {
+            this.environment.shaderGrassSystem.setGrassBendStrength(strength);
         }
     }
 }
