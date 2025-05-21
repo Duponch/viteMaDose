@@ -100,12 +100,24 @@ export default class ShaderGrassInstancer {
                     `
                     #include <begin_vertex>
                     
-                    // DISPLACEMENT pour l'herbe
+                    // Courbure naturelle du brin d'herbe (indépendant du vent)
+                    float bendStrength = 0.2; // Force de la courbure naturelle légèrement augmentée
+                    // Facteur de hauteur plus progressif pour une courbure plus prononcée dans la partie supérieure
+                    float heightFactor = pow(uv.y, 4.0); // Exposant augmenté pour accentuer l'effet en haut
+                    
+                    // Appliquer une courbure naturelle dans une direction aléatoire mais constante
+                    float bendAngle = fract(sin(instanceMatrix[3][0] * 100.0 + instanceMatrix[3][2] * 100.0) * 43758.5453) * 6.28; // Angle aléatoire entre 0 et 2π
+                    float bendX = cos(bendAngle) * bendStrength * heightFactor;
+                    float bendZ = sin(bendAngle) * bendStrength * heightFactor;
+                    transformed.x += bendX;
+                    transformed.z += bendZ;
+                    
+                    // DISPLACEMENT pour l'herbe (effet du vent)
                     float dispPower = 1.0 - cos(uv.y * 3.1416 / 2.0);
                     float displacement = sin(position.z + time * 5.0) * (0.1 * dispPower * windStrength);
                     transformed.x += displacement;
                     
-                    // Légère variation sur l'axe z pour plus de naturalité
+                    // Légère variation sur l'axe z pour plus de naturalité avec le vent
                     float displacementZ = cos(position.x + time * 7.0) * (0.05 * dispPower * windStrength);
                     transformed.z += displacementZ;
                     `
