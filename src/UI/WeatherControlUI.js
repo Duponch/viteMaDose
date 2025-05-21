@@ -79,9 +79,9 @@ export default class WeatherControlUI {
         this.createSlider('Brouillard', 'fog', 0, 1, 0.01, this.weatherSystem.fogEffect.fogDensity);
         
         // Nouveaux curseurs simplifiés pour l'animation de l'herbe
-        this.createSlider('Vitesse animation', 'grass-animation-speed', 0, 200, 1, 100); // 0-200% (100% = vitesse normale)
-        this.createSlider('Torsion/plis', 'grass-torsion-amplitude', 0, 200, 1, 100); // 0-200% (100% = amplitude normale)
-        this.createSlider('Inclinaison', 'grass-inclination-amplitude', 0, 200, 1, 100); // 0-200% (100% = amplitude normale)
+        this.createSlider('Vitesse animation', 'grass-animation-speed', 0, 400, 1, 100); // 0-400% (100% = vitesse normale)
+        this.createSlider('Torsion/plis', 'grass-torsion-amplitude', 0, 400, 1, 100); // 0-400% (100% = amplitude normale)
+        this.createSlider('Inclinaison', 'grass-inclination-amplitude', 0, 400, 1, 100); // 0-400% (100% = amplitude normale)
         
         this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
         this.createSlider('Arc-en-ciel', 'rainbow', 0, 1, 0.01, this.weatherSystem.rainbowEffect.opacity);
@@ -237,7 +237,7 @@ export default class WeatherControlUI {
                 
             case 'grass-animation-speed':
                 if (this.experience.world) {
-                    // Conversion de 0-200 à 0.1-2.0 pour la vitesse d'animation
+                    // Conversion de 0-400 à 0.1-2.0 pour la vitesse d'animation
                     const speed = value / 100;
                     this.experience.world.setGrassAnimationSpeed(speed);
                 }
@@ -245,7 +245,7 @@ export default class WeatherControlUI {
                 
             case 'grass-torsion-amplitude':
                 if (this.experience.world) {
-                    // Conversion de 0-200 à 0.1-2.0 pour l'amplitude de torsion
+                    // Conversion de 0-400 à 0.1-2.0 pour l'amplitude de torsion
                     const amplitude = value / 100;
                     this.experience.world.setGrassTorsionAmplitude(amplitude);
                 }
@@ -253,7 +253,7 @@ export default class WeatherControlUI {
                 
             case 'grass-inclination-amplitude':
                 if (this.experience.world) {
-                    // Conversion de 0-200 à 0.1-2.0 pour l'amplitude d'inclinaison
+                    // Conversion de 0-400 à 0.1-2.0 pour l'amplitude d'inclinaison
                     const amplitude = value / 100;
                     this.experience.world.setGrassInclinationAmplitude(amplitude);
                 }
