@@ -51,10 +51,18 @@ export default class ShaderGrassInstancer {
         this.maxAnimationDistance = 50;
         this.maxAnimationDistanceSquared = this.maxAnimationDistance * this.maxAnimationDistance;
         
+        // Nouvelles distances pour le LOD progressif
+        this.fullDetailDistance = 150; // Distance pour le détail complet
+        this.fullDetailDistanceSquared = this.fullDetailDistance * this.fullDetailDistance;
+        this.mediumDetailDistance = 250; // Distance pour le détail moyen
+        this.mediumDetailDistanceSquared = this.mediumDetailDistance * this.mediumDetailDistance;
+        this.lowDetailDistance = 350; // Distance pour le détail faible
+        this.lowDetailDistanceSquared = this.lowDetailDistance * this.lowDetailDistance;
+        
         // Paramètres de mise à jour
-        this.updateFrequency = 2; // Mettre à jour tous les 2 frames
+        this.updateFrequency = 5; // Réduction de la fréquence de mise à jour (était 2)
         this.frameCount = 0;
-        this.updateInterval = 1000; // Mettre à jour toutes les secondes
+        this.updateInterval = 1500; // Augmentation de l'intervalle (était 1000ms)
         this.lastUpdateTime = 0;
         
         // Stockage caméra
@@ -411,7 +419,10 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             isAnimated: false,  // Par défaut, pas animé jusqu'à ce que la distance soit vérifiée
             lastAnimatedState: false,
             boundingSphere: boundingSphere,
-            plot: plot
+            plot: plot,
+            lodLevel: 0, // 0 = détail complet, 1 = moyen, 2 = faible, 3 = très faible
+            lastLodLevel: -1, // Pour détecter les changements
+            instancesVisible: 0 // Nombre d'instances actuellement visibles
         };
         this.plotData.push(plotInfo);
         
@@ -432,7 +443,8 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             positions: [],
             originalMatrices: [],
             visible: new Array(this.instanceNumber).fill(true),
-            animated: false // État d'animation pour toute la parcelle
+            animated: false, // État d'animation pour toute la parcelle
+            originalVisibilityState: new Array(this.instanceNumber).fill(true) // Pour le LOD
         };
         
         // Positionner et échelonner les instances d'herbe aléatoirement dans la parcelle
@@ -475,33 +487,67 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
     }
     
     update() {
-        // Mettre à jour l'uniform de temps pour l'animation si le shader est compilé
-        if (this.materialShader) {
-            this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
-            
-            // Mettre à jour les paramètres d'animation simplifiés
-            this.materialShader.uniforms.animationEnabled.value = this.animationEnabled ? 1.0 : 0.0;
-            this.materialShader.uniforms.animationSpeed.value = this.animationSpeed;
-            this.materialShader.uniforms.torsionAmplitude.value = this.torsionAmplitude;
-            this.materialShader.uniforms.inclinationAmplitude.value = this.inclinationAmplitude;
-            
-            // Mettre à jour les directions
-            this.materialShader.uniforms.windDirection.value = this.windDirection;
-            this.materialShader.uniforms.inclinationDirection.value = this.inclinationDirection;
-        }
-        
-        // Mise à jour du frustum culling
-        if (!this.camera) return;
-        
         // Optimisation: Ne mettre à jour que tous les X frames
         this.frameCount++;
-        if (this.frameCount % this.updateFrequency !== 0) return;
+        if (this.frameCount % this.updateFrequency !== 0) {
+            // Mettre à jour l'uniform de temps pour l'animation si le shader est compilé
+            // même si on ne fait pas la mise à jour complète
+            if (this.materialShader && this.animationEnabled) {
+                this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
+            }
+            return; // Sortir pour économiser du CPU
+        }
 
+        // Mise à jour complète du système
         const currentTime = Date.now();
+        
+        // Mettre à jour les shaders uniquement si nécessaire
+        if (this.materialShader) {
+            // Mettre à jour l'uniform de temps pour l'animation
+            this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
+            
+            // Mettre à jour les paramètres d'animation simplifiés seulement s'ils ont changé
+            // (Utilisation de variables temporaires pour éviter d'accéder aux uniforms si pas nécessaire)
+            const animEnabled = this.animationEnabled ? 1.0 : 0.0;
+            if (this.materialShader.uniforms.animationEnabled.value !== animEnabled) {
+                this.materialShader.uniforms.animationEnabled.value = animEnabled;
+            }
+            
+            // Mettre à jour seulement les paramètres qui ont changé
+            if (this.materialShader.uniforms.animationSpeed.value !== this.animationSpeed) {
+                this.materialShader.uniforms.animationSpeed.value = this.animationSpeed;
+            }
+            
+            if (this.materialShader.uniforms.torsionAmplitude.value !== this.torsionAmplitude) {
+                this.materialShader.uniforms.torsionAmplitude.value = this.torsionAmplitude;
+            }
+            
+            if (this.materialShader.uniforms.inclinationAmplitude.value !== this.inclinationAmplitude) {
+                this.materialShader.uniforms.inclinationAmplitude.value = this.inclinationAmplitude;
+            }
+            
+            // Mettre à jour les directions seulement si elles ont changé
+            const windDirX = this.windDirection.x;
+            const windDirY = this.windDirection.y;
+            if (this.materialShader.uniforms.windDirection.value.x !== windDirX || 
+                this.materialShader.uniforms.windDirection.value.y !== windDirY) {
+                this.materialShader.uniforms.windDirection.value = this.windDirection;
+            }
+            
+            const inclDirX = this.inclinationDirection.x;
+            const inclDirY = this.inclinationDirection.y;
+            if (this.materialShader.uniforms.inclinationDirection.value.x !== inclDirX || 
+                this.materialShader.uniforms.inclinationDirection.value.y !== inclDirY) {
+                this.materialShader.uniforms.inclinationDirection.value = this.inclinationDirection;
+            }
+        }
         
         // Optimisation: Vérifier si suffisamment de temps s'est écoulé depuis la dernière mise à jour
         if (currentTime - this.lastUpdateTime < this.updateInterval) return;
         this.lastUpdateTime = currentTime;
+        
+        // Mise à jour du frustum culling
+        if (!this.camera) return;
         
         // Vérifier si la caméra a bougé significativement
         if (!this._checkCameraMovement()) return;
@@ -526,12 +572,9 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             }
             
             // Mettre à jour l'uniform d'animation basé sur la parcelle la plus proche
-            if (closestPlotInfo) {
-                this.materialShader.uniforms.isAnimatedByDistance.value = 
-                    closestPlotInfo.isAnimated ? 1.0 : 0.0;
-            } else {
-                // Pas de parcelle visible, désactiver l'animation
-                this.materialShader.uniforms.isAnimatedByDistance.value = 0.0;
+            const animationState = closestPlotInfo && closestPlotInfo.isAnimated ? 1.0 : 0.0;
+            if (this.materialShader.uniforms.isAnimatedByDistance.value !== animationState) {
+                this.materialShader.uniforms.isAnimatedByDistance.value = animationState;
             }
         }
     }
@@ -609,10 +652,28 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             // Déterminer si l'animation doit être activée
             const shouldAnimate = isVisible && plotInfo.distanceSquared <= this.maxAnimationDistanceSquared;
             
-            // Appliquer la visibilité et l'animation
-            if (plotInfo.isVisible !== isVisible || plotInfo.isAnimated !== shouldAnimate) {
+            // Déterminer le niveau de LOD en fonction de la distance
+            let newLodLevel = 0; // Par défaut, détail complet
+            
+            if (isVisible) {
+                if (plotInfo.distanceSquared > this.lowDetailDistanceSquared) {
+                    newLodLevel = 3; // Très faible détail (seulement ~10% des instances)
+                } else if (plotInfo.distanceSquared > this.mediumDetailDistanceSquared) {
+                    newLodLevel = 2; // Faible détail (seulement ~30% des instances)
+                } else if (plotInfo.distanceSquared > this.fullDetailDistanceSquared) {
+                    newLodLevel = 1; // Détail moyen (seulement ~60% des instances)
+                }
+            }
+            
+            // Appliquer la visibilité et l'animation seulement si un changement est nécessaire
+            const visibilityChanged = plotInfo.isVisible !== isVisible;
+            const animationChanged = plotInfo.isAnimated !== shouldAnimate;
+            const lodChanged = plotInfo.lodLevel !== newLodLevel;
+            
+            if (visibilityChanged || animationChanged || lodChanged) {
                 plotInfo.isVisible = isVisible;
                 plotInfo.isAnimated = shouldAnimate;
+                plotInfo.lodLevel = newLodLevel;
                 this._applyPlotVisibility(plotInfo);
             }
         });
@@ -623,40 +684,84 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         const mesh = plotInfo.mesh;
         if (!mesh || !mesh.userData) return;
         
-        const matrix = new THREE.Matrix4();
-        
+        // Optimisation majeure: Utiliser mesh.visible pour désactiver complètement le rendu
+        // au lieu de déplacer les instances hors champ
         if (!plotInfo.isVisible) {
-            // Déplacer toutes les instances hors du champ de vision
-            for (let i = 0; i < this.instanceNumber; i++) {
-                mesh.getMatrixAt(i, matrix);
-                matrix.elements[12] = -10000; // X
-                matrix.elements[13] = -10000; // Y
-                matrix.elements[14] = -10000; // Z
-                mesh.setMatrixAt(i, matrix);
-                mesh.userData.visible[i] = false;
+            // Si la parcelle n'est pas visible, désactiver complètement le mesh
+            if (mesh.visible) {
+                mesh.visible = false;
             }
-        } else {
-            // Restaurer toutes les instances à leur position d'origine
+            return; // Sortir immédiatement pour économiser des calculs
+        } else if (!mesh.visible) {
+            // Si la parcelle devient visible, réactiver le mesh
+            mesh.visible = true;
+        }
+        
+        // Si le niveau de LOD a changé, ajuster le nombre d'instances visibles
+        if (plotInfo.lodLevel !== plotInfo.lastLodLevel) {
+            const matrix = new THREE.Matrix4();
+            let instanceCount = this.instanceNumber;
+            
+            // Déterminer combien d'instances doivent être visibles selon le LOD
+            switch(plotInfo.lodLevel) {
+                case 1: // Détail moyen
+                    instanceCount = Math.floor(this.instanceNumber * 0.6);
+                    break;
+                case 2: // Faible détail
+                    instanceCount = Math.floor(this.instanceNumber * 0.3);
+                    break;
+                case 3: // Très faible détail
+                    instanceCount = Math.floor(this.instanceNumber * 0.1);
+                    break;
+                default: // Détail complet
+                    instanceCount = this.instanceNumber;
+            }
+            
+            // Mettre à jour la visibilité des instances
+            let needsUpdate = false;
+            
             for (let i = 0; i < this.instanceNumber; i++) {
-                if (!mesh.userData.visible[i]) {
-                    mesh.setMatrixAt(i, mesh.userData.originalMatrices[i]);
-                    mesh.userData.visible[i] = true;
+                const shouldBeVisible = i < instanceCount;
+                
+                // Si l'état de visibilité a changé
+                if (mesh.userData.visible[i] !== shouldBeVisible) {
+                    if (shouldBeVisible) {
+                        // Restaurer la position d'origine
+                        mesh.setMatrixAt(i, mesh.userData.originalMatrices[i]);
+                    } else {
+                        // Déplacer l'instance hors du champ
+                        mesh.getMatrixAt(i, matrix);
+                        matrix.elements[12] = -10000; // X
+                        matrix.elements[13] = -10000; // Y
+                        matrix.elements[14] = -10000; // Z
+                        mesh.setMatrixAt(i, matrix);
+                    }
+                    
+                    mesh.userData.visible[i] = shouldBeVisible;
+                    needsUpdate = true;
                 }
             }
             
-            // Mettre à jour l'état d'animation dans le userData
-            mesh.userData.animated = plotInfo.isAnimated;
-            
-            // Si nous avons accès au shader, mettre à jour l'uniform d'animation
-            if (this.materialShader && this.materialShader.uniforms && 
-                plotInfo.lastAnimatedState !== plotInfo.isAnimated) {
-                
-                // Conserver l'état pour comparer lors de la prochaine mise à jour
-                plotInfo.lastAnimatedState = plotInfo.isAnimated;
+            // Mettre à jour la matrice seulement si nécessaire
+            if (needsUpdate) {
+                mesh.instanceMatrix.needsUpdate = true;
             }
+            
+            // Sauvegarder le nouveau niveau de LOD
+            plotInfo.lastLodLevel = plotInfo.lodLevel;
+            plotInfo.instancesVisible = instanceCount;
         }
         
-        mesh.instanceMatrix.needsUpdate = true;
+        // Mettre à jour l'état d'animation dans le userData
+        mesh.userData.animated = plotInfo.isAnimated;
+        
+        // Si nous avons accès au shader, mettre à jour l'uniform d'animation
+        if (this.materialShader && this.materialShader.uniforms && 
+            plotInfo.lastAnimatedState !== plotInfo.isAnimated) {
+            
+            // Conserver l'état pour comparer lors de la prochaine mise à jour
+            plotInfo.lastAnimatedState = plotInfo.isAnimated;
+        }
     }
     
     reset() {
