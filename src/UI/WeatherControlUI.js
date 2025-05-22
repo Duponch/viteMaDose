@@ -31,11 +31,11 @@ export default class WeatherControlUI {
                 // Sauvegarder les valeurs initiales du système (avant la fonctionnalité météo)
                 this.defaultValues = {
                     rainIntensity: 0,
-                    leavesCount: 0,       // Changé de leavesIntensity à leavesCount
-                    leavesSpeed: 1.0,     // Nouvelle valeur par défaut pour la vitesse des feuilles
-                    cloudDensity: 0.3, // Valeur par défaut dans CloudSystem
-                    cloudColor: 0, // Valeur 0 = blanc (défaut), 1 = noir
-                    cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
+                    leavesCount: 8,       // Valeur par défaut: 8
+                    leavesSpeed: 0.53,    // Valeur par défaut: 0.53 (53%)
+                    cloudDensity: 0.3,    // Valeur par défaut dans CloudSystem
+                    cloudColor: 0,        // Valeur 0 = blanc (défaut), 1 = noir
+                    cloudOpacity: 0.5,    // Valeur par défaut dans CloudSystem
                     fogDensity: 0.03,     // Valeur par défaut du brouillard
                     
                     // Nouveaux paramètres simplifiés
@@ -101,8 +101,8 @@ export default class WeatherControlUI {
         
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
-        this.createSlider('Nombre de feuilles', 'leaves-count', 0, 100, 1, this.weatherSystem.leavesEffect.intensity * 100);
-        this.createSlider('Vitesse des feuilles', 'leaves-speed', 0, 100, 1, 100); // Valeur par défaut 100%
+        this.createSlider('Nombre de feuilles', 'leaves-count', 0, 100, 1, this.defaultValues.leavesCount);
+        this.createSlider('Vitesse des feuilles', 'leaves-speed', 0, 100, 1, this.defaultValues.leavesSpeed * 100); // Convertir en pourcentage
         this.createSlider('Nombre de nuages', 'cloud-density', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudDensity);
         this.createSlider('Couleur des nuages', 'cloud-color', 0, 1, 0.01, 0); // 0 = blanc, 1 = noir
         this.createSlider('Opacité des nuages', 'cloud-opacity', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudOpacity);
@@ -126,6 +126,10 @@ export default class WeatherControlUI {
             this.experience.world.setGrassTorsionAmplitude(1.0);
             this.experience.world.setGrassInclinationAmplitude(1.0);
         }
+        
+        // Appliquer directement les valeurs par défaut des feuilles au rendu
+        this.weatherSystem.leavesEffect.setLeavesPercentage(this.defaultValues.leavesCount);
+        this.weatherSystem.leavesEffect.setSpeedFactor(this.defaultValues.leavesSpeed);
         
         // Bouton pour réinitialiser les valeurs par défaut
         const resetButton = document.createElement('button');
@@ -202,7 +206,9 @@ export default class WeatherControlUI {
         const labelEl = document.createElement('span');
         labelEl.textContent = label;
         
-                const valueEl = document.createElement('span');        valueEl.id = `value-${id}`;        valueEl.textContent = initialValue !== null && initialValue !== undefined ? initialValue.toFixed(2) : "0.00";
+        const valueEl = document.createElement('span');
+        valueEl.id = `value-${id}`;
+        valueEl.textContent = initialValue !== null && initialValue !== undefined ? initialValue.toFixed(2) : "0.00";
         
         labelRow.appendChild(labelEl);
         labelRow.appendChild(valueEl);
@@ -218,7 +224,9 @@ export default class WeatherControlUI {
         slider.value = initialValue;
         
         // Mettre à jour la valeur CSS lors du changement
-                slider.addEventListener('input', (e) => {            const value = parseFloat(e.target.value);            valueEl.textContent = value !== null && value !== undefined ? value.toFixed(2) : "0.00";
+        slider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            valueEl.textContent = value !== null && value !== undefined ? value.toFixed(2) : "0.00";
             slider.style.setProperty('--value', `${(value - min) / (max - min) * 100}%`);
             
             // Gérer spécialement le curseur d'orage
@@ -253,7 +261,7 @@ export default class WeatherControlUI {
         const parameters = [
             { name: 'rain', defaultValue: this.defaultValues.rainIntensity, maxValue: this.stormMaxValues.rainIntensity },
             { name: 'leaves-count', defaultValue: this.defaultValues.leavesCount, maxValue: 80 },
-            { name: 'leaves-speed', defaultValue: 100, maxValue: 180 },
+            { name: 'leaves-speed', defaultValue: this.defaultValues.leavesSpeed * 100, maxValue: 180 },
             { name: 'cloud-density', defaultValue: this.defaultValues.cloudDensity, maxValue: this.stormMaxValues.cloudDensity },
             { name: 'cloud-color', defaultValue: this.defaultValues.cloudColor, maxValue: this.stormMaxValues.cloudColor },
             { name: 'cloud-opacity', defaultValue: this.defaultValues.cloudOpacity, maxValue: this.stormMaxValues.cloudOpacity },
