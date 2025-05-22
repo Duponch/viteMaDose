@@ -163,22 +163,19 @@ export default class TreePlacementStrategy extends IZonePlacementStrategy {
 
         // Si l'asset a des parts, on doit gérer chaque partie séparément
         if (assetInfo.parts && assetInfo.parts.length > 0) {
-            // Pour chaque partie, créer une matrice d'instance
-            assetInfo.parts.forEach((part, index) => {
-                const instanceMatrix = this.calculateInstanceMatrix(
-                    treeX,
-                    treeZ,
-                    assetInfo.sizeAfterFitting.y,
-                    assetInfo.fittingScaleFactor,
-                    assetInfo.centerOffset,
-                    finalUserScale,
-                    randomRotationY,
-                    plotGroundY
-                );
-
-                // Utiliser l'ID de l'asset original pour toutes les parties
-                instanceDataManager.addData('tree', assetInfo.id, instanceMatrix);
-            });
+            // Créer une seule matrice d'instance par placement
+            const instanceMatrix = this.calculateInstanceMatrix(
+                treeX,
+                treeZ,
+                assetInfo.sizeAfterFitting.y,
+                assetInfo.fittingScaleFactor,
+                assetInfo.centerOffset,
+                finalUserScale,
+                randomRotationY,
+                plotGroundY
+            );
+            // Ajouter une seule fois par placement
+            instanceDataManager.addData('tree', assetInfo.id, instanceMatrix);
             return true;
         }
 
