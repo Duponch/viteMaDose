@@ -469,9 +469,9 @@ export default class Environment {
         const snowHeight = 120; // Hauteur à partir de laquelle la neige apparaît
         
         // Couleurs vives pour l'effet low poly
-        const grassColor = new THREE.Color(0x4CAF50);  // Vert vif
-        const rockColor = new THREE.Color(0x795548);   // Marron
-        const snowColor = new THREE.Color(0xFFFFFF);   // Blanc
+        const grassColorValue = new THREE.Color(0x4CAF50);  // Vert vif
+        const rockColorValue = new THREE.Color(0x795548);   // Marron
+        const snowColorValue = new THREE.Color(0xFFFFFF);   // Blanc
         
         // Création de la géométrie carrée
         const geometry = new THREE.PlaneGeometry(width, depth, segments, segments);
@@ -560,7 +560,7 @@ export default class Environment {
             
             // Fallback avec matériau standard
             const material = new THREE.MeshStandardMaterial({
-                color: grassColor,
+                color: grassColorValue,
                 roughness: 0.9,
                 metalness: 0.0,
                 flatShading: true, // Important pour l'effet low poly
@@ -569,8 +569,44 @@ export default class Environment {
             
             this.outerGroundMesh = new THREE.Mesh(geometry, material);
         } else {
-            // Création du matériau shader avec couleurs plates
+            // Récupération des valeurs initiales pour l'éclairage et le brouillard
+            // Utiliser la direction normalisée du soleil pour l'éclairage
+            const sunDirection = this.sunLight ? this.sunLight.position.clone().normalize() : new THREE.Vector3(0, 1, 0);
+            const sunColor = this.sunLight ? this.sunLight.color.clone() : new THREE.Color(0xFFFFFF);
+            const sunIntensity = this.sunLight ? this.sunLight.intensity : 1.0;
+            
+            // S'assurer que l'intensité ambiante n'est pas trop élevée pour éviter le sur-éclairage
+            const ambientColor = this.ambientLight ? this.ambientLight.color.clone() : new THREE.Color(0x404040);
+            const ambientIntensity = this.ambientLight ? Math.min(this.ambientLight.intensity, 0.5) : 0.3;
+            
+            // Paramètres du brouillard
+            const fogEnabled = !!this.experience.scene.fog;
+            const fogColor = this.experience.scene.fog ? this.experience.scene.fog.color.clone() : new THREE.Color(0xCCCCCC);
+            const fogNear = this.experience.scene.fog ? this.experience.scene.fog.near : 1000;
+            const fogFar = this.experience.scene.fog ? this.experience.scene.fog.far : 2000;
+            
+            // Densité du brouillard (récupérer depuis la configuration si disponible)
+            // Si la propriété fogDensity existe dans config, l'utiliser, sinon par défaut à 1.0
+            const fogDensity = this.config && this.config.fogDensity !== undefined ? this.config.fogDensity : 1.0;
+            
+            // Vérifier et définir des couleurs vives pour un meilleur contraste
+            const grassColorValue = new THREE.Color(0x4CAF50);  // Vert vif
+            const rockColorValue = new THREE.Color(0x795548);   // Marron
+            const snowColorValue = new THREE.Color(0xFFFFFF);   // Blanc
+            
+            // Log pour le diagnostic
+            console.log('Création du terrain low poly avec les valeurs suivantes:');
+            console.log('- rockHeight:', rockHeight);
+            console.log('- snowHeight:', snowHeight);
+            console.log('- sunDirection:', sunDirection);
+            console.log('- sunIntensity:', sunIntensity);
+            console.log('- ambientIntensity:', ambientIntensity);
+            console.log('- fogEnabled:', fogEnabled);
+            console.log('- fogDensity:', fogDensity);
+            
+            // Création du matériau shader avec couleurs plates et éclairage
             const uniforms = {
+                // Paramètres pour le terrain
                 uFlatRadius: { value: flatRadius },
                 uTransitionWidth: { value: transitionWidth },
                 uHillAmplitude: { value: hillAmplitude },
@@ -581,9 +617,23 @@ export default class Environment {
                 uNoiseScale2: { value: noiseScale2 },
                 uOctave1Weight: { value: octave1Weight },
                 uOctave2Weight: { value: octave2Weight },
-                uGrassColor: { value: grassColor },
-                uRockColor: { value: rockColor },
-                uSnowColor: { value: snowColor }
+                uGrassColor: { value: grassColorValue },
+                uRockColor: { value: rockColorValue },
+                uSnowColor: { value: snowColorValue },
+                
+                // Paramètres pour la lumière
+                uSunPosition: { value: sunDirection },
+                uSunColor: { value: sunColor },
+                uSunIntensity: { value: sunIntensity },
+                uAmbientColor: { value: ambientColor },
+                uAmbientIntensity: { value: ambientIntensity },
+                
+                // Paramètres pour le brouillard
+                uFogColor: { value: fogColor },
+                uFogNear: { value: fogNear },
+                uFogFar: { value: fogFar },
+                uFogEnabled: { value: fogEnabled },
+                uFogDensity: { value: fogDensity }
             };
             
             const material = new THREE.ShaderMaterial({
@@ -656,7 +706,63 @@ export default class Environment {
 
             // 1. Mettre à jour le cycle Jour/Nuit (calcul couleurs, positions soleil/lune)
             // Cette fonction utilise deltaTime pour faire avancer this.cycleTime
-			this.updateDayNightCycle();
+            this.updateDayNightCycle();
+            
+            // Mettre à jour les uniforms du terrain s'il est disponible avec un matériau shader
+            if (this.outerGroundMesh && this.outerGroundMesh.material && this.outerGroundMesh.material.uniforms) {
+                const uniforms = this.outerGroundMesh.material.uniforms;
+                
+                // Mise à jour des paramètres de lumière
+                if (this.sunLight) {
+                    // Utiliser la position normalisée pour une meilleure direction d'éclairage
+                    const sunDirection = this.sunLight.position.clone().normalize();
+                    uniforms.uSunPosition.value.copy(sunDirection);
+                    uniforms.uSunColor.value.copy(this.sunLight.color);
+                    uniforms.uSunIntensity.value = this.sunLight.intensity;
+                }
+                
+                if (this.ambientLight) {
+                    uniforms.uAmbientColor.value.copy(this.ambientLight.color);
+                    uniforms.uAmbientIntensity.value = this.ambientLight.intensity;
+                }
+                
+                // Mise à jour des paramètres de brouillard
+                if (this.experience.scene.fog) {
+                    uniforms.uFogEnabled.value = true;
+                    uniforms.uFogColor.value.copy(this.experience.scene.fog.color);
+                    
+                    // Si c'est un brouillard linéaire, conserver les valeurs near et far
+                    if (this.experience.scene.fog.isFog) {
+                        uniforms.uFogNear.value = this.experience.scene.fog.near;
+                        uniforms.uFogFar.value = this.experience.scene.fog.far;
+                    }
+                    
+                    // Pour le brouillard exponentiel, obtenir directement la densité brute
+                    // Cela correspond exactement à l'approche utilisée pour les oiseaux
+                    if (this.experience.scene.fog.isFogExp2) {
+                        // Utiliser directement la densité du brouillard de la scène
+                        uniforms.uFogDensity.value = this.experience.scene.fog.density;
+                    } else {
+                        // Pour les brouillards non-exponentiels, convertir depuis fogEffect si disponible
+                        if (this.weatherSystem && this.weatherSystem.fogEffect) {
+                            // Obtenir la densité normalisée (0-1)
+                            const normalizedDensity = this.weatherSystem.fogEffect.fogDensity;
+                            // Convertir en densité exponentielle comparable à FogExp2
+                            // La formule correspond à celle utilisée dans FogEffect.js
+                            const minFogExp = 0;
+                            const maxFogExp = 0.02;
+                            uniforms.uFogDensity.value = normalizedDensity * (maxFogExp - minFogExp) + minFogExp;
+                        } else {
+                            // Fallback si aucune source disponible
+                            uniforms.uFogDensity.value = 0.005; // Valeur moyenne faible
+                        }
+                    }
+                } else {
+                    // Si le brouillard est désactivé dans la scène
+                    uniforms.uFogEnabled.value = false;
+                    uniforms.uFogDensity.value = 0.0;
+                }
+            }
             
             // --- NOUVEAU : Mettre à jour les systèmes ---
             if (this.weatherSystem) {
