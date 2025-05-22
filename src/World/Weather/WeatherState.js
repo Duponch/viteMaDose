@@ -13,6 +13,7 @@ export default class WeatherState {
      * @param {number} lightningIntensity - Intensité des éclairs (0-1)
      * @param {number} rainbowOpacity - Opacité de l'arc-en-ciel (0-1)
      * @param {number} grassBendStrength - Force d'inclinaison de l'herbe (0-1.5)
+     * @param {number} leavesIntensity - Intensité des feuilles qui s'envolent (0-1)
      */
     constructor(
         type = 'clear',
@@ -23,7 +24,8 @@ export default class WeatherState {
         sunBrightness = 1.0,
         lightningIntensity = 0,
         rainbowOpacity = 0,
-        grassBendStrength = 0
+        grassBendStrength = 0,
+        leavesIntensity = 0
     ) {
         this.type = type;
         this.cloudDensity = cloudDensity;
@@ -34,6 +36,7 @@ export default class WeatherState {
         this.lightningIntensity = lightningIntensity;
         this.rainbowOpacity = rainbowOpacity;
         this.grassBendStrength = grassBendStrength;
+        this.leavesIntensity = leavesIntensity;
     }
 
     /**
@@ -50,7 +53,8 @@ export default class WeatherState {
             this.sunBrightness,
             this.lightningIntensity,
             this.rainbowOpacity,
-            this.grassBendStrength
+            this.grassBendStrength,
+            this.leavesIntensity
         );
     }
 } 

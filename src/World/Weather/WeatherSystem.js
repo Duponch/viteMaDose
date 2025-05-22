@@ -9,6 +9,7 @@ import FogEffect from './Effects/FogEffect.js';
 import CloudSystem from './Effects/CloudSystem.js';
 import LightningEffect from './Effects/LightningEffect.js';
 import RainbowEffect from './Effects/RainbowEffect.js';
+import LeavesEffect from './Effects/LeavesEffect.js';
 import WeatherState from './WeatherState.js';
 
 export default class WeatherSystem {
@@ -56,6 +57,8 @@ export default class WeatherSystem {
         this.lightningEffect = new LightningEffect(this);
         // Ensuite la pluie qui peut dépendre des précédents
         this.rainEffect = new RainEffect(this);
+        // Ajout de l'effet de feuilles
+        this.leavesEffect = new LeavesEffect(this);
         // Enfin, l'arc-en-ciel qui dépend du soleil et peut apparaître avec la pluie
         this.rainbowEffect = new RainbowEffect(this);
         
@@ -65,6 +68,7 @@ export default class WeatherSystem {
             this.cloudSystem,
             this.lightningEffect,
             this.rainEffect,
+            this.leavesEffect,
             this.rainbowEffect
         ];
         
@@ -83,7 +87,8 @@ export default class WeatherSystem {
                 fogDensity: 0,
                 lightningIntensity: 0,
                 rainbowOpacity: 0,
-                sunBrightness: 1.0
+                sunBrightness: 1.0,
+                leavesIntensity: 0
             },
             partlyCloudy: {
                 name: 'Partiellement nuageux',
@@ -93,7 +98,8 @@ export default class WeatherSystem {
                 fogDensity: 0,
                 lightningIntensity: 0,
                 rainbowOpacity: 0,
-                sunBrightness: 0.8
+                sunBrightness: 0.8,
+                leavesIntensity: 0.2
             },
             cloudy: {
                 name: 'Nuageux',
@@ -103,7 +109,8 @@ export default class WeatherSystem {
                 fogDensity: 0.1,
                 lightningIntensity: 0,
                 rainbowOpacity: 0,
-                sunBrightness: 0.6
+                sunBrightness: 0.6,
+                leavesIntensity: 0.4
             },
             lightRain: {
                 name: 'Pluie légère',
@@ -113,7 +120,8 @@ export default class WeatherSystem {
                 fogDensity: 0.2,
                 lightningIntensity: 0.1,
                 rainbowOpacity: 0.3,
-                sunBrightness: 0.5
+                sunBrightness: 0.5,
+                leavesIntensity: 0.5
             },
             heavyRain: {
                 name: 'Fortes pluies',
@@ -123,7 +131,8 @@ export default class WeatherSystem {
                 fogDensity: 0.3,
                 lightningIntensity: 0.4,
                 rainbowOpacity: 0.7,
-                sunBrightness: 0.3
+                sunBrightness: 0.3,
+                leavesIntensity: 0.7
             },
             storm: {
                 name: 'Orage',
@@ -133,7 +142,8 @@ export default class WeatherSystem {
                 fogDensity: 0.2,
                 lightningIntensity: 0.8,
                 rainbowOpacity: 0,
-                sunBrightness: 0.2
+                sunBrightness: 0.2,
+                leavesIntensity: 0.9
             },
             foggy: {
                 name: 'Brouillard',
@@ -143,7 +153,8 @@ export default class WeatherSystem {
                 fogDensity: 0.8,
                 lightningIntensity: 0,
                 rainbowOpacity: 0,
-                sunBrightness: 0.4
+                sunBrightness: 0.4,
+                leavesIntensity: 0.3
             }
         };
         
@@ -179,7 +190,9 @@ export default class WeatherSystem {
             this.fogEffect.fogDensity,
             this.environment.sunLight.intensity / 3.0, // Normaliser par rapport à l'intensité max (3.0)
             this.lightningEffect.intensity,
-            this.rainbowEffect.opacity
+            this.rainbowEffect.opacity,
+            0, // grassBendStrength (non utilisé par les presets)
+            this.leavesEffect.intensity
         );
         
         // Configurer l'état cible avec le nouveau préréglage
@@ -192,7 +205,9 @@ export default class WeatherSystem {
             preset.fogDensity,
             preset.sunBrightness,
             preset.lightningIntensity,
-            preset.rainbowOpacity
+            preset.rainbowOpacity,
+            0, // grassBendStrength (non utilisé par les presets)
+            preset.leavesIntensity
         );
         
         // Démarrer la transition
@@ -258,6 +273,13 @@ export default class WeatherSystem {
                 t
             );
             
+            // Transition des feuilles
+            this.leavesEffect.intensity = THREE.MathUtils.lerp(
+                this.currentWeatherState.leavesIntensity, 
+                this.targetWeatherState.leavesIntensity, 
+                t
+            );
+            
             // Transition du brouillard
             this.fogEffect.fogDensity = THREE.MathUtils.lerp(
                 this.currentWeatherState.fogDensity, 
@@ -312,6 +334,7 @@ export default class WeatherSystem {
             this.currentWeatherState.cloudDensity = this.cloudSystem.cloudDensity;
             this.currentWeatherState.cloudOpacity = this.cloudSystem.cloudOpacity;
             this.currentWeatherState.rainIntensity = this.rainEffect.intensity; 
+            this.currentWeatherState.leavesIntensity = this.leavesEffect.intensity;
             this.currentWeatherState.fogDensity = this.fogEffect.fogDensity;
             this.currentWeatherState.lightningIntensity = this.lightningEffect.intensity;
             this.currentWeatherState.rainbowOpacity = this.rainbowEffect.opacity;

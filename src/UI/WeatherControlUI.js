@@ -31,6 +31,7 @@ export default class WeatherControlUI {
                 // Sauvegarder les valeurs initiales du système (avant la fonctionnalité météo)
                 this.defaultValues = {
                     rainIntensity: 0,
+                    leavesIntensity: 0,
                     cloudDensity: 0.3, // Valeur par défaut dans CloudSystem
                     cloudColor: 0, // Valeur 0 = blanc (défaut), 1 = noir
                     cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
@@ -99,6 +100,7 @@ export default class WeatherControlUI {
         
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
+        this.createSlider('Feuilles', 'leaves', 0, 1, 0.01, this.weatherSystem.leavesEffect.intensity);
         this.createSlider('Nombre de nuages', 'cloud-density', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudDensity);
         this.createSlider('Couleur des nuages', 'cloud-color', 0, 1, 0.01, 0); // 0 = blanc, 1 = noir
         this.createSlider('Opacité des nuages', 'cloud-opacity', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudOpacity);
@@ -156,6 +158,7 @@ export default class WeatherControlUI {
         this.valueDisplays = {
             storm: this.container.querySelector('#value-storm'),
             rain: this.container.querySelector('#value-rain'),
+            leaves: this.container.querySelector('#value-leaves'),
             cloudDensity: this.container.querySelector('#value-cloud-density'),
             cloudColor: this.container.querySelector('#value-cloud-color'),
             cloudOpacity: this.container.querySelector('#value-cloud-opacity'),
@@ -248,6 +251,7 @@ export default class WeatherControlUI {
         // Mettre à jour tous les paramètres proportionnellement
         const parameters = [
             { name: 'rain', defaultValue: this.defaultValues.rainIntensity, maxValue: this.stormMaxValues.rainIntensity },
+            { name: 'leaves', defaultValue: this.defaultValues.leavesIntensity, maxValue: 0.8 },
             { name: 'cloud-density', defaultValue: this.defaultValues.cloudDensity, maxValue: this.stormMaxValues.cloudDensity },
             { name: 'cloud-color', defaultValue: this.defaultValues.cloudColor, maxValue: this.stormMaxValues.cloudColor },
             { name: 'cloud-opacity', defaultValue: this.defaultValues.cloudOpacity, maxValue: this.stormMaxValues.cloudOpacity },
@@ -306,6 +310,10 @@ export default class WeatherControlUI {
         switch (param) {
             case 'rain':
                 this.weatherSystem.rainEffect.intensity = value;
+                break;
+                
+            case 'leaves':
+                this.weatherSystem.leavesEffect.intensity = value;
                 break;
                 
             case 'cloud-density':
@@ -383,6 +391,13 @@ export default class WeatherControlUI {
                     this.valueDisplays.rain.textContent = value.toFixed(2);
                     this.sliders.rain.style.setProperty('--value', `${value * 100}%`);
                     this.weatherSystem.rainEffect.intensity = value;
+                    break;
+                    
+                case 'leavesIntensity':
+                    this.sliders.leaves.value = value;
+                    this.valueDisplays.leaves.textContent = value.toFixed(2);
+                    this.sliders.leaves.style.setProperty('--value', `${value * 100}%`);
+                    this.weatherSystem.leavesEffect.intensity = value;
                     break;
                     
                 case 'cloudDensity':
