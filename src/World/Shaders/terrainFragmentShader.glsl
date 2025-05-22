@@ -17,9 +17,38 @@ uniform float uFogFar;
 uniform bool uFogEnabled;
 uniform float uFogDensity;
 
+// Textures procédurales
+uniform sampler2D uGrassTexture;
+uniform sampler2D uRockTexture;
+uniform sampler2D uSnowTexture;
+
+// Hauteurs de transition
+uniform float uRockHeight;
+uniform float uSnowHeight;
+
 void main() {
-    // Récupérer la couleur de base
-    vec3 baseColor = vColor;
+    // Calculer les coordonnées UV pour le mapping de texture
+    // Utiliser la position pour créer des coordonnées de texture cohérentes
+    vec2 uv = vPosition.xz * 0.01;
+    
+    // Récupérer les textures
+    vec3 grassColor = texture2D(uGrassTexture, uv).rgb;
+    vec3 rockColor = texture2D(uRockTexture, uv).rgb;
+    vec3 snowColor = texture2D(uSnowTexture, uv).rgb;
+    
+    // Facteurs de mélange basés sur la hauteur
+    float rockFactor = smoothstep(uRockHeight - 10.0, uRockHeight + 10.0, vHeight);
+    float snowFactor = smoothstep(uSnowHeight - 15.0, uSnowHeight + 15.0, vHeight);
+    
+    // Ajouter un facteur basé sur la pente (normale)
+    // Les surfaces plus verticales (falaises) seront plus rocheuses
+    float slopeRockFactor = 1.0 - dot(normalize(vNormal), vec3(0.0, 1.0, 0.0));
+    rockFactor = max(rockFactor, slopeRockFactor * 0.8);
+    
+    // Combiner les textures en fonction de la hauteur et de la pente
+    vec3 baseColor = grassColor;
+    baseColor = mix(baseColor, rockColor, rockFactor);
+    baseColor = mix(baseColor, snowColor, snowFactor);
     
     // Calcul de l'éclairage (modèle Lambert standard)
     vec3 normal = normalize(vNormal);

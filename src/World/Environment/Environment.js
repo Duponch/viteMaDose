@@ -604,7 +604,18 @@ export default class Environment {
             console.log('- fogEnabled:', fogEnabled);
             console.log('- fogDensity:', fogDensity);
             
-            // Création du matériau shader avec couleurs plates et éclairage
+            // Créer les textures procédurales pour le terrain
+            const grassTexture = this.createProceduralGrassTexture();
+            const rockTexture = this.createProceduralRockTexture();
+            const snowTexture = this.createProceduralSnowTexture();
+            
+            // Log pour le diagnostic
+            console.log('Création des textures procédurales:');
+            console.log('- grassTexture:', grassTexture);
+            console.log('- rockTexture:', rockTexture);
+            console.log('- snowTexture:', snowTexture);
+            
+            // Ajouter les textures aux uniforms
             const uniforms = {
                 // Paramètres pour le terrain
                 uFlatRadius: { value: flatRadius },
@@ -633,7 +644,12 @@ export default class Environment {
                 uFogNear: { value: fogNear },
                 uFogFar: { value: fogFar },
                 uFogEnabled: { value: fogEnabled },
-                uFogDensity: { value: fogDensity }
+                uFogDensity: { value: fogDensity },
+                
+                // Textures procédurales
+                uGrassTexture: { value: grassTexture },
+                uRockTexture: { value: rockTexture },
+                uSnowTexture: { value: snowTexture },
             };
             
             const material = new THREE.ShaderMaterial({
@@ -679,10 +695,35 @@ export default class Environment {
         if (this.moonLight) this.scene.remove(this.moonLight);
         if (this.skyBox) { this.scene.remove(this.skyBox); this.skyBox.geometry?.dispose(); this.skyBox.material?.dispose(); this.skyBox = null; }
         if (this.starsMesh) { this.scene.remove(this.starsMesh); this.starsMesh.geometry?.dispose(); this.starsMesh.material?.dispose(); this.starsMesh = null; }
-        if (this.outerGroundMesh) { this.scene.remove(this.outerGroundMesh); this.outerGroundMesh.geometry?.dispose(); this.outerGroundMesh.material?.dispose(); this.outerGroundMesh = null; }
+        
+        // Nettoyer le terrain et ses textures
+        if (this.outerGroundMesh) {
+            this.scene.remove(this.outerGroundMesh);
+            
+            // Nettoyer les textures du shader
+            if (this.outerGroundMesh.material && this.outerGroundMesh.material.uniforms) {
+                const uniforms = this.outerGroundMesh.material.uniforms;
+                
+                // Disposer les textures procédurales si elles existent
+                if (uniforms.uGrassTexture && uniforms.uGrassTexture.value) {
+                    uniforms.uGrassTexture.value.dispose();
+                }
+                if (uniforms.uRockTexture && uniforms.uRockTexture.value) {
+                    uniforms.uRockTexture.value.dispose();
+                }
+                if (uniforms.uSnowTexture && uniforms.uSnowTexture.value) {
+                    uniforms.uSnowTexture.value.dispose();
+                }
+            }
+            
+            this.outerGroundMesh.geometry?.dispose();
+            this.outerGroundMesh.material?.dispose();
+            this.outerGroundMesh = null;
+        }
+        
         if (this.moonMesh) { this.scene.remove(this.moonMesh); this.moonMesh.geometry?.dispose(); this.moonMesh.material?.dispose(); this.moonMesh = null; }
         
-        // Nettoyer les textures
+        // Nettoyer les anciennes textures si elles existent encore
         if (this.grassTexture) this.grassTexture.dispose();
         if (this.rockTexture) this.rockTexture.dispose();
         if (this.snowTexture) this.snowTexture.dispose();
@@ -844,31 +885,194 @@ export default class Environment {
 
     /**
      * Crée une texture procédurale pour l'herbe
-     * @returns {THREE.CanvasTexture} La texture générée
-     * Note: Cette méthode n'est plus utilisée dans la version low poly
+     * @returns {THREE.Texture} Texture générée
      */
-    createGrassTexture() {
-        // Cette méthode est conservée pour compatibilité mais n'est plus utilisée
-        return null;
+    createProceduralGrassTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        
+        // Couleur de base pour l'herbe
+        ctx.fillStyle = '#4a8c3d';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Ajouter des variations pour simuler de l'herbe
+        for (let i = 0; i < 3000; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 3 + 1;
+            
+            // Variation de la couleur de l'herbe
+            const hue = 90 + Math.random() * 30; // vert avec variation
+            const saturation = 50 + Math.random() * 30;
+            const lightness = 30 + Math.random() * 20;
+            
+            ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+            
+            // Dessiner de petites brins d'herbe (lignes verticales)
+            const grassHeight = Math.random() * 6 + 3;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x, y - grassHeight);
+            ctx.lineWidth = size;
+            ctx.strokeStyle = ctx.fillStyle;
+            ctx.stroke();
+        }
+        
+        // Ajouter des textures de sol entre les herbes
+        for (let i = 0; i < 2000; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 4 + 2;
+            
+            // Couleur de terre
+            const brownHue = 30 + Math.random() * 20;
+            const brownSat = 30 + Math.random() * 20;
+            const brownLight = 20 + Math.random() * 15;
+            
+            ctx.fillStyle = `hsl(${brownHue}, ${brownSat}%, ${brownLight}%)`;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(5, 5); // Répéter pour éviter des textures trop grandes/évidentes
+        
+        return texture;
     }
 
     /**
      * Crée une texture procédurale pour la roche
-     * @returns {THREE.CanvasTexture} La texture générée
-     * Note: Cette méthode n'est plus utilisée dans la version low poly
+     * @returns {THREE.Texture} Texture générée
      */
-    createRockTexture() {
-        // Cette méthode est conservée pour compatibilité mais n'est plus utilisée
-        return null;
+    createProceduralRockTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        
+        // Couleur de base pour la roche
+        ctx.fillStyle = '#656565';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Ajouter de la texture de base avec du bruit
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            // Ajouter du bruit pour créer une texture de roche
+            const noise = Math.random() * 30 - 15;
+            data[i] = Math.max(0, Math.min(255, data[i] + noise));     // R
+            data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise)); // G
+            data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise)); // B
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+        
+        // Ajouter des fissures et lignes pour simuler des roches
+        for (let i = 0; i < 100; i++) {
+            const x1 = Math.random() * canvas.width;
+            const y1 = Math.random() * canvas.height;
+            const length = Math.random() * 100 + 20;
+            const angle = Math.random() * Math.PI;
+            
+            const x2 = x1 + Math.cos(angle) * length;
+            const y2 = y1 + Math.sin(angle) * length;
+            
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.lineWidth = Math.random() * 2 + 0.5;
+            ctx.strokeStyle = `rgba(40, 40, 40, ${Math.random() * 0.5 + 0.2})`;
+            ctx.stroke();
+        }
+        
+        // Ajouter des taches plus claires et plus foncées
+        for (let i = 0; i < 500; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 15 + 5;
+            
+            // Alternance entre taches claires et foncées
+            const shade = Math.random() > 0.5 ? 
+                `rgba(100, 100, 100, ${Math.random() * 0.3 + 0.1})` : 
+                `rgba(50, 50, 50, ${Math.random() * 0.3 + 0.1})`;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fillStyle = shade;
+            ctx.fill();
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(3, 3);
+        
+        return texture;
     }
 
     /**
      * Crée une texture procédurale pour la neige
-     * @returns {THREE.CanvasTexture} La texture générée
-     * Note: Cette méthode n'est plus utilisée dans la version low poly
+     * @returns {THREE.Texture} Texture générée
      */
-    createSnowTexture() {
-        // Cette méthode est conservée pour compatibilité mais n'est plus utilisée
-        return null;
+    createProceduralSnowTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        
+        // Couleur de base pour la neige
+        ctx.fillStyle = '#f0f5f9';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Ajouter de légères variations pour la texture de neige
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        for (let i = 0; i < data.length; i += 4) {
+            // Légères variations pour donner un aspect poudreux
+            const variation = Math.random() * 15;
+            data[i] = Math.max(220, Math.min(255, data[i] - variation));     // R
+            data[i+1] = Math.max(220, Math.min(255, data[i+1] - variation)); // G
+            data[i+2] = Math.max(240, Math.min(255, data[i+2])); // B - garder une teinte légèrement bleutée
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
+        
+        // Ajouter des scintillements pour la neige
+        for (let i = 0; i < 800; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 2 + 0.5;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.fill();
+        }
+        
+        // Ajouter quelques ombres subtiles pour donner du relief
+        for (let i = 0; i < 300; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 10 + 5;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(200, 210, 230, ${Math.random() * 0.2 + 0.1})`;
+            ctx.fill();
+        }
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(4, 4);
+        
+        return texture;
     }
 }
