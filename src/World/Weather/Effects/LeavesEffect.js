@@ -394,6 +394,7 @@ export default class LeavesEffect {
                 
                 // Gestion des différents types de brouillard
                 if (this.scene.fog.isFogExp2) {
+                    // Utiliser la même densité que le brouillard de la scène
                     this.leavesMaterial.uniforms.fogDensity.value = this.scene.fog.density;
                     this.leavesMaterial.uniforms.fogNear.value = 5;
                     this.leavesMaterial.uniforms.fogFar.value = 15;
@@ -403,13 +404,34 @@ export default class LeavesEffect {
                         this.leavesMaterial.needsUpdate = true;
                     }
                 } else {
+                    // Pour le brouillard linéaire, synchroniser les paramètres
                     this.leavesMaterial.uniforms.fogNear.value = this.scene.fog.near;
                     this.leavesMaterial.uniforms.fogFar.value = this.scene.fog.far;
-                    this.leavesMaterial.uniforms.fogDensity.value = 0.1;
+                    
+                    // Convertir le brouillard linéaire en densité pour notre shader
+                    // Plus le far est petit, plus la densité est élevée
+                    const normalizedDensity = 1.0 - (this.scene.fog.far / 1000); // Normaliser far (0-1)
+                    this.leavesMaterial.uniforms.fogDensity.value = normalizedDensity * 0.05;
                     
                     if (this.leavesMaterial.defines?.USE_FOG_EXP2) {
                         delete this.leavesMaterial.defines.USE_FOG_EXP2;
                         this.leavesMaterial.needsUpdate = true;
+                    }
+                }
+                
+                // Accéder au FogEffect si disponible pour obtenir la densité normalisée
+                if (this.weatherSystem && this.weatherSystem.fogEffect) {
+                    // La densité dans FogEffect est normalisée (0-1)
+                    const normalizedDensity = this.weatherSystem.fogEffect.fogDensity;
+                    
+                    // Amplifier l'effet du brouillard sur les feuilles pour une meilleure correspondance visuelle
+                    // Cela rend les feuilles plus sensibles aux changements de brouillard
+                    const amplifiedFactor = Math.pow(normalizedDensity, 0.8) * 1.5;
+                    
+                    // Appliquer un facteur de pondération plus fort pour les feuilles lointaines
+                    if (this.leavesMaterial.uniforms.fogDensity) {
+                        // Accentuer la densité tout en préservant la valeur de base
+                        this.leavesMaterial.uniforms.fogDensity.value *= (1.0 + amplifiedFactor);
                     }
                 }
             }

@@ -50,7 +50,10 @@ void main() {
     
     // Position et taille dans l'espace caméra
     vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
-    vDistance = -mvPosition.z;
+    
+    // Calculer la distance à la caméra pour l'effet de brouillard
+    // Utiliser la distance euclidienne complète pour un brouillard plus réaliste
+    vDistance = length(mvPosition.xyz);
     
     // Appliquer la taille en fonction de la distance et de l'intensité
     float sizeBoost = 1.0 + intensity * 0.5;

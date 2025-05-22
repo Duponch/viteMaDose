@@ -53,21 +53,26 @@ void main() {
     // Choix du type de brouillard (exponentiel ou linéaire)
     #ifdef USE_FOG_EXP2
         // Brouillard exponentiel - plus réaliste et progressif
-        fogFactor = 1.0 - exp(-fogDensity * fogDensity * vDistance * vDistance);
+        // Utilisation d'une formule plus sensible pour les feuilles
+        fogFactor = 1.0 - exp(-fogDensity * fogDensity * vDistance * vDistance * 1.5);
     #else
         // Brouillard linéaire - simple et efficace
-        fogFactor = smoothstep(fogNear, fogFar, vDistance);
+        // Augmenter la sensibilité du brouillard linéaire
+        float fogStart = fogNear * 0.8; // Commencer le brouillard plus tôt
+        float fogEnd = fogFar * 0.9;    // Terminer le brouillard plus tôt
+        fogFactor = smoothstep(fogStart, fogEnd, vDistance);
     #endif
     
     // S'assurer que le brouillard est correctement appliqué
     fogFactor = clamp(fogFactor, 0.0, 1.0);
     
-    // Appliquer le brouillard en fonction de la densité du brouillard
-    vec3 finalColor = mix(litColor, fogColor, fogFactor);
-    
-    // Réduire l'opacité en fonction de la distance dans le brouillard
+    // Renforcer l'effet du brouillard sur l'opacité pour les feuilles lointaines
     // Plus l'objet est loin, plus il devient transparent dans le brouillard
-    alpha *= mix(1.0, 0.7, fogFactor);
+    float opacityFactor = mix(1.0, 0.5, fogFactor * fogFactor);
+    alpha *= opacityFactor;
+    
+    // Appliquer le brouillard à la couleur
+    vec3 finalColor = mix(litColor, fogColor, fogFactor);
     
     // Couleur finale
     gl_FragColor = vec4(finalColor, alpha);
