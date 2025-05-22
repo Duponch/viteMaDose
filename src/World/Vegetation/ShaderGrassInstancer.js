@@ -47,6 +47,10 @@ export default class ShaderGrassInstancer {
         this.maxVisibilityDistance = 400;
         this.maxVisibilityDistanceSquared = this.maxVisibilityDistance * this.maxVisibilityDistance;
         
+        // Distance maximale d'animation (en unités) - pour optimisation des performances
+        this.maxAnimationDistance = 50;
+        this.maxAnimationDistanceSquared = this.maxAnimationDistance * this.maxAnimationDistance;
+        
         // Paramètres de mise à jour
         this.updateFrequency = 2; // Mettre à jour tous les 2 frames
         this.frameCount = 0;
@@ -107,6 +111,9 @@ export default class ShaderGrassInstancer {
                 shader.uniforms.windDirection = { value: this.windDirection };
                 shader.uniforms.inclinationDirection = { value: this.inclinationDirection };
                 
+                // Nouvel uniform pour l'état d'animation de la parcelle
+                shader.uniforms.isAnimatedByDistance = { value: 0.0 };
+                
                 // Stocker une référence au shader pour la mise à jour
                 this.materialShader = shader;
                 
@@ -125,6 +132,9 @@ export default class ShaderGrassInstancer {
                     // Directions
                     uniform vec2 windDirection;    // Direction du vent
                     uniform vec2 inclinationDirection; // Direction d'inclinaison
+                    
+                    // État d'animation basé sur la distance
+                    uniform float isAnimatedByDistance; // 0.0 = pas animé, 1.0 = animé
                     
                     varying vec2 vUv;
                     
@@ -154,7 +164,7 @@ export default class ShaderGrassInstancer {
                     `
                 );
                 
-                // 2. Ensuite ajouter le code d'animation simplifié
+                // 2. Ensuite ajouter le code d'animation simplifié, avec vérification de la distance
                 shader.vertexShader = shader.vertexShader.replace(
                     '#include <begin_vertex>',
                     `
@@ -166,8 +176,11 @@ export default class ShaderGrassInstancer {
                     // Effet seulement proportionnel à la hauteur (pas d'effet à la base)
                     float effectIntensity = heightFactor * heightFactor; // Effet quadratique
                     
+                    // Vérifier si l'animation est activée et si la parcelle est dans la plage d'animation
+                    bool shouldAnimateInstance = animationEnabled > 0.5 && isAnimatedByDistance > 0.5 && effectIntensity > 0.0;
+                    
                     // Si l'animation est activée et qu'on n'est pas à la base du brin
-                    if (animationEnabled > 0.5 && effectIntensity > 0.0) {
+                    if (shouldAnimateInstance) {
                         // Temps actuel pour l'animation
                         float currentTime = time;
                         
@@ -395,6 +408,8 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             lastUpdate: 0,
             id: plot.id || Math.random().toString(36).substr(2, 9),
             isVisible: true,
+            isAnimated: false,  // Par défaut, pas animé jusqu'à ce que la distance soit vérifiée
+            lastAnimatedState: false,
             boundingSphere: boundingSphere,
             plot: plot
         };
@@ -416,7 +431,8 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         instancedMesh.userData = {
             positions: [],
             originalMatrices: [],
-            visible: new Array(this.instanceNumber).fill(true)
+            visible: new Array(this.instanceNumber).fill(true),
+            animated: false // État d'animation pour toute la parcelle
         };
         
         // Positionner et échelonner les instances d'herbe aléatoirement dans la parcelle
@@ -493,6 +509,31 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         // Mettre à jour le frustum et la visibilité des parcelles
         this._updateCameraFrustum();
         this._updatePlotVisibility();
+        
+        // Mettre à jour l'uniform d'animation en fonction de la parcelle actuellement active
+        if (this.materialShader && this.materialShader.uniforms) {
+            // Chercher la parcelle visible la plus proche pour déterminer l'état d'animation
+            let closestPlotInfo = null;
+            let minDistance = Infinity;
+            
+            for (const plotInfo of this.plotData) {
+                if (plotInfo.isVisible) {
+                    if (plotInfo.distanceSquared < minDistance) {
+                        minDistance = plotInfo.distanceSquared;
+                        closestPlotInfo = plotInfo;
+                    }
+                }
+            }
+            
+            // Mettre à jour l'uniform d'animation basé sur la parcelle la plus proche
+            if (closestPlotInfo) {
+                this.materialShader.uniforms.isAnimatedByDistance.value = 
+                    closestPlotInfo.isAnimated ? 1.0 : 0.0;
+            } else {
+                // Pas de parcelle visible, désactiver l'animation
+                this.materialShader.uniforms.isAnimatedByDistance.value = 0.0;
+            }
+        }
     }
     
     // Vérifier si la caméra a bougé suffisamment pour justifier une mise à jour
@@ -565,9 +606,13 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
                 isVisible = this._frustum.intersectsSphere(this._tempBoundingSphere);
             }
             
-            // Appliquer la visibilité
-            if (plotInfo.isVisible !== isVisible) {
+            // Déterminer si l'animation doit être activée
+            const shouldAnimate = isVisible && plotInfo.distanceSquared <= this.maxAnimationDistanceSquared;
+            
+            // Appliquer la visibilité et l'animation
+            if (plotInfo.isVisible !== isVisible || plotInfo.isAnimated !== shouldAnimate) {
                 plotInfo.isVisible = isVisible;
+                plotInfo.isAnimated = shouldAnimate;
                 this._applyPlotVisibility(plotInfo);
             }
         });
@@ -597,6 +642,17 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
                     mesh.setMatrixAt(i, mesh.userData.originalMatrices[i]);
                     mesh.userData.visible[i] = true;
                 }
+            }
+            
+            // Mettre à jour l'état d'animation dans le userData
+            mesh.userData.animated = plotInfo.isAnimated;
+            
+            // Si nous avons accès au shader, mettre à jour l'uniform d'animation
+            if (this.materialShader && this.materialShader.uniforms && 
+                plotInfo.lastAnimatedState !== plotInfo.isAnimated) {
+                
+                // Conserver l'état pour comparer lors de la prochaine mise à jour
+                plotInfo.lastAnimatedState = plotInfo.isAnimated;
             }
         }
         
