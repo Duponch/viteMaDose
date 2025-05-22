@@ -467,6 +467,9 @@ export default class Environment {
         // Paramètres pour les couleurs de terrain
         const rockHeight = 50; // Hauteur à partir de laquelle la roche apparaît
         const snowHeight = 120; // Hauteur à partir de laquelle la neige apparaît
+        const minSnowHeight = 65; // Hauteur minimale absolue pour la neige
+        const transitionNoiseScale = 0.01; // Échelle du bruit pour les transitions (plus petit = plus grand motif)
+        const transitionNoiseStrength = 35; // Force du bruit pour les transitions (plus = plus irrégulier)
         
         // Couleurs vives pour l'effet low poly
         const grassColorValue = new THREE.Color(0x4CAF50);  // Vert vif
@@ -624,6 +627,7 @@ export default class Environment {
                 uTerrainVisibleRadius: { value: width / 2 }, // Utiliser la moitié de la largeur comme référence
                 uRockHeight: { value: rockHeight },
                 uSnowHeight: { value: snowHeight },
+                uMinSnowHeight: { value: minSnowHeight }, // Hauteur minimale absolue pour la neige
                 uNoiseScale1: { value: noiseScale1 },
                 uNoiseScale2: { value: noiseScale2 },
                 uOctave1Weight: { value: octave1Weight },
@@ -631,6 +635,9 @@ export default class Environment {
                 uGrassColor: { value: grassColorValue },
                 uRockColor: { value: rockColorValue },
                 uSnowColor: { value: snowColorValue },
+                // Nouveaux paramètres pour transitions non-linéaires
+                uTransitionNoiseScale: { value: transitionNoiseScale },
+                uTransitionNoiseStrength: { value: transitionNoiseStrength },
                 
                 // Paramètres pour la lumière
                 uSunPosition: { value: sunDirection },

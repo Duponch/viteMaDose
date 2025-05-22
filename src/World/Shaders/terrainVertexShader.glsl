@@ -4,12 +4,17 @@ uniform float uHillAmplitude;
 uniform float uTerrainVisibleRadius;
 uniform float uRockHeight;
 uniform float uSnowHeight;
+uniform float uMinSnowHeight; // Hauteur minimale absolue pour la neige
 
 // Variables pour le noise
 uniform float uNoiseScale1;
 uniform float uNoiseScale2;
 uniform float uOctave1Weight;
 uniform float uOctave2Weight;
+
+// Nouveaux paramètres pour transitions non-linéaires
+uniform float uTransitionNoiseScale;
+uniform float uTransitionNoiseStrength;
 
 // Couleurs du terrain
 uniform vec3 uGrassColor;
@@ -42,18 +47,9 @@ void main() {
     if (length(rockColor) < 0.1) rockColor = vec3(0.5, 0.3, 0.2);
     if (length(snowColor) < 0.1) snowColor = vec3(1.0, 1.0, 1.0);
     
-    // Déterminer la couleur en fonction de la hauteur
+    // La détermination des couleurs basée sur la hauteur est maintenant gérée dans le fragment shader
+    // avec les transitions bruitées, donc nous utilisons juste une couleur de base ici
     vec3 terrainColor = grassColor;  // Couleur par défaut
-    
-    // Transition vers la roche
-    if (pos.y >= uRockHeight) {
-        terrainColor = rockColor;
-    }
-    
-    // Transition vers la neige
-    if (pos.y >= uSnowHeight) {
-        terrainColor = snowColor;
-    }
     
     // Légère variation par facette pour un effet low poly
     float variation = (normal.x + normal.z) * 0.1;
