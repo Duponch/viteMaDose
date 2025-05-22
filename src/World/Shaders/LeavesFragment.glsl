@@ -12,11 +12,18 @@ uniform float leafOpacity;
 uniform vec3 ambientColor;
 uniform float ambientIntensity;
 uniform float dayFactor;
+uniform float time;
 
 varying float vSize;
 varying float vDistance;
 varying float vRotation;
 varying vec2 vUv;
+
+// Fonction pour créer une ombre subtile sur les bords des feuilles
+float edgeShadow(vec2 uv) {
+    float distFromCenter = length(uv - vec2(0.5, 0.5));
+    return smoothstep(0.0, 0.5, 1.0 - distFromCenter * 1.2);
+}
 
 void main() {
     // Calculer les coordonnées UV rotatives pour simuler la rotation des feuilles
@@ -41,12 +48,37 @@ void main() {
         discard;
     }
     
+    // Ajouter un léger flottement de couleur basé sur le temps pour simuler le mouvement de la lumière
+    float colorShift = sin(time * 0.2) * 0.05 + 0.95;
+    
+    // Effet d'ombrage aux bords pour plus de réalisme
+    float shadow = edgeShadow(rotatedUv);
+    
+    // Effet de translucidité subtile quand la feuille est exposée à la lumière
+    float translucency = dayFactor * 0.3 * shadow;
+    
     // Appliquer l'éclairage ambiant en fonction du cycle jour/nuit
     // Facteur de luminosité combinant l'intensité ambiante et le facteur jour/nuit
     float lightFactor = ambientIntensity * mix(0.3, 1.0, dayFactor);
     
-    // Couleur avec éclairage ambiant
-    vec3 litColor = texColor.rgb * ambientColor * lightFactor;
+    // Modifier légèrement la couleur en fonction de la rotation et du temps
+    // pour simuler les différentes faces de la feuille sous différents angles de lumière
+    vec3 baseColor = texColor.rgb * colorShift;
+    
+    // Ajouter une légère variation de teinte en fonction de la position
+    // pour simuler différents types de feuilles
+    float hueVariation = fract(sin(gl_FragCoord.x * 0.01 + gl_FragCoord.y * 0.02) * 4325.5453);
+    float hueShift = mix(0.9, 1.1, hueVariation);
+    
+    // Couleur avec éclairage ambiant et effets appliqués
+    vec3 litColor = baseColor * ambientColor * lightFactor * shadow;
+    
+    // Ajouter un effet de translucidité (brightening) quand la lumière passe à travers la feuille
+    litColor += baseColor * translucency * vec3(1.0, 0.9, 0.7);
+    
+    // Appliquer la variation de teinte
+    litColor.r *= hueShift;
+    litColor.g *= mix(0.9, 1.1, fract(hueVariation * 3.7));
     
     // Assombrir davantage la nuit
     if (dayFactor < 0.3) {
@@ -76,6 +108,4 @@ void main() {
     
     // Couleur finale avec alpha fixe à 1.0 pour les pixels visibles
     gl_FragColor = vec4(finalColor, 1.0);
-    
-    // Nous n'avons plus besoin de rejeter les pixels ici car nous l'avons fait plus tôt
 } 

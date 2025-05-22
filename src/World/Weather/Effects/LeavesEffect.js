@@ -18,18 +18,18 @@ export default class LeavesEffect {
         // Configuration
         this._intensity = 0;             // Intensité (0-1), modifie la visibilité et la quantité
         this.leafCount = 100000;         // Nombre de feuilles augmenté pour un meilleur effet
-        this.windSpeed = 20;             // Vitesse de base du vent
+        this.windSpeed = 12;             // Vitesse de base du vent (encore réduite pour moins de verticalité)
         this.worldBounds = 2000;         // Taille du monde où les feuilles peuvent apparaître
         this.worldBoundsHalf = this.worldBounds / 2;
-        this.leafHeight = 200;           // Hauteur maximale des feuilles augmentée
+        this.leafHeight = 180;           // Hauteur maximale des feuilles (légèrement réduite)
         this.leafMinHeight = 0;          // Hauteur minimale des feuilles (au sol)
-        this.speedIntensityFactor = 0.7; // Facteur de proportionnalité entre l'intensité et la vitesse (0-1)
+        this.speedIntensityFactor = 0.4; // Facteur de proportionnalité entre l'intensité et la vitesse (encore réduit)
         this.minLeafSize = 0.9;          // Taille minimale des feuilles
         this.maxLeafSize = 1.8;          // Taille maximale des feuilles
-        this.rotationFactor = 2.0;       // Facteur de rotation des feuilles
+        this.rotationFactor = 2.5;       // Facteur de rotation des feuilles
         this.leafOpacity = 1.0;          // Opacité des feuilles (1.0 = complètement opaque)
-        this.verticalWindEffect = 0.3;   // Effet vertical du vent
-        this.respawnInterval = 10000;    // Intervalle de réapparition des feuilles (10 secondes)
+        this.verticalWindEffect = 0.12;  // Effet vertical du vent (fortement réduit pour favoriser le mouvement horizontal)
+        this.respawnInterval = 8000;     // Intervalle de réapparition des feuilles
         this.lastRespawnTime = 0;        // Temps de la dernière réapparition
         
         // Vecteurs temporaires pour les calculs
@@ -222,30 +222,38 @@ export default class LeavesEffect {
         const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
         
         for (let i = 0; i < this.leafCount; i++) {
-            // Répartir les feuilles dans tout le monde, pas seulement autour de la caméra
-            const x = Math.random() * this.worldBounds - this.worldBoundsHalf;
-            const z = Math.random() * this.worldBounds - this.worldBoundsHalf;
+            // Répartir les feuilles dans tout le monde avec une distribution plus naturelle
+            // Utiliser une distribution qui favorise légèrement les bords du monde
+            // pour éviter une concentration excessive au centre
+            const angle = Math.random() * Math.PI * 2;
+            const radiusFactor = Math.pow(Math.random(), 0.7); // Distribution non linéaire
+            const radius = this.worldBoundsHalf * radiusFactor;
             
-            // Position x, z aléatoire dans le monde
+            const x = Math.cos(angle) * radius + (Math.random() - 0.5) * 200; // Ajouter une petite variation
+            const z = Math.sin(angle) * radius + (Math.random() - 0.5) * 200;
+            
+            // Position x, z dans le monde avec distribution améliorée
             positions[i * 3] = x;
             
             // Si l'indice est supérieur au nombre de feuilles visibles, cacher la feuille
             if (i >= visibleLeafCount) {
                 positions[i * 3 + 1] = -10000; // Cacher sous le terrain
             } else {
-                // Hauteur entre le sol et la hauteur maximale des feuilles
-                positions[i * 3 + 1] = this.leafMinHeight + Math.random() * this.leafHeight;
+                // Distribution de hauteur non uniforme pour plus de réalisme
+                // Favoriser les hauteurs plus basses pour simuler des feuilles qui volent près du sol
+                const heightDistribution = Math.pow(Math.random(), 1.5);
+                positions[i * 3 + 1] = this.leafMinHeight + heightDistribution * this.leafHeight;
             }
             
             positions[i * 3 + 2] = z;
             
-            // Taille aléatoire
-            sizes[i] = this.minLeafSize + Math.random() * (this.maxLeafSize - this.minLeafSize);
+            // Taille aléatoire avec distribution plus variée
+            sizes[i] = this.minLeafSize + Math.pow(Math.random(), 0.8) * (this.maxLeafSize - this.minLeafSize);
             
-            // Vitesse aléatoire
-            velocities[i] = 0.8 + Math.random() * 0.4;
+            // Vitesse aléatoire avec distribution naturelle
+            velocities[i] = 0.7 + Math.pow(Math.random(), 0.9) * 0.6;
             
-            // Angle aléatoire
+            // Angle aléatoire pour la direction du mouvement
             angles[i] = Math.random() * Math.PI * 2;
             
             // Décalage aléatoire pour différencier le mouvement
@@ -279,6 +287,7 @@ export default class LeavesEffect {
         const positions = this.leavesObject.geometry.attributes.position;
         const rotations = this.leavesObject.geometry.attributes.rotation;
         const velocities = this.leavesObject.geometry.attributes.velocity;
+        const angles = this.leavesObject.geometry.attributes.angle;
         
         // Nombre de feuilles à afficher en fonction de l'intensité actuelle
         const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
@@ -299,17 +308,30 @@ export default class LeavesEffect {
                 Math.abs(positions.array[idx]) > this.worldBoundsHalf ||
                 Math.abs(positions.array[idx + 2]) > this.worldBoundsHalf) {
                 
-                // Repositionner la feuille dans une position aléatoire en hauteur
-                const x = Math.random() * this.worldBounds - this.worldBoundsHalf;
-                const z = Math.random() * this.worldBounds - this.worldBoundsHalf;
+                // Repositionner la feuille avec une distribution naturelle améliorée
+                // Placement similaire à la méthode createLeaves
+                const angle = Math.random() * Math.PI * 2;
+                const radiusFactor = Math.pow(Math.random(), 0.7);
+                const radius = this.worldBoundsHalf * radiusFactor;
+                
+                const x = Math.cos(angle) * radius + (Math.random() - 0.5) * 200;
+                const z = Math.sin(angle) * radius + (Math.random() - 0.5) * 200;
                 
                 positions.array[idx] = x;
-                positions.array[idx + 1] = respawnHeight - Math.random() * (respawnHeight * 0.2); // Légère variation en hauteur
+                
+                // Distribution de hauteur non uniforme, favorisant les hauteurs supérieures
+                // pour simuler des feuilles qui commencent à tomber
+                const heightVariation = Math.pow(Math.random(), 0.7);
+                positions.array[idx + 1] = respawnHeight - heightVariation * (respawnHeight * 0.3);
+                
                 positions.array[idx + 2] = z;
                 
-                // Réinitialiser la rotation et la vitesse
+                // Réinitialiser la rotation et la vitesse avec des variations naturelles
                 rotations.array[i] = Math.random() * Math.PI * 2;
-                velocities.array[i] = 0.8 + Math.random() * 0.4;
+                velocities.array[i] = 0.7 + Math.pow(Math.random(), 0.9) * 0.6;
+                
+                // Nouvel angle de direction aléatoire
+                angles.array[i] = Math.random() * Math.PI * 2;
                 
                 needsUpdate = true;
             }
@@ -328,6 +350,7 @@ export default class LeavesEffect {
             positions.needsUpdate = true;
             rotations.needsUpdate = true;
             velocities.needsUpdate = true;
+            angles.needsUpdate = true;
         }
         
         this.lastRespawnTime = this.weatherSystem.time.elapsed;
@@ -341,6 +364,17 @@ export default class LeavesEffect {
         
         // Obtenir la direction de la caméra
         this._tempVector1.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+        
+        // Accentuer la composante horizontale et réduire la composante verticale
+        // pour favoriser un mouvement plus latéral que vertical
+        this._tempVector1.y *= this.verticalWindEffect; // Réduire fortement la composante verticale
+        
+        // Amplifier légèrement les composantes horizontales
+        this._tempVector1.x *= 1.5;
+        this._tempVector1.z *= 1.5;
+        
+        // Normaliser le vecteur pour maintenir une force constante
+        this._tempVector1.normalize();
         
         // Calculer le vecteur de mouvement des feuilles (similaire au vent)
         this.windVelocity.lerp(this._tempVector1, 0.1);
@@ -357,6 +391,7 @@ export default class LeavesEffect {
         
         if (this._intensity <= 0.01) return;
         
+        // Mettre à jour la variable de temps pour les deux shaders (vertex et fragment)
         this.leavesMaterial.uniforms.time.value += deltaTime / 1000;
         this.leavesMaterial.uniforms.intensity.value = this._intensity;
         
@@ -377,10 +412,20 @@ export default class LeavesEffect {
         }
         
         // Mettre à jour le vecteur direction du vent
-        // On utilise la direction de la caméra comme indication du vent pour des raisons visuelles
+        // En favorisant les mouvements horizontaux
         if (this.camera) {
+            // Obtenir la direction mais réduire l'effet vertical pour un mouvement plus horizontal
             this._tempVector1.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
-            this._tempVector1.y *= this.verticalWindEffect; // Réduire l'effet vertical
+            this._tempVector1.y *= this.verticalWindEffect; // Réduire fortement la composante verticale
+            
+            // Amplifier les composantes horizontales
+            this._tempVector1.x *= 1.5;
+            this._tempVector1.z *= 1.5;
+            
+            // Normaliser le vecteur
+            this._tempVector1.normalize();
+            
+            // Appliquer au shader
             this.leavesMaterial.uniforms.cameraForward.value.copy(this._tempVector1);
         }
         
