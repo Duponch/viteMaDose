@@ -30,10 +30,10 @@ void main() {
     
     // Réduire l'intensité globale de l'éclairage (atténuation)
     // Réduire la contribution de la lumière diffuse
-    float diffuseScale = 0.6; // Réduire l'intensité diffuse
+    float diffuseScale = 0.03; // Réduire l'intensité diffuse
     
     // Lumière ambiante (toujours présente mais réduite)
-    vec3 ambient = uAmbientColor * (uAmbientIntensity * 0.5); // Réduire l'intensité ambiante
+    vec3 ambient = uAmbientColor * (uAmbientIntensity * 0.03); // Réduire l'intensité ambiante
     
     // Lumière diffuse (dépend de l'angle avec la source lumineuse)
     vec3 diffuse = uSunColor * (uSunIntensity * diffuseScale) * NdotL;
