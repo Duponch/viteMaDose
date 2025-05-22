@@ -7,6 +7,15 @@ uniform float leaveHeight;
 uniform vec3 cameraForward;
 uniform float rotationFactor;
 
+// Nouveaux uniforms pour paramétrer l'animation
+uniform float xMovementAmplitude;
+uniform float zMovementAmplitude;
+uniform float spiralFactor;
+uniform float verticalSpeedFactor;
+uniform float yOffsetAmplitude;
+uniform float gustEffectAmplitude;
+uniform float windStrengthFactor;
+
 attribute float size;
 attribute float velocity;
 attribute float angle;
@@ -41,28 +50,35 @@ void main() {
     float customTime = time + offset * 10.0;
     
     // Création de trajectoires chaotiques avec différentes fréquences et amplitudes
-    // Mouvement horizontal beaucoup plus important (X et Z) - Amplitudes augmentées
-    float xMovement = sin(customTime * 0.5) * 4.5 + cos(customTime * 0.33) * 3.2 + sin(customTime * 0.17) * 2.0;
-    float zMovement = cos(customTime * 0.4) * 4.0 + sin(customTime * 0.28) * 3.5 + cos(customTime * 0.22) * 2.3;
+    // Mouvement horizontal beaucoup plus important (X et Z) - Amplitudes paramétrables
+    float xMovement = sin(customTime * 0.5) * xMovementAmplitude + cos(customTime * 0.33) * (xMovementAmplitude * 0.7) + sin(customTime * 0.17) * (xMovementAmplitude * 0.4);
+    float zMovement = cos(customTime * 0.4) * zMovementAmplitude + sin(customTime * 0.28) * (zMovementAmplitude * 0.9) + cos(customTime * 0.22) * (zMovementAmplitude * 0.6);
     
     // Ajout de mouvements en spirale horizontaux plus prononcés
-    float spiralFactor = sin(customTime * 0.15) * 0.8 + 0.4;
-    float spiralX = sin(customTime * 0.4) * spiralFactor * 6.0;
-    float spiralZ = cos(customTime * 0.4) * spiralFactor * 6.0;
+    float spiralFactorValue = sin(customTime * 0.15) * spiralFactor + (spiralFactor * 0.5);
+    float spiralX = sin(customTime * 0.4) * spiralFactorValue * 6.0;
+    float spiralZ = cos(customTime * 0.4) * spiralFactorValue * 6.0;
     
     // Mouvement vertical réduit et moins dominant
-    float verticalSpeed = windEffect * (0.15 + 0.1 * sin(customTime * 0.1)); // Vitesse verticale réduite de moitié
-    float yOffset = sin(customTime * 0.3) * 1.0; // Ondulation verticale réduite
-    float yPos = mod(basePos.y + time * verticalSpeed + offset * leaveHeight * 0.6 + yOffset, leaveHeight) - leaveHeight * 0.5;
+    float verticalSpeed = windEffect * (verticalSpeedFactor + 0.1 * sin(customTime * 0.1));
+    float yOffset = sin(customTime * 0.3) * yOffsetAmplitude;
+    
+    // Nouveau calcul de la position verticale qui évite la domination du mouvement vertical
+    float baseY = basePos.y;
+    float verticalMovement = sin(customTime * 0.2) * verticalSpeed * 2.0; // Mouvement vertical oscillant
+    float yPos = baseY + verticalMovement + yOffset;
+    
+    // Limiter la hauteur des feuilles
+    yPos = clamp(yPos, 0.0, leaveHeight);
     
     // Ajouter un effet de rafale de vent aléatoire plus fort horizontalement
     float gustEffect = smoothstep(0.0, 1.0, sin(customTime * 0.05 + randomFactor * 6.28) * 0.5 + 0.5);
-    float gustX = cos(angle) * gustEffect * 7.0 * intensity;
-    float gustZ = sin(angle) * gustEffect * 7.0 * intensity;
+    float gustX = cos(angle) * gustEffect * gustEffectAmplitude * intensity;
+    float gustZ = sin(angle) * gustEffect * gustEffectAmplitude * intensity;
     
     // Ajouter un déplacement latéral plus prononcé basé sur la direction du vent
     vec2 windDirection = vec2(cameraForward.x, cameraForward.z);
-    float windStrength = length(windDirection) * 3.0;
+    float windStrength = length(windDirection) * windStrengthFactor;
     vec2 normalizedWind = length(windDirection) > 0.01 ? normalize(windDirection) : vec2(1.0, 0.0);
     float windX = normalizedWind.x * windStrength * (0.5 + 0.5 * sin(customTime * 0.12));
     float windZ = normalizedWind.y * windStrength * (0.5 + 0.5 * cos(customTime * 0.14));

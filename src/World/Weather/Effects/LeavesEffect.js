@@ -30,10 +30,19 @@ export default class LeavesEffect {
         this.maxLeafSize = 1.8;          // Taille maximale des feuilles
         this.rotationFactor = 2.5;       // Facteur de rotation des feuilles
         this.leafOpacity = 1.0;          // Opacité des feuilles (1.0 = complètement opaque)
-        this.verticalWindEffect = 0.12;  // Effet vertical du vent (fortement réduit pour favoriser le mouvement horizontal)
+        this.verticalWindEffect = 0.08;  // Effet vertical du vent (encore plus réduit pour diminuer les mouvements verticaux)
         this.respawnInterval = 8000;     // Intervalle de réapparition des feuilles
         this.lastRespawnTime = 0;        // Temps de la dernière réapparition
         this.initialPositions = null;    // Pour stocker les positions initiales des feuilles
+        
+        // Paramètres d'animation pour le shader
+        this.xMovementAmplitude = 4.5;   // Amplitude du mouvement horizontal X
+        this.zMovementAmplitude = 4.0;   // Amplitude du mouvement horizontal Z
+        this.spiralFactor = 0.8;         // Facteur de mouvement en spirale
+        this.verticalSpeedFactor = 0.15; // Facteur de vitesse verticale
+        this.yOffsetAmplitude = 1.0;     // Amplitude de l'ondulation verticale
+        this.gustEffectAmplitude = 7.0;  // Amplitude de l'effet de rafale
+        this.windStrengthFactor = 3.0;   // Facteur de force du vent
         
         // Vecteurs temporaires pour les calculs
         this._tempVector1 = new THREE.Vector3();
@@ -98,7 +107,15 @@ export default class LeavesEffect {
                     leafOpacity: { value: this.leafOpacity },
                     ambientColor: { value: ambientColor },
                     ambientIntensity: { value: ambientIntensity },
-                    dayFactor: { value: dayFactor }
+                    dayFactor: { value: dayFactor },
+                    // Paramètres d'animation
+                    xMovementAmplitude: { value: this.xMovementAmplitude },
+                    zMovementAmplitude: { value: this.zMovementAmplitude },
+                    spiralFactor: { value: this.spiralFactor },
+                    verticalSpeedFactor: { value: this.verticalSpeedFactor },
+                    yOffsetAmplitude: { value: this.yOffsetAmplitude },
+                    gustEffectAmplitude: { value: this.gustEffectAmplitude },
+                    windStrengthFactor: { value: this.windStrengthFactor }
                 },
                 vertexShader: vertexShader,
                 fragmentShader: fragmentShader,
