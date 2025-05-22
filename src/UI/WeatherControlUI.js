@@ -105,9 +105,9 @@ export default class WeatherControlUI {
         this.createSlider('Brouillard', 'fog', 0, 1, 0.01, this.weatherSystem.fogEffect.fogDensity);
         
         // Nouveaux curseurs simplifiés pour l'animation de l'herbe
-        this.createSlider('Vitesse animation herbe', 'grass-animation-speed', 0, 400, 1, 100); // 0-400% (100% = vitesse normale)
-        this.createSlider('Torsion/plis herbe', 'grass-torsion-amplitude', 0, 400, 1, 100); // 0-400% (100% = amplitude normale)
-        this.createSlider('Inclinaison herbe', 'grass-inclination-amplitude', 0, 400, 1, 100); // 0-400% (100% = amplitude normale)
+        this.createSlider('Vitesse animation herbe', 'grass-animation-speed', 0, 700, 1, 100); // 0-800% (100% = vitesse normale)
+        this.createSlider('Torsion/plis herbe', 'grass-torsion-amplitude', 0, 500, 1, 100); // 0-800% (100% = amplitude normale)
+        this.createSlider('Inclinaison herbe', 'grass-inclination-amplitude', 0, 600, 1, 100); // 0-800% (100% = amplitude normale)
         
         this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
         this.createSlider('Arc-en-ciel', 'rainbow', 0, 1, 0.01, this.weatherSystem.rainbowEffect.opacity);

@@ -784,70 +784,63 @@ export default class World {
 
     /**
      * Définit la vitesse d'animation de l'herbe 
-     * @param {number} speed - Vitesse de l'animation (0.1-2.0)
+     * @param {number} speed - Vitesse de l'animation (0.1-8.0)
      */
     setGrassAnimationSpeed(speed) {
         // Activer l'animation avec la nouvelle vitesse
-        const normalizedSpeed = Math.max(0.1, Math.min(2.0, speed));
-        
-        // Activer l'animation si la vitesse est > 0
-        const animationEnabled = normalizedSpeed > 0.1;
+        const animationEnabled = speed > 0.1;
         
         // Appliquer les paramètres
         if (this.cityManager && this.cityManager.contentGenerator) {
             const grassInstancer = this.cityManager.contentGenerator.grassInstancer;
             if (grassInstancer) {
                 grassInstancer.animationEnabled = animationEnabled;
-                grassInstancer.animationSpeed = normalizedSpeed;
+                grassInstancer.animationSpeed = speed;
             }
         }
         
         // Pour compatibilité, essayer aussi les références directes via environment
         if (this.environment && this.environment.shaderGrassSystem) {
             this.environment.shaderGrassSystem.setAnimationEnabled(animationEnabled);
-            this.environment.shaderGrassSystem.setAnimationSpeed(normalizedSpeed);
+            this.environment.shaderGrassSystem.setAnimationSpeed(speed);
         }
     }
 
     /**
      * Définit l'amplitude de torsion/plis des brins d'herbe
-     * @param {number} amplitude - Amplitude de torsion (0.1-2.0)
+     * @param {number} amplitude - Amplitude de torsion (0.1-8.0)
      */
     setGrassTorsionAmplitude(amplitude) {
-        const normalizedAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
-        
         // Appliquer les paramètres
         if (this.cityManager && this.cityManager.contentGenerator) {
             const grassInstancer = this.cityManager.contentGenerator.grassInstancer;
             if (grassInstancer) {
-                grassInstancer.torsionAmplitude = normalizedAmplitude;
+                grassInstancer.torsionAmplitude = amplitude;
             }
         }
         
         // Pour compatibilité, essayer aussi les références directes via environment
         if (this.environment && this.environment.shaderGrassSystem) {
-            this.environment.shaderGrassSystem.setTorsionAmplitude(normalizedAmplitude);
+            this.environment.shaderGrassSystem.setTorsionAmplitude(amplitude);
         }
     }
 
     /**
      * Définit l'amplitude d'inclinaison des brins d'herbe
-     * @param {number} amplitude - Amplitude d'inclinaison (0.1-2.0)
+     * @param {number} amplitude - Amplitude d'inclinaison (0.1-8.0)
      */
     setGrassInclinationAmplitude(amplitude) {
-        const normalizedAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
-        
         // Appliquer les paramètres
         if (this.cityManager && this.cityManager.contentGenerator) {
             const grassInstancer = this.cityManager.contentGenerator.grassInstancer;
             if (grassInstancer) {
-                grassInstancer.inclinationAmplitude = normalizedAmplitude;
+                grassInstancer.inclinationAmplitude = amplitude;
             }
         }
         
         // Pour compatibilité, essayer aussi les références directes via environment
         if (this.environment && this.environment.shaderGrassSystem) {
-            this.environment.shaderGrassSystem.setInclinationAmplitude(normalizedAmplitude);
+            this.environment.shaderGrassSystem.setInclinationAmplitude(amplitude);
         }
     }
 
@@ -894,7 +887,7 @@ export default class World {
     
     /**
      * Définit le facteur de torsion du brin d'herbe
-     * @param {number} factor - Facteur de torsion (0.1-2.0)
+     * @param {number} factor - Facteur de torsion (0.1-8.0)
      */
     setGrassTwistFactor(factor) {
         console.warn("setGrassTwistFactor est déprécié. Utiliser setGrassTorsionAmplitude à la place.");
@@ -903,7 +896,7 @@ export default class World {
 
     /**
      * Définit le facteur d'inclinaison du brin d'herbe
-     * @param {number} factor - Facteur d'inclinaison (0.1-2.0)
+     * @param {number} factor - Facteur d'inclinaison (0.1-8.0)
      */
     setGrassInclinationFactor(factor) {
         console.warn("setGrassInclinationFactor est déprécié. Utiliser setGrassInclinationAmplitude à la place.");

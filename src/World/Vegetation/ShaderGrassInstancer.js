@@ -820,36 +820,36 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
     
     /**
      * Définit la vitesse de l'animation de l'herbe
-     * @param {number} speed - Vitesse de l'animation (0.1-2.0)
+     * @param {number} speed - Vitesse de l'animation (0.1-8.0)
      */
     setAnimationSpeed(speed) {
-        this.animationSpeed = Math.max(0.1, Math.min(2.0, speed));
+        this.animationSpeed = speed;
     }
     
     /**
      * Définit l'amplitude de l'animation de l'herbe
-     * @param {number} amplitude - Amplitude de l'animation (0.1-2.0)
+     * @param {number} amplitude - Amplitude de l'animation (0.1-8.0)
      */
     setAnimationAmplitude(amplitude) {
         // Pour simplifier, on applique la même amplitude aux deux effets
-        this.torsionAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
-        this.inclinationAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
+        this.torsionAmplitude = amplitude;
+        this.inclinationAmplitude = amplitude;
     }
     
     /**
      * Définit l'amplitude de torsion/plis des brins d'herbe
-     * @param {number} amplitude - Amplitude de torsion (0.1-2.0)
+     * @param {number} amplitude - Amplitude de torsion (0.1-8.0)
      */
     setTorsionAmplitude(amplitude) {
-        this.torsionAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
+        this.torsionAmplitude = amplitude;
     }
     
     /**
      * Définit l'amplitude d'inclinaison des brins d'herbe
-     * @param {number} amplitude - Amplitude d'inclinaison (0.1-2.0)
+     * @param {number} amplitude - Amplitude d'inclinaison (0.1-8.0)
      */
     setInclinationAmplitude(amplitude) {
-        this.inclinationAmplitude = Math.max(0.1, Math.min(2.0, amplitude));
+        this.inclinationAmplitude = amplitude;
     }
     
     // --- Anciennes méthodes conservées pour compatibilité ---
