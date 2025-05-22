@@ -57,6 +57,27 @@ export default class LeavesEffect {
             // Créer une texture de feuille (texture temporaire en attendant une texture réelle)
             const leafTexture = this.createLeafTexture();
             
+            // Récupérer les informations sur l'éclairage global de la scène
+            let ambientColor = new THREE.Color(0x404040); // Couleur ambiante par défaut
+            let ambientIntensity = 0.5; // Intensité ambiante par défaut
+            let dayFactor = 1.0; // Facteur jour/nuit par défaut (1.0 = jour complet)
+            
+            // Récupérer les paramètres d'éclairage de l'environnement si disponible
+            if (this.weatherSystem.environment) {
+                const env = this.weatherSystem.environment;
+                
+                // Facteur jour/nuit (0-1)
+                if (env.skyUniforms && env.skyUniforms.uDayFactor) {
+                    dayFactor = env.skyUniforms.uDayFactor.value;
+                }
+                
+                // Lumière ambiante
+                if (env.ambientLight) {
+                    ambientColor.copy(env.ambientLight.color);
+                    ambientIntensity = env.ambientLight.intensity;
+                }
+            }
+            
             // Créer le matériau
             this.leavesMaterial = new THREE.ShaderMaterial({
                 uniforms: {
@@ -67,11 +88,16 @@ export default class LeavesEffect {
                     leaveHeight: { value: this.leafHeight },
                     cameraForward: { value: new THREE.Vector3() },
                     rotationFactor: { value: this.rotationFactor },
+                    // Paramètres de brouillard
                     fogColor: { value: new THREE.Color(0xffffff) },
                     fogNear: { value: 50 },
                     fogFar: { value: 300 },
                     fogDensity: { value: 0.01 },
-                    leafOpacity: { value: this.leafOpacity }
+                    // Paramètres d'éclairage
+                    leafOpacity: { value: this.leafOpacity },
+                    ambientColor: { value: ambientColor },
+                    ambientIntensity: { value: ambientIntensity },
+                    dayFactor: { value: dayFactor }
                 },
                 vertexShader: vertexShader,
                 fragmentShader: fragmentShader,
@@ -306,6 +332,22 @@ export default class LeavesEffect {
         this.leavesMaterial.uniforms.time.value += deltaTime / 1000;
         this.leavesMaterial.uniforms.intensity.value = this._intensity;
         
+        // Mettre à jour les paramètres d'éclairage
+        if (this.weatherSystem.environment) {
+            const env = this.weatherSystem.environment;
+            
+            // Mettre à jour le facteur jour/nuit
+            if (env.skyUniforms && env.skyUniforms.uDayFactor) {
+                this.leavesMaterial.uniforms.dayFactor.value = env.skyUniforms.uDayFactor.value;
+            }
+            
+            // Mettre à jour la lumière ambiante
+            if (env.ambientLight) {
+                this.leavesMaterial.uniforms.ambientColor.value.copy(env.ambientLight.color);
+                this.leavesMaterial.uniforms.ambientIntensity.value = env.ambientLight.intensity;
+            }
+        }
+        
         // Mettre à jour la position des feuilles en fonction de la caméra
         if (this.camera && this.lastCameraPosition) {
             const currentPos = this.camera.position;
@@ -347,8 +389,10 @@ export default class LeavesEffect {
         // Mise à jour des uniforms de brouillard
         try {
             if (this.scene.fog) {
+                // Mise à jour directe de la couleur du brouillard
                 this.leavesMaterial.uniforms.fogColor.value.copy(this.scene.fog.color);
                 
+                // Gestion des différents types de brouillard
                 if (this.scene.fog.isFogExp2) {
                     this.leavesMaterial.uniforms.fogDensity.value = this.scene.fog.density;
                     this.leavesMaterial.uniforms.fogNear.value = 5;
