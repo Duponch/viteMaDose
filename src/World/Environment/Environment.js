@@ -62,6 +62,8 @@ export default class Environment {
 
         this.vertexShaderCode = null;
         this.fragmentShaderCode = null;
+        this.terrainVertexShader = null;
+        this.terrainFragmentShader = null;
         this.isInitialized = false;
         this.skyBox = null; this.starsMesh = null; this.outerGroundMesh = null;
         this.skyboxRadius = 0;
@@ -190,13 +192,23 @@ export default class Environment {
             const vertexShaderCode = await ShaderLoader.loadShader('SkyVertex.glsl');
             const fragmentShaderCode = await ShaderLoader.loadShader('skyFragment.glsl');
             
+            // Chargement des shaders pour le terrain
+            const terrainVertexShader = await ShaderLoader.loadShader('terrainVertexShader.glsl');
+            const terrainFragmentShader = await ShaderLoader.loadShader('terrainFragmentShader.glsl');
+            
             this.vertexShaderCode = vertexShaderCode;
             this.fragmentShaderCode = fragmentShaderCode;
+            this.terrainVertexShader = terrainVertexShader;
+            this.terrainFragmentShader = terrainFragmentShader;
             //console.log("Environment: Shaders chargés.");
 
             // --- Création Éléments Scène ---
             this.renderSkybox(); // Définit les rayons/distances
             this.outerGroundDisplayRadius = this.skyboxRadius + 10;
+            
+            // Création des textures pour le terrain
+            this.createTerrainTextures();
+            
             this.createOuterGround();
             this.createStarsPoints();
             this.createMoonMesh();
@@ -432,62 +444,181 @@ export default class Environment {
     } // Fin updateDayNightCycle
 
     createOuterGround() {
-        // ... (code inchangé)
         if (this.outerGroundMesh) return; // Évite de recréer
         if (this.outerGroundDisplayRadius <= 0) {
              console.error("Impossible de créer OuterGround: outerGroundDisplayRadius non défini (skyboxRadius?).");
              return;
         }
-        const width = this.outerGroundDisplayRadius * 2.5;
-        const depth = this.outerGroundDisplayRadius * 2.5;
-        const segments = 150;
-		const flatRadius = this.mapSize * 0.5;
-		const transitionWidth = this.mapSize * 0.4;
-		const noiseScale1 = 0.002;
-		const noiseScale2 = 0.005;
-		const octave1Weight = 0.6;
-		const octave2Weight = 0.4;
-		const hillAmplitude = 150;
-        const terrainVisibleRadius = this.outerGroundDisplayRadius;
+        
+        // Paramètres du terrain
+        const width = this.outerGroundDisplayRadius * 2.5;  // Garder un terrain carré large
+        const depth = this.outerGroundDisplayRadius * 2.5;  // Garder un terrain carré large
+        const segments = 40; // Réduit pour effet low poly
+        const flatRadius = this.mapSize * 0.5;
+        const transitionWidth = this.mapSize * 0.4;
+        
+        // Paramètres du noise modifiés pour un style low poly plus triangulaire
+        const noiseScale1 = 0.001; // Échelle plus grande = montagnes plus larges
+        const noiseScale2 = 0.003;
+        const octave1Weight = 0.7;
+        const octave2Weight = 0.3;
+        const hillAmplitude = 200; // Amplitude augmentée pour montagnes plus hautes
+        
+        // Paramètres pour les couleurs de terrain
+        const rockHeight = 50; // Hauteur à partir de laquelle la roche apparaît
+        const snowHeight = 120; // Hauteur à partir de laquelle la neige apparaît
+        
+        // Couleurs vives pour l'effet low poly
+        const grassColor = new THREE.Color(0x4CAF50);  // Vert vif
+        const rockColor = new THREE.Color(0x795548);   // Marron
+        const snowColor = new THREE.Color(0xFFFFFF);   // Blanc
+        
+        // Création de la géométrie carrée
         const geometry = new THREE.PlaneGeometry(width, depth, segments, segments);
         geometry.rotateX(-Math.PI / 2);
+        
+        // Génération des hauteurs avec noise
         const simplex = new SimplexNoise();
         const positions = geometry.attributes.position.array;
-        function smoothStep(edge0, edge1, x) { const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0))); return t * t * (3 - 2 * t); }
+        
+        function smoothStep(edge0, edge1, x) {
+            const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+            return t * t * (3 - 2 * t);
+        }
+        
+        // Appliquer le bruit pour générer les hauteurs avec style low poly
         for (let i = 0; i < positions.length; i += 3) {
-            const x = positions[i]; const z = positions[i + 2]; const dist = Math.sqrt(x * x + z * z);
+            const x = positions[i];
+            const z = positions[i + 2];
+            const dist = Math.sqrt(x * x + z * z);
+            
             let height = 0;
             if (dist >= flatRadius) {
+                // Fonction de bruit pour un effet plus angulaire
                 const noise1 = simplex.noise(x * noiseScale1, z * noiseScale1);
                 const noise2 = simplex.noise(x * noiseScale2, z * noiseScale2);
-                const combinedNoise = octave1Weight * noise1 + octave2Weight * noise2;
+                
+                // Accentuer les variations pour créer des pics plus prononcés
+                const sharpNoise1 = Math.pow(Math.abs(noise1), 0.8) * Math.sign(noise1);
+                const sharpNoise2 = Math.pow(Math.abs(noise2), 0.8) * Math.sign(noise2);
+                
+                const combinedNoise = octave1Weight * sharpNoise1 + octave2Weight * sharpNoise2;
+                
+                // Transition entre la zone plate et les montagnes
                 const factor = smoothStep(flatRadius, flatRadius + transitionWidth, dist);
+                
+                // Calculer la hauteur finale
                 height = hillAmplitude * combinedNoise * factor;
             }
+            
             positions[i + 1] = height;
         }
-        for (let i = 0; i < positions.length; i += 3) {
-            const x = positions[i]; const z = positions[i + 2]; const dist = Math.sqrt(x * x + z * z);
-            if (dist > terrainVisibleRadius) {
-                const factor = terrainVisibleRadius / dist;
-                positions[i] = x * factor; positions[i + 2] = z * factor;
-            }
-        }
+        
+        // Ne plus limiter le terrain à un rayon visible (suppression de la découpe circulaire)
+        // Le terrain reste carré comme la géométrie d'origine
+        
         geometry.attributes.position.needsUpdate = true;
+        
+        // Important pour l'effet low poly: ne pas lisser les normales
+        // Pour un effet facetté, on calcule les normales par face plutôt que par vertex
         geometry.computeVertexNormals();
-        const material = new THREE.MeshStandardMaterial({ 
-            map: this.outerGroundTexture,
-            color: 0x4c7f33,
-            roughness: 0.8,
-            metalness: 0.0,
-            side: THREE.DoubleSide
-        });
-        this.outerGroundMesh = new THREE.Mesh(geometry, material);
+        
+        // Triangulation aléatoire supplémentaire pour certaines faces (effet montagneux plus prononcé)
+        const triangulateRandomFaces = () => {
+            // Obtenir une copie de la géométrie
+            const positionAttribute = geometry.getAttribute('position');
+            const positions = positionAttribute.array;
+            const indices = [];
+            
+            // Créer les indices de faces
+            for (let i = 0; i < segments; i++) {
+                for (let j = 0; j < segments; j++) {
+                    const a = i * (segments + 1) + j;
+                    const b = i * (segments + 1) + (j + 1);
+                    const c = (i + 1) * (segments + 1) + j;
+                    const d = (i + 1) * (segments + 1) + (j + 1);
+                    
+                    // Création aléatoire de la diagonale pour certaines faces pour un effet plus anguleux
+                    if (Math.random() > 0.5) {
+                        indices.push(a, b, d);
+                        indices.push(a, d, c);
+                    } else {
+                        indices.push(a, b, c);
+                        indices.push(b, d, c);
+                    }
+                }
+            }
+            
+            geometry.setIndex(indices);
+        };
+        
+        triangulateRandomFaces();
+        
+        // Pour un effet low poly, on n'utilise plus les textures mais des couleurs simples
+        if (!this.terrainVertexShader || !this.terrainFragmentShader) {
+            console.error("Les shaders du terrain ne sont pas chargés, utilisation du matériau standard.");
+            
+            // Fallback avec matériau standard
+            const material = new THREE.MeshStandardMaterial({
+                color: grassColor,
+                roughness: 0.9,
+                metalness: 0.0,
+                flatShading: true, // Important pour l'effet low poly
+                side: THREE.DoubleSide
+            });
+            
+            this.outerGroundMesh = new THREE.Mesh(geometry, material);
+        } else {
+            // Création du matériau shader avec couleurs plates
+            const uniforms = {
+                uFlatRadius: { value: flatRadius },
+                uTransitionWidth: { value: transitionWidth },
+                uHillAmplitude: { value: hillAmplitude },
+                uTerrainVisibleRadius: { value: width / 2 }, // Utiliser la moitié de la largeur comme référence
+                uRockHeight: { value: rockHeight },
+                uSnowHeight: { value: snowHeight },
+                uNoiseScale1: { value: noiseScale1 },
+                uNoiseScale2: { value: noiseScale2 },
+                uOctave1Weight: { value: octave1Weight },
+                uOctave2Weight: { value: octave2Weight },
+                uGrassColor: { value: grassColor },
+                uRockColor: { value: rockColor },
+                uSnowColor: { value: snowColor }
+            };
+            
+            const material = new THREE.ShaderMaterial({
+                uniforms: uniforms,
+                vertexShader: this.terrainVertexShader,
+                fragmentShader: this.terrainFragmentShader,
+                side: THREE.DoubleSide,
+                // Important: ne pas lisser entre les facettes pour obtenir l'effet low poly
+                flatShading: true
+            });
+            
+            this.outerGroundMesh = new THREE.Mesh(geometry, material);
+        }
+        
         this.outerGroundMesh.position.y = -0.1;
         this.outerGroundMesh.receiveShadow = true;
-        this.outerGroundMesh.name = "OuterGround_Hills_CircularGeom_FlatCenter";
+        this.outerGroundMesh.castShadow = true; // Permettre aux montagnes de projeter des ombres
+        this.outerGroundMesh.name = "OuterGround_LowPoly_Mountains_Square";
         this.scene.add(this.outerGroundMesh);
-        //console.log(`Sol extérieur (géométrie circulaire, centre plat) créé. Rayon: ${terrainVisibleRadius}, Rayon plat: ${flatRadius}`);
+        
+        // Supprimer les anciennes textures car elles ne sont plus utilisées
+        if (this.grassTexture) {
+            this.grassTexture.dispose();
+            this.grassTexture = null;
+        }
+        if (this.rockTexture) {
+            this.rockTexture.dispose();
+            this.rockTexture = null;
+        }
+        if (this.snowTexture) {
+            this.snowTexture.dispose();
+            this.snowTexture = null;
+        }
+        
+        //console.log(`Terrain low poly carré créé. Segments: ${segments}, Amplitude: ${hillAmplitude}`);
     }
 
     destroy() {
@@ -500,6 +631,12 @@ export default class Environment {
         if (this.starsMesh) { this.scene.remove(this.starsMesh); this.starsMesh.geometry?.dispose(); this.starsMesh.material?.dispose(); this.starsMesh = null; }
         if (this.outerGroundMesh) { this.scene.remove(this.outerGroundMesh); this.outerGroundMesh.geometry?.dispose(); this.outerGroundMesh.material?.dispose(); this.outerGroundMesh = null; }
         if (this.moonMesh) { this.scene.remove(this.moonMesh); this.moonMesh.geometry?.dispose(); this.moonMesh.material?.dispose(); this.moonMesh = null; }
+        
+        // Nettoyer les textures
+        if (this.grassTexture) this.grassTexture.dispose();
+        if (this.rockTexture) this.rockTexture.dispose();
+        if (this.snowTexture) this.snowTexture.dispose();
+        if (this.outerGroundTexture) this.outerGroundTexture.dispose();
         
         // Nettoyer les systèmes
         if (this.weatherSystem && this.weatherSystem.destroy) this.weatherSystem.destroy();
@@ -587,5 +724,45 @@ export default class Environment {
         if (!this.calendar) return 30; // Valeur par défaut si le calendrier n'est pas disponible
         
         return this.calendar.getMonthDays(month, year);
+    }
+
+    /**
+     * Crée les textures pour le terrain (herbe, roche, neige)
+     * Note: Ces textures ne sont plus utilisées dans la version low poly
+     * qui utilise des couleurs plates à la place
+     */
+    createTerrainTextures() {
+        // Cette méthode est conservée pour compatibilité mais n'est plus utilisée
+        // car nous utilisons maintenant des couleurs plates pour l'effet low poly
+    }
+
+    /**
+     * Crée une texture procédurale pour l'herbe
+     * @returns {THREE.CanvasTexture} La texture générée
+     * Note: Cette méthode n'est plus utilisée dans la version low poly
+     */
+    createGrassTexture() {
+        // Cette méthode est conservée pour compatibilité mais n'est plus utilisée
+        return null;
+    }
+
+    /**
+     * Crée une texture procédurale pour la roche
+     * @returns {THREE.CanvasTexture} La texture générée
+     * Note: Cette méthode n'est plus utilisée dans la version low poly
+     */
+    createRockTexture() {
+        // Cette méthode est conservée pour compatibilité mais n'est plus utilisée
+        return null;
+    }
+
+    /**
+     * Crée une texture procédurale pour la neige
+     * @returns {THREE.CanvasTexture} La texture générée
+     * Note: Cette méthode n'est plus utilisée dans la version low poly
+     */
+    createSnowTexture() {
+        // Cette méthode est conservée pour compatibilité mais n'est plus utilisée
+        return null;
     }
 }
