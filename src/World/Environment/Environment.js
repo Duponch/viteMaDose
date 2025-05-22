@@ -453,7 +453,7 @@ export default class Environment {
         // Paramètres du terrain
         const width = this.outerGroundDisplayRadius * 2.5;  // Garder un terrain carré large
         const depth = this.outerGroundDisplayRadius * 2.5;  // Garder un terrain carré large
-        const segments = 40; // Réduit pour effet low poly
+        const segments = 100; // Réduit pour effet low poly
         const flatRadius = this.mapSize * 0.5;
         const transitionWidth = this.mapSize * 0.4;
         
