@@ -16,9 +16,9 @@ export default class LeavesEffect {
         this.camera = weatherSystem.camera.instance;
         
         // Configuration
-        this._intensity = 0;             // Intensité (0-1), modifie la visibilité et la quantité
-        this._leavesPercentage = 0;      // Pourcentage de feuilles visibles (0-100)
-        this._speedFactor = 1.0;         // Facteur de vitesse des feuilles (0.1-2.0)
+        this._intensity = 0.08;             // Intensité (0-1), modifie la visibilité et la quantité (0.08 = 8%)
+        this._leavesPercentage = 8;      // Pourcentage de feuilles visibles (0-100)
+        this._speedFactor = 0.53;         // Facteur de vitesse des feuilles (0.1-2.0)
         this.leafCount = 100000;         // Nombre de feuilles augmenté pour un meilleur effet
         this.windSpeed = 12;             // Vitesse de base du vent (encore réduite pour moins de verticalité)
         this.worldBounds = 2000;         // Taille du monde où les feuilles peuvent apparaître
@@ -95,13 +95,16 @@ export default class LeavesEffect {
                 }
             }
             
+            // Calculer la vitesse effective du vent avec le facteur de vitesse
+            const effectiveWindSpeed = this.windSpeed * Math.pow(this._speedFactor, 15);
+            
             // Créer le matériau
             this.leavesMaterial = new THREE.ShaderMaterial({
                 uniforms: {
                     leavesTexture: { value: leafTexture },
                     time: { value: 0 },
                     intensity: { value: this._intensity },
-                    windSpeed: { value: this.windSpeed * this._speedFactor },
+                    windSpeed: { value: effectiveWindSpeed },
                     leaveHeight: { value: this.leafHeight },
                     leafMinHeight: { value: this.leafMinHeight },
                     cameraForward: { value: new THREE.Vector3() },
@@ -148,11 +151,72 @@ export default class LeavesEffect {
             // Mise à jour des vecteurs pour le mouvement
             this.updateVectors();
             
+            // Forcer la mise à jour initiale des valeurs dans le shader et la géométrie
+            this.forceUpdateInitialValues();
+            
             // Forcer la réinitialisation des positions des feuilles
             this.resetLeavesPositions();
             
         } catch (error) {
             console.error("Erreur lors de l'initialisation de l'effet de feuilles:", error);
+        }
+    }
+    
+    /**
+     * Force la mise à jour des valeurs initiales dans le shader et la géométrie
+     * Cette méthode est appelée après l'initialisation pour s'assurer
+     * que les valeurs par défaut sont correctement appliquées
+     */
+    forceUpdateInitialValues() {
+        if (!this.leavesMaterial || !this.leavesObject) return;
+        
+        // Forcer la mise à jour du pourcentage de feuilles visible
+        const visibleLeafCount = Math.floor(this.leafCount * (this._leavesPercentage / 100));
+        console.log(`Mise à jour forcée: ${this._leavesPercentage}% de feuilles visibles (${visibleLeafCount} sur ${this.leafCount})`);
+        
+        // Forcer la mise à jour des uniforms du shader
+        this.leavesMaterial.uniforms.intensity.value = this._intensity;
+        
+        // Forcer la mise à jour de la vitesse dans le shader
+        const effectiveWindSpeed = this.windSpeed * Math.pow(this._speedFactor, 15);
+        this.leavesMaterial.uniforms.windSpeed.value = effectiveWindSpeed;
+        
+        console.log(`Mise à jour forcée: facteur de vitesse=${this._speedFactor}, vitesse effective=${effectiveWindSpeed}`);
+        
+        // Mettre à jour la visibilité de l'objet feuilles
+        this.leavesObject.visible = this._leavesPercentage > 0.01;
+        
+        // Mettre à jour les positions et attributs des feuilles visibles
+        if (this.leavesObject.geometry) {
+            const positions = this.leavesObject.geometry.attributes.position;
+            const sizes = this.leavesObject.geometry.attributes.size;
+            
+            for (let i = 0; i < this.leafCount; i++) {
+                const idx = i * 3;
+                
+                // Mise à jour de la visibilité des feuilles
+                if (i < visibleLeafCount) {
+                    // Si la feuille était cachée (position Y très négative), la repositionner
+                    if (positions.array[idx + 1] < -1000.0) {
+                        // Distribution de hauteur non uniforme, favorisant les hauteurs plus basses
+                        const heightDistribution = Math.pow(Math.random(), 3.0);
+                        positions.array[idx + 1] = this.leafMinHeight + heightDistribution * (this.leafHeight - this.leafMinHeight);
+                    }
+                    
+                    // Assurer une taille visible
+                    if (sizes.array[i] === 0) {
+                        sizes.array[i] = this.minLeafSize + Math.pow(Math.random(), 0.8) * (this.maxLeafSize - this.minLeafSize);
+                    }
+                } else {
+                    // Cacher les feuilles qui ne devraient pas être visibles
+                    positions.array[idx + 1] = -10000; // Cacher sous le terrain
+                    sizes.array[i] = 0;
+                }
+            }
+            
+            // Indiquer que les attributs ont été modifiés
+            positions.needsUpdate = true;
+            sizes.needsUpdate = true;
         }
     }
     
@@ -239,7 +303,10 @@ export default class LeavesEffect {
         // Créer la géométrie des points
         const geometry = new THREE.BufferGeometry();
         
-        // Générer les positions aléatoires des feuilles
+        // Calculer le nombre de feuilles visibles en fonction du pourcentage
+        const visibleLeafCount = Math.floor(this.leafCount * (this._leavesPercentage / 100));
+        
+        // Distribuer toutes les feuilles dans l'espace
         const positions = new Float32Array(this.leafCount * 3);
         const sizes = new Float32Array(this.leafCount);
         const velocities = new Float32Array(this.leafCount);
@@ -249,7 +316,6 @@ export default class LeavesEffect {
         
         const simplex = new SimplexNoise();
         
-        // Distribuer toutes les feuilles dans l'espace mais les cacher initialement
         for (let i = 0; i < this.leafCount; i++) {
             // Répartir les feuilles dans tout le monde avec une distribution plus naturelle
             const angle = Math.random() * Math.PI * 2;
@@ -267,8 +333,12 @@ export default class LeavesEffect {
             const heightDistribution = Math.pow(Math.random(), 3.0); // Puissance 3 = concentration près du sol
             const y = this.leafMinHeight + heightDistribution * (this.leafHeight - this.leafMinHeight);
             
-            // Cacher toutes les feuilles au départ (l'intensité est à 0)
-            positions[i * 3 + 1] = -10000; // Cacher sous le terrain
+            // Positionner les feuilles visibles à leur hauteur réelle, cacher les autres
+            if (i < visibleLeafCount) {
+                positions[i * 3 + 1] = y; // Position réelle
+            } else {
+                positions[i * 3 + 1] = -10000; // Cacher sous le terrain
+            }
             positions[i * 3 + 2] = z;
             
             // Taille aléatoire avec distribution plus variée
@@ -306,8 +376,12 @@ export default class LeavesEffect {
         // Créer le maillage de feuilles
         this.leavesObject = new THREE.Points(geometry, this.leavesMaterial);
         this.leavesObject.frustumCulled = false; // Désactiver le culling pour s'assurer que les feuilles sont toujours visibles
-        this.leavesObject.visible = this._intensity > 0.01;
+        this.leavesObject.visible = this._leavesPercentage > 0.01; // Visibilité basée sur le pourcentage actuel
         this.leavesObject.renderOrder = 10; // Priorité de rendu élevée pour s'assurer que les feuilles sont rendues correctement
+        
+        // Afficher les informations de débogage
+        console.log(`Feuilles créées: ${this._leavesPercentage}% visibles (${visibleLeafCount} sur ${this.leafCount})`);
+        console.log(`Facteur de vitesse: ${this._speedFactor}, vitesse effective: ${this.windSpeed * Math.pow(this._speedFactor, 15)}`);
     }
     
     /**
@@ -649,6 +723,14 @@ export default class LeavesEffect {
                 this.leavesObject.geometry.attributes.angle.needsUpdate = true;
             }
         }
+        
+        // Forcer une mise à jour immédiate du rendu pour appliquer les changements
+        if (this.weatherSystem && this.weatherSystem.time) {
+            // Simuler une mise à jour avec un deltaTime typique
+            this.update(16); // 16ms ≈ 60fps
+        }
+        
+        console.log(`Pourcentage de feuilles mis à jour: ${this._leavesPercentage}%, intensité: ${this._intensity}`);
     }
     
     /**
@@ -672,6 +754,12 @@ export default class LeavesEffect {
             this.leavesMaterial.uniforms.windSpeed.value = scaledSpeed;
             
             console.log(`Facteur de vitesse des feuilles: ${this._speedFactor}, vitesse réelle: ${scaledSpeed}`);
+        }
+        
+        // Forcer une mise à jour immédiate du rendu pour appliquer les changements
+        if (this.weatherSystem && this.weatherSystem.time) {
+            // Simuler une mise à jour avec un deltaTime typique
+            this.update(16); // 16ms ≈ 60fps
         }
     }
     

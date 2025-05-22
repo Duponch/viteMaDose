@@ -127,9 +127,9 @@ export default class WeatherControlUI {
             this.experience.world.setGrassInclinationAmplitude(1.0);
         }
         
-        // Appliquer directement les valeurs par défaut des feuilles au rendu
-        this.weatherSystem.leavesEffect.setLeavesPercentage(this.defaultValues.leavesCount);
-        this.weatherSystem.leavesEffect.setSpeedFactor(this.defaultValues.leavesSpeed);
+        // Note: Aucune action spécifique n'est nécessaire pour les feuilles ici
+        // car les valeurs par défaut sont maintenant appliquées directement 
+        // dans la classe LeavesEffect au chargement via forceUpdateInitialValues()
         
         // Bouton pour réinitialiser les valeurs par défaut
         const resetButton = document.createElement('button');
