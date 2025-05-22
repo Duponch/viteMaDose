@@ -458,11 +458,11 @@ export default class Environment {
         const transitionWidth = this.mapSize * 0.4;
         
         // Paramètres du noise modifiés pour un style low poly plus triangulaire
-        const noiseScale1 = 0.001; // Échelle plus grande = montagnes plus larges
-        const noiseScale2 = 0.003;
+        const noiseScale1 = 0.0008; // Échelle plus grande = montagnes plus larges
+        const noiseScale2 = 0.002;
         const octave1Weight = 0.7;
         const octave2Weight = 0.3;
-        const hillAmplitude = 200; // Amplitude augmentée pour montagnes plus hautes
+        const hillAmplitude = 250; // Amplitude augmentée pour montagnes plus hautes
         
         // Paramètres pour les couleurs de terrain
         const rockHeight = 50; // Hauteur à partir de laquelle la roche apparaît
