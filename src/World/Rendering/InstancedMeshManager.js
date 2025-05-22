@@ -147,6 +147,26 @@ export default class InstancedMeshManager {
                                     });
                                     instancedMesh.instanceMatrix.needsUpdate = true;
 
+                                    // Ajout: animation de balancement pour les arbres
+                                    if (type === 'tree') {
+                                        const phases = new Float32Array(count);
+                                        for (let i = 0; i < count; i++) {
+                                            phases[i] = Math.random() * Math.PI * 2;
+                                        }
+                                        instancedMesh.geometry.setAttribute('instanceSwayPhase', new THREE.InstancedBufferAttribute(phases, 1));
+                                        instancedMesh.material.onBeforeCompile = (shader) => {
+                                            shader.uniforms.uTime = { value: 0 };
+                                            shader.uniforms.uSwayAmplitude = { value: 0.05 };
+                                            shader.vertexShader = 'attribute float instanceSwayPhase;\nuniform float uTime;\nuniform float uSwayAmplitude;\n' + shader.vertexShader;
+                                            shader.vertexShader = shader.vertexShader.replace(
+                                                '#include <begin_vertex>',
+                                                `#include <begin_vertex>
+                                                float sway = sin(uTime + instanceSwayPhase) * uSwayAmplitude;
+                                                transformed.z += sway * transformed.y;`
+                                            );
+                                            instancedMesh.userData.shader = shader;
+                                        };
+                                    }
                                     this.parentGroup.add(instancedMesh);
                                     this.instancedMeshes[`commercial_${commercialKey}_part${index}`] = instancedMesh;
                                     totalMeshesCreated++;
@@ -295,6 +315,26 @@ export default class InstancedMeshManager {
                                     });
                                     instancedMesh.instanceMatrix.needsUpdate = true;
 
+                                    // Ajout: animation de balancement pour les arbres
+                                    if (type === 'tree') {
+                                        const phases = new Float32Array(count);
+                                        for (let i = 0; i < count; i++) {
+                                            phases[i] = Math.random() * Math.PI * 2;
+                                        }
+                                        instancedMesh.geometry.setAttribute('instanceSwayPhase', new THREE.InstancedBufferAttribute(phases, 1));
+                                        instancedMesh.material.onBeforeCompile = (shader) => {
+                                            shader.uniforms.uTime = { value: 0 };
+                                            shader.uniforms.uSwayAmplitude = { value: 0.05 };
+                                            shader.vertexShader = 'attribute float instanceSwayPhase;\nuniform float uTime;\nuniform float uSwayAmplitude;\n' + shader.vertexShader;
+                                            shader.vertexShader = shader.vertexShader.replace(
+                                                '#include <begin_vertex>',
+                                                `#include <begin_vertex>
+                                                float sway = sin(uTime + instanceSwayPhase) * uSwayAmplitude;
+                                                transformed.z += sway * transformed.y;`
+                                            );
+                                            instancedMesh.userData.shader = shader;
+                                        };
+                                    }
                                     this.parentGroup.add(instancedMesh);
                                     this.instancedMeshes[`${meshKey}_part${index}`] = instancedMesh;
                                     totalMeshesCreated++;
@@ -396,6 +436,26 @@ export default class InstancedMeshManager {
                         });
                         instancedMesh.instanceMatrix.needsUpdate = true;
 
+                        // Ajout: animation de balancement pour les arbres
+                        if (type === 'tree') {
+                            const phases = new Float32Array(count);
+                            for (let i = 0; i < count; i++) {
+                                phases[i] = Math.random() * Math.PI * 2;
+                            }
+                            instancedMesh.geometry.setAttribute('instanceSwayPhase', new THREE.InstancedBufferAttribute(phases, 1));
+                            instancedMesh.material.onBeforeCompile = (shader) => {
+                                shader.uniforms.uTime = { value: 0 };
+                                shader.uniforms.uSwayAmplitude = { value: 0.05 };
+                                shader.vertexShader = 'attribute float instanceSwayPhase;\nuniform float uTime;\nuniform float uSwayAmplitude;\n' + shader.vertexShader;
+                                shader.vertexShader = shader.vertexShader.replace(
+                                    '#include <begin_vertex>',
+                                    `#include <begin_vertex>
+                                    float sway = sin(uTime + instanceSwayPhase) * uSwayAmplitude;
+                                    transformed.z += sway * transformed.y;`
+                                );
+                                instancedMesh.userData.shader = shader;
+                            };
+                        }
                         this.parentGroup.add(instancedMesh);
                         this.instancedMeshes[meshKey] = instancedMesh;
                         totalMeshesCreated++;

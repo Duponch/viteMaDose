@@ -394,8 +394,19 @@ export default class PlotContentGenerator {
      * @param {number} currentHour - L'heure actuelle.
      */
     update(currentHour) {
-        // La logique de mise à jour est maintenant dans InstancedMeshManager
+        // Mise à jour des fenêtres
         this.instancedMeshManager?.updateWindows(currentHour);
+        // Mise à jour de l'animation de balancement des arbres
+        const meshes = this.instancedMeshManager?.instancedMeshes;
+        if (meshes) {
+            const timeSec = this.experience.time.elapsed * 0.001;
+            Object.values(meshes).forEach(mesh => {
+                const shader = mesh.userData.shader;
+                if (shader?.uniforms?.uTime) {
+                    shader.uniforms.uTime.value = timeSec;
+                }
+            });
+        }
         // Mettre à jour l'animation de l'herbe
         this.grassInstancer?.update();
     }
