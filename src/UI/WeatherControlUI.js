@@ -260,8 +260,8 @@ export default class WeatherControlUI {
         // Mettre à jour tous les paramètres proportionnellement
         const parameters = [
             { name: 'rain', defaultValue: this.defaultValues.rainIntensity, maxValue: this.stormMaxValues.rainIntensity },
-            { name: 'leaves-count', defaultValue: this.defaultValues.leavesCount, maxValue: 80 },
-            { name: 'leaves-speed', defaultValue: this.defaultValues.leavesSpeed * 100, maxValue: 180 },
+            { name: 'leaves-count', defaultValue: this.defaultValues.leavesCount, maxValue: 40 }, // Valeur maximale 42 pour l'orage
+            { name: 'leaves-speed', defaultValue: this.defaultValues.leavesSpeed * 100, maxValue: 55 },
             { name: 'cloud-density', defaultValue: this.defaultValues.cloudDensity, maxValue: this.stormMaxValues.cloudDensity },
             { name: 'cloud-color', defaultValue: this.defaultValues.cloudColor, maxValue: this.stormMaxValues.cloudColor },
             { name: 'cloud-opacity', defaultValue: this.defaultValues.cloudOpacity, maxValue: this.stormMaxValues.cloudOpacity },
