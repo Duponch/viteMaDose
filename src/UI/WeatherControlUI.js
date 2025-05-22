@@ -50,15 +50,15 @@ export default class WeatherControlUI {
                 
                 // Valeurs maximales pour l'orage
                 this.stormMaxValues = {
-                    rainIntensity: 1.0,
-                    cloudDensity: 1.0,
-                    cloudColor: 1.0,
-                    cloudOpacity: 1.0,
-                    fogDensity: 0.15,
-                    grassAnimationSpeed: 3.0,
-                    grassTorsionAmplitude: 3.0,
-                    grassInclinationAmplitude: 3.0,
-                    lightningIntensity: 1.0,
+                    rainIntensity: 1.0,        // 100% de 1.0
+                    cloudDensity: 1.0,         // 100% de 1.0
+                    cloudColor: 1.0,           // 100% de 1.0
+                    cloudOpacity: 0.83,        // 83% de 1.0
+                    fogDensity: 0.15,          // 15% de 1.0
+                    grassAnimationSpeed: 700,  // 100% de la valeur max du curseur
+                    grassTorsionAmplitude: 500,// 100% de la valeur max du curseur
+                    grassInclinationAmplitude: 600, // 100% de la valeur max du curseur
+                    lightningIntensity: 0.2,   // 70% de 1.0
                 };
                 
                 this.init();
@@ -240,6 +240,11 @@ export default class WeatherControlUI {
     updateStormParameter(intensity) {
         if (!this.weatherSystem) return;
         
+        // Récupérer les valeurs maximales des curseurs d'herbe
+        const grassSpeedMax = this.sliders.grassAnimationSpeed.max;
+        const grassTorsionMax = this.sliders.grassTorsionAmplitude.max;
+        const grassInclinationMax = this.sliders.grassInclinationAmplitude.max;
+        
         // Mettre à jour tous les paramètres proportionnellement
         const parameters = [
             { name: 'rain', defaultValue: this.defaultValues.rainIntensity, maxValue: this.stormMaxValues.rainIntensity },
@@ -247,9 +252,9 @@ export default class WeatherControlUI {
             { name: 'cloud-color', defaultValue: this.defaultValues.cloudColor, maxValue: this.stormMaxValues.cloudColor },
             { name: 'cloud-opacity', defaultValue: this.defaultValues.cloudOpacity, maxValue: this.stormMaxValues.cloudOpacity },
             { name: 'fog', defaultValue: this.defaultValues.fogDensity, maxValue: this.stormMaxValues.fogDensity },
-            { name: 'grass-animation-speed', defaultValue: 100, maxValue: 300 }, // Convertis en pourcentage
-            { name: 'grass-torsion-amplitude', defaultValue: 100, maxValue: 300 }, // Convertis en pourcentage
-            { name: 'grass-inclination-amplitude', defaultValue: 100, maxValue: 300 }, // Convertis en pourcentage
+            { name: 'grass-animation-speed', defaultValue: 100, maxValue: grassSpeedMax }, // Utilise la valeur max du curseur
+            { name: 'grass-torsion-amplitude', defaultValue: 100, maxValue: grassTorsionMax }, // Utilise la valeur max du curseur
+            { name: 'grass-inclination-amplitude', defaultValue: 100, maxValue: grassInclinationMax }, // Utilise la valeur max du curseur
             { name: 'lightning', defaultValue: this.defaultValues.lightningIntensity, maxValue: this.stormMaxValues.lightningIntensity }
         ];
         
