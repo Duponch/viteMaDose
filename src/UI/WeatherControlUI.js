@@ -31,7 +31,8 @@ export default class WeatherControlUI {
                 // Sauvegarder les valeurs initiales du système (avant la fonctionnalité météo)
                 this.defaultValues = {
                     rainIntensity: 0,
-                    leavesIntensity: 0,
+                    leavesCount: 0,       // Changé de leavesIntensity à leavesCount
+                    leavesSpeed: 1.0,     // Nouvelle valeur par défaut pour la vitesse des feuilles
                     cloudDensity: 0.3, // Valeur par défaut dans CloudSystem
                     cloudColor: 0, // Valeur 0 = blanc (défaut), 1 = noir
                     cloudOpacity: 0.5, // Valeur par défaut dans CloudSystem
@@ -100,7 +101,8 @@ export default class WeatherControlUI {
         
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
-        this.createSlider('Feuilles', 'leaves', 0, 1, 0.01, this.weatherSystem.leavesEffect.intensity);
+        this.createSlider('Nombre de feuilles', 'leaves-count', 0, 100, 1, this.weatherSystem.leavesEffect.intensity * 100);
+        this.createSlider('Vitesse des feuilles', 'leaves-speed', 0, 100, 1, 100); // Valeur par défaut 100%
         this.createSlider('Nombre de nuages', 'cloud-density', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudDensity);
         this.createSlider('Couleur des nuages', 'cloud-color', 0, 1, 0.01, 0); // 0 = blanc, 1 = noir
         this.createSlider('Opacité des nuages', 'cloud-opacity', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudOpacity);
@@ -141,6 +143,8 @@ export default class WeatherControlUI {
         this.sliders = {
             storm: this.container.querySelector('#slider-storm'),
             rain: this.container.querySelector('#slider-rain'),
+            leavesCount: this.container.querySelector('#slider-leaves-count'),
+            leavesSpeed: this.container.querySelector('#slider-leaves-speed'),
             cloudDensity: this.container.querySelector('#slider-cloud-density'),
             cloudColor: this.container.querySelector('#slider-cloud-color'),
             cloudOpacity: this.container.querySelector('#slider-cloud-opacity'),
@@ -158,7 +162,8 @@ export default class WeatherControlUI {
         this.valueDisplays = {
             storm: this.container.querySelector('#value-storm'),
             rain: this.container.querySelector('#value-rain'),
-            leaves: this.container.querySelector('#value-leaves'),
+            leavesCount: this.container.querySelector('#value-leaves-count'),
+            leavesSpeed: this.container.querySelector('#value-leaves-speed'),
             cloudDensity: this.container.querySelector('#value-cloud-density'),
             cloudColor: this.container.querySelector('#value-cloud-color'),
             cloudOpacity: this.container.querySelector('#value-cloud-opacity'),
@@ -247,7 +252,8 @@ export default class WeatherControlUI {
         // Mettre à jour tous les paramètres proportionnellement
         const parameters = [
             { name: 'rain', defaultValue: this.defaultValues.rainIntensity, maxValue: this.stormMaxValues.rainIntensity },
-            { name: 'leaves', defaultValue: this.defaultValues.leavesIntensity, maxValue: 0.8 },
+            { name: 'leaves-count', defaultValue: this.defaultValues.leavesCount, maxValue: 80 },
+            { name: 'leaves-speed', defaultValue: 100, maxValue: 180 },
             { name: 'cloud-density', defaultValue: this.defaultValues.cloudDensity, maxValue: this.stormMaxValues.cloudDensity },
             { name: 'cloud-color', defaultValue: this.defaultValues.cloudColor, maxValue: this.stormMaxValues.cloudColor },
             { name: 'cloud-opacity', defaultValue: this.defaultValues.cloudOpacity, maxValue: this.stormMaxValues.cloudOpacity },
@@ -285,6 +291,8 @@ export default class WeatherControlUI {
      */
     paramNameToSliderKey(paramName) {
         switch(paramName) {
+            case 'leaves-count': return 'leavesCount';
+            case 'leaves-speed': return 'leavesSpeed';
             case 'cloud-density': return 'cloudDensity';
             case 'cloud-color': return 'cloudColor';
             case 'cloud-opacity': return 'cloudOpacity';
@@ -308,8 +316,17 @@ export default class WeatherControlUI {
                 this.weatherSystem.rainEffect.intensity = value;
                 break;
                 
-            case 'leaves':
-                this.weatherSystem.leavesEffect.intensity = value;
+            case 'leaves-count':
+                this.sliders.leavesCount.value = value;
+                this.valueDisplays.leavesCount.textContent = value.toFixed(2);
+                this.sliders.leavesCount.style.setProperty('--value', `${value}%`);
+                this.weatherSystem.leavesEffect.setLeavesPercentage(value);
+                break;
+                
+            case 'leaves-speed':
+                // Convertir la valeur 0-100 en facteur de vitesse (0.1-2.0)
+                const speed = (value / 100) * 1.9 + 0.1; // 0.1 à 2.0
+                this.weatherSystem.leavesEffect.setSpeedFactor(speed);
                 break;
                 
             case 'cloud-density':
@@ -389,11 +406,18 @@ export default class WeatherControlUI {
                     this.weatherSystem.rainEffect.intensity = value;
                     break;
                     
-                case 'leavesIntensity':
-                    this.sliders.leaves.value = value;
-                    this.valueDisplays.leaves.textContent = value.toFixed(2);
-                    this.sliders.leaves.style.setProperty('--value', `${value * 100}%`);
-                    this.weatherSystem.leavesEffect.intensity = value;
+                case 'leavesCount':
+                    this.sliders.leavesCount.value = value;
+                    this.valueDisplays.leavesCount.textContent = value.toFixed(2);
+                    this.sliders.leavesCount.style.setProperty('--value', `${value}%`);
+                    this.weatherSystem.leavesEffect.setLeavesPercentage(value);
+                    break;
+                    
+                case 'leavesSpeed':
+                    this.sliders.leavesSpeed.value = value * 100; // Convertir en pourcentage
+                    this.valueDisplays.leavesSpeed.textContent = (value * 100).toFixed(0);
+                    this.sliders.leavesSpeed.style.setProperty('--value', `${value * 100}%`);
+                    this.weatherSystem.leavesEffect.setSpeedFactor(value);
                     break;
                     
                 case 'cloudDensity':

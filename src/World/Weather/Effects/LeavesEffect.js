@@ -17,6 +17,8 @@ export default class LeavesEffect {
         
         // Configuration
         this._intensity = 0;             // Intensité (0-1), modifie la visibilité et la quantité
+        this._leavesPercentage = 0;      // Pourcentage de feuilles visibles (0-100)
+        this._speedFactor = 1.0;         // Facteur de vitesse des feuilles (0.1-2.0)
         this.leafCount = 100000;         // Nombre de feuilles augmenté pour un meilleur effet
         this.windSpeed = 12;             // Vitesse de base du vent (encore réduite pour moins de verticalité)
         this.worldBounds = 2000;         // Taille du monde où les feuilles peuvent apparaître
@@ -31,6 +33,7 @@ export default class LeavesEffect {
         this.verticalWindEffect = 0.12;  // Effet vertical du vent (fortement réduit pour favoriser le mouvement horizontal)
         this.respawnInterval = 8000;     // Intervalle de réapparition des feuilles
         this.lastRespawnTime = 0;        // Temps de la dernière réapparition
+        this.initialPositions = null;    // Pour stocker les positions initiales des feuilles
         
         // Vecteurs temporaires pour les calculs
         this._tempVector1 = new THREE.Vector3();
@@ -82,7 +85,7 @@ export default class LeavesEffect {
                     leavesTexture: { value: leafTexture },
                     time: { value: 0 },
                     intensity: { value: this._intensity },
-                    windSpeed: { value: this.windSpeed },
+                    windSpeed: { value: this.windSpeed * this._speedFactor }, // Modifié pour prendre en compte le facteur de vitesse
                     leaveHeight: { value: this.leafHeight },
                     cameraForward: { value: new THREE.Vector3() },
                     rotationFactor: { value: this.rotationFactor },
@@ -218,9 +221,7 @@ export default class LeavesEffect {
         
         const simplex = new SimplexNoise();
         
-        // Nombre de feuilles à afficher en fonction de l'intensité actuelle
-        const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
-        
+        // Distribuer toutes les feuilles dans l'espace mais les cacher initialement
         for (let i = 0; i < this.leafCount; i++) {
             // Répartir les feuilles dans tout le monde avec une distribution plus naturelle
             // Utiliser une distribution qui favorise légèrement les bords du monde
@@ -235,16 +236,13 @@ export default class LeavesEffect {
             // Position x, z dans le monde avec distribution améliorée
             positions[i * 3] = x;
             
-            // Si l'indice est supérieur au nombre de feuilles visibles, cacher la feuille
-            if (i >= visibleLeafCount) {
-                positions[i * 3 + 1] = -10000; // Cacher sous le terrain
-            } else {
-                // Distribution de hauteur non uniforme pour plus de réalisme
-                // Favoriser les hauteurs plus basses pour simuler des feuilles qui volent près du sol
-                const heightDistribution = Math.pow(Math.random(), 1.5);
-                positions[i * 3 + 1] = this.leafMinHeight + heightDistribution * this.leafHeight;
-            }
+            // Distribution de hauteur non uniforme pour plus de réalisme
+            // Favoriser les hauteurs plus basses pour simuler des feuilles qui volent près du sol
+            const heightDistribution = Math.pow(Math.random(), 1.5);
+            const y = this.leafMinHeight + heightDistribution * this.leafHeight;
             
+            // Cacher toutes les feuilles au départ (l'intensité est à 0)
+            positions[i * 3 + 1] = -10000; // Cacher sous le terrain
             positions[i * 3 + 2] = z;
             
             // Taille aléatoire avec distribution plus variée
@@ -271,6 +269,14 @@ export default class LeavesEffect {
         geometry.setAttribute('offset', new THREE.BufferAttribute(offsets, 1));
         geometry.setAttribute('rotation', new THREE.BufferAttribute(rotations, 1));
         
+        // Stocker les positions initiales pour pouvoir les réutiliser
+        this.initialPositions = new Float32Array(positions.length);
+        for (let i = 0; i < positions.length; i += 3) {
+            this.initialPositions[i] = positions[i]; // x
+            this.initialPositions[i + 1] = this.leafMinHeight + Math.pow(Math.random(), 1.5) * this.leafHeight; // y réel (pas caché)
+            this.initialPositions[i + 2] = positions[i + 2]; // z
+        }
+        
         // Créer le maillage de feuilles
         this.leavesObject = new THREE.Points(geometry, this.leavesMaterial);
         this.leavesObject.frustumCulled = false; // Désactiver le culling pour s'assurer que les feuilles sont toujours visibles
@@ -289,8 +295,8 @@ export default class LeavesEffect {
         const velocities = this.leavesObject.geometry.attributes.velocity;
         const angles = this.leavesObject.geometry.attributes.angle;
         
-        // Nombre de feuilles à afficher en fonction de l'intensité actuelle
-        const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
+        // Nombre de feuilles à afficher en fonction du pourcentage
+        const visibleLeafCount = Math.floor(this.leafCount * (this._leavesPercentage / 100));
         
         // Hauteur du sol (pour vérifier si les feuilles sont tombées au sol)
         const groundHeight = this.leafMinHeight;
@@ -337,14 +343,6 @@ export default class LeavesEffect {
             }
         }
         
-        // Gérer les feuilles cachées (non visibles)
-        for (let i = visibleLeafCount; i < this.leafCount; i++) {
-            if (positions.array[i * 3 + 1] > -10000) {
-                positions.array[i * 3 + 1] = -10000; // Cacher sous le terrain
-                needsUpdate = true;
-            }
-        }
-        
         // Mettre à jour les attributs seulement si nécessaire
         if (needsUpdate) {
             positions.needsUpdate = true;
@@ -387,13 +385,16 @@ export default class LeavesEffect {
     update(deltaTime) {
         if (!this.leavesObject || !this.leavesMaterial) return;
         
-        this.leavesObject.visible = this._intensity > 0.01;
+        this.leavesObject.visible = this._leavesPercentage > 0.01;
         
-        if (this._intensity <= 0.01) return;
+        if (this._leavesPercentage <= 0.01) return;
         
         // Mettre à jour la variable de temps pour les deux shaders (vertex et fragment)
         this.leavesMaterial.uniforms.time.value += deltaTime / 1000;
         this.leavesMaterial.uniforms.intensity.value = this._intensity;
+        
+        // Mettre à jour la vitesse du vent dans le shader
+        this.leavesMaterial.uniforms.windSpeed.value = this.windSpeed * this._speedFactor;
         
         // Mettre à jour les paramètres d'éclairage
         if (this.weatherSystem.environment) {
@@ -490,57 +491,122 @@ export default class LeavesEffect {
     }
     
     /**
-     * Définit l'intensité de l'effet de feuilles
-     * @param {number} value - Intensité (0-1)
+     * Définit le pourcentage de feuilles visibles
+     * @param {number} percentage - Pourcentage de feuilles (0-100)
      */
-    set intensity(value) {
-        const oldIntensity = this._intensity;
-        this._intensity = THREE.MathUtils.clamp(value, 0, 1);
+    setLeavesPercentage(percentage) {
+        const clampedPercentage = THREE.MathUtils.clamp(percentage, 0, 100);
         
-        // Mettre à jour la visibilité et l'uniforme si le matériau existe
-        if (this.leavesObject) {
-            this.leavesObject.visible = this._intensity > 0.01;
-            
-            // Ajuster le nombre de feuilles visibles en fonction de l'intensité
-            if (this.leavesObject.geometry) {
-                const positions = this.leavesObject.geometry.attributes.position;
-                
-                // Nombre de feuilles à afficher en fonction de l'intensité
-                const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
-                
-                for (let i = 0; i < this.leafCount; i++) {
-                    // Si l'indice est supérieur au nombre de feuilles visibles, cacher la feuille
-                    // en la déplaçant très loin sous le terrain
-                    if (i >= visibleLeafCount) {
-                        positions.array[i * 3 + 1] = -10000; // Déplacer loin sous le terrain
-                    } else if (positions.array[i * 3 + 1] === -10000) {
-                        // Si la feuille était cachée et doit maintenant être visible,
-                        // réinitialiser sa position Y à une valeur aléatoire dans la plage de hauteur
-                        positions.array[i * 3 + 1] = this.leafMinHeight + Math.random() * this.leafHeight;
-                        
-                        // Repositionner aléatoirement en X et Z pour une meilleure distribution
-                        positions.array[i * 3] = Math.random() * this.worldBounds - this.worldBoundsHalf;
-                        positions.array[i * 3 + 2] = Math.random() * this.worldBounds - this.worldBoundsHalf;
-                    }
-                }
-                
-                // Marquer les attributs comme nécessitant une mise à jour
-                positions.needsUpdate = true;
-            }
-        }
+        // Si aucun changement, sortir
+        if (this._leavesPercentage === clampedPercentage) return;
+        
+        const oldPercentage = this._leavesPercentage;
+        this._leavesPercentage = clampedPercentage;
+        
+        // Mettre à jour l'intensité pour le shader
+        this._intensity = clampedPercentage / 100;
         
         if (this.leavesMaterial) {
             this.leavesMaterial.uniforms.intensity.value = this._intensity;
         }
         
-        // Respawn immédiatement si l'intensité a augmenté
-        if (this._intensity > oldIntensity) {
-            this.respawnLeaves();
+        // Mettre à jour la visibilité des feuilles
+        if (this.leavesObject && this.leavesObject.geometry) {
+            this.leavesObject.visible = this._leavesPercentage > 0.01;
+            
+            // Calculer le nombre de feuilles visibles
+            const visibleLeafCount = Math.floor(this.leafCount * (clampedPercentage / 100));
+            
+            // Obtenir l'attribut de taille
+            const sizes = this.leavesObject.geometry.attributes.size;
+            const originalSizes = this.leavesObject.geometry.attributes.size.array.slice();
+            
+            // Mettre à jour les tailles (0 = invisible, >0 = visible)
+            for (let i = 0; i < this.leafCount; i++) {
+                if (i < visibleLeafCount) {
+                    // Si l'oiseau doit être visible, on utilise sa taille normale
+                    if (sizes.array[i] === 0) {
+                        // Si la feuille était cachée, lui donner une taille aléatoire
+                        sizes.array[i] = this.minLeafSize + Math.pow(Math.random(), 0.8) * (this.maxLeafSize - this.minLeafSize);
+                    }
+                } else {
+                    // Si l'oiseau doit être caché, on met sa taille à 0
+                    sizes.array[i] = 0;
+                }
+            }
+            
+            // Marquer l'attribut comme nécessitant une mise à jour
+            sizes.needsUpdate = true;
+            
+            // Si on a augmenté le pourcentage, réinitialiser certaines feuilles qui étaient cachées
+            if (clampedPercentage > oldPercentage) {
+                const oldVisibleCount = Math.floor(this.leafCount * (oldPercentage / 100));
+                
+                // Mettre à jour les positions des nouvelles feuilles visibles pour qu'elles
+                // apparaissent à des positions aléatoires et pas toutes au même endroit
+                const positions = this.leavesObject.geometry.attributes.position;
+                
+                for (let i = oldVisibleCount; i < visibleLeafCount; i++) {
+                    const idx = i * 3;
+                    
+                    // Repositionner à un endroit aléatoire du ciel
+                    const angle = Math.random() * Math.PI * 2;
+                    const radiusFactor = Math.pow(Math.random(), 0.7);
+                    const radius = this.worldBoundsHalf * radiusFactor;
+                    
+                    positions.array[idx] = Math.cos(angle) * radius + (Math.random() - 0.5) * 200;
+                    positions.array[idx + 1] = this.leafHeight - Math.pow(Math.random(), 0.7) * (this.leafHeight * 0.3);
+                    positions.array[idx + 2] = Math.sin(angle) * radius + (Math.random() - 0.5) * 200;
+                    
+                    // Réinitialiser les autres attributs pour ces feuilles
+                    const rotations = this.leavesObject.geometry.attributes.rotation;
+                    const velocities = this.leavesObject.geometry.attributes.velocity;
+                    const angles = this.leavesObject.geometry.attributes.angle;
+                    
+                    rotations.array[i] = Math.random() * Math.PI * 2;
+                    velocities.array[i] = 0.7 + Math.pow(Math.random(), 0.9) * 0.6;
+                    angles.array[i] = Math.random() * Math.PI * 2;
+                }
+                
+                // Marquer les attributs comme nécessitant une mise à jour
+                positions.needsUpdate = true;
+                this.leavesObject.geometry.attributes.rotation.needsUpdate = true;
+                this.leavesObject.geometry.attributes.velocity.needsUpdate = true;
+                this.leavesObject.geometry.attributes.angle.needsUpdate = true;
+            }
         }
     }
     
     /**
-     * Obtient l'intensité actuelle de l'effet de feuilles
+     * Définit le facteur de vitesse des feuilles
+     * @param {number} factor - Facteur de vitesse (0.1-2.0)
+     */
+    setSpeedFactor(factor) {
+        // Limiter le facteur entre 0.1 et 2.0
+        const clampedFactor = THREE.MathUtils.clamp(factor, 0.1, 2.0);
+        
+        // Si aucun changement, sortir
+        if (this._speedFactor === clampedFactor) return;
+        
+        this._speedFactor = clampedFactor;
+        
+        // Mettre à jour la vitesse du vent dans le shader
+        if (this.leavesMaterial && this.leavesMaterial.uniforms.windSpeed) {
+            this.leavesMaterial.uniforms.windSpeed.value = this.windSpeed * this._speedFactor;
+        }
+    }
+    
+    /**
+     * Définit l'intensité de l'effet de feuilles (pour compatibilité)
+     * @param {number} value - Intensité (0-1)
+     */
+    set intensity(value) {
+        // Convertir l'intensité (0-1) en pourcentage (0-100)
+        this.setLeavesPercentage(value * 100);
+    }
+    
+    /**
+     * Obtient l'intensité actuelle de l'effet de feuilles (pour compatibilité)
      * @returns {number} - Intensité (0-1)
      */
     get intensity() {
