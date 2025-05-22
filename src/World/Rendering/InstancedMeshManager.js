@@ -284,6 +284,15 @@ export default class InstancedMeshManager {
                                 // Gérer les parties séparément (chaque partie devient un InstancedMesh)
                                 // Note : Cette logique crée plusieurs InstancedMesh par asset à parts,
                                 // elle doit rester ici et ne pas passer par la création unique plus bas.
+                                // Nouveau: génère une phase partagée pour chaque instance d'arbre
+                                let treeSwayPhases;
+                                if (type === 'tree') {
+                                    const count = matrices.length;
+                                    treeSwayPhases = new Float32Array(count);
+                                    for (let i = 0; i < count; i++) {
+                                        treeSwayPhases[i] = Math.random() * Math.PI * 2;
+                                    }
+                                }
                                 assetData.parts.forEach((part, index) => {
                                     if (!part.geometry || !part.material) {
                                         console.warn(`[IMM] Invalid part data for ${type} asset ${assetId}, part index: ${index}`);
@@ -320,7 +329,7 @@ export default class InstancedMeshManager {
                                     if (type === 'tree') {
                                         const phases = new Float32Array(count);
                                         for (let i = 0; i < count; i++) {
-                                            phases[i] = Math.random() * Math.PI * 2;
+                                            phases[i] = treeSwayPhases[i];
                                         }
                                         instancedMesh.geometry.setAttribute('instanceSwayPhase', new THREE.InstancedBufferAttribute(phases, 1));
                                         instancedMesh.material.onBeforeCompile = (shader) => {
@@ -442,7 +451,7 @@ export default class InstancedMeshManager {
                         if (type === 'tree') {
                             const phases = new Float32Array(count);
                             for (let i = 0; i < count; i++) {
-                                phases[i] = Math.random() * Math.PI * 2;
+                                phases[i] = treeSwayPhases[i];
                             }
                             instancedMesh.geometry.setAttribute('instanceSwayPhase', new THREE.InstancedBufferAttribute(phases, 1));
                             instancedMesh.material.onBeforeCompile = (shader) => {

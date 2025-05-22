@@ -48,6 +48,8 @@ export default class WeatherControlUI {
                     
                     // Nouveau paramètre pour l'orage
                     stormIntensity: 0,      // Pas d'orage par défaut
+                    // Nouveau paramètre pour animation arbres
+                    treeAnimationIntensity: 0.2
                 };
                 
                 // Valeurs maximales pour l'orage
@@ -517,6 +519,12 @@ export default class WeatherControlUI {
                     this.valueDisplays.rainbow.textContent = value.toFixed(2);
                     this.sliders.rainbow.style.setProperty('--value', `${value * 100}%`);
                     this.weatherSystem.rainbowEffect.setOpacity(value);
+                    break;
+                case 'treeAnimationIntensity':
+                    this.sliders.treeAnimationIntensity.value = value;
+                    this.valueDisplays.treeAnimationIntensity.textContent = value.toFixed(2);
+                    this.sliders.treeAnimationIntensity.style.setProperty('--value', `${value * 100}%`);
+                    this.updateWeatherParameter('treeAnimationIntensity', value);
                     break;
             }
         }
