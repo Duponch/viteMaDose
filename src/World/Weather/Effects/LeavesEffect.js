@@ -22,10 +22,10 @@ export default class LeavesEffect {
         this.leafArea = 100;             // Zone des feuilles - rayon autour de la caméra (augmenté)
         this.leafHeight = 60;            // Hauteur maximale des feuilles
         this.speedIntensityFactor = 0.7; // Facteur de proportionnalité entre l'intensité et la vitesse (0-1)
-        this.minLeafSize = 0.6;          // Taille minimale des feuilles
-        this.maxLeafSize = 1.5;          // Taille maximale des feuilles
+        this.minLeafSize = 0.9;          // Taille minimale des feuilles (augmentée)
+        this.maxLeafSize = 1.8;          // Taille maximale des feuilles (augmentée)
         this.rotationFactor = 2.0;       // Facteur de rotation des feuilles
-        this.leafOpacity = 0.9;          // Opacité des feuilles (0-1)
+        this.leafOpacity = 1.0;          // Opacité des feuilles (1.0 = complètement opaque)
         this.cameraFollowFactor = 0.98;  // Facteur de suivi de la caméra (augmenté pour meilleur suivi)
         this.verticalFollowFactor = 0.8; // Facteur de suivi vertical de la caméra (augmenté)
         this.inertiaFactor = 0.92;
@@ -103,8 +103,10 @@ export default class LeavesEffect {
                 fragmentShader: fragmentShader,
                 transparent: true,
                 blending: THREE.NormalBlending,
-                depthWrite: false,
-                depthTest: true
+                depthWrite: true,       // Activer l'écriture de profondeur pour les parties opaques
+                depthTest: true,
+                alphaTest: 0.5,         // Utiliser un test alpha pour déterminer ce qui est opaque
+                side: THREE.DoubleSide  // Rendre les deux côtés des feuilles
             });
             
             // Générer la géométrie des feuilles
@@ -127,7 +129,7 @@ export default class LeavesEffect {
     }
     
     /**
-     * Crée une texture temporaire pour les feuilles
+     * Crée une texture améliorée pour les feuilles
      * @returns {THREE.Texture} - Texture de feuille
      */
     createLeafTexture() {
@@ -138,43 +140,42 @@ export default class LeavesEffect {
         
         const context = canvas.getContext('2d');
         
-        // Dessiner une feuille simple
-        context.fillStyle = 'rgba(0, 0, 0, 0)';
-        context.fillRect(0, 0, size, size);
+        // Fond complètement transparent
+        context.clearRect(0, 0, size, size);
         
         // Types de feuilles avec différentes couleurs
         const leafColors = [
-            'rgba(139, 69, 19, 0.9)', // Marron
-            'rgba(205, 133, 63, 0.9)', // Peru
-            'rgba(160, 82, 45, 0.9)', // Sienna
-            'rgba(210, 105, 30, 0.9)', // Chocolat
-            'rgba(165, 42, 42, 0.9)', // Marron foncé
-            'rgba(233, 116, 81, 0.9)', // Corail clair
-            'rgba(250, 128, 114, 0.9)', // Saumon
-            'rgba(255, 160, 122, 0.9)', // Saumon clair
-            'rgba(255, 127, 80, 0.9)', // Corail
-            'rgba(255, 69, 0, 0.9)' // Orange rouge
+            'rgba(139, 69, 19, 1.0)', // Marron - opacité à 1.0
+            'rgba(205, 133, 63, 1.0)', // Peru - opacité à 1.0
+            'rgba(160, 82, 45, 1.0)', // Sienna - opacité à 1.0
+            'rgba(210, 105, 30, 1.0)', // Chocolat - opacité à 1.0
+            'rgba(165, 42, 42, 1.0)', // Marron foncé - opacité à 1.0
+            'rgba(233, 116, 81, 1.0)', // Corail clair - opacité à 1.0
+            'rgba(250, 128, 114, 1.0)', // Saumon - opacité à 1.0
+            'rgba(255, 160, 122, 1.0)', // Saumon clair - opacité à 1.0
+            'rgba(255, 127, 80, 1.0)', // Corail - opacité à 1.0
+            'rgba(255, 69, 0, 1.0)' // Orange rouge - opacité à 1.0
         ];
         
         // Choisir une couleur aléatoire
         context.fillStyle = leafColors[Math.floor(Math.random() * leafColors.length)];
         
-        // Dessiner une forme de feuille simple
+        // Dessiner une forme de feuille avec des contours plus nets
         context.beginPath();
         context.moveTo(size/2, 10);
         context.bezierCurveTo(size/4, size/3, 10, size/2, size/2, size-10);
         context.bezierCurveTo(size-10, size/2, size*3/4, size/3, size/2, 10);
         context.fill();
         
-        // Dessiner la nervure centrale
-        context.strokeStyle = 'rgba(100, 50, 0, 0.7)';
-        context.lineWidth = 1;
+        // Dessiner la nervure centrale avec un trait plus épais
+        context.strokeStyle = 'rgba(100, 50, 0, 1.0)'; // Opacité à 1.0
+        context.lineWidth = 2; // Trait plus épais
         context.beginPath();
         context.moveTo(size/2, 10);
         context.lineTo(size/2, size-10);
         context.stroke();
         
-        // Quelques nervures secondaires
+        // Quelques nervures secondaires plus prononcées
         for (let i = 1; i < 5; i++) {
             const y = 10 + i * (size-20) / 5;
             context.beginPath();
@@ -187,6 +188,15 @@ export default class LeavesEffect {
             context.lineTo(size*3/4, y + size/20);
             context.stroke();
         }
+        
+        // Ajouter un léger contour à la feuille pour un meilleur rendu
+        context.strokeStyle = 'rgba(80, 40, 0, 1.0)';
+        context.lineWidth = 1;
+        context.beginPath();
+        context.moveTo(size/2, 10);
+        context.bezierCurveTo(size/4, size/3, 10, size/2, size/2, size-10);
+        context.bezierCurveTo(size-10, size/2, size*3/4, size/3, size/2, 10);
+        context.stroke();
         
         const texture = new THREE.CanvasTexture(canvas);
         texture.needsUpdate = true;
@@ -217,6 +227,9 @@ export default class LeavesEffect {
             center.copy(this.camera.position);
         }
         
+        // Nombre de feuilles à afficher en fonction de l'intensité actuelle
+        const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
+        
         for (let i = 0; i < this.leafCount; i++) {
             // Position aléatoire dans un cercle autour de la caméra
             const radius = Math.random() * this.leafArea;
@@ -225,7 +238,14 @@ export default class LeavesEffect {
             
             // Position x, y, z (distribution sphérique autour de la caméra)
             positions[i * 3] = center.x + Math.sin(phi) * Math.cos(theta) * radius;
-            positions[i * 3 + 1] = center.y + Math.cos(phi) * radius * 0.5 + Math.random() * this.leafHeight - this.leafHeight * 0.5;
+            
+            // Si l'indice est supérieur au nombre de feuilles visibles, cacher la feuille
+            if (i >= visibleLeafCount) {
+                positions[i * 3 + 1] = -10000; // Cacher sous le terrain
+            } else {
+                positions[i * 3 + 1] = center.y + Math.cos(phi) * radius * 0.5 + Math.random() * this.leafHeight - this.leafHeight * 0.5;
+            }
+            
             positions[i * 3 + 2] = center.z + Math.sin(phi) * Math.sin(theta) * radius;
             
             // Taille aléatoire
@@ -256,6 +276,7 @@ export default class LeavesEffect {
         this.leavesObject = new THREE.Points(geometry, this.leavesMaterial);
         this.leavesObject.frustumCulled = false; // Désactiver le culling pour s'assurer que les feuilles sont toujours visibles
         this.leavesObject.visible = this._intensity > 0.01;
+        this.leavesObject.renderOrder = 10; // Priorité de rendu élevée pour s'assurer que les feuilles sont rendues correctement
         
         // Position initiale
         if (this.camera) {
@@ -277,15 +298,25 @@ export default class LeavesEffect {
         // Position centrale (position de la caméra)
         const center = this.camera.position;
         
+        // Nombre de feuilles à afficher en fonction de l'intensité actuelle
+        const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
+        
         for (let i = 0; i < this.leafCount; i++) {
             // Position aléatoire dans un cercle autour de la caméra
             const radius = Math.random() * this.leafArea;
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.random() * Math.PI; // Pour une distribution 3D sphérique
             
-            // Position x, y, z (distribution sphérique autour de la caméra)
+            // Position x, z (distribution sphérique autour de la caméra)
             positions.array[i * 3] = Math.sin(phi) * Math.cos(theta) * radius;
-            positions.array[i * 3 + 1] = Math.cos(phi) * radius * 0.5 + Math.random() * this.leafHeight - this.leafHeight * 0.5;
+            
+            // Si l'indice est supérieur au nombre de feuilles visibles, cacher la feuille
+            if (i >= visibleLeafCount) {
+                positions.array[i * 3 + 1] = -10000; // Cacher sous le terrain
+            } else {
+                positions.array[i * 3 + 1] = Math.cos(phi) * radius * 0.5 + Math.random() * this.leafHeight - this.leafHeight * 0.5;
+            }
+            
             positions.array[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
             
             // Réinitialiser la rotation et la vitesse
@@ -451,6 +482,30 @@ export default class LeavesEffect {
         // Mettre à jour la visibilité et l'uniforme si le matériau existe
         if (this.leavesObject) {
             this.leavesObject.visible = this._intensity > 0.01;
+            
+            // Ajuster le nombre de feuilles visibles en fonction de l'intensité
+            if (this.leavesObject.geometry) {
+                const positions = this.leavesObject.geometry.attributes.position;
+                const sizes = this.leavesObject.geometry.attributes.size;
+                
+                // Nombre de feuilles à afficher en fonction de l'intensité
+                const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
+                
+                for (let i = 0; i < this.leafCount; i++) {
+                    // Si l'indice est supérieur au nombre de feuilles visibles, cacher la feuille
+                    // en la déplaçant très loin sous le terrain
+                    if (i >= visibleLeafCount) {
+                        positions.array[i * 3 + 1] = -10000; // Déplacer loin sous le terrain
+                    } else if (positions.array[i * 3 + 1] === -10000) {
+                        // Si la feuille était cachée et doit maintenant être visible,
+                        // réinitialiser sa position Y à une valeur aléatoire dans la plage normale
+                        positions.array[i * 3 + 1] = Math.random() * this.leafHeight - this.leafHeight * 0.5;
+                    }
+                }
+                
+                // Marquer les attributs comme nécessitant une mise à jour
+                positions.needsUpdate = true;
+            }
         }
         
         if (this.leavesMaterial) {

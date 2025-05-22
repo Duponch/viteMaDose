@@ -31,8 +31,15 @@ void main() {
     // Échantillonner la texture de feuille
     vec4 texColor = texture2D(leavesTexture, rotatedUv);
     
-    // Transparence de base ajustée par l'intensité et l'opacité configurée
-    float alpha = texColor.a * intensity * leafOpacity;
+    // Transparence binaire stricte pour créer une séparation nette
+    // Seuil plus élevé pour garantir que seules les parties vraiment opaques sont rendues
+    float alpha = texColor.a > 0.3 ? 1.0 : 0.0;
+    
+    // Si le pixel n'est pas opaque, le rejeter immédiatement
+    // Cela permet au test de profondeur de fonctionner correctement
+    if (alpha < 0.5) {
+        discard;
+    }
     
     // Appliquer l'éclairage ambiant en fonction du cycle jour/nuit
     // Facteur de luminosité combinant l'intensité ambiante et le facteur jour/nuit
@@ -52,11 +59,9 @@ void main() {
     
     // Choix du type de brouillard (exponentiel ou linéaire)
     #ifdef USE_FOG_EXP2
-        // Brouillard exponentiel - plus réaliste et progressif
         // Utilisation d'une formule plus sensible pour les feuilles
         fogFactor = 1.0 - exp(-fogDensity * fogDensity * vDistance * vDistance * 1.5);
     #else
-        // Brouillard linéaire - simple et efficace
         // Augmenter la sensibilité du brouillard linéaire
         float fogStart = fogNear * 0.8; // Commencer le brouillard plus tôt
         float fogEnd = fogFar * 0.9;    // Terminer le brouillard plus tôt
@@ -66,17 +71,11 @@ void main() {
     // S'assurer que le brouillard est correctement appliqué
     fogFactor = clamp(fogFactor, 0.0, 1.0);
     
-    // Renforcer l'effet du brouillard sur l'opacité pour les feuilles lointaines
-    // Plus l'objet est loin, plus il devient transparent dans le brouillard
-    float opacityFactor = mix(1.0, 0.5, fogFactor * fogFactor);
-    alpha *= opacityFactor;
-    
-    // Appliquer le brouillard à la couleur
+    // Le brouillard n'affecte que la couleur, pas l'opacité
     vec3 finalColor = mix(litColor, fogColor, fogFactor);
     
-    // Couleur finale
-    gl_FragColor = vec4(finalColor, alpha);
+    // Couleur finale avec alpha fixe à 1.0 pour les pixels visibles
+    gl_FragColor = vec4(finalColor, 1.0);
     
-    // Rejeter les pixels trop transparents
-    if (gl_FragColor.a < 0.01) discard;
+    // Nous n'avons plus besoin de rejeter les pixels ici car nous l'avons fait plus tôt
 } 

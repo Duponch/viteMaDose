@@ -43,10 +43,8 @@ void main() {
         basePos.z + zOffset * intensity
     );
     
-    // Si intensité est 0, cacher les feuilles
-    if (intensity < 0.01) {
-        finalPos.y = -1000.0;
-    }
+    // Nous n'avons plus besoin de cacher les feuilles ici, c'est géré par le positionnement dans le JavaScript
+    // Les feuilles avec position.y = -10000 sont déjà cachées
     
     // Position et taille dans l'espace caméra
     vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
