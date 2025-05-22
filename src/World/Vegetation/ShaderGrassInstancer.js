@@ -12,6 +12,11 @@ export default class ShaderGrassInstancer {
         this.instancedMeshes = [];
         this.camera = null;
         
+        // Nouveau: référence au système de temps du jeu
+        this.gameTime = experience.time;
+        this.lastGameTime = 0; // Pour calculer le delta time basé sur le temps du jeu
+        this.accumulatedGameTime = 0; // Temps de jeu accumulé pour l'animation
+        
         // Paramètres de la végétation
         this.grassColor = new THREE.Color(0x485e3c); // Même couleur que dans l'ancien GrassInstancer
         
@@ -508,8 +513,8 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             // Mettre à jour l'uniform de temps pour l'animation si le shader est compilé
             // même si on ne fait pas la mise à jour complète
             if (this.materialShader && this.animationEnabled) {
-                this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
-                // Three.js met à jour automatiquement cameraPosition
+                // Utiliser le temps du jeu au lieu du temps réel
+                this.updateGameTimeAnimation();
             }
             return; // Sortir pour économiser du CPU
         }
@@ -519,8 +524,8 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         
         // Mettre à jour les shaders uniquement si nécessaire
         if (this.materialShader) {
-            // Mettre à jour l'uniform de temps pour l'animation
-            this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
+            // Mettre à jour l'animation avec le temps du jeu
+            this.updateGameTimeAnimation();
             
             // Three.js met à jour automatiquement cameraPosition, pas besoin de le faire
             
@@ -575,6 +580,33 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         // Mettre à jour le frustum et la visibilité des parcelles
         this._updateCameraFrustum();
         this._updatePlotVisibility();
+    }
+    
+    // Nouvelle méthode pour mettre à jour l'animation basée sur le temps de jeu
+    updateGameTimeAnimation() {
+        if (!this.materialShader) return;
+        
+        // Obtenir le temps actuel du jeu (en millisecondes)
+        const currentGameTime = this.gameTime.elapsed; // Temps écoulé dans le temps du jeu
+        
+        // Calculer le delta time du jeu (millisecondes écoulées depuis la dernière mise à jour)
+        const deltaGameTime = currentGameTime - this.lastGameTime;
+        this.lastGameTime = currentGameTime;
+        
+        // Si le jeu est en pause, ne pas avancer l'animation
+        if (this.gameTime.isPaused) return;
+        
+        // Convertir en secondes pour une animation plus lisse
+        const deltaSeconds = deltaGameTime / 1000;
+        
+        // Appliquer le facteur de vitesse du temps du jeu pour l'animation
+        const gameTimeSpeed = this.gameTime.timeSpeed || 1.0;
+        
+        // Accumuler le temps de jeu pour l'animation (en tenant compte de la vitesse du jeu)
+        this.accumulatedGameTime += deltaSeconds * gameTimeSpeed;
+        
+        // Mettre à jour l'uniform de temps pour l'animation
+        this.materialShader.uniforms.time.value = this.accumulatedGameTime;
     }
     
     // Vérifier si la caméra a bougé suffisamment pour justifier une mise à jour

@@ -43,6 +43,22 @@ export default class WeatherControlUI {
                     
                     lightningIntensity: 0, // Pas d'éclairs par défaut
                     rainbowOpacity: 0,      // Pas d'arc-en-ciel par défaut
+                    
+                    // Nouveau paramètre pour l'orage
+                    stormIntensity: 0,      // Pas d'orage par défaut
+                };
+                
+                // Valeurs maximales pour l'orage
+                this.stormMaxValues = {
+                    rainIntensity: 1.0,
+                    cloudDensity: 1.0,
+                    cloudColor: 1.0,
+                    cloudOpacity: 1.0,
+                    fogDensity: 0.15,
+                    grassAnimationSpeed: 3.0,
+                    grassTorsionAmplitude: 3.0,
+                    grassInclinationAmplitude: 3.0,
+                    lightningIntensity: 1.0,
                 };
                 
                 this.init();
@@ -71,6 +87,16 @@ export default class WeatherControlUI {
         title.textContent = 'Météo';
         this.container.appendChild(title);
         
+        // Créer le nouveau curseur d'orage en premier
+        this.createSlider('Orage', 'storm', 0, 100, 1, 0);
+        
+        // Séparateur après le curseur d'orage
+        const separator = document.createElement('div');
+        separator.className = 'slider-separator';
+        separator.style.margin = '10px 0';
+        separator.style.borderBottom = '1px solid rgba(255, 255, 255, 0.2)';
+        this.container.appendChild(separator);
+        
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
         this.createSlider('Nombre de nuages', 'cloud-density', 0, 1, 0.01, this.weatherSystem.cloudSystem.cloudDensity);
@@ -79,9 +105,9 @@ export default class WeatherControlUI {
         this.createSlider('Brouillard', 'fog', 0, 1, 0.01, this.weatherSystem.fogEffect.fogDensity);
         
         // Nouveaux curseurs simplifiés pour l'animation de l'herbe
-        this.createSlider('Vitesse animation', 'grass-animation-speed', 0, 400, 1, 100); // 0-400% (100% = vitesse normale)
-        this.createSlider('Torsion/plis', 'grass-torsion-amplitude', 0, 400, 1, 100); // 0-400% (100% = amplitude normale)
-        this.createSlider('Inclinaison', 'grass-inclination-amplitude', 0, 400, 1, 100); // 0-400% (100% = amplitude normale)
+        this.createSlider('Vitesse animation herbe', 'grass-animation-speed', 0, 400, 1, 100); // 0-400% (100% = vitesse normale)
+        this.createSlider('Torsion/plis herbe', 'grass-torsion-amplitude', 0, 400, 1, 100); // 0-400% (100% = amplitude normale)
+        this.createSlider('Inclinaison herbe', 'grass-inclination-amplitude', 0, 400, 1, 100); // 0-400% (100% = amplitude normale)
         
         this.createSlider('Éclairs', 'lightning', 0, 1, 0.01, this.weatherSystem.lightningEffect.intensity);
         this.createSlider('Arc-en-ciel', 'rainbow', 0, 1, 0.01, this.weatherSystem.rainbowEffect.opacity);
@@ -111,6 +137,7 @@ export default class WeatherControlUI {
         
         // Sauvegarder les références des sliders pour y accéder plus tard
         this.sliders = {
+            storm: this.container.querySelector('#slider-storm'),
             rain: this.container.querySelector('#slider-rain'),
             cloudDensity: this.container.querySelector('#slider-cloud-density'),
             cloudColor: this.container.querySelector('#slider-cloud-color'),
@@ -127,6 +154,7 @@ export default class WeatherControlUI {
         };
         
         this.valueDisplays = {
+            storm: this.container.querySelector('#value-storm'),
             rain: this.container.querySelector('#value-rain'),
             cloudDensity: this.container.querySelector('#value-cloud-density'),
             cloudColor: this.container.querySelector('#value-cloud-color'),
@@ -189,8 +217,13 @@ export default class WeatherControlUI {
             valueEl.textContent = value.toFixed(2);
             slider.style.setProperty('--value', `${(value - min) / (max - min) * 100}%`);
             
-            // Mettre à jour le paramètre correspondant dans le système météo
-            this.updateWeatherParameter(id, value);
+            // Gérer spécialement le curseur d'orage
+            if (id === 'storm') {
+                this.updateStormParameter(value / 100); // Normaliser à 0-1
+            } else {
+                // Mettre à jour le paramètre correspondant dans le système météo
+                this.updateWeatherParameter(id, value);
+            }
         });
         
         // Initialiser la valeur CSS
@@ -198,6 +231,63 @@ export default class WeatherControlUI {
         
         sliderContainer.appendChild(slider);
         this.container.appendChild(sliderContainer);
+    }
+    
+    /**
+     * Met à jour tous les paramètres météo en fonction de l'intensité de l'orage
+     * @param {number} intensity - Intensité de l'orage (0-1)
+     */
+    updateStormParameter(intensity) {
+        if (!this.weatherSystem) return;
+        
+        // Mettre à jour tous les paramètres proportionnellement
+        const parameters = [
+            { name: 'rain', defaultValue: this.defaultValues.rainIntensity, maxValue: this.stormMaxValues.rainIntensity },
+            { name: 'cloud-density', defaultValue: this.defaultValues.cloudDensity, maxValue: this.stormMaxValues.cloudDensity },
+            { name: 'cloud-color', defaultValue: this.defaultValues.cloudColor, maxValue: this.stormMaxValues.cloudColor },
+            { name: 'cloud-opacity', defaultValue: this.defaultValues.cloudOpacity, maxValue: this.stormMaxValues.cloudOpacity },
+            { name: 'fog', defaultValue: this.defaultValues.fogDensity, maxValue: this.stormMaxValues.fogDensity },
+            { name: 'grass-animation-speed', defaultValue: 100, maxValue: 300 }, // Convertis en pourcentage
+            { name: 'grass-torsion-amplitude', defaultValue: 100, maxValue: 300 }, // Convertis en pourcentage
+            { name: 'grass-inclination-amplitude', defaultValue: 100, maxValue: 300 }, // Convertis en pourcentage
+            { name: 'lightning', defaultValue: this.defaultValues.lightningIntensity, maxValue: this.stormMaxValues.lightningIntensity }
+        ];
+        
+        // Mettre à jour chaque paramètre
+        parameters.forEach(param => {
+            // Calculer la nouvelle valeur interpolée entre la valeur par défaut et la valeur max
+            const newValue = param.defaultValue + (param.maxValue - param.defaultValue) * intensity;
+            
+            // Mettre à jour le slider et le texte d'affichage
+            const slider = this.sliders[this.paramNameToSliderKey(param.name)];
+            const valueDisplay = this.valueDisplays[this.paramNameToSliderKey(param.name)];
+            
+            if (slider && valueDisplay) {
+                slider.value = newValue;
+                valueDisplay.textContent = newValue.toFixed(2);
+                slider.style.setProperty('--value', `${(newValue - slider.min) / (slider.max - slider.min) * 100}%`);
+                
+                // Mettre à jour le paramètre dans le système météo
+                this.updateWeatherParameter(param.name, newValue);
+            }
+        });
+    }
+    
+    /**
+     * Convertit un nom de paramètre en clé de slider
+     * @param {string} paramName - Nom du paramètre (ex: 'rain', 'cloud-density')
+     * @returns {string} - Clé de slider correspondante (ex: 'rain', 'cloudDensity')
+     */
+    paramNameToSliderKey(paramName) {
+        switch(paramName) {
+            case 'cloud-density': return 'cloudDensity';
+            case 'cloud-color': return 'cloudColor';
+            case 'cloud-opacity': return 'cloudOpacity';
+            case 'grass-animation-speed': return 'grassAnimationSpeed';
+            case 'grass-torsion-amplitude': return 'grassTorsionAmplitude';
+            case 'grass-inclination-amplitude': return 'grassInclinationAmplitude';
+            default: return paramName;
+        }
     }
     
     /**
@@ -274,6 +364,11 @@ export default class WeatherControlUI {
      */
     resetToDefaults() {
         if (!this.weatherSystem) return;
+        
+        // Réinitialiser d'abord le curseur d'orage
+        this.sliders.storm.value = 0;
+        this.valueDisplays.storm.textContent = "0.00";
+        this.sliders.storm.style.setProperty('--value', '0%');
         
         // Mettre à jour les curseurs et les valeurs affichées
         for (const [key, value] of Object.entries(this.defaultValues)) {
