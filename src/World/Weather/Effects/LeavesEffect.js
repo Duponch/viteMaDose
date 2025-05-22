@@ -23,7 +23,7 @@ export default class LeavesEffect {
         this.windSpeed = 12;             // Vitesse de base du vent (encore réduite pour moins de verticalité)
         this.worldBounds = 2000;         // Taille du monde où les feuilles peuvent apparaître
         this.worldBoundsHalf = this.worldBounds / 2;
-        this.leafHeight = 100;           // Hauteur maximale des feuilles (légèrement réduite)
+        this.leafHeight = 30;           // Hauteur maximale des feuilles (légèrement réduite)
         this.leafMinHeight = 0;          // Hauteur minimale des feuilles (au sol)
         this.speedIntensityFactor = 0.4; // Facteur de proportionnalité entre l'intensité et la vitesse (encore réduit)
         this.minLeafSize = 0.9;          // Taille minimale des feuilles
