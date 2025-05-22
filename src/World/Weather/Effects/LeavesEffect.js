@@ -289,17 +289,49 @@ export default class LeavesEffect {
         context.lineTo(size/2, size-10);
         context.stroke();
         
-        // Quelques nervures secondaires plus prononcées
-        for (let i = 1; i < 5; i++) {
-            const y = 10 + i * (size-20) / 5;
+        // Fonction pour calculer approximativement la largeur de la feuille à une hauteur donnée
+        const getLeafWidthAtHeight = (height) => {
+            // Calculer la distance relative par rapport au centre de la feuille (0 = centre, 1 = extrémité)
+            const normalizedHeight = Math.abs((height - (size/2)) / (size/2 - 10));
+            
+            // Forme parabolique: plus étroit aux extrémités, plus large au milieu
+            // La largeur maximale est environ 40% de la taille de la feuille au milieu
+            const maxWidthRatio = 0.4;
+            
+            // Calculer la largeur avec une courbe parabolique (1-x²)
+            return (size * maxWidthRatio) * (1 - normalizedHeight * normalizedHeight * 0.9);
+        };
+        
+        // Dessiner seulement 3 nervures secondaires au lieu de 4, et éviter les extrémités
+        for (let i = 1; i <= 3; i++) {
+            // Répartir les nervures de manière plus centrée, en évitant les extrémités
+            const y = size/4 + i * (size/2) / 4;
+            
+            // Obtenir la largeur approximative de la feuille à cette hauteur
+            const halfWidth = getLeafWidthAtHeight(y) / 2;
+            
+            // Calculer la longueur des nervures (plus courtes que la largeur totale)
+            const nervureLength = halfWidth * 0.85; // 85% de la demi-largeur
+            
+            // Angle des nervures (plus horizontal près des extrémités)
+            const angleOffset = Math.min(15, 5 + 10 * Math.abs(y - size/2) / (size/2));
+            
+            // Nervure gauche
             context.beginPath();
             context.moveTo(size/2, y);
-            context.lineTo(size/4, y + size/20);
+            // Calcul du point final avec une inclinaison qui dépend de la position
+            const leftEndX = size/2 - nervureLength;
+            const leftEndY = y + Math.sin(angleOffset * Math.PI / 180) * nervureLength * 0.4;
+            context.lineTo(leftEndX, leftEndY);
             context.stroke();
             
+            // Nervure droite
             context.beginPath();
             context.moveTo(size/2, y);
-            context.lineTo(size*3/4, y + size/20);
+            // Calcul du point final avec une inclinaison qui dépend de la position
+            const rightEndX = size/2 + nervureLength;
+            const rightEndY = y + Math.sin(angleOffset * Math.PI / 180) * nervureLength * 0.4;
+            context.lineTo(rightEndX, rightEndY);
             context.stroke();
         }
         
