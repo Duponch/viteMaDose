@@ -47,18 +47,29 @@ void main() {
     float randomFactor = fract(sin(dot(vec2(basePos.x, basePos.z), vec2(12.9898, 78.233))) * 43758.5453);
     windEffect *= (0.8 + 0.4 * randomFactor);
     
-    // Temps personnalisé pour chaque feuille
-    float customTime = time + offset * 10.0;
+    // Normaliser windSpeed pour éviter des valeurs extrêmes qui annuleraient tout effet
+    // Limiter windSpeed à une plage raisonnable tout en préservant les variations
+    float normalizedWindSpeed = clamp(windSpeed, 0.0, 1000.0) / 1000.0; // Normaliser entre 0 et 1
+    float effectiveWindSpeed = 0.1 + normalizedWindSpeed * 10.0; // Mapper à une plage de 0.1 à 10.1
+    
+    // Temps personnalisé pour chaque feuille - influencé par la vitesse du vent
+    float speedModulator = min(1.0 + normalizedWindSpeed * 10.0, 10.0); // Facteur d'accélération du temps
+    float customTime = time * speedModulator + offset * 10.0;
     
     // Création de trajectoires chaotiques avec différentes fréquences et amplitudes
     // Mouvement horizontal beaucoup plus important (X et Z) - Amplitudes paramétrables
     float xMovement = sin(customTime * 0.5) * xMovementAmplitude + cos(customTime * 0.33) * (xMovementAmplitude * 0.7) + sin(customTime * 0.17) * (xMovementAmplitude * 0.4);
     float zMovement = cos(customTime * 0.4) * zMovementAmplitude + sin(customTime * 0.28) * (zMovementAmplitude * 0.9) + cos(customTime * 0.22) * (zMovementAmplitude * 0.6);
     
+    // Amplifier les mouvements horizontaux en fonction de la vitesse du vent
+    float horizontalAmplifier = 1.0 + normalizedWindSpeed * 5.0; // Plus de mouvement horizontal avec plus de vent
+    xMovement *= horizontalAmplifier;
+    zMovement *= horizontalAmplifier;
+    
     // Ajout de mouvements en spirale horizontaux plus prononcés
     float spiralFactorValue = sin(customTime * 0.15) * spiralFactor + (spiralFactor * 0.5);
-    float spiralX = sin(customTime * 0.4) * spiralFactorValue * 6.0;
-    float spiralZ = cos(customTime * 0.4) * spiralFactorValue * 6.0;
+    float spiralX = sin(customTime * 0.4) * spiralFactorValue * 6.0 * horizontalAmplifier;
+    float spiralZ = cos(customTime * 0.4) * spiralFactorValue * 6.0 * horizontalAmplifier;
     
     // Mouvement vertical réduit et moins dominant
     float verticalSpeed = windEffect * (verticalSpeedFactor + 0.1 * sin(customTime * 0.1));
@@ -87,12 +98,13 @@ void main() {
     
     // Ajouter un effet de rafale de vent aléatoire plus fort horizontalement
     float gustEffect = smoothstep(0.0, 1.0, sin(customTime * 0.05 + randomFactor * 6.28) * 0.5 + 0.5);
-    float gustX = cos(angle) * gustEffect * gustEffectAmplitude * intensity;
-    float gustZ = sin(angle) * gustEffect * gustEffectAmplitude * intensity;
+    float gustIntensity = gustEffectAmplitude * intensity * (1.0 + normalizedWindSpeed * 5.0);
+    float gustX = cos(angle) * gustEffect * gustIntensity;
+    float gustZ = sin(angle) * gustEffect * gustIntensity;
     
     // Ajouter un déplacement latéral plus prononcé basé sur la direction du vent
     vec2 windDirection = vec2(cameraForward.x, cameraForward.z);
-    float windStrength = length(windDirection) * windStrengthFactor;
+    float windStrength = length(windDirection) * windStrengthFactor * (1.0 + normalizedWindSpeed * 5.0);
     vec2 normalizedWind = length(windDirection) > 0.01 ? normalize(windDirection) : vec2(1.0, 0.0);
     float windX = normalizedWind.x * windStrength * (0.5 + 0.5 * sin(customTime * 0.12));
     float windZ = normalizedWind.y * windStrength * (0.5 + 0.5 * cos(customTime * 0.14));

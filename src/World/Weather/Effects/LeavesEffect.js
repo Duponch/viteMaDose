@@ -44,6 +44,9 @@ export default class LeavesEffect {
         this.gustEffectAmplitude = 7.0;  // Amplitude de l'effet de rafale
         this.windStrengthFactor = 3.0;   // Facteur de force du vent
         
+        // Facteur de vitesse initial (peut être modifié via setSpeedFactor)
+        this._speedFactor = 1.0;
+        
         // Vecteurs temporaires pour les calculs
         this._tempVector1 = new THREE.Vector3();
         this._tempVector2 = new THREE.Vector3();
@@ -417,7 +420,11 @@ export default class LeavesEffect {
         this.leavesMaterial.uniforms.intensity.value = this._intensity;
         
         // Mettre à jour la vitesse du vent dans le shader
-        this.leavesMaterial.uniforms.windSpeed.value = this.windSpeed * this._speedFactor;
+        const scaledSpeed = this.windSpeed * Math.pow(this._speedFactor, 15);
+        this.leavesMaterial.uniforms.windSpeed.value = scaledSpeed;
+        
+        // Log pour vérifier les valeurs (à enlever après débogage)
+        console.log(`Speed update: factor=${this._speedFactor}, speed=${scaledSpeed}`);
         
         // Mettre à jour les valeurs de hauteur
         this.leavesMaterial.uniforms.leaveHeight.value = this.leafHeight;
@@ -646,11 +653,11 @@ export default class LeavesEffect {
     
     /**
      * Définit le facteur de vitesse des feuilles
-     * @param {number} factor - Facteur de vitesse (0.1-2.0)
+     * @param {number} factor - Facteur de vitesse (0.1-4.0)
      */
     setSpeedFactor(factor) {
-        // Limiter le facteur entre 0.1 et 2.0
-        const clampedFactor = THREE.MathUtils.clamp(factor, 0.1, 2.0);
+        // Étendre la plage de vitesse de 0.1 à 4.0 (au lieu de 0.1-2.0)
+        const clampedFactor = THREE.MathUtils.clamp(factor, 0.1, 40);
         
         // Si aucun changement, sortir
         if (this._speedFactor === clampedFactor) return;
@@ -659,7 +666,12 @@ export default class LeavesEffect {
         
         // Mettre à jour la vitesse du vent dans le shader
         if (this.leavesMaterial && this.leavesMaterial.uniforms.windSpeed) {
-            this.leavesMaterial.uniforms.windSpeed.value = this.windSpeed * this._speedFactor;
+            // Utiliser une fonction exponentielle pour accentuer les différences
+            // Cela donne un effet plus prononcé aux valeurs extrêmes
+            const scaledSpeed = this.windSpeed * Math.pow(this._speedFactor, 15);
+            this.leavesMaterial.uniforms.windSpeed.value = scaledSpeed;
+            
+            console.log(`Facteur de vitesse des feuilles: ${this._speedFactor}, vitesse réelle: ${scaledSpeed}`);
         }
     }
     
