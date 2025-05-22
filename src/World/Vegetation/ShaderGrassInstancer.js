@@ -119,8 +119,8 @@ export default class ShaderGrassInstancer {
                 shader.uniforms.windDirection = { value: this.windDirection };
                 shader.uniforms.inclinationDirection = { value: this.inclinationDirection };
                 
-                // Nouvel uniform pour l'état d'animation de la parcelle
-                shader.uniforms.isAnimatedByDistance = { value: 0.0 };
+                // Nouvel uniform pour la distance max d'animation (cameraPosition est déjà fourni par Three.js)
+                shader.uniforms.maxAnimationDistanceSquared = { value: this.maxAnimationDistanceSquared };
                 
                 // Stocker une référence au shader pour la mise à jour
                 this.materialShader = shader;
@@ -141,8 +141,9 @@ export default class ShaderGrassInstancer {
                     uniform vec2 windDirection;    // Direction du vent
                     uniform vec2 inclinationDirection; // Direction d'inclinaison
                     
-                    // État d'animation basé sur la distance
-                    uniform float isAnimatedByDistance; // 0.0 = pas animé, 1.0 = animé
+                    // Nouveaux uniformes pour le calcul de distance
+                    // Note: cameraPosition est déjà fourni par Three.js, pas besoin de le déclarer
+                    uniform float maxAnimationDistanceSquared; // Distance max d'animation au carré
                     
                     varying vec2 vUv;
                     
@@ -172,7 +173,7 @@ export default class ShaderGrassInstancer {
                     `
                 );
                 
-                // 2. Ensuite ajouter le code d'animation simplifié, avec vérification de la distance
+                // 2. Modifier le code d'animation pour utiliser la distance à la caméra
                 shader.vertexShader = shader.vertexShader.replace(
                     '#include <begin_vertex>',
                     `
@@ -184,8 +185,20 @@ export default class ShaderGrassInstancer {
                     // Effet seulement proportionnel à la hauteur (pas d'effet à la base)
                     float effectIntensity = heightFactor * heightFactor; // Effet quadratique
                     
-                    // Vérifier si l'animation est activée et si la parcelle est dans la plage d'animation
-                    bool shouldAnimateInstance = animationEnabled > 0.5 && isAnimatedByDistance > 0.5 && effectIntensity > 0.0;
+                    // Calculer la distance au carré entre l'instance et la caméra
+                    #ifdef USE_INSTANCING
+                    vec3 instPosition = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+                    vec3 toCameraVector = instPosition - cameraPosition;
+                    float distanceToCamera = dot(toCameraVector, toCameraVector); // équivalent à length(toCameraVector)^2
+                    
+                    // Vérifier si l'animation est activée et si l'instance est dans la plage d'animation
+                    bool shouldAnimateInstance = animationEnabled > 0.5 && distanceToCamera <= maxAnimationDistanceSquared && effectIntensity > 0.0;
+                    #else
+                    // Si pas d'instancing, position simple
+                    vec3 toCameraVector = position - cameraPosition;
+                    float distanceToCamera = dot(toCameraVector, toCameraVector);
+                    bool shouldAnimateInstance = animationEnabled > 0.5 && distanceToCamera <= maxAnimationDistanceSquared && effectIntensity > 0.0;
+                    #endif
                     
                     // Si l'animation est activée et qu'on n'est pas à la base du brin
                     if (shouldAnimateInstance) {
@@ -194,7 +207,6 @@ export default class ShaderGrassInstancer {
                         
                         // Calculer la valeur d'animation de base
                         #ifdef USE_INSTANCING
-                        vec3 instPosition = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
                         float animValue = grassAnimation(currentTime, instPosition);
                         #else
                         float animValue = grassAnimation(currentTime, position);
@@ -487,6 +499,9 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
     }
     
     update() {
+        // S'assurer que la caméra est définie
+        if (!this.camera) return;
+        
         // Optimisation: Ne mettre à jour que tous les X frames
         this.frameCount++;
         if (this.frameCount % this.updateFrequency !== 0) {
@@ -494,6 +509,7 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             // même si on ne fait pas la mise à jour complète
             if (this.materialShader && this.animationEnabled) {
                 this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
+                // Three.js met à jour automatiquement cameraPosition
             }
             return; // Sortir pour économiser du CPU
         }
@@ -505,6 +521,8 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         if (this.materialShader) {
             // Mettre à jour l'uniform de temps pour l'animation
             this.materialShader.uniforms.time.value = this.clock.getElapsedTime();
+            
+            // Three.js met à jour automatiquement cameraPosition, pas besoin de le faire
             
             // Mettre à jour les paramètres d'animation simplifiés seulement s'ils ont changé
             // (Utilisation de variables temporaires pour éviter d'accéder aux uniforms si pas nécessaire)
@@ -524,6 +542,11 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             
             if (this.materialShader.uniforms.inclinationAmplitude.value !== this.inclinationAmplitude) {
                 this.materialShader.uniforms.inclinationAmplitude.value = this.inclinationAmplitude;
+            }
+            
+            // Mettre à jour la distance maximale d'animation si elle a changé
+            if (this.materialShader.uniforms.maxAnimationDistanceSquared.value !== this.maxAnimationDistanceSquared) {
+                this.materialShader.uniforms.maxAnimationDistanceSquared.value = this.maxAnimationDistanceSquared;
             }
             
             // Mettre à jour les directions seulement si elles ont changé
@@ -546,37 +569,12 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
         if (currentTime - this.lastUpdateTime < this.updateInterval) return;
         this.lastUpdateTime = currentTime;
         
-        // Mise à jour du frustum culling
-        if (!this.camera) return;
-        
         // Vérifier si la caméra a bougé significativement
         if (!this._checkCameraMovement()) return;
         
         // Mettre à jour le frustum et la visibilité des parcelles
         this._updateCameraFrustum();
         this._updatePlotVisibility();
-        
-        // Mettre à jour l'uniform d'animation en fonction de la parcelle actuellement active
-        if (this.materialShader && this.materialShader.uniforms) {
-            // Chercher la parcelle visible la plus proche pour déterminer l'état d'animation
-            let closestPlotInfo = null;
-            let minDistance = Infinity;
-            
-            for (const plotInfo of this.plotData) {
-                if (plotInfo.isVisible) {
-                    if (plotInfo.distanceSquared < minDistance) {
-                        minDistance = plotInfo.distanceSquared;
-                        closestPlotInfo = plotInfo;
-                    }
-                }
-            }
-            
-            // Mettre à jour l'uniform d'animation basé sur la parcelle la plus proche
-            const animationState = closestPlotInfo && closestPlotInfo.isAnimated ? 1.0 : 0.0;
-            if (this.materialShader.uniforms.isAnimatedByDistance.value !== animationState) {
-                this.materialShader.uniforms.isAnimatedByDistance.value = animationState;
-            }
-        }
     }
     
     // Vérifier si la caméra a bougé suffisamment pour justifier une mise à jour
@@ -649,9 +647,6 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
                 isVisible = this._frustum.intersectsSphere(this._tempBoundingSphere);
             }
             
-            // Déterminer si l'animation doit être activée
-            const shouldAnimate = isVisible && plotInfo.distanceSquared <= this.maxAnimationDistanceSquared;
-            
             // Déterminer le niveau de LOD en fonction de la distance
             let newLodLevel = 0; // Par défaut, détail complet
             
@@ -665,14 +660,12 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
                 }
             }
             
-            // Appliquer la visibilité et l'animation seulement si un changement est nécessaire
+            // Appliquer la visibilité et le LOD seulement si un changement est nécessaire
             const visibilityChanged = plotInfo.isVisible !== isVisible;
-            const animationChanged = plotInfo.isAnimated !== shouldAnimate;
             const lodChanged = plotInfo.lodLevel !== newLodLevel;
             
-            if (visibilityChanged || animationChanged || lodChanged) {
+            if (visibilityChanged || lodChanged) {
                 plotInfo.isVisible = isVisible;
-                plotInfo.isAnimated = shouldAnimate;
                 plotInfo.lodLevel = newLodLevel;
                 this._applyPlotVisibility(plotInfo);
             }
@@ -750,17 +743,6 @@ gradient.addColorStop(1, '#FFFFFF'); // Plus clair aux pointes, mais opaque
             // Sauvegarder le nouveau niveau de LOD
             plotInfo.lastLodLevel = plotInfo.lodLevel;
             plotInfo.instancesVisible = instanceCount;
-        }
-        
-        // Mettre à jour l'état d'animation dans le userData
-        mesh.userData.animated = plotInfo.isAnimated;
-        
-        // Si nous avons accès au shader, mettre à jour l'uniform d'animation
-        if (this.materialShader && this.materialShader.uniforms && 
-            plotInfo.lastAnimatedState !== plotInfo.isAnimated) {
-            
-            // Conserver l'état pour comparer lors de la prochaine mise à jour
-            plotInfo.lastAnimatedState = plotInfo.isAnimated;
         }
     }
     
