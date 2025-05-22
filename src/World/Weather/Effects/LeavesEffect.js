@@ -181,6 +181,10 @@ export default class LeavesEffect {
         const effectiveWindSpeed = this.windSpeed * Math.pow(this._speedFactor, 15);
         this.leavesMaterial.uniforms.windSpeed.value = effectiveWindSpeed;
         
+        // CRITIQUE: Forcer la mise à jour du shader lui-même pour qu'il prenne en compte les nouvelles valeurs
+        // Cela est particulièrement important pour la vitesse qui peut ne pas être immédiatement appliquée
+        this.leavesMaterial.needsUpdate = true;
+        
         console.log(`Mise à jour forcée: facteur de vitesse=${this._speedFactor}, vitesse effective=${effectiveWindSpeed}`);
         
         // Mettre à jour la visibilité de l'objet feuilles
@@ -190,6 +194,9 @@ export default class LeavesEffect {
         if (this.leavesObject.geometry) {
             const positions = this.leavesObject.geometry.attributes.position;
             const sizes = this.leavesObject.geometry.attributes.size;
+            const velocities = this.leavesObject.geometry.attributes.velocity;
+            const angles = this.leavesObject.geometry.attributes.angle;
+            const rotations = this.leavesObject.geometry.attributes.rotation;
             
             for (let i = 0; i < this.leafCount; i++) {
                 const idx = i * 3;
@@ -207,6 +214,13 @@ export default class LeavesEffect {
                     if (sizes.array[i] === 0) {
                         sizes.array[i] = this.minLeafSize + Math.pow(Math.random(), 0.8) * (this.maxLeafSize - this.minLeafSize);
                     }
+                    
+                    // NOUVEAU: Ajuster les vélocités pour refléter la vitesse actuelle
+                    velocities.array[i] = 0.7 + Math.pow(Math.random(), 0.9) * 0.6 * this._speedFactor;
+                    
+                    // Ajuster les angles et rotations pour une meilleure distribution
+                    angles.array[i] = Math.random() * Math.PI * 2;
+                    rotations.array[i] = Math.random() * Math.PI * 2;
                 } else {
                     // Cacher les feuilles qui ne devraient pas être visibles
                     positions.array[idx + 1] = -10000; // Cacher sous le terrain
@@ -214,9 +228,17 @@ export default class LeavesEffect {
                 }
             }
             
-            // Indiquer que les attributs ont été modifiés
+            // Indiquer que tous les attributs ont été modifiés
             positions.needsUpdate = true;
             sizes.needsUpdate = true;
+            velocities.needsUpdate = true;
+            angles.needsUpdate = true;
+            rotations.needsUpdate = true;
+        }
+        
+        // Forcer une mise à jour immédiate pour appliquer les changements
+        if (this.weatherSystem && this.weatherSystem.time) {
+            this.update(16); // Simuler une frame à ~60fps
         }
     }
     
@@ -739,7 +761,7 @@ export default class LeavesEffect {
      */
     setSpeedFactor(factor) {
         // Étendre la plage de vitesse de 0.1 à 4.0 (au lieu de 0.1-2.0)
-        const clampedFactor = THREE.MathUtils.clamp(factor, 0.1, 40);
+        const clampedFactor = THREE.MathUtils.clamp(factor, 0.1, 4.0);
         
         // Si aucun changement, sortir
         if (this._speedFactor === clampedFactor) return;
@@ -753,14 +775,14 @@ export default class LeavesEffect {
             const scaledSpeed = this.windSpeed * Math.pow(this._speedFactor, 15);
             this.leavesMaterial.uniforms.windSpeed.value = scaledSpeed;
             
-            console.log(`Facteur de vitesse des feuilles: ${this._speedFactor}, vitesse réelle: ${scaledSpeed}`);
+            // IMPORTANT: Indiquer au shader qu'il doit se recompiler
+            this.leavesMaterial.needsUpdate = true;
+            
+            console.log(`Facteur de vitesse des feuilles mis à jour: ${this._speedFactor}, vitesse réelle: ${scaledSpeed}`);
         }
         
-        // Forcer une mise à jour immédiate du rendu pour appliquer les changements
-        if (this.weatherSystem && this.weatherSystem.time) {
-            // Simuler une mise à jour avec un deltaTime typique
-            this.update(16); // 16ms ≈ 60fps
-        }
+        // Utiliser la méthode forceUpdateInitialValues pour garantir une mise à jour complète
+        this.forceUpdateInitialValues();
     }
     
     /**

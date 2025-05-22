@@ -48,12 +48,17 @@ void main() {
     windEffect *= (0.8 + 0.4 * randomFactor);
     
     // Normaliser windSpeed pour éviter des valeurs extrêmes qui annuleraient tout effet
-    // Limiter windSpeed à une plage raisonnable tout en préservant les variations
-    float normalizedWindSpeed = clamp(windSpeed, 0.0, 1000.0) / 1000.0; // Normaliser entre 0 et 1
-    float effectiveWindSpeed = 0.1 + normalizedWindSpeed * 10.0; // Mapper à une plage de 0.1 à 10.1
+    // AMÉLIORATION: Ajuster la normalisation pour mieux gérer les valeurs faibles
+    // en utilisant une fonction logarithmique qui préserve mieux les différences
+    float normalizedWindSpeed = clamp(windSpeed, 0.1, 1000.0);
+    normalizedWindSpeed = log(normalizedWindSpeed + 1.0) / log(1001.0); // Normalisation logarithmique
+    
+    // AMÉLIORATION: Calculer la vitesse effective avec une formule qui préserve 
+    // mieux les différences entre valeurs faibles et élevées
+    float effectiveWindSpeed = 0.1 + normalizedWindSpeed * 20.0;
     
     // Temps personnalisé pour chaque feuille - influencé par la vitesse du vent
-    float speedModulator = min(1.0 + normalizedWindSpeed * 10.0, 10.0); // Facteur d'accélération du temps
+    float speedModulator = 0.5 + normalizedWindSpeed * 19.5; // Plage de 0.5 à 20.0
     float customTime = time * speedModulator + offset * 10.0;
     
     // Création de trajectoires chaotiques avec différentes fréquences et amplitudes
