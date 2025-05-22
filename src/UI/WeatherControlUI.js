@@ -99,6 +99,10 @@ export default class WeatherControlUI {
         separator.style.borderBottom = '1px solid rgba(255, 255, 255, 0.2)';
         this.container.appendChild(separator);
         
+        // Slider pour l'intensité animation des arbres
+        const defaultTreeIntensity = 0.2;
+        this.createSlider('Intensité animation arbres', 'treeAnimationIntensity', 0, 1, 0.01, defaultTreeIntensity);
+        
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Pluie', 'rain', 0, 1, 0.01, this.weatherSystem.rainEffect.intensity);
         this.createSlider('Nombre de feuilles', 'leaves-count', 0, 100, 1, this.defaultValues.leavesCount);
@@ -160,7 +164,8 @@ export default class WeatherControlUI {
             grassInclinationAmplitude: this.container.querySelector('#slider-grass-inclination-amplitude'),
             
             lightning: this.container.querySelector('#slider-lightning'),
-            rainbow: this.container.querySelector('#slider-rainbow')
+            rainbow: this.container.querySelector('#slider-rainbow'),
+            treeAnimationIntensity: this.container.querySelector('#slider-treeAnimationIntensity')
         };
         
         this.valueDisplays = {
@@ -179,7 +184,8 @@ export default class WeatherControlUI {
             grassInclinationAmplitude: this.container.querySelector('#value-grass-inclination-amplitude'),
             
             lightning: this.container.querySelector('#value-lightning'),
-            rainbow: this.container.querySelector('#value-rainbow')
+            rainbow: this.container.querySelector('#value-rainbow'),
+            treeAnimationIntensity: this.container.querySelector('#value-treeAnimationIntensity')
         };
         
         //console.log("Interface de contrôle météo avec curseurs initialisée");
@@ -257,7 +263,8 @@ export default class WeatherControlUI {
         const grassTorsionMax = this.sliders.grassTorsionAmplitude.max;
         const grassInclinationMax = this.sliders.grassInclinationAmplitude.max;
         
-        // Mettre à jour tous les paramètres proportionnellement
+        // Valeur par défaut de l'intensité animation arbres pour l'orage
+        const defaultTreeIntensity = 0.2;
         const parameters = [
             { name: 'rain', defaultValue: this.defaultValues.rainIntensity, maxValue: this.stormMaxValues.rainIntensity },
             { name: 'leaves-count', defaultValue: this.defaultValues.leavesCount, maxValue: 40 }, // Valeur maximale 42 pour l'orage
@@ -269,7 +276,8 @@ export default class WeatherControlUI {
             { name: 'grass-animation-speed', defaultValue: 100, maxValue: grassSpeedMax }, // Utilise la valeur max du curseur
             { name: 'grass-torsion-amplitude', defaultValue: 100, maxValue: grassTorsionMax }, // Utilise la valeur max du curseur
             { name: 'grass-inclination-amplitude', defaultValue: 100, maxValue: grassInclinationMax }, // Utilise la valeur max du curseur
-            { name: 'lightning', defaultValue: this.defaultValues.lightningIntensity, maxValue: this.stormMaxValues.lightningIntensity }
+            { name: 'lightning', defaultValue: this.defaultValues.lightningIntensity, maxValue: this.stormMaxValues.lightningIntensity },
+            { name: 'treeAnimationIntensity', defaultValue: defaultTreeIntensity, maxValue: 1.0 }
         ];
         
         // Mettre à jour chaque paramètre
@@ -389,6 +397,22 @@ export default class WeatherControlUI {
                 
             case 'rainbow':
                 this.weatherSystem.rainbowEffect.setOpacity(value);
+                break;
+            
+            case 'treeAnimationIntensity':
+                // Mettre à jour amplitude et fréquence du balancement des arbres
+                const imManager = this.experience.world.cityManager.contentGenerator.instancedMeshManager;
+                if (imManager && imManager.instancedMeshes) {
+                    const maxAmp = 0.25;
+                    const maxFreq = 5.0;
+                    Object.values(imManager.instancedMeshes).forEach(mesh => {
+                        const shader = mesh.userData.shader;
+                        if (shader && shader.uniforms) {
+                            shader.uniforms.uSwayAmplitude.value = maxAmp * value;
+                            shader.uniforms.uSwayFrequency.value = maxFreq * value;
+                        }
+                    });
+                }
                 break;
         }
     }

@@ -64,17 +64,6 @@ export default class EnvironmentControlUI {
         // Créer les curseurs pour chaque paramètre
         this.createSlider('Nombre d\'oiseaux', 'birds', 0, 1, 0.01, this.environmentSystem.getBirdDensity());
         
-        // Slider pour l'intensité d'animation des arbres
-        const defaultTreeIntensity = 0.2;
-        this.createSlider('Intensité animation arbres', 'treeAnimationIntensity', 0, 1, 0.01, defaultTreeIntensity);
-        // Appliquer la valeur par défaut immédiatement
-        this.updateEnvironmentParameter('treeAnimationIntensity', defaultTreeIntensity);
-        
-        // Séparateur pour section eau
-        /* const waterSeparator = document.createElement('div');
-        waterSeparator.className = 'ui-separator';
-        this.container.appendChild(waterSeparator); */
-        
         // Checkbox pour activer/désactiver l'eau
         this.createCheckbox('Visible', 'waterVisible', this.defaultValues.waterVisible);
         
@@ -250,21 +239,6 @@ export default class EnvironmentControlUI {
                 break;
             case 'waterHeight':
                 this.environment.setWaterDimensions(this.sliders.waterWidth.value, value);
-                break;
-            case 'treeAnimationIntensity':
-                // Mettre à jour amplitude et fréquence du balancement des arbres
-                const imManager = this.experience.world.cityManager.contentGenerator.instancedMeshManager;
-                if (imManager && imManager.instancedMeshes) {
-                    const maxAmp = 0.25;
-                    const maxFreq = 5.0;
-                    Object.values(imManager.instancedMeshes).forEach(mesh => {
-                        const shader = mesh.userData.shader;
-                        if (shader && shader.uniforms) {
-                            shader.uniforms.uSwayAmplitude.value = maxAmp * value;
-                            shader.uniforms.uSwayFrequency.value = maxFreq * value;
-                        }
-                    });
-                }
                 break;
         }
     }
