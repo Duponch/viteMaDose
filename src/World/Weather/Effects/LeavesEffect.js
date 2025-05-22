@@ -23,7 +23,7 @@ export default class LeavesEffect {
         this.windSpeed = 12;             // Vitesse de base du vent (encore réduite pour moins de verticalité)
         this.worldBounds = 2000;         // Taille du monde où les feuilles peuvent apparaître
         this.worldBoundsHalf = this.worldBounds / 2;
-        this.leafHeight = 180;           // Hauteur maximale des feuilles (légèrement réduite)
+        this.leafHeight = 100;           // Hauteur maximale des feuilles (légèrement réduite)
         this.leafMinHeight = 0;          // Hauteur minimale des feuilles (au sol)
         this.speedIntensityFactor = 0.4; // Facteur de proportionnalité entre l'intensité et la vitesse (encore réduit)
         this.minLeafSize = 0.9;          // Taille minimale des feuilles
@@ -50,6 +50,10 @@ export default class LeavesEffect {
         this._tempVector3 = new THREE.Vector3();
         this._tempVector4 = new THREE.Vector3();
         this.windVelocity = new THREE.Vector3();
+        
+        // Variables pour le suivi des modifications de hauteur
+        this.lastLeafHeight = this.leafHeight;
+        this.lastLeafMinHeight = this.leafMinHeight;
         
         // Initialisation
         this.initialize();
@@ -94,8 +98,9 @@ export default class LeavesEffect {
                     leavesTexture: { value: leafTexture },
                     time: { value: 0 },
                     intensity: { value: this._intensity },
-                    windSpeed: { value: this.windSpeed * this._speedFactor }, // Modifié pour prendre en compte le facteur de vitesse
+                    windSpeed: { value: this.windSpeed * this._speedFactor },
                     leaveHeight: { value: this.leafHeight },
+                    leafMinHeight: { value: this.leafMinHeight },
                     cameraForward: { value: new THREE.Vector3() },
                     rotationFactor: { value: this.rotationFactor },
                     // Paramètres de brouillard
@@ -139,6 +144,9 @@ export default class LeavesEffect {
             
             // Mise à jour des vecteurs pour le mouvement
             this.updateVectors();
+            
+            // Forcer la réinitialisation des positions des feuilles
+            this.resetLeavesPositions();
             
         } catch (error) {
             console.error("Erreur lors de l'initialisation de l'effet de feuilles:", error);
@@ -241,22 +249,20 @@ export default class LeavesEffect {
         // Distribuer toutes les feuilles dans l'espace mais les cacher initialement
         for (let i = 0; i < this.leafCount; i++) {
             // Répartir les feuilles dans tout le monde avec une distribution plus naturelle
-            // Utiliser une distribution qui favorise légèrement les bords du monde
-            // pour éviter une concentration excessive au centre
             const angle = Math.random() * Math.PI * 2;
-            const radiusFactor = Math.pow(Math.random(), 0.7); // Distribution non linéaire
+            const radiusFactor = Math.pow(Math.random(), 0.7);
             const radius = this.worldBoundsHalf * radiusFactor;
             
-            const x = Math.cos(angle) * radius + (Math.random() - 0.5) * 200; // Ajouter une petite variation
+            const x = Math.cos(angle) * radius + (Math.random() - 0.5) * 200;
             const z = Math.sin(angle) * radius + (Math.random() - 0.5) * 200;
             
             // Position x, z dans le monde avec distribution améliorée
             positions[i * 3] = x;
             
             // Distribution de hauteur non uniforme pour plus de réalisme
-            // Favoriser les hauteurs plus basses pour simuler des feuilles qui volent près du sol
-            const heightDistribution = Math.pow(Math.random(), 1.5);
-            const y = this.leafMinHeight + heightDistribution * this.leafHeight;
+            // Commencer à la hauteur minimale avec une forte préférence pour les positions basses
+            const heightDistribution = Math.pow(Math.random(), 3.0); // Puissance 3 = concentration près du sol
+            const y = this.leafMinHeight + heightDistribution * (this.leafHeight - this.leafMinHeight);
             
             // Cacher toutes les feuilles au départ (l'intensité est à 0)
             positions[i * 3 + 1] = -10000; // Cacher sous le terrain
@@ -345,7 +351,7 @@ export default class LeavesEffect {
                 // Distribution de hauteur non uniforme, favorisant les hauteurs supérieures
                 // pour simuler des feuilles qui commencent à tomber
                 const heightVariation = Math.pow(Math.random(), 0.7);
-                positions.array[idx + 1] = respawnHeight - heightVariation * (respawnHeight * 0.3);
+                positions.array[idx + 1] = this.leafMinHeight + heightVariation * (this.leafHeight - this.leafMinHeight);
                 
                 positions.array[idx + 2] = z;
                 
@@ -412,6 +418,20 @@ export default class LeavesEffect {
         
         // Mettre à jour la vitesse du vent dans le shader
         this.leavesMaterial.uniforms.windSpeed.value = this.windSpeed * this._speedFactor;
+        
+        // Mettre à jour les valeurs de hauteur
+        this.leavesMaterial.uniforms.leaveHeight.value = this.leafHeight;
+        this.leavesMaterial.uniforms.leafMinHeight.value = this.leafMinHeight;
+        
+        // Vérifier si nous devons réinitialiser les positions (si les valeurs ont changé)
+        if (!this.lastLeafHeight) this.lastLeafHeight = this.leafHeight;
+        if (!this.lastLeafMinHeight) this.lastLeafMinHeight = this.leafMinHeight;
+        
+        if (this.leafHeight !== this.lastLeafHeight || this.leafMinHeight !== this.lastLeafMinHeight) {
+            this.lastLeafHeight = this.leafHeight;
+            this.lastLeafMinHeight = this.leafMinHeight;
+            this.resetLeavesPositions();
+        }
         
         // Mettre à jour les paramètres d'éclairage
         if (this.weatherSystem.environment) {
@@ -508,6 +528,32 @@ export default class LeavesEffect {
     }
     
     /**
+     * Réinitialise la position des feuilles en fonction des hauteurs définies
+     */
+    resetLeavesPositions() {
+        if (!this.leavesObject) return;
+        
+        const positions = this.leavesObject.geometry.attributes.position;
+        
+        // Nombre de feuilles à afficher en fonction du pourcentage
+        const visibleLeafCount = Math.floor(this.leafCount * (this._leavesPercentage / 100));
+        
+        for (let i = 0; i < visibleLeafCount; i++) {
+            const idx = i * 3;
+            
+            // Repositionner les feuilles principalement près du sol
+            // Favoriser fortement les positions basses
+            const heightFactor = Math.pow(Math.random(), 3.0); // Exposant plus élevé = plus de feuilles près du sol
+            positions.array[idx + 1] = this.leafMinHeight + heightFactor * (this.leafHeight - this.leafMinHeight);
+        }
+        
+        // Marquer l'attribut comme nécessitant une mise à jour
+        positions.needsUpdate = true;
+        
+        console.log(`Feuilles réinitialisées avec hauteur min: ${this.leafMinHeight}, max: ${this.leafHeight}`);
+    }
+    
+    /**
      * Définit le pourcentage de feuilles visibles
      * @param {number} percentage - Pourcentage de feuilles (0-100)
      */
@@ -572,7 +618,11 @@ export default class LeavesEffect {
                     const radius = this.worldBoundsHalf * radiusFactor;
                     
                     positions.array[idx] = Math.cos(angle) * radius + (Math.random() - 0.5) * 200;
-                    positions.array[idx + 1] = this.leafHeight - Math.pow(Math.random(), 0.7) * (this.leafHeight * 0.3);
+                    
+                    // Favoriser les positions près du sol
+                    const heightFactor = Math.pow(Math.random(), 3.0);
+                    positions.array[idx + 1] = this.leafMinHeight + heightFactor * (this.leafHeight - this.leafMinHeight);
+                    
                     positions.array[idx + 2] = Math.sin(angle) * radius + (Math.random() - 0.5) * 200;
                     
                     // Réinitialiser les autres attributs pour ces feuilles
@@ -628,5 +678,35 @@ export default class LeavesEffect {
      */
     get intensity() {
         return this._intensity;
+    }
+    
+    /**
+     * Définit la hauteur maximale des feuilles
+     * @param {number} height - Hauteur maximale des feuilles
+     */
+    setLeafHeight(height) {
+        if (height === this.leafHeight) return;
+        this.leafHeight = height;
+        
+        // Mettre à jour la hauteur dans le shader
+        if (this.leavesMaterial && this.leavesMaterial.uniforms.leaveHeight) {
+            this.leavesMaterial.uniforms.leaveHeight.value = height;
+            this.resetLeavesPositions();
+        }
+    }
+    
+    /**
+     * Définit la hauteur minimale des feuilles
+     * @param {number} height - Hauteur minimale des feuilles
+     */
+    setLeafMinHeight(height) {
+        if (height === this.leafMinHeight) return;
+        this.leafMinHeight = height;
+        
+        // Mettre à jour la hauteur minimale dans le shader
+        if (this.leavesMaterial && this.leavesMaterial.uniforms.leafMinHeight) {
+            this.leavesMaterial.uniforms.leafMinHeight.value = height;
+            this.resetLeavesPositions();
+        }
     }
 } 

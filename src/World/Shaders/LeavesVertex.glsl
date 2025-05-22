@@ -4,6 +4,7 @@ uniform float time;
 uniform float intensity;
 uniform float windSpeed;
 uniform float leaveHeight;
+uniform float leafMinHeight;
 uniform vec3 cameraForward;
 uniform float rotationFactor;
 
@@ -63,13 +64,26 @@ void main() {
     float verticalSpeed = windEffect * (verticalSpeedFactor + 0.1 * sin(customTime * 0.1));
     float yOffset = sin(customTime * 0.3) * yOffsetAmplitude;
     
-    // Nouveau calcul de la position verticale qui évite la domination du mouvement vertical
-    float baseY = basePos.y;
-    float verticalMovement = sin(customTime * 0.2) * verticalSpeed * 2.0; // Mouvement vertical oscillant
-    float yPos = baseY + verticalMovement + yOffset;
+    // Position verticale avec mouvement naturel autour de la position de base
+    float baseY = position.y;
+    // Si la feuille est cachée (position Y très négative), utiliser une position aléatoire
+    // avec une forte préférence pour les positions basses
+    if (baseY < -1000.0) {
+        float heightFactor = pow(randomFactor, 3.0); // Utiliser le cube pour concentrer près du sol
+        baseY = leafMinHeight + heightFactor * (leaveHeight - leafMinHeight);
+    }
+    // Réduire l'amplitude du mouvement vertical près du sol
+    float heightRatio = (baseY - leafMinHeight) / (leaveHeight - leafMinHeight);
+    float verticalAmplitude = mix(0.5, 1.0, heightRatio); // Moins de mouvement près du sol
+    float verticalMovement = sin(customTime * 0.2) * verticalSpeed * 2.0 * verticalAmplitude;
+    float yPos = baseY + verticalMovement + yOffset * verticalAmplitude;
     
-    // Limiter la hauteur des feuilles
-    yPos = clamp(yPos, 0.0, leaveHeight);
+    // Assurer une forte tendance à rester près du sol
+    float groundAttraction = 1.0 - pow(heightRatio, 2.0); // Force qui tire vers le sol
+    yPos = mix(yPos, leafMinHeight, groundAttraction * 0.1); // Légère attraction vers le sol
+    
+    // Limiter la hauteur des feuilles en prenant en compte la hauteur minimale
+    yPos = clamp(yPos, leafMinHeight, leaveHeight);
     
     // Ajouter un effet de rafale de vent aléatoire plus fort horizontalement
     float gustEffect = smoothstep(0.0, 1.0, sin(customTime * 0.05 + randomFactor * 6.28) * 0.5 + 0.5);
