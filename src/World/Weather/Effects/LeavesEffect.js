@@ -17,22 +17,20 @@ export default class LeavesEffect {
         
         // Configuration
         this._intensity = 0;             // Intensité (0-1), modifie la visibilité et la quantité
-        this.leafCount = 10000;          // Nombre de feuilles
+        this.leafCount = 100000;         // Nombre de feuilles augmenté pour un meilleur effet
         this.windSpeed = 20;             // Vitesse de base du vent
-        this.leafArea = 100;             // Zone des feuilles - rayon autour de la caméra (augmenté)
-        this.leafHeight = 60;            // Hauteur maximale des feuilles
+        this.worldBounds = 2000;         // Taille du monde où les feuilles peuvent apparaître
+        this.worldBoundsHalf = this.worldBounds / 2;
+        this.leafHeight = 200;           // Hauteur maximale des feuilles augmentée
+        this.leafMinHeight = 0;          // Hauteur minimale des feuilles (au sol)
         this.speedIntensityFactor = 0.7; // Facteur de proportionnalité entre l'intensité et la vitesse (0-1)
-        this.minLeafSize = 0.9;          // Taille minimale des feuilles (augmentée)
-        this.maxLeafSize = 1.8;          // Taille maximale des feuilles (augmentée)
+        this.minLeafSize = 0.9;          // Taille minimale des feuilles
+        this.maxLeafSize = 1.8;          // Taille maximale des feuilles
         this.rotationFactor = 2.0;       // Facteur de rotation des feuilles
         this.leafOpacity = 1.0;          // Opacité des feuilles (1.0 = complètement opaque)
-        this.cameraFollowFactor = 0.98;  // Facteur de suivi de la caméra (augmenté pour meilleur suivi)
-        this.verticalFollowFactor = 0.8; // Facteur de suivi vertical de la caméra (augmenté)
-        this.inertiaFactor = 0.92;
-        this.lastCameraPosition = null;
-        this.repositionThreshold = 60;   // Distance à partir de laquelle on repositionne les feuilles
-        this.repositionCheckInterval = 500; // Vérifier tous les 500ms si on doit repositionner
-        this.lastRepositionTime = 0;     // Dernière fois qu'on a repositionné les feuilles
+        this.verticalWindEffect = 0.3;   // Effet vertical du vent
+        this.respawnInterval = 10000;    // Intervalle de réapparition des feuilles (10 secondes)
+        this.lastRespawnTime = 0;        // Temps de la dernière réapparition
         
         // Vecteurs temporaires pour les calculs
         this._tempVector1 = new THREE.Vector3();
@@ -112,12 +110,11 @@ export default class LeavesEffect {
             // Générer la géométrie des feuilles
             this.createLeaves();
             
-            // Ajouter à la scène
-            this.scene.add(this.leavesObject);
-            
-            // Position initiale
-            if (this.camera) {
-                this.lastCameraPosition = this.camera.position.clone();
+            // Ajouter à la scène seulement si l'objet existe
+            if (this.leavesObject) {
+                this.scene.add(this.leavesObject);
+            } else {
+                console.error("Impossible d'ajouter les feuilles à la scène: this.leavesObject est undefined");
             }
             
             // Mise à jour des vecteurs pour le mouvement
@@ -221,32 +218,26 @@ export default class LeavesEffect {
         
         const simplex = new SimplexNoise();
         
-        // Position centrale (position de la caméra si disponible)
-        const center = new THREE.Vector3();
-        if (this.camera) {
-            center.copy(this.camera.position);
-        }
-        
         // Nombre de feuilles à afficher en fonction de l'intensité actuelle
         const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
         
         for (let i = 0; i < this.leafCount; i++) {
-            // Position aléatoire dans un cercle autour de la caméra
-            const radius = Math.random() * this.leafArea;
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.random() * Math.PI; // Pour une distribution 3D sphérique
+            // Répartir les feuilles dans tout le monde, pas seulement autour de la caméra
+            const x = Math.random() * this.worldBounds - this.worldBoundsHalf;
+            const z = Math.random() * this.worldBounds - this.worldBoundsHalf;
             
-            // Position x, y, z (distribution sphérique autour de la caméra)
-            positions[i * 3] = center.x + Math.sin(phi) * Math.cos(theta) * radius;
+            // Position x, z aléatoire dans le monde
+            positions[i * 3] = x;
             
             // Si l'indice est supérieur au nombre de feuilles visibles, cacher la feuille
             if (i >= visibleLeafCount) {
                 positions[i * 3 + 1] = -10000; // Cacher sous le terrain
             } else {
-                positions[i * 3 + 1] = center.y + Math.cos(phi) * radius * 0.5 + Math.random() * this.leafHeight - this.leafHeight * 0.5;
+                // Hauteur entre le sol et la hauteur maximale des feuilles
+                positions[i * 3 + 1] = this.leafMinHeight + Math.random() * this.leafHeight;
             }
             
-            positions[i * 3 + 2] = center.z + Math.sin(phi) * Math.sin(theta) * radius;
+            positions[i * 3 + 2] = z;
             
             // Taille aléatoire
             sizes[i] = this.minLeafSize + Math.random() * (this.maxLeafSize - this.minLeafSize);
@@ -257,7 +248,7 @@ export default class LeavesEffect {
             // Angle aléatoire
             angles[i] = Math.random() * Math.PI * 2;
             
-            // Décalage aléatoire
+            // Décalage aléatoire pour différencier le mouvement
             offsets[i] = Math.random();
             
             // Rotation initiale aléatoire
@@ -277,63 +268,69 @@ export default class LeavesEffect {
         this.leavesObject.frustumCulled = false; // Désactiver le culling pour s'assurer que les feuilles sont toujours visibles
         this.leavesObject.visible = this._intensity > 0.01;
         this.leavesObject.renderOrder = 10; // Priorité de rendu élevée pour s'assurer que les feuilles sont rendues correctement
-        
-        // Position initiale
-        if (this.camera) {
-            this.leavesObject.position.copy(this.camera.position);
-            this.leavesObject.position.y -= 10; // Légèrement en dessous de la caméra
-        }
     }
     
     /**
-     * Repositionne les feuilles autour de la caméra
+     * Respawn les feuilles qui sont sorties des limites définies
      */
-    repositionLeaves() {
-        if (!this.camera || !this.leavesObject) return;
+    respawnLeaves() {
+        if (!this.leavesObject) return;
         
         const positions = this.leavesObject.geometry.attributes.position;
         const rotations = this.leavesObject.geometry.attributes.rotation;
         const velocities = this.leavesObject.geometry.attributes.velocity;
         
-        // Position centrale (position de la caméra)
-        const center = this.camera.position;
-        
         // Nombre de feuilles à afficher en fonction de l'intensité actuelle
         const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
         
-        for (let i = 0; i < this.leafCount; i++) {
-            // Position aléatoire dans un cercle autour de la caméra
-            const radius = Math.random() * this.leafArea;
-            const theta = Math.random() * Math.PI * 2;
-            const phi = Math.random() * Math.PI; // Pour une distribution 3D sphérique
+        // Hauteur du sol (pour vérifier si les feuilles sont tombées au sol)
+        const groundHeight = this.leafMinHeight;
+        
+        // Hauteur à laquelle les feuilles réapparaissent
+        const respawnHeight = this.leafHeight;
+        
+        let needsUpdate = false;
+        
+        for (let i = 0; i < visibleLeafCount; i++) {
+            const idx = i * 3;
             
-            // Position x, z (distribution sphérique autour de la caméra)
-            positions.array[i * 3] = Math.sin(phi) * Math.cos(theta) * radius;
-            
-            // Si l'indice est supérieur au nombre de feuilles visibles, cacher la feuille
-            if (i >= visibleLeafCount) {
-                positions.array[i * 3 + 1] = -10000; // Cacher sous le terrain
-            } else {
-                positions.array[i * 3 + 1] = Math.cos(phi) * radius * 0.5 + Math.random() * this.leafHeight - this.leafHeight * 0.5;
+            // Si la feuille est sous le sol ou a dépassé les limites du monde
+            if (positions.array[idx + 1] <= groundHeight ||
+                Math.abs(positions.array[idx]) > this.worldBoundsHalf ||
+                Math.abs(positions.array[idx + 2]) > this.worldBoundsHalf) {
+                
+                // Repositionner la feuille dans une position aléatoire en hauteur
+                const x = Math.random() * this.worldBounds - this.worldBoundsHalf;
+                const z = Math.random() * this.worldBounds - this.worldBoundsHalf;
+                
+                positions.array[idx] = x;
+                positions.array[idx + 1] = respawnHeight - Math.random() * (respawnHeight * 0.2); // Légère variation en hauteur
+                positions.array[idx + 2] = z;
+                
+                // Réinitialiser la rotation et la vitesse
+                rotations.array[i] = Math.random() * Math.PI * 2;
+                velocities.array[i] = 0.8 + Math.random() * 0.4;
+                
+                needsUpdate = true;
             }
-            
-            positions.array[i * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
-            
-            // Réinitialiser la rotation et la vitesse
-            rotations.array[i] = Math.random() * Math.PI * 2;
-            velocities.array[i] = 0.8 + Math.random() * 0.4;
         }
         
-        // Marquer les attributs comme nécessitant une mise à jour
-        positions.needsUpdate = true;
-        rotations.needsUpdate = true;
-        velocities.needsUpdate = true;
+        // Gérer les feuilles cachées (non visibles)
+        for (let i = visibleLeafCount; i < this.leafCount; i++) {
+            if (positions.array[i * 3 + 1] > -10000) {
+                positions.array[i * 3 + 1] = -10000; // Cacher sous le terrain
+                needsUpdate = true;
+            }
+        }
         
-        // Réinitialiser la position de l'objet des feuilles à la position de la caméra
-        this.leavesObject.position.copy(center);
-        this.leavesObject.position.y -= 10; // Légèrement en dessous de la caméra
+        // Mettre à jour les attributs seulement si nécessaire
+        if (needsUpdate) {
+            positions.needsUpdate = true;
+            rotations.needsUpdate = true;
+            velocities.needsUpdate = true;
+        }
         
-        this.lastRepositionTime = this.weatherSystem.time.elapsed;
+        this.lastRespawnTime = this.weatherSystem.time.elapsed;
     }
     
     /**
@@ -379,42 +376,18 @@ export default class LeavesEffect {
             }
         }
         
-        // Mettre à jour la position des feuilles en fonction de la caméra
-        if (this.camera && this.lastCameraPosition) {
-            const currentPos = this.camera.position;
-            
-            // Vérifier la distance entre la caméra et le centre des feuilles
-            const cameraToLeaves = this._tempVector4.copy(currentPos).sub(this.leavesObject.position);
-            const distanceToLeaves = cameraToLeaves.length();
-            
-            // Si la caméra s'est trop éloignée des feuilles et qu'assez de temps s'est écoulé depuis la dernière fois
-            const currentTime = this.weatherSystem.time.elapsed;
-            if (distanceToLeaves > this.repositionThreshold && 
-                currentTime - this.lastRepositionTime > this.repositionCheckInterval) {
-                this.repositionLeaves();
-            } else {
-                // Sinon, déplacer les feuilles en douceur vers la caméra
-                const movement = this._tempVector3.copy(currentPos).sub(this.lastCameraPosition);
-                
-                // Suivre la caméra en x et z, et en y avec un facteur différent
-                movement.y *= this.verticalFollowFactor;
-                
-                // Appliquer le mouvement à l'objet des feuilles avec un facteur de suivi élevé
-                this.leavesObject.position.add(movement.multiplyScalar(this.cameraFollowFactor));
-                
-                // Faire dériver les feuilles vers la caméra pour éviter qu'elles ne s'éloignent trop
-                const driftVector = this._tempVector2.copy(currentPos).sub(this.leavesObject.position);
-                driftVector.y *= 0.2; // Réduire l'effet vertical
-                driftVector.multiplyScalar(0.01); // Facteur de dérive faible pour un mouvement subtil
-                this.leavesObject.position.add(driftVector);
-            }
-            
-            // Mémoriser la position actuelle de la caméra pour le prochain frame
-            this.lastCameraPosition.copy(currentPos);
-        } else if (this.camera) {
-            // Initialisation lors du premier frame
-            this.lastCameraPosition = this.camera.position.clone();
-            this.repositionLeaves();
+        // Mettre à jour le vecteur direction du vent
+        // On utilise la direction de la caméra comme indication du vent pour des raisons visuelles
+        if (this.camera) {
+            this._tempVector1.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+            this._tempVector1.y *= this.verticalWindEffect; // Réduire l'effet vertical
+            this.leavesMaterial.uniforms.cameraForward.value.copy(this._tempVector1);
+        }
+        
+        // Vérifier périodiquement si des feuilles doivent réapparaître
+        const currentTime = this.weatherSystem.time.elapsed;
+        if (currentTime - this.lastRespawnTime > this.respawnInterval) {
+            this.respawnLeaves();
         }
         
         // Mise à jour des uniforms de brouillard
@@ -486,7 +459,6 @@ export default class LeavesEffect {
             // Ajuster le nombre de feuilles visibles en fonction de l'intensité
             if (this.leavesObject.geometry) {
                 const positions = this.leavesObject.geometry.attributes.position;
-                const sizes = this.leavesObject.geometry.attributes.size;
                 
                 // Nombre de feuilles à afficher en fonction de l'intensité
                 const visibleLeafCount = Math.floor(this.leafCount * this._intensity);
@@ -498,8 +470,12 @@ export default class LeavesEffect {
                         positions.array[i * 3 + 1] = -10000; // Déplacer loin sous le terrain
                     } else if (positions.array[i * 3 + 1] === -10000) {
                         // Si la feuille était cachée et doit maintenant être visible,
-                        // réinitialiser sa position Y à une valeur aléatoire dans la plage normale
-                        positions.array[i * 3 + 1] = Math.random() * this.leafHeight - this.leafHeight * 0.5;
+                        // réinitialiser sa position Y à une valeur aléatoire dans la plage de hauteur
+                        positions.array[i * 3 + 1] = this.leafMinHeight + Math.random() * this.leafHeight;
+                        
+                        // Repositionner aléatoirement en X et Z pour une meilleure distribution
+                        positions.array[i * 3] = Math.random() * this.worldBounds - this.worldBoundsHalf;
+                        positions.array[i * 3 + 2] = Math.random() * this.worldBounds - this.worldBoundsHalf;
                     }
                 }
                 
@@ -510,6 +486,11 @@ export default class LeavesEffect {
         
         if (this.leavesMaterial) {
             this.leavesMaterial.uniforms.intensity.value = this._intensity;
+        }
+        
+        // Respawn immédiatement si l'intensité a augmenté
+        if (this._intensity > oldIntensity) {
+            this.respawnLeaves();
         }
     }
     

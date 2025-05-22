@@ -197,9 +197,7 @@ export default class WeatherControlUI {
         const labelEl = document.createElement('span');
         labelEl.textContent = label;
         
-        const valueEl = document.createElement('span');
-        valueEl.id = `value-${id}`;
-        valueEl.textContent = initialValue.toFixed(2);
+                const valueEl = document.createElement('span');        valueEl.id = `value-${id}`;        valueEl.textContent = initialValue !== null && initialValue !== undefined ? initialValue.toFixed(2) : "0.00";
         
         labelRow.appendChild(labelEl);
         labelRow.appendChild(valueEl);
@@ -215,9 +213,7 @@ export default class WeatherControlUI {
         slider.value = initialValue;
         
         // Mettre à jour la valeur CSS lors du changement
-        slider.addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value);
-            valueEl.textContent = value.toFixed(2);
+                slider.addEventListener('input', (e) => {            const value = parseFloat(e.target.value);            valueEl.textContent = value !== null && value !== undefined ? value.toFixed(2) : "0.00";
             slider.style.setProperty('--value', `${(value - min) / (max - min) * 100}%`);
             
             // Gérer spécialement le curseur d'orage
