@@ -123,17 +123,17 @@ export default class PlotGroundGenerator {
 
         // Palette de couleurs vertes variées (du foncé au clair)
         const greenShades = [
-            new THREE.Color(0x3a5e2a), // Vert très foncé
-            new THREE.Color(0x4a6e3a), // Vert foncé
-            new THREE.Color(0x5a7e4a), // Vert moyen foncé
-            new THREE.Color(0x6a8e5a), // Vert moyen
-            new THREE.Color(0x7a9e6a), // Vert moyen clair
-            new THREE.Color(0x8aae7a), // Vert clair
-            new THREE.Color(0x9abe8a)  // Vert très clair
+            new THREE.Color(0x2a4e1a), // Vert très foncé
+            new THREE.Color(0x3a5e2a), // Vert foncé
+            new THREE.Color(0x4a6e3a), // Vert moyen foncé
+            new THREE.Color(0x5a7e4a), // Vert moyen
+            new THREE.Color(0x6a8e5a), // Vert moyen clair
+            new THREE.Color(0x7a9e6a), // Vert clair
+            new THREE.Color(0x8aae7a)  // Vert très clair
         ];
 
-        // Couleur de base (vert moyen)
-        const baseColor = greenShades[3];
+        // Couleur de base (vert moyen foncé)
+        const baseColor = greenShades[2];
         ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -514,7 +514,7 @@ export default class PlotGroundGenerator {
                 case 'house':
                     groundMaterial = new THREE.MeshStandardMaterial({
                         map: this.lawnTexture,
-                        color: 0x000000,
+                        color: 0x4a6e3a,        // Couleur plus sombre
                         roughness: 1.0,        // Rugosité maximale pour éliminer les reflets
                         metalness: 0.0,        // Aucune métallicité
                         transparent: false,     // Pas de transparence
