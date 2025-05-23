@@ -16,12 +16,11 @@ export default class TreeRenderer {
         
         // Palette de couleurs de feuillage
         this.foliageColors = [
-            0x228B22, // Vert forêt
-            0x006400, // Vert foncé
+            0x446544, // Vert forêt
+            0x295422, // Vert foncé
             0x808000, // Vert olive
-            0xFFA500, // Orange
-            0x9ACD32, // Vert jaunâtre
-            0x32CD32  // Vert lime
+            0xa0791f, // Orange
+            0x769537, // Vert jaunâtre
         ];
 
         // Création des textures partagées
@@ -385,7 +384,7 @@ export default class TreeRenderer {
      * Génère un arbre procédural
      * @returns {object} Asset data contenant les parties de l'arbre
      */
-    generateProceduralTree(baseWidth = 4, baseHeight = 8, baseDepth = 4, userScale = 1) {
+    generateProceduralTree(baseWidth = 4, baseHeight = 8, baseDepth = 4, userScale = 1, forcedFoliageColor = null) {
         //console.log("[Tree Proc] Début de la génération de l'arbre procédural.");
         const treeGroup = new THREE.Group();
 
@@ -396,8 +395,10 @@ export default class TreeRenderer {
             map: this.sharedTrunkTexture
         });
         
-        // Sélection aléatoire d'une couleur de feuillage
-        const foliageColor = this.foliageColors[Math.floor(Math.random() * this.foliageColors.length)];
+        // Sélection de la couleur de feuillage (aléatoire ou forcée)
+        const foliageColor = forcedFoliageColor != null
+            ? forcedFoliageColor
+            : this.foliageColors[Math.floor(Math.random() * this.foliageColors.length)];
         
         const foliageMaterial = new THREE.MeshStandardMaterial({ 
             color: foliageColor, 

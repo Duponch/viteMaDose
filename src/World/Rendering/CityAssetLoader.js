@@ -94,19 +94,19 @@ export default class CityAssetLoader {
                             return null; //
                         })
                 ];
-            } else if (type === 'tree') { // Génération de plusieurs variantes d'arbres réguliers et d'un sapin
-                const numRegularVariants = this.config.proceduralTreeVariants ?? this.treeRenderer.foliageColors.length;
+            } else if (type === 'tree') { // Génération d'une instance par couleur et sapin
                 const treePromises = [];
-                for (let i = 0; i < numRegularVariants; i++) {
+                // Une instance par couleur de feuillage
+                this.treeRenderer.foliageColors.forEach(color => {
                     treePromises.push(
-                        this.loadAssetModel(null, type, width, height, depth, 1.0, 'regular')
+                        this.loadAssetModel(null, type, width, height, depth, 1.0, color)
                             .catch(error => {
-                                console.error(`Echec génération procédurale arbre régulier:`, error);
+                                console.error(`Echec génération procédurale arbre couleur ${color.toString(16)}:`, error);
                                 return null;
                             })
                     );
-                }
-                // Variante sapin unique
+                });
+                // Sapin unique
                 treePromises.push(
                     this.loadAssetModel(null, type, width, height, depth, 1.0, 'fir')
                         .catch(error => {
@@ -428,7 +428,10 @@ export default class CityAssetLoader {
                     }
                     
                     try {
-                        assetData = renderer.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale);
+                        // Pour les arbres réguliers, forcer la couleur si fournie
+                        assetData = isFirTree
+                            ? renderer.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale)
+                            : renderer.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale, rendererTypeHint);
                         if (assetData) {
                             // Utiliser des identifiants distincts pour les deux types d'arbres
                             finalModelId = isFirTree 
