@@ -35,6 +35,10 @@ export default class CloudSystem {
         this.updateDebounceTime = 100;
         this.lastUpdateTime = 0;
         
+        // Configuration de l'interpénétration des particules
+        // Plus la valeur est faible, plus les particules sont rapprochées
+        this.particleSpacingFactor = 0.5; // Valeur par défaut
+        
         // Configuration de la zone de couverture
         this.mapSize = this.weatherSystem.experience.world.cityManager.config.mapSize;
         this.cloudCoverageWidth = this.mapSize * 2; // Largeur de la zone de couverture
@@ -94,9 +98,14 @@ export default class CloudSystem {
 
         // Plus de parties et de variété dans les nuages
         const numParts = THREE.MathUtils.randInt(7, 14);
-        const maxOffset = 6;
-        const minPartScale = 0.3;
-        const maxPartScale = 0.8;
+        const minPartScale = 0.2;
+        const maxPartScale = 0.4;
+        
+        // Calculer l'espacement en fonction de la taille moyenne des parties
+        const averageScale = (minPartScale + maxPartScale) / 2;
+        // L'espacement sera proportionnel à la taille des parties
+        // Plus les parties sont petites, plus elles seront rapprochées
+        const maxOffset = 6 * averageScale / 0.3 * this.particleSpacingFactor; // 0.3 est la valeur de référence
 
         for (let i = 0; i < numParts; i++) {
             const randomPosition = new THREE.Vector3(
@@ -474,6 +483,36 @@ export default class CloudSystem {
      */
     get cloudColor() {
         return this._cloudColor;
+    }
+    
+    /**
+     * Définit le facteur d'espacement des particules dans les nuages
+     * @param {number} factor - Facteur d'espacement (0.1 = très rapprochées, 2.0 = très espacées)
+     */
+    set particleSpacing(factor) {
+        if (factor < 0.1) factor = 0.1;
+        if (factor > 3.0) factor = 3.0;
+        
+        this.particleSpacingFactor = factor;
+        
+        // Recréer les géométries de base avec le nouveau facteur
+        this.cloudBaseGeometries.forEach(geom => geom.dispose());
+        this.cloudBaseGeometries = [];
+        
+        for (let i = 0; i < this.numberOfCloudBaseShapes; i++) {
+            this.cloudBaseGeometries.push(this.createLowPolyCloudGeometry());
+        }
+        
+        // Recréer les instances avec les nouvelles géométries
+        this.createCloudInstances();
+    }
+    
+    /**
+     * Obtient le facteur d'espacement actuel des particules
+     * @returns {number} Le facteur d'espacement des particules
+     */
+    get particleSpacing() {
+        return this.particleSpacingFactor;
     }
     
     /**
