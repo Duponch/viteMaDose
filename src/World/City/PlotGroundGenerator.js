@@ -117,63 +117,128 @@ export default class PlotGroundGenerator {
      */
     createLawnTexture() {
         const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 512;
+        canvas.width = 1024; // Augmentation de la résolution pour plus de détails
+        canvas.height = 1024;
         const ctx = canvas.getContext('2d');
 
-        // Couleur de base de l'herbe (plus claire)
-        const baseColor = new THREE.Color(0x7a9c6c);
+        // Palette de couleurs vertes variées (du foncé au clair)
+        const greenShades = [
+            new THREE.Color(0x3a5e2a), // Vert très foncé
+            new THREE.Color(0x4a6e3a), // Vert foncé
+            new THREE.Color(0x5a7e4a), // Vert moyen foncé
+            new THREE.Color(0x6a8e5a), // Vert moyen
+            new THREE.Color(0x7a9e6a), // Vert moyen clair
+            new THREE.Color(0x8aae7a), // Vert clair
+            new THREE.Color(0x9abe8a)  // Vert très clair
+        ];
+
+        // Couleur de base (vert moyen)
+        const baseColor = greenShades[3];
         ctx.fillStyle = `rgb(${baseColor.r * 255}, ${baseColor.g * 255}, ${baseColor.b * 255})`;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Ajouter des variations de couleur pour simuler des touffes d'herbe
-        for (let i = 0; i < 200; i++) {
-            // Position aléatoire
+        // Fonction pour dessiner un brin d'herbe individuel
+        const drawGrassBlade = (x, y, length, width, angle, color) => {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            
+            // Gradient pour le brin d'herbe (plus foncé à la base, plus clair au sommet)
+            const gradient = ctx.createLinearGradient(0, 0, 0, -length);
+            gradient.addColorStop(0, `rgb(${color.r * 255 * 0.7}, ${color.g * 255 * 0.7}, ${color.b * 255 * 0.7})`); // Base plus foncée
+            gradient.addColorStop(0.6, `rgb(${color.r * 255}, ${color.g * 255}, ${color.b * 255})`); // Couleur normale
+            gradient.addColorStop(1, `rgb(${Math.min(255, color.r * 255 * 1.3)}, ${Math.min(255, color.g * 255 * 1.3)}, ${Math.min(255, color.b * 255 * 1.3)})`); // Sommet plus clair
+            
+            ctx.fillStyle = gradient;
+            
+            // Forme du brin d'herbe (légèrement courbe)
+            ctx.beginPath();
+            ctx.moveTo(-width/2, 0);
+            ctx.quadraticCurveTo(-width/4, -length/2, 0, -length);
+            ctx.quadraticCurveTo(width/4, -length/2, width/2, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+        };
+
+        // Générer des milliers de brins d'herbe individuels
+        for (let i = 0; i < 8000; i++) {
             const x = Math.random() * canvas.width;
             const y = Math.random() * canvas.height;
             
-            // Taille aléatoire
-            const size = Math.random() * 20 + 10;
+            // Taille variable du brin d'herbe
+            const length = 8 + Math.random() * 25;
+            const width = 1 + Math.random() * 3;
             
-            // Variation de couleur (plus claire)
-            const variation = Math.random() * 30 + 10; // Variation uniquement vers le plus clair
-            const r = Math.max(0, Math.min(255, baseColor.r * 255 + variation));
-            const g = Math.max(0, Math.min(255, baseColor.g * 255 + variation));
-            const b = Math.max(0, Math.min(255, baseColor.b * 255 + variation));
+            // Angle légèrement aléatoire pour un aspect naturel
+            const angle = (Math.random() - 0.5) * 0.6; // Angle entre -0.3 et 0.3 radians
             
-            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            // Sélection aléatoire d'une nuance de vert
+            const colorIndex = Math.floor(Math.random() * greenShades.length);
+            const grassColor = greenShades[colorIndex];
             
-            // Dessiner une touffe d'herbe
-            ctx.beginPath();
-            const numBlades = 5 + Math.floor(Math.random() * 5);
-            for (let j = 0; j < numBlades; j++) {
-                const angle = (j / numBlades) * Math.PI * 2;
-                const radius = size * (0.7 + Math.random() * 0.6);
-                const px = x + Math.cos(angle) * radius;
-                const py = y + Math.sin(angle) * radius;
+            drawGrassBlade(x, y, length, width, angle, grassColor);
+        }
+
+        // Ajouter des touffes d'herbe plus denses par endroits
+        for (let i = 0; i < 150; i++) {
+            const clusterX = Math.random() * canvas.width;
+            const clusterY = Math.random() * canvas.height;
+            const clusterSize = 20 + Math.random() * 40;
+            const numBladesInCluster = 15 + Math.floor(Math.random() * 25);
+            
+            // Couleur dominante pour cette touffe
+            const dominantColorIndex = Math.floor(Math.random() * greenShades.length);
+            
+            for (let j = 0; j < numBladesInCluster; j++) {
+                const offsetX = (Math.random() - 0.5) * clusterSize;
+                const offsetY = (Math.random() - 0.5) * clusterSize;
+                const x = clusterX + offsetX;
+                const y = clusterY + offsetY;
                 
-                if (j === 0) {
-                    ctx.moveTo(px, py);
-                } else {
-                    ctx.lineTo(px, py);
+                // Vérifier que le brin reste dans les limites du canvas
+                if (x >= 0 && x <= canvas.width && y >= 0 && y <= canvas.height) {
+                    const length = 10 + Math.random() * 20;
+                    const width = 1.5 + Math.random() * 2.5;
+                    const angle = (Math.random() - 0.5) * 0.8;
+                    
+                    // Utiliser la couleur dominante avec de légères variations
+                    let colorIndex = dominantColorIndex;
+                    if (Math.random() < 0.3) { // 30% de chance de variation
+                        colorIndex = Math.max(0, Math.min(greenShades.length - 1, 
+                            dominantColorIndex + (Math.random() < 0.5 ? -1 : 1)));
+                    }
+                    
+                    drawGrassBlade(x, y, length, width, angle, greenShades[colorIndex]);
                 }
             }
-            ctx.closePath();
+        }
+
+        // Ajouter de la texture granuleuse de base avec de petits points
+        for (let i = 0; i < 12000; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const size = Math.random() * 2 + 0.5;
+            
+            // Variation de couleur très subtile pour la granularité
+            const colorIndex = Math.floor(Math.random() * greenShades.length);
+            const pointColor = greenShades[colorIndex];
+            
+            ctx.fillStyle = `rgba(${pointColor.r * 255}, ${pointColor.g * 255}, ${pointColor.b * 255}, ${0.3 + Math.random() * 0.4})`;
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Ajouter des taches plus claires pour plus de variété
-        for (let i = 0; i < 50; i++) {
+        // Ajouter quelques zones d'ombre plus foncées pour du réalisme
+        for (let i = 0; i < 80; i++) {
             const x = Math.random() * canvas.width;
             const y = Math.random() * canvas.height;
-            const size = Math.random() * 30 + 20;
+            const size = Math.random() * 60 + 30;
             
-            const lightVariation = 30; // Variation vers le plus clair
-            const r = Math.max(0, Math.min(255, baseColor.r * 255 + lightVariation));
-            const g = Math.max(0, Math.min(255, baseColor.g * 255 + lightVariation));
-            const b = Math.max(0, Math.min(255, baseColor.b * 255 + lightVariation));
-            
-            ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+            const shadowColor = greenShades[0]; // Utiliser le vert le plus foncé
+            ctx.fillStyle = `rgba(${shadowColor.r * 255}, ${shadowColor.g * 255}, ${shadowColor.b * 255}, ${0.1 + Math.random() * 0.2})`;
             ctx.beginPath();
             ctx.arc(x, y, size, 0, Math.PI * 2);
             ctx.fill();
@@ -182,7 +247,7 @@ export default class PlotGroundGenerator {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(4, 4);
+        texture.repeat.set(6, 6); // Augmentation de la répétition pour plus de détails
         return texture;
     }
 
@@ -449,9 +514,14 @@ export default class PlotGroundGenerator {
                 case 'house':
                     groundMaterial = new THREE.MeshStandardMaterial({
                         map: this.lawnTexture,
-                        color: 0x61874c,
-                        roughness: 0.8,
-                        metalness: 0.0
+                        color: 0x000000,
+                        roughness: 1.0,        // Rugosité maximale pour éliminer les reflets
+                        metalness: 0.0,        // Aucune métallicité
+                        transparent: false,     // Pas de transparence
+                        emissive: 0x000000,    // Aucune émission de lumière
+                        side: THREE.FrontSide, // Rendu seulement sur la face avant
+                        flatShading: false,    // Ombrage lisse
+                        fog: true              // Affecté par le brouillard
                     });
                     break;
                 case 'building':
