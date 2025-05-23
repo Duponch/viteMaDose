@@ -16,11 +16,8 @@ export default class FirTreeRenderer {
         
         // Palette de couleurs de feuillage pour sapins
         this.foliageColors = [
-            0x2a3f0c, // Couleur originale
-            0x446544, // Vert forêt
-            0x295422, // Vert foncé
+            0x5b7757, // Vert forêt
             0x808000, // Vert olive
-            0xa0791f, // Orange
             0x769537  // Vert jaunâtre
         ];
 
@@ -82,16 +79,17 @@ export default class FirTreeRenderer {
         context.fillStyle = `rgb(${Math.floor(color.r * 255)}, ${Math.floor(color.g * 255)}, ${Math.floor(color.b * 255)})`;
         context.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Ajout de lignes verticales de différentes teintes de vert
+        // Ajout de lignes verticales avec variation basée sur la couleur de base
         for (let i = 0; i < 80; i++) {
             const x = Math.random() * canvas.width;
             const yStart = Math.random() * canvas.height * 0.3;
             const length = (Math.random() * 0.5 + 0.5) * (canvas.height - yStart);
-            // Nouvelles teintes de vert basées sur 0x2a3f0c
-            const greenShade = Math.random() > 0.7 ? '#1a2a08' : 
-                             (Math.random() > 0.4 ? '#1e3009' : 
-                             (Math.random() > 0.2 ? '#1c2e09' : '#1a2a08'));
-            context.strokeStyle = greenShade;
+            // Variation de couleur autour de baseHexColor
+            const variation = Math.random() * 60 - 20;
+            const r = Math.max(0, Math.min(255, color.r * 255 + variation));
+            const g = Math.max(0, Math.min(255, color.g * 255 + variation));
+            const b = Math.max(0, Math.min(255, color.b * 255 + variation));
+            context.strokeStyle = `rgb(${r}, ${g}, ${b})`;
             context.lineWidth = Math.random() * 1.2 + 0.3;
             context.beginPath();
             context.moveTo(x, yStart);
