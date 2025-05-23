@@ -94,22 +94,26 @@ export default class CityAssetLoader {
                             return null; //
                         })
                 ];
-            } else if (type === 'tree') { // Modification pour gérer les deux types d'arbres
-                //console.log(`-> Préparation de la génération procédurale pour les types d'arbres (régulier et sapin)...`);
-                const treePromises = [
-                    // Arbre régulier
-                    this.loadAssetModel(null, type, width, height, depth, 1.0, 'regular')
-                        .catch(error => {
-                            console.error(`Echec génération procédurale arbre régulier:`, error);
-                            return null;
-                        }),
-                    // Sapin
+            } else if (type === 'tree') { // Génération de plusieurs variantes d'arbres réguliers et d'un sapin
+                const numRegularVariants = this.config.proceduralTreeVariants ?? this.treeRenderer.foliageColors.length;
+                const treePromises = [];
+                for (let i = 0; i < numRegularVariants; i++) {
+                    treePromises.push(
+                        this.loadAssetModel(null, type, width, height, depth, 1.0, 'regular')
+                            .catch(error => {
+                                console.error(`Echec génération procédurale arbre régulier:`, error);
+                                return null;
+                            })
+                    );
+                }
+                // Variante sapin unique
+                treePromises.push(
                     this.loadAssetModel(null, type, width, height, depth, 1.0, 'fir')
                         .catch(error => {
                             console.error(`Echec génération procédurale sapin:`, error);
                             return null;
                         })
-                ];
+                );
                 return treePromises;
             } else if (type === 'skyscraper') { // *** NOUVELLE LOGIQUE POUR GRATTE-CIELS ***
                  //console.log(`-> Préparation de la génération procédurale pour les variants de gratte-ciels (7 à 11 étages)...`);
