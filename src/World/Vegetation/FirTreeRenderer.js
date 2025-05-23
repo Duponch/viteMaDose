@@ -14,12 +14,23 @@ export default class FirTreeRenderer {
         this.materials = materials;
         this.assetIdCounter = 0;
         
-        // Couleur de base pour le feuillage unique, comme dans l'original
-        this.fixedFoliageBaseColor = 0x2a3f0c; // '#207020'
+        // Palette de couleurs de feuillage pour sapins
+        this.foliageColors = [
+            0x2a3f0c, // Couleur originale
+            0x446544, // Vert forêt
+            0x295422, // Vert foncé
+            0x808000, // Vert olive
+            0xa0791f, // Orange
+            0x769537  // Vert jaunâtre
+        ];
 
         // Création des textures partagées
         this.sharedTrunkTexture = this.createTrunkTexture();
-        this.sharedFoliageTexture = this.createFoliageTexture(this.fixedFoliageBaseColor);
+        this.sharedFoliageTextures = new Map();
+        // Pré-créer une texture de feuillage pour chaque couleur
+        this.foliageColors.forEach(color => {
+            this.sharedFoliageTextures.set(color, this.createFoliageTexture(color));
+        });
     }
 
     /**
@@ -102,9 +113,10 @@ export default class FirTreeRenderer {
      * @param {number} baseHeight - (Ignoré pour dimensions)
      * @param {number} baseDepth - (Ignoré pour dimensions)
      * @param {number} userScale - Facteur d'échelle spécifié par l'utilisateur
+     * @param {number} forcedFoliageColor - Couleur de feuillage forcée (null pour choix aléatoire)
      * @returns {object|null} Asset data contenant les parties du sapin, ou null en cas d'erreur
      */
-    generateProceduralTree(baseWidth = 4, baseHeight = 8, baseDepth = 4, userScale = 1) {
+    generateProceduralTree(baseWidth = 4, baseHeight = 8, baseDepth = 4, userScale = 1, forcedFoliageColor = null) {
         //console.log("[FirTree Proc] Début de la génération du sapin (style original).");
         const sourceTreeGroup = new THREE.Group();
 
@@ -116,11 +128,16 @@ export default class FirTreeRenderer {
             name: "FirTreeTrunkMat_OriginalStyle" 
         });
         
+        // Sélection de la couleur de feuillage (aléatoire ou forcée)
+        const foliageColor = forcedFoliageColor != null
+            ? forcedFoliageColor
+            : this.foliageColors[Math.floor(Math.random() * this.foliageColors.length)];
         const foliageMaterial = new THREE.MeshStandardMaterial({
-            map: this.sharedFoliageTexture,
+            color: foliageColor,
+            map: this.sharedFoliageTextures.get(foliageColor),
             roughness: 0.7,
             metalness: 0.1,
-            name: "FirTreeFoliageMat_OriginalStyle"
+            name: `FirTreeFoliageMat_${foliageColor.toString(16)}`
         });
 
         // Application du facteur d'échelle aux dimensions de base

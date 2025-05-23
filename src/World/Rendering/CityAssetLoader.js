@@ -106,14 +106,16 @@ export default class CityAssetLoader {
                             })
                     );
                 });
-                // Sapin unique
-                treePromises.push(
-                    this.loadAssetModel(null, type, width, height, depth, 1.0, 'fir')
-                        .catch(error => {
-                            console.error(`Echec génération procédurale sapin:`, error);
-                            return null;
-                        })
-                );
+                // Variantes de sapins par couleur
+                this.firTreeRenderer.foliageColors.forEach(color => {
+                    treePromises.push(
+                        this.loadAssetModel(null, type, width, height, depth, 1.0, { type: 'fir', color })
+                            .catch(error => {
+                                console.error(`Echec génération procédurale sapin couleur ${color.toString(16)}:`, error);
+                                return null;
+                            })
+                    );
+                });
                 return treePromises;
             } else if (type === 'skyscraper') { // *** NOUVELLE LOGIQUE POUR GRATTE-CIELS ***
                  //console.log(`-> Préparation de la génération procédurale pour les variants de gratte-ciels (7 à 11 étages)...`);
@@ -416,42 +418,43 @@ export default class CityAssetLoader {
 					}
 					return; // Sortir car c'est procédural
 				} else if (type === 'tree') {
-                    // Vérification du type d'arbre à générer
-                    const isFirTree = rendererTypeHint === 'fir';
+                    // Vérification du type d'arbre et parsing du hint
+                    let isFirTree, forcedColor;
+                    if (rendererTypeHint != null && typeof rendererTypeHint === 'object') {
+                        isFirTree = rendererTypeHint.type === 'fir';
+                        forcedColor = rendererTypeHint.color != null ? rendererTypeHint.color : null;
+                    } else {
+                        isFirTree = rendererTypeHint === 'fir';
+                        forcedColor = typeof rendererTypeHint === 'number' ? rendererTypeHint : null;
+                    }
                     const renderer = isFirTree ? this.firTreeRenderer : this.treeRenderer;
                     const rendererName = isFirTree ? 'FirTreeRenderer' : 'TreeRenderer';
-                    
+
                     if (!renderer) {
                         console.error(`${rendererName} not initialized.`);
                         resolve(null);
                         return;
                     }
-                    
+
                     try {
-                        // Pour les arbres réguliers, forcer la couleur si fournie
-                        assetData = isFirTree
-                            ? renderer.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale)
-                            : renderer.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale, rendererTypeHint);
+                        // Génération de l'arbre avec couleur forcée si spécifiée
+                        assetData = renderer.generateProceduralTree(baseWidth, baseHeight, baseDepth, userScale, forcedColor);
                         if (assetData) {
-                            // Utiliser des identifiants distincts pour les deux types d'arbres
-                            finalModelId = isFirTree 
-                                ? `firtree_proc_${internalCounterId}` 
+                            finalModelId = isFirTree
+                                ? `firtree_proc_${internalCounterId}`
                                 : `tree_proc_${internalCounterId}`;
-                            
                             assetData.id = finalModelId;
                             assetData.procedural = true;
                             assetData.rendererType = rendererName;
                             assetData.treeType = isFirTree ? 'fir' : 'regular';
-                            
                             this.loadedAssets.set(finalModelId, assetData);
-                            //console.log(`  - Generated procedural ${isFirTree ? 'fir tree' : 'regular tree'} asset '${finalModelId}'`);
                             resolve(assetData);
                         } else {
-                            console.warn(`Procedural generation for ${isFirTree ? 'fir tree' : 'regular tree'} returned null.`);
+                            console.warn(`Procedural generation for ${rendererName} returned null.`);
                             resolve(null);
                         }
                     } catch (error) {
-                        console.error(`Error during procedural ${isFirTree ? 'fir tree' : 'regular tree'} generation:`, error);
+                        console.error(`Error during procedural ${rendererName} generation:`, error);
                         resolve(null);
                     }
                 } else if (type === 'industrial') {
