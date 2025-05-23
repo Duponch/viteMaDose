@@ -23,11 +23,11 @@ varying vec3 vWorldPosition;
 varying vec3 vViewPosition;
 
 void main() {
-    // Orienter les coordonnées UV pour que la pointe de la goutte pointe vers le bas
-    vec2 rotatedUv = gl_PointCoord;
+    // Utiliser les coordonnées UV du quad pour échantillonner la texture
+    vec2 textureUv = vUv;
     
-    // Échantillonner la texture de goutte
-    vec4 texColor = texture2D(rainTexture, rotatedUv);
+    // Échantillonner la texture de fil d'eau
+    vec4 texColor = texture2D(rainTexture, textureUv);
     
     // Calculer l'éclairage
     float lightingFactor = 1.0;
@@ -41,11 +41,11 @@ void main() {
     if (directionalLightIntensity > 0.01) {
         // Calculer l'angle entre la direction de la lumière et la normale (approximée)
         vec3 lightDir = normalize(-directionalLightDirection);
-        // Pour les gouttes de pluie, on simule une normale vers le haut avec une légère variation
-        vec3 dropNormal = normalize(vec3(0.1, 1.0, 0.1));
+        // Pour les fils d'eau, on simule une normale perpendiculaire au fil
+        vec3 streamNormal = normalize(vec3(1.0, 0.0, 0.0)); // Normal latéral pour les reflets
         
         // Calcul de Lambert simple
-        float lambertian = max(dot(dropNormal, lightDir), 0.0);
+        float lambertian = max(dot(streamNormal, lightDir), 0.0);
         directionalContribution = lambertian * directionalLightIntensity * directionalLightColor.r * 0.6;
     }
     

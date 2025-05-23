@@ -18,15 +18,15 @@ export default class RainEffect {
         
         // Configuration
         this._intensity = 0;            // Intensité (0-1), modifie la visibilité et la quantité
-        this.dropCount = 250000;         // Nombre de gouttes de pluie - augmenté pour plus de densité
-        this.rainSpeed = 40;            // Vitesse de base de la pluie - augmentée légèrement
+        this.dropCount = 120000;        // Nombre de fils d'eau - augmenté pour plus de densité
+        this.rainSpeed = 80;            // Vitesse de base de la pluie - augmentée pour plus de dynamisme
         this.rainArea = 70;             // Zone de pluie - rayon autour de la caméra - augmentée
         this.rainHeight = 45;           // Hauteur maximale de la pluie - augmentée
         this.speedIntensityFactor = 0.6; // Facteur de proportionnalité entre l'intensité et la vitesse (0-1)
-        this.minDropSize = 0.1;         // Taille minimale des gouttes - augmentée pour mieux voir la forme
-        this.maxDropSize = 0.5;         // Taille maximale des gouttes - augmentée pour mieux voir la forme
-        this.stretchFactor = 0.5;       // Facteur d'étirement des gouttes - augmenté
-        this.dropOpacity = 0.8;         // Opacité des gouttes (0-1)
+        this.minDropSize = 0.1;         // Taille minimale des fils - augmentée pour mieux voir la forme
+        this.maxDropSize = 0.5;         // Taille maximale des fils - augmentée pour mieux voir la forme
+        this.stretchFactor = 0.8;       // Facteur d'étirement des fils - augmenté pour l'effet filaire
+        this.dropOpacity = 0.8;         // Opacité des fils (0-1)
         this.cameraFollowFactor = 0.15; // Facteur de suivi de la caméra (entre 0 et 1) - réduit pour moins d'attraction
         this.verticalFollowFactor = 0.3; // Facteur de suivi vertical de la caméra (plus élevé pour mieux suivre les mouvements verticaux)
         this.inertiaFactor = 0.92;      // Facteur d'inertie (entre 0 et 1) - plus proche de 1 = plus d'inertie
@@ -76,16 +76,24 @@ export default class RainEffect {
         const vertexShader = await ShaderLoader.loadShader('RainVertex.glsl');
         const fragmentShader = await ShaderLoader.loadShader('RainFragment.glsl');
         
-        // Créer la géométrie
+        // Créer la géométrie - maintenant avec des quads au lieu de points
         this.rainGeometry = new THREE.BufferGeometry();
         
-        // Tableaux pour les attributs
-        const positions = new Float32Array(this.dropCount * 3);      // xyz
-        const initialPositions = new Float32Array(this.dropCount * 3); // positions initiales xyz
-        const sizes = new Float32Array(this.dropCount);              // taille
-        const velocities = new Float32Array(this.dropCount);         // vitesse
-        const angles = new Float32Array(this.dropCount);             // angle
-        const offsets = new Float32Array(this.dropCount);            // décalage
+        // Chaque goutte = 1 quad = 4 vertices = 6 indices (2 triangles)
+        const verticesPerDrop = 4;
+        const indicesPerDrop = 6;
+        const totalVertices = this.dropCount * verticesPerDrop;
+        const totalIndices = this.dropCount * indicesPerDrop;
+        
+        // Tableaux pour les attributs (4 fois plus d'éléments car 4 vertices par goutte)
+        const positions = new Float32Array(totalVertices * 3);      // xyz
+        const initialPositions = new Float32Array(totalVertices * 3); // positions initiales xyz
+        const sizes = new Float32Array(totalVertices);              // taille
+        const velocities = new Float32Array(totalVertices);         // vitesse
+        const angles = new Float32Array(totalVertices);             // angle
+        const offsets = new Float32Array(totalVertices);            // décalage
+        const uvs = new Float32Array(totalVertices * 2);            // coordonnées UV
+        const indices = new Uint32Array(totalIndices);              // indices pour les triangles
         
         // Générer les positions et attributs initiaux
         for (let i = 0; i < this.dropCount; i++) {
@@ -102,33 +110,85 @@ export default class RainEffect {
             const heightFactor = Math.pow(Math.random(), 0.5);
             const y = heightFactor * this.rainHeight - this.rainHeight * 0.5;
             
-            // Stocker la position
-            positions[i * 3] = x;
-            positions[i * 3 + 1] = y;
-            positions[i * 3 + 2] = z;
-            
-            // Stocker également la position initiale dans l'espace monde
-            // (utilisée pour l'effet d'inertie)
-            initialPositions[i * 3] = x;
-            initialPositions[i * 3 + 1] = y;
-            initialPositions[i * 3 + 2] = z;
-            
             // Taille de la goutte - relation avec la vitesse
             const velocity = THREE.MathUtils.randFloat(0.8, 1.2);
-            velocities[i] = velocity;
             
             // Taille basée sur la vitesse (gouttes plus rapides = plus grosses)
-            sizes[i] = THREE.MathUtils.lerp(
+            const size = THREE.MathUtils.lerp(
                 this.minDropSize,
                 this.maxDropSize,
                 (velocity - 0.8) / 0.4  // Normaliser entre 0-1
             );
             
             // Angle aléatoire de la goutte (rotation dans le plan XZ)
-            angles[i] = angle;
+            const dropAngle = angle;
             
             // Décalage aléatoire pour éviter synchronisation
-            offsets[i] = Math.random() * this.rainHeight;
+            const offset = Math.random() * this.rainHeight;
+            
+            // Hauteur du fil d'eau (proportionnelle à la vitesse)
+            const dropHeight = size * this.stretchFactor * 3.0; // Plus long pour l'effet fil
+            const dropWidth = size * 0.3; // Plus fin pour l'effet fil
+            
+            // Créer les 4 vertices du quad pour cette goutte
+            const baseIndex = i * verticesPerDrop;
+            
+            // Vertex 0: en haut à gauche
+            positions[baseIndex * 3] = x - dropWidth * 0.5;
+            positions[baseIndex * 3 + 1] = y + dropHeight * 0.5;
+            positions[baseIndex * 3 + 2] = z;
+            uvs[baseIndex * 2] = 0.0;
+            uvs[baseIndex * 2 + 1] = 0.0;
+            
+            // Vertex 1: en haut à droite
+            positions[(baseIndex + 1) * 3] = x + dropWidth * 0.5;
+            positions[(baseIndex + 1) * 3 + 1] = y + dropHeight * 0.5;
+            positions[(baseIndex + 1) * 3 + 2] = z;
+            uvs[(baseIndex + 1) * 2] = 1.0;
+            uvs[(baseIndex + 1) * 2 + 1] = 0.0;
+            
+            // Vertex 2: en bas à droite
+            positions[(baseIndex + 2) * 3] = x + dropWidth * 0.5;
+            positions[(baseIndex + 2) * 3 + 1] = y - dropHeight * 0.5;
+            positions[(baseIndex + 2) * 3 + 2] = z;
+            uvs[(baseIndex + 2) * 2] = 1.0;
+            uvs[(baseIndex + 2) * 2 + 1] = 1.0;
+            
+            // Vertex 3: en bas à gauche
+            positions[(baseIndex + 3) * 3] = x - dropWidth * 0.5;
+            positions[(baseIndex + 3) * 3 + 1] = y - dropHeight * 0.5;
+            positions[(baseIndex + 3) * 3 + 2] = z;
+            uvs[(baseIndex + 3) * 2] = 0.0;
+            uvs[(baseIndex + 3) * 2 + 1] = 1.0;
+            
+            // Dupliquer les propriétés pour les 4 vertices
+            for (let v = 0; v < verticesPerDrop; v++) {
+                const vertIndex = baseIndex + v;
+                
+                // Stocker également la position initiale dans l'espace monde
+                initialPositions[vertIndex * 3] = positions[vertIndex * 3];
+                initialPositions[vertIndex * 3 + 1] = positions[vertIndex * 3 + 1];
+                initialPositions[vertIndex * 3 + 2] = positions[vertIndex * 3 + 2];
+                
+                velocities[vertIndex] = velocity;
+                sizes[vertIndex] = size;
+                angles[vertIndex] = dropAngle;
+                offsets[vertIndex] = offset;
+            }
+            
+            // Créer les indices pour les 2 triangles du quad
+            const indexBase = i * indicesPerDrop;
+            const vertBase = baseIndex;
+            
+            // Premier triangle (0, 1, 2)
+            indices[indexBase] = vertBase;
+            indices[indexBase + 1] = vertBase + 1;
+            indices[indexBase + 2] = vertBase + 2;
+            
+            // Deuxième triangle (0, 2, 3)
+            indices[indexBase + 3] = vertBase;
+            indices[indexBase + 4] = vertBase + 2;
+            indices[indexBase + 5] = vertBase + 3;
         }
         
         // Assigner les attributs à la géométrie
@@ -138,14 +198,16 @@ export default class RainEffect {
         this.rainGeometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 1));
         this.rainGeometry.setAttribute('angle', new THREE.BufferAttribute(angles, 1));
         this.rainGeometry.setAttribute('offset', new THREE.BufferAttribute(offsets, 1));
+        this.rainGeometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+        this.rainGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
         
         // Initialiser la position de la caméra
         if (this.camera) {
             this.lastCameraPosition = this.camera.position.clone();
         }
         
-        // Créer la texture de goutte
-        const rainTexture = this.createRainDropTexture();
+        // Créer la texture de fils d'eau
+        const rainTexture = this.createRainStreamTexture();
         
         // Créer le matériau avec un shader personnalisé
         this.rainMaterial = new THREE.ShaderMaterial({
@@ -176,13 +238,14 @@ export default class RainEffect {
             transparent: true,
             depthWrite: false,
             blending: THREE.AdditiveBlending,
-            fog: false
+            fog: false,
+            side: THREE.DoubleSide
         });
         
-        // Créer le système de particules
-        this.rainObject = new THREE.Points(this.rainGeometry, this.rainMaterial);
+        // Créer le système de particules - maintenant avec des Mesh au lieu de Points
+        this.rainObject = new THREE.Mesh(this.rainGeometry, this.rainMaterial);
         this.rainObject.frustumCulled = false; // Toujours visible même hors du champ de vision
-        this.rainObject.name = "RainParticles";
+        this.rainObject.name = "RainStreams";
         
         // Visible uniquement si l'intensité > 0
         this.rainObject.visible = this._intensity > 0;
@@ -859,100 +922,128 @@ export default class RainEffect {
     }
 
     /**
-     * Crée une texture pour les gouttes de pluie
+     * Crée une texture pour les fils d'eau verticaux
      * @returns {THREE.Texture}
      */
-    createRainDropTexture() {
+    createRainStreamTexture() {
         const canvas = document.createElement('canvas');
-        canvas.width = 128;
-        canvas.height = 128;
+        canvas.width = 32;  // Plus étroit car les fils sont fins
+        canvas.height = 256; // Plus haut pour l'effet d'étirement vertical
         
         const context = canvas.getContext('2d');
         context.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Créer une forme de goutte en forme de larme réaliste
-        // Utiliser un dégradé vertical avec plus de détails
-        const larmeGradient = context.createLinearGradient(64, 20, 64, 100);
-        larmeGradient.addColorStop(0, 'rgba(200, 220, 255, 0.8)');
-        larmeGradient.addColorStop(0.2, 'rgba(190, 210, 255, 0.7)');
-        larmeGradient.addColorStop(0.5, 'rgba(180, 200, 255, 0.6)');
-        larmeGradient.addColorStop(0.8, 'rgba(170, 190, 255, 0.4)');
-        larmeGradient.addColorStop(1.0, 'rgba(160, 180, 255, 0.0)');
+        // Créer un dégradé vertical pour simuler un fil d'eau
+        const centerX = canvas.width / 2;
         
-        // Dessiner la forme de goutte d'eau classique
-        context.fillStyle = larmeGradient;
-        context.beginPath();
+        // Dégradé principal vertical avec effet de transparence
+        const streamGradient = context.createLinearGradient(0, 0, 0, canvas.height);
         
-        // Utiliser une forme de goutte avec une tête arrondie et une queue en pointe
-        // Commencer par le haut de la goutte
-        context.moveTo(64, 30);
+        // Effet de fade-in/fade-out pour simuler le mouvement
+        streamGradient.addColorStop(0, 'rgba(200, 220, 255, 0.0)');    // Transparent en haut
+        streamGradient.addColorStop(0.05, 'rgba(210, 230, 255, 0.3)'); // Fade-in rapide
+        streamGradient.addColorStop(0.15, 'rgba(220, 240, 255, 0.8)'); // Corps principal
+        streamGradient.addColorStop(0.85, 'rgba(200, 230, 255, 0.8)'); // Corps principal
+        streamGradient.addColorStop(0.95, 'rgba(180, 210, 255, 0.3)'); // Fade-out
+        streamGradient.addColorStop(1.0, 'rgba(160, 200, 255, 0.0)');  // Transparent en bas
         
-        // Créer la forme de larme à l'aide de courbes de Bézier
-        // Partie supérieure arrondie
-        context.bezierCurveTo(
-            74, 30, // point de contrôle 1
-            82, 38, // point de contrôle 2
-            82, 48  // point d'arrivée
+        // Créer le fil principal (forme étirée verticalement)
+        const streamWidth = canvas.width * 0.6;
+        const streamLeft = centerX - streamWidth / 2;
+        const streamRight = centerX + streamWidth / 2;
+        
+        // Dessiner le fil principal
+        context.fillStyle = streamGradient;
+        context.fillRect(streamLeft, 0, streamWidth, canvas.height);
+        
+        // Ajouter un dégradé horizontal pour donner du volume au fil
+        const volumeGradient = context.createRadialGradient(
+            centerX, canvas.height / 2, 0,
+            centerX, canvas.height / 2, streamWidth / 2
         );
         
-        // Partie intermédiaire
-        context.bezierCurveTo(
-            82, 65, // point de contrôle 1
-            75, 80, // point de contrôle 2
-            64, 95  // point d'arrivée (pointe)
-        );
-        
-        // Partie inférieure (symétrique)
-        context.bezierCurveTo(
-            53, 80, // point de contrôle 1
-            46, 65, // point de contrôle 2
-            46, 48  // point d'arrivée
-        );
-        
-        // Fermer la forme
-        context.bezierCurveTo(
-            46, 38, // point de contrôle 1
-            54, 30, // point de contrôle 2
-            64, 30  // point de départ/fin
-        );
-        
-        context.fill();
-        
-        // Ajouter un effet de volume avec un dégradé radial
-        const volumeGradient = context.createRadialGradient(64, 50, 5, 64, 50, 40);
-        volumeGradient.addColorStop(0, 'rgba(200, 220, 255, 0.15)');
-        volumeGradient.addColorStop(0.5, 'rgba(190, 210, 255, 0.05)');
-        volumeGradient.addColorStop(1, 'rgba(180, 200, 255, 0)');
+        volumeGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+        volumeGradient.addColorStop(0.3, 'rgba(240, 250, 255, 0.2)');
+        volumeGradient.addColorStop(0.7, 'rgba(220, 235, 255, 0.1)');
+        volumeGradient.addColorStop(1, 'rgba(200, 220, 255, 0.0)');
         
         context.globalCompositeOperation = 'source-atop';
         context.fillStyle = volumeGradient;
-        context.fillRect(25, 25, 80, 70);
+        context.fillRect(0, 0, canvas.width, canvas.height);
         
-        // Ajouter un reflet brillant en haut à gauche (comme la lumière réfléchie)
-        const refletGradient = context.createRadialGradient(60, 35, 0, 60, 35, 15);
-        refletGradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
-        refletGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.2)');
-        refletGradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
-        
+        // Ajouter des reflets brillants sur les côtés pour simuler la réflexion de la lumière
         context.globalCompositeOperation = 'lighter';
-        context.fillStyle = refletGradient;
-        context.beginPath();
-        context.arc(60, 35, 15, 0, Math.PI * 2);
-        context.fill();
         
-        // Ajouter un petit reflet secondaire
-        const refletSecondaire = context.createRadialGradient(70, 45, 0, 70, 45, 8);
-        refletSecondaire.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
-        refletSecondaire.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+        // Reflet gauche
+        const leftHighlight = context.createLinearGradient(
+            streamLeft, 0, 
+            streamLeft + streamWidth * 0.3, 0
+        );
+        leftHighlight.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
+        leftHighlight.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
         
-        context.fillStyle = refletSecondaire;
-        context.beginPath();
-        context.arc(70, 45, 8, 0, Math.PI * 2);
-        context.fill();
+        context.fillStyle = leftHighlight;
+        context.fillRect(streamLeft, canvas.height * 0.1, streamWidth * 0.3, canvas.height * 0.8);
+        
+        // Reflet droit (plus subtil)
+        const rightHighlight = context.createLinearGradient(
+            streamRight - streamWidth * 0.2, 0,
+            streamRight, 0
+        );
+        rightHighlight.addColorStop(0, 'rgba(255, 255, 255, 0.0)');
+        rightHighlight.addColorStop(1, 'rgba(255, 255, 255, 0.2)');
+        
+        context.fillStyle = rightHighlight;
+        context.fillRect(streamRight - streamWidth * 0.2, canvas.height * 0.1, streamWidth * 0.2, canvas.height * 0.8);
+        
+        // Ajouter un effet de "scintillement" au centre pour simuler les reflets dynamiques
+        context.globalCompositeOperation = 'lighter';
+        
+        // Plusieurs petites zones brillantes réparties verticalement
+        for (let i = 0; i < 5; i++) {
+            const y = canvas.height * (0.2 + i * 0.15);
+            const intensity = 0.15 + Math.random() * 0.1;
+            
+            const sparkleGradient = context.createRadialGradient(
+                centerX, y, 0,
+                centerX, y, streamWidth * 0.4
+            );
+            
+            sparkleGradient.addColorStop(0, `rgba(255, 255, 255, ${intensity})`);
+            sparkleGradient.addColorStop(0.5, `rgba(240, 250, 255, ${intensity * 0.5})`);
+            sparkleGradient.addColorStop(1, 'rgba(255, 255, 255, 0.0)');
+            
+            context.fillStyle = sparkleGradient;
+            context.beginPath();
+            context.arc(centerX, y, streamWidth * 0.4, 0, Math.PI * 2);
+            context.fill();
+        }
+        
+        // Ajouter un léger effet de "turbulence" sur les bords
+        context.globalCompositeOperation = 'source-atop';
+        
+        // Créer des variations subtiles sur les bords pour simuler la turbulence de l'eau
+        for (let y = 0; y < canvas.height; y += 4) {
+            const leftVariation = Math.sin(y * 0.1) * 2;
+            const rightVariation = Math.cos(y * 0.1) * 2;
+            
+            const turbulenceGradient = context.createLinearGradient(0, y, canvas.width, y);
+            turbulenceGradient.addColorStop(0, 'rgba(180, 200, 240, 0.1)');
+            turbulenceGradient.addColorStop(0.5, 'rgba(200, 220, 255, 0.0)');
+            turbulenceGradient.addColorStop(1, 'rgba(180, 200, 240, 0.1)');
+            
+            context.fillStyle = turbulenceGradient;
+            context.fillRect(
+                streamLeft + leftVariation, y, 
+                streamWidth + rightVariation - leftVariation, 2
+            );
+        }
         
         // Créer la texture
         const texture = new THREE.Texture(canvas);
         texture.needsUpdate = true;
+        texture.wrapS = THREE.ClampToEdgeWrap;
+        texture.wrapT = THREE.ClampToEdgeWrap;
         
         return texture;
     }
