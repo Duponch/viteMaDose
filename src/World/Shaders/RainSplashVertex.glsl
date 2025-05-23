@@ -7,8 +7,13 @@ attribute float rotation;
 
 varying vec2 vUv;
 varying float vLife;
+varying vec3 vWorldPosition;
 
 void main() {
+    // Position dans l'espace monde (nécessaire pour l'éclairage)
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPosition.xyz;
+    
     // Position dans l'espace caméra
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     

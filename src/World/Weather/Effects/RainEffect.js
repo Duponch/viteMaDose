@@ -162,7 +162,14 @@ export default class RainEffect {
                 fogFar: { value: 30.0 },
                 fogDensity: { value: 0.1 },
                 speedIntensityFactor: { value: this.speedIntensityFactor },
-                dropOpacity: { value: this.dropOpacity }
+                dropOpacity: { value: this.dropOpacity },
+                // Nouveaux uniformes pour l'éclairage
+                ambientLightColor: { value: new THREE.Color(0x404040) },
+                ambientLightIntensity: { value: 0.5 },
+                directionalLightColor: { value: new THREE.Color(0xffffff) },
+                directionalLightDirection: { value: new THREE.Vector3(0, -1, 0) },
+                directionalLightIntensity: { value: 1.0 },
+                dayFactor: { value: 1.0 }
             },
             vertexShader: vertexShader,
             fragmentShader: fragmentShader,
@@ -200,7 +207,14 @@ export default class RainEffect {
             uniforms: {
                 splashTexture: { value: splashTexture },
                 time: { value: 0 },
-                intensity: { value: this._intensity }
+                intensity: { value: this._intensity },
+                // Nouveaux uniformes pour l'éclairage
+                ambientLightColor: { value: new THREE.Color(0x404040) },
+                ambientLightIntensity: { value: 0.5 },
+                directionalLightColor: { value: new THREE.Color(0xffffff) },
+                directionalLightDirection: { value: new THREE.Vector3(0, -1, 0) },
+                directionalLightIntensity: { value: 1.0 },
+                dayFactor: { value: 1.0 }
             },
             vertexShader: vertexShader,
             fragmentShader: fragmentShader,
@@ -418,6 +432,68 @@ export default class RainEffect {
     }
     
     /**
+     * Met à jour les informations d'éclairage pour la pluie
+     */
+    updateLighting() {
+        if (!this.rainMaterial || !this.rainMaterial.uniforms) return;
+        
+        // Valeurs par défaut
+        let ambientColor = new THREE.Color(0x404040);
+        let ambientIntensity = 0.5;
+        let directionalColor = new THREE.Color(0xffffff);
+        let directionalDirection = new THREE.Vector3(0, -1, 0);
+        let directionalIntensity = 1.0;
+        let dayFactor = 1.0;
+        
+        // Récupérer les informations depuis le système météorologique si disponible
+        if (this.weatherSystem.environment) {
+            const env = this.weatherSystem.environment;
+            
+            // Facteur jour/nuit depuis les uniformes du ciel
+            if (env.skyUniforms && env.skyUniforms.uDayFactor) {
+                dayFactor = env.skyUniforms.uDayFactor.value;
+            }
+            
+            // Lumière ambiante
+            if (env.ambientLight) {
+                ambientColor.copy(env.ambientLight.color);
+                ambientIntensity = env.ambientLight.intensity;
+            }
+            
+            // Lumière directionnelle (soleil)
+            if (env.sunLight) {
+                directionalColor.copy(env.sunLight.color);
+                directionalDirection.copy(env.sunLight.position).normalize();
+                directionalIntensity = env.sunLight.intensity;
+            }
+        }
+        
+        // Parcourir la scène pour trouver d'autres lumières si l'environnement n'est pas disponible
+        if (!this.weatherSystem.environment) {
+            this.scene.traverse((object) => {
+                if (object.isLight && object.visible) {
+                    if (object.isAmbientLight) {
+                        ambientColor.copy(object.color);
+                        ambientIntensity = object.intensity;
+                    } else if (object.isDirectionalLight) {
+                        directionalColor.copy(object.color);
+                        directionalDirection.copy(object.position).normalize();
+                        directionalIntensity = object.intensity;
+                    }
+                }
+            });
+        }
+        
+        // Mettre à jour les uniformes
+        this.rainMaterial.uniforms.ambientLightColor.value.copy(ambientColor);
+        this.rainMaterial.uniforms.ambientLightIntensity.value = ambientIntensity;
+        this.rainMaterial.uniforms.directionalLightColor.value.copy(directionalColor);
+        this.rainMaterial.uniforms.directionalLightDirection.value.copy(directionalDirection);
+        this.rainMaterial.uniforms.directionalLightIntensity.value = directionalIntensity;
+        this.rainMaterial.uniforms.dayFactor.value = dayFactor;
+    }
+    
+    /**
      * Met à jour l'effet de pluie
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
      */
@@ -430,6 +506,9 @@ export default class RainEffect {
         
         this.rainMaterial.uniforms.time.value += deltaTime / 1000;
         this.rainMaterial.uniforms.intensity.value = this._intensity;
+        
+        // Mettre à jour l'éclairage
+        this.updateLighting();
         
         if (this.enableSplashes && this.splashesObject) {
             this.updateSplashes(deltaTime);
@@ -529,6 +608,26 @@ export default class RainEffect {
     }
     
     /**
+     * Met à jour les informations d'éclairage pour les impacts de pluie
+     */
+    updateSplashesLighting() {
+        if (!this.splashesMaterial || !this.splashesMaterial.uniforms) return;
+        
+        // Utiliser les mêmes valeurs que pour les gouttes de pluie
+        if (this.rainMaterial && this.rainMaterial.uniforms) {
+            const rainUniforms = this.rainMaterial.uniforms;
+            const splashUniforms = this.splashesMaterial.uniforms;
+            
+            splashUniforms.ambientLightColor.value.copy(rainUniforms.ambientLightColor.value);
+            splashUniforms.ambientLightIntensity.value = rainUniforms.ambientLightIntensity.value;
+            splashUniforms.directionalLightColor.value.copy(rainUniforms.directionalLightColor.value);
+            splashUniforms.directionalLightDirection.value.copy(rainUniforms.directionalLightDirection.value);
+            splashUniforms.directionalLightIntensity.value = rainUniforms.directionalLightIntensity.value;
+            splashUniforms.dayFactor.value = rainUniforms.dayFactor.value;
+        }
+    }
+    
+    /**
      * Met à jour les impacts de gouttes
      * @param {number} deltaTime - Temps écoulé depuis la dernière frame en ms
      */
@@ -539,6 +638,9 @@ export default class RainEffect {
         // Mettre à jour le temps dans le shader
         this.splashesMaterial.uniforms.time.value += deltaSeconds;
         this.splashesMaterial.uniforms.intensity.value = this._intensity;
+        
+        // Mettre à jour l'éclairage des impacts
+        this.updateSplashesLighting();
         
         // Ne pas générer d'impacts si l'intensité est trop faible
         if (this._intensity < 0.1) {

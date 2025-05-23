@@ -16,6 +16,8 @@ attribute float offset;
 varying float vSize;
 varying float vDistance;
 varying vec2 vUv;
+varying vec3 vWorldPosition;
+varying vec3 vViewPosition;
 
 void main() {
     // Paramètres de la goutte
@@ -42,8 +44,13 @@ void main() {
         finalPos.y = -1000.0;
     }
     
+    // Position dans l'espace monde (nécessaire pour l'éclairage)
+    vec4 worldPosition = modelMatrix * vec4(finalPos, 1.0);
+    vWorldPosition = worldPosition.xyz;
+    
     // Position et taille dans l'espace caméra
     vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
+    vViewPosition = mvPosition.xyz;
     vDistance = -mvPosition.z;
     
     // Appliquer la taille en fonction de la distance et de l'intensité
