@@ -464,7 +464,7 @@ export default class HouseRenderer {
         // Dimensions des fenêtres avec cadres détaillés
         const frameWidth = 0.2;
         const frameHeight = 0.4 * armDepth;
-        const frameDepth = 0.02;
+        const frameDepth = 0.01;
         const barThickness = 0.015;
     
         // Ajout d'un petit décalage pour éviter le z-fighting
@@ -1033,10 +1033,11 @@ export default class HouseRenderer {
         // Créer les fenêtres détaillées comme dans NewHouseRenderer
         const createWindow = (x, y, z, rotY = 0) => {
             const windowGroup = new THREE.Group();
+            // Utiliser les mêmes dimensions que dans defineHouseBaseGeometries mais avec scale
             const frameWidth = 0.2 * scale;
             const frameHeight = 0.4 * armDepth;
             const frameDepth = 0.02 * scale;
-            const barThickness = 0.015 * scale;
+            const barThickness = 0.01 * scale; // Réduit pour être moins épais
 
             // Créer les géométries des barres du cadre
             const sideBarGeo = new THREE.BoxGeometry(barThickness, frameHeight, frameDepth);
