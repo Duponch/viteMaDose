@@ -246,7 +246,6 @@ export default class NewHouseRenderer {
         const chimneyBrickMaterial = this.localMaterials.chimneyBrick;
         const chimneyTopMaterial = this.localMaterials.chimneyTop;
         const doorMaterial = this.localMaterials.door;
-        const garageDoorMaterial = this.localMaterials.garageDoor;
         const windowFrameMaterial = this.localMaterials.windowFrame;
         const windowPaneMaterial = this.localMaterials.windowPane;
         const stepMaterial = this.localMaterials.step;
@@ -298,6 +297,28 @@ export default class NewHouseRenderer {
         backGableMesh.position.z = -wallDepth / 2 + roofThickness / 2 + gableInset; // Position arrière
         backGableMesh.rotation.y = Math.PI; // Retourner le pignon arrière
         roofGroup.add(backGableMesh);
+
+        // Pignons latéraux pour fermer les espaces triangulaires
+        const sideGableBaseWidth = wallDepth;
+        const sideGableShape = new THREE.Shape();
+        sideGableShape.moveTo(-sideGableBaseWidth / 2, 0);
+        sideGableShape.lineTo(sideGableBaseWidth / 2, 0);
+        sideGableShape.lineTo(0, roofHeight);
+        sideGableShape.closePath();
+        const sideExtrudeSettings = { depth: roofThickness, bevelEnabled: false };
+        const sideGableGeometry = new THREE.ExtrudeGeometry(sideGableShape, sideExtrudeSettings);
+        
+        // Pignon gauche
+        const leftGableMesh = new THREE.Mesh(sideGableGeometry, gableMaterial);
+        leftGableMesh.position.x = -wallWidth / 2 + roofThickness / 2 + gableInset;
+        leftGableMesh.rotation.y = Math.PI / 2; // Orienter vers la droite
+        roofGroup.add(leftGableMesh);
+        
+        // Pignon droit
+        const rightGableMesh = new THREE.Mesh(sideGableGeometry.clone(), gableMaterial);
+        rightGableMesh.position.x = wallWidth / 2 - roofThickness / 2 - gableInset;
+        rightGableMesh.rotation.y = -Math.PI / 2; // Orienter vers la gauche
+        roofGroup.add(rightGableMesh);
 
         // 2. Pans inclinés (BoxGeometry)
         const roofPaneLength = wallDepth + roofOverhang * 2;
@@ -358,29 +379,6 @@ export default class NewHouseRenderer {
         // Position par rapport au centre de la maison, sur la face avant
         doorMesh.position.set(0, doorHeight / 2, wallDepth / 2 + doorDepth / 2 + 0.001);
         houseGroup.add(doorMesh);
-
-        // Ajouter un marqueur bleu émissif devant la porte pour indiquer l'orientation
-        /*const doorMarkerMaterial = new THREE.MeshBasicMaterial({
-            color: 0x4dabf5,      // Bleu clair
-            emissive: 0x4dabf5,   // Même couleur pour l'émissif
-            emissiveIntensity: 0.8,
-            transparent: true,
-            opacity: 0.8,
-            name: "NewHouseDoorMarkerMat"
-        });
-        const doorMarkerGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-        const doorMarker = new THREE.Mesh(doorMarkerGeo, doorMarkerMaterial);
-        // Positionner devant la porte principale
-        doorMarker.position.set(0, 0.5, wallDepth / 2 + doorDepth + 0.5);
-        houseGroup.add(doorMarker);*/
-
-        // Porte de garage
-        const garageDoorWidth = 2.5; const garageDoorHeight = 2.2; const garageDoorDepth = 0.1;
-        const garageDoorGeometry = new THREE.BoxGeometry(garageDoorWidth, garageDoorHeight, garageDoorDepth);
-        const garageDoorMesh = new THREE.Mesh(garageDoorGeometry, garageDoorMaterial);
-        // Positionner la porte de garage à droite de la porte principale
-        garageDoorMesh.position.set(doorWidth + 0.5, garageDoorHeight / 2, wallDepth / 2 + garageDoorDepth / 2 + 0.001);
-        houseGroup.add(garageDoorMesh);
 
         // Marche
         const stepWidth = 1.2; const stepHeight = 0.2; const stepDepth = 0.5;
@@ -512,10 +510,10 @@ export default class NewHouseRenderer {
         if (allGeometries.length === 0) {
             console.error("[NewHouse Proc] Aucune géométrie valide trouvée après parcours.");
             // Nettoyer les géométries locales
-             wallGeometry.dispose(); gableGeometry.dispose(); roofPaneGeometry.dispose();
-             chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose(); //doorMarkerGeo.dispose();
-             // Nettoyer géométries fenêtres
-             houseGroup.traverse(obj => { if (obj.isMesh) obj.geometry?.dispose(); });
+             wallGeometry.dispose(); gableGeometry.dispose(); sideGableGeometry.dispose(); roofPaneGeometry.dispose();
+             chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose();
+            // Nettoyer les géométries de fenêtres
+            houseGroup.traverse(obj => { if (obj.isMesh) obj.geometry?.dispose(); });
             return null;
         }
 
@@ -572,9 +570,8 @@ export default class NewHouseRenderer {
         // Nettoyer toutes les géométries initiales de allGeometries
         allGeometries.forEach(g => g.dispose());
         // Nettoyer les géométries de base qui ont été utilisées pour les clones
-        wallGeometry.dispose(); gableGeometry.dispose(); roofPaneGeometry.dispose();
-        chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose(); //doorMarkerGeo.dispose();
-        garageDoorGeometry.dispose();
+        wallGeometry.dispose(); gableGeometry.dispose(); sideGableGeometry.dispose(); roofPaneGeometry.dispose();
+        chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose();
         // Nettoyer les géométries de fenêtres
         houseGroup.traverse(obj => { if (obj.isMesh) obj.geometry?.dispose(); });
 
