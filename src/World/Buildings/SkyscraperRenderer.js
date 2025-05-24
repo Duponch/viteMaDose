@@ -22,6 +22,12 @@ export default class SkyscraperRenderer {
         // Estimation des proportions : éléments verticaux vs poutres horizontales
         this.sharedBeamTexture.repeat.set(4.5, 1.5 / 3); // Diminution de la répétition Y pour éviter l'écrasement
         
+        // Créer une troisième texture pour la partie supérieure de la base avec moins d'étirement horizontal
+        this.sharedIntermediateTexture = this.sharedFacadeTexture.clone();
+        this.sharedIntermediateTexture.needsUpdate = true;
+        // Ajustement pour réduire l'étirement horizontal sur la structure intermédiaire
+        this.sharedIntermediateTexture.repeat.set(4.5, 1.5 / 3); // Réduction de la répétition X pour moins d'étirement horizontal
+        
         this.defineSkyscraperBaseMaterials();
         this.defineSkyscraperBaseGeometries();
         this.initializeSkyscraperMatrixArrays();
@@ -232,6 +238,13 @@ export default class SkyscraperRenderer {
             name: "SkyscraperBaseMat",
             map: this.sharedFacadeTexture
         });
+        // Matériau spécialisé pour la partie supérieure de la base (structure intermédiaire)
+        const intermediateMaterial = new THREE.MeshStandardMaterial({
+            color: 0x6e7883,
+            flatShading: true,
+            name: "SkyscraperIntermediateMat",
+            map: this.sharedIntermediateTexture
+        });
         const metallicMaterial = new THREE.MeshStandardMaterial({
             color: 0xadb5bd,
             metalness: 0.9,
@@ -301,7 +314,7 @@ export default class SkyscraperRenderer {
         const originalBaseSideWindowPanelWidth = (mainDepth - 3 * pillarThickness) / 2;
         const doorWidth = originalBaseWindowPanelWidth * doorWidthFactor * doorWidthFactorAdjustment;
         const sideDoorWidth = originalBaseSideWindowPanelWidth * doorWidthFactor * doorWidthFactorAdjustment;
-        const doorPanelDepth = (pillarThickness * 0.8) / 2;
+        const doorPanelDepth = (pillarThickness * 0.8) / 4;
         let doorGeomX = null, doorGeomZ = null;
         if (doorWidth > 0.01 && doorHeight > 0.01) {
             doorGeomX = new THREE.BoxGeometry(doorWidth, doorHeight, doorPanelDepth);
@@ -338,7 +351,7 @@ export default class SkyscraperRenderer {
         const intermediateWidth = mainWidth + 2 * intermediateOverhang;
         const intermediateDepth = mainDepth + 2 * intermediateOverhang;
         const intermediateGeometry = new THREE.BoxGeometry(intermediateWidth, intermediateStructureHeight, intermediateDepth);
-        const intermediateMesh = new THREE.Mesh(intermediateGeometry, baseMaterial);
+        const intermediateMesh = new THREE.Mesh(intermediateGeometry, intermediateMaterial);
         intermediateMesh.position.y = baseHeightVal + intermediateStructureHeight / 2;
         intermediateMesh.castShadow = true;
         intermediateMesh.receiveShadow = true;
@@ -554,6 +567,7 @@ export default class SkyscraperRenderer {
         materialMap.set(structureMaterial.name, { material: structureMaterial.clone(), geoms: [] });
         materialMap.set(beamMaterial.name, { material: beamMaterial.clone(), geoms: [] });
         materialMap.set(baseMaterial.name, { material: baseMaterial.clone(), geoms: [] });
+        materialMap.set(intermediateMaterial.name, { material: intermediateMaterial.clone(), geoms: [] });
         materialMap.set(metallicMaterial.name, { material: metallicMaterial.clone(), geoms: [] });
         materialMap.set(floorMaterial.name, { material: floorMaterial.clone(), geoms: [] });
         materialMap.set(skyscraperWindowMaterial.name, { material: skyscraperWindowMaterial.clone(), geoms: [] });
