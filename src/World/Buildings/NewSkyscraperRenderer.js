@@ -260,7 +260,7 @@ export default class NewSkyscraperRenderer {
 		const frontRoofBaseWidth = mainWidth + recessWidth; const frontRoofWidth = frontRoofBaseWidth + roofOverhang * 2; // Utilisé ici
 		const frontRoofBaseDepth = mainDepth; const frontRoofDepth = frontRoofBaseDepth + roofOverhang * 2; // Utilisé ici
 		const windowWidth = 1.2; const windowHeight = 1.5; const windowDepth = 0.1;
-		const frameThickness = 0.05; const frameDepth = 0.08;
+		const frameThickness = 0.05; const frameDepth = 0.05;
 		const balconyWindowWidth = recessWidth * 0.7; const balconyWindowHeight = windowHeight * 1.1;
 		const balconyWindowDepth = windowDepth; const dividerWidth = frameThickness * 1.5;
 		const balconyWallHeight = 0.6; const balconyWallThickness = 0.2; const balconyWallWidth = recessWidth;
@@ -325,8 +325,8 @@ export default class NewSkyscraperRenderer {
 				if (windowGeoFB && mullionGeoFB && windowPanelWidthFB > 0) { let currentX = -horizontalSectionLength / 2; const windowBaseY = horizontalBeamSize; const windowCenterY = windowBaseY + windowHeight / 2; for (let i = 0; i < numPanels; i++) { const isDoorPanel = isGroundFloor && isFrontFace && i >= doorPanelIndex && i < doorPanelIndex + doorPanelCount && doorWidth > 0 && doorHeight > 0; const isFirstDoorPanel = isDoorPanel && i === doorPanelIndex; const isMiddleDoorMullionToSkip = (doorPanelCount === 2) && i === doorPanelIndex; if (isDoorPanel) { if (isFirstDoorPanel) { const doorGeo = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth); const doorMesh = new THREE.Mesh(doorGeo, doorMaterial); doorMesh.position.set(doorXPos, doorYPos, zPosWindow); floorGroup.add(doorMesh); doorGeo.dispose(); 
 					
 					// Bande verticale au milieu de la porte
-					const dividerWidth = frameThickness * 0.8;
-					const dividerGeo = new THREE.BoxGeometry(dividerWidth, doorHeight * 0.9, frameDepth);
+					const dividerWidth = frameThickness * 2;
+					const dividerGeo = new THREE.BoxGeometry(dividerWidth, doorHeight, frameDepth);
 					const divider = new THREE.Mesh(dividerGeo, frameMaterial);
 					divider.position.set(doorXPos, doorYPos, zPosWindow + doorDepth / 2 + frameDepth / 2);
 					floorGroup.add(divider);
