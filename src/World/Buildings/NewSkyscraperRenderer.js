@@ -19,7 +19,7 @@ export default class NewSkyscraperRenderer {
         // Ajustement pour compenser l'étirement sur les poutres horizontales fines
         // wallTexture utilise maintenant (1.5, 1), donc il faut recalculer pour les poutres
         // Ratio des proportions : murs (12x3.5) vs poutres (12x0.5) = facteur 7 en hauteur
-        beamTexture.repeat.set(3.5, 1.6 / 7); // Retour aux valeurs qui fonctionnaient bien pour les poutres
+        beamTexture.repeat.set(3.5, 2 / 7); // Retour aux valeurs qui fonctionnaient bien pour les poutres
 
         // --- Define materials specific to this skyscraper ---
         // Adapt colors and textures as needed from your create...Texture functions or shared materials
