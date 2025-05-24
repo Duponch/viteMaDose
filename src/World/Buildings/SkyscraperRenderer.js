@@ -15,6 +15,13 @@ export default class SkyscraperRenderer {
         // Création de la texture de façade partagée
         this.sharedFacadeTexture = this.createFacadeTexture();
         
+        // Créer une seconde texture identique pour les poutres horizontales avec paramètres ajustés
+        this.sharedBeamTexture = this.sharedFacadeTexture.clone();
+        this.sharedBeamTexture.needsUpdate = true;
+        // Ajustement pour compenser l'étirement sur les poutres horizontales fines
+        // Estimation des proportions : éléments verticaux vs poutres horizontales
+        this.sharedBeamTexture.repeat.set(4.5, 1.5 / 3); // Diminution de la répétition Y pour éviter l'écrasement
+        
         this.defineSkyscraperBaseMaterials();
         this.defineSkyscraperBaseGeometries();
         this.initializeSkyscraperMatrixArrays();
@@ -120,7 +127,7 @@ export default class SkyscraperRenderer {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(1, 1.5); // Ajustement de la répétition pour les panneaux plus grands
+        texture.repeat.set(1, 1); // Ajustement de la répétition pour les panneaux plus grands
         return texture;
     }
 
@@ -211,6 +218,13 @@ export default class SkyscraperRenderer {
             flatShading: true,
             name: "SkyscraperStructureMat",
             map: this.sharedFacadeTexture
+        });
+        // Matériau séparé pour les poutres horizontales
+        const beamMaterial = new THREE.MeshStandardMaterial({
+            color: 0xced4da,
+            flatShading: true,
+            name: "SkyscraperBeamMat",
+            map: this.sharedBeamTexture
         });
         const baseMaterial = new THREE.MeshStandardMaterial({
             color: 0x6e7883,
@@ -447,18 +461,18 @@ export default class SkyscraperRenderer {
             const bandBaseY = startY + floor * floorHeight;
             const yPosBandCenter = bandBaseY + horizontalBandHeight / 2;
             if (horizontalBandGeomX) {
-                const bandFront = new THREE.Mesh(horizontalBandGeomX, structureMaterial);
+                const bandFront = new THREE.Mesh(horizontalBandGeomX, beamMaterial);
                 bandFront.position.set(0, yPosBandCenter, mainDepth / 2);
                 skyscraper.add(bandFront);
-                const bandBack = new THREE.Mesh(horizontalBandGeomX, structureMaterial);
+                const bandBack = new THREE.Mesh(horizontalBandGeomX, beamMaterial);
                 bandBack.position.set(0, yPosBandCenter, -mainDepth / 2);
                 skyscraper.add(bandBack);
             }
             if (horizontalBandGeomZ) {
-                const bandRight = new THREE.Mesh(horizontalBandGeomZ, structureMaterial);
+                const bandRight = new THREE.Mesh(horizontalBandGeomZ, beamMaterial);
                 bandRight.position.set(mainWidth / 2, yPosBandCenter, 0);
                 skyscraper.add(bandRight);
-                const bandLeft = new THREE.Mesh(horizontalBandGeomZ, structureMaterial);
+                const bandLeft = new THREE.Mesh(horizontalBandGeomZ, beamMaterial);
                 bandLeft.position.set(-mainWidth / 2, yPosBandCenter, 0);
                 skyscraper.add(bandLeft);
             }
@@ -538,6 +552,7 @@ export default class SkyscraperRenderer {
         const allGeoms = [];
         const materialMap = new Map();
         materialMap.set(structureMaterial.name, { material: structureMaterial.clone(), geoms: [] });
+        materialMap.set(beamMaterial.name, { material: beamMaterial.clone(), geoms: [] });
         materialMap.set(baseMaterial.name, { material: baseMaterial.clone(), geoms: [] });
         materialMap.set(metallicMaterial.name, { material: metallicMaterial.clone(), geoms: [] });
         materialMap.set(floorMaterial.name, { material: floorMaterial.clone(), geoms: [] });
