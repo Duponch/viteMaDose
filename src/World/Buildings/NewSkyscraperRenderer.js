@@ -55,14 +55,14 @@ export default class NewSkyscraperRenderer {
                 name: "NewSkyscraperRoofMat" 
             }),
             antenna: new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.6, metalness: 0.6, side: THREE.DoubleSide, name: "NewSkyscraperAntennaMat" }),
-            door: new THREE.MeshStandardMaterial({ color: 0x582812, roughness: 0.8, name: "NewSkyscraperDoorMat" }),
-            threshold: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperThresholdMat" }),
+            door: new THREE.MeshStandardMaterial({ color: 0x545a6c, roughness: 0.8, name: "NewSkyscraperDoorMat" }),
+            threshold: new THREE.MeshStandardMaterial({ color: 0x6f6d71, roughness: 0.7, name: "NewSkyscraperThresholdMat" }),
             floor: new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 0.8, name: "NewSkyscraperFloorMat" }),
             redLight: new THREE.MeshBasicMaterial({ color: 0xff0000, name: "NewSkyscraperRedLightMat" }), // Non-lit material
             trim: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperTrimMat" }),
             vent: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperVentMat" }),
             balconyWall: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperBalconyWallMat" }),
-            frame: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperFrameMat" }),
+            frame: new THREE.MeshStandardMaterial({ color: 0x6f6d71, roughness: 0.7, name: "NewSkyscraperFrameMat" }),
             balconyWindow: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperBalconyWindowMat" })
         };
 
@@ -80,7 +80,7 @@ export default class NewSkyscraperRenderer {
         const context = canvas.getContext('2d');
 
         // Fond gris moderne avec teinte bleue et plus foncé
-        context.fillStyle = '#5a6080';
+        context.fillStyle = '#343848';
         context.fillRect(0, 0, canvas.width, canvas.height);
 
         // Paramètres pour les dalles
@@ -89,9 +89,9 @@ export default class NewSkyscraperRenderer {
         const jointWidth = 2;   // Épaisseur des joints
 
         // Couleurs pour les dalles - plus foncées avec teinte bleue accentuée
-        const baseColor = { r: 90, g: 96, b: 128 };
-        const darkJoint = '#3a4056';
-        const lightHighlight = '#6a7090';
+        const baseColor = { r: 60, g: 66, b: 96 };
+        const darkJoint = '#2a2e46';
+        const lightHighlight = '#4a4e66';
 
         // Dessiner les joints horizontaux
         context.fillStyle = darkJoint;
@@ -152,7 +152,7 @@ export default class NewSkyscraperRenderer {
         const context = canvas.getContext('2d');
 
         // Fond gris foncé pour le toit avec teinte bleue accentuée
-        context.fillStyle = '#303860';
+        context.fillStyle = '#202840';
         context.fillRect(0, 0, canvas.width, canvas.height);
 
         // Paramètres pour les dalles de toit
@@ -161,10 +161,10 @@ export default class NewSkyscraperRenderer {
         const pattern = tileSize + jointWidth;
 
         // Couleurs - plus foncées avec teinte bleue accentuée
-        const baseColor = { r: 48, g: 56, b: 96 };
-        const jointColor = '#252a50';
-        const highlightColor = '#3a426a';
-        const shadowColor = '#1a1e35';
+        const baseColor = { r: 32, g: 40, b: 72 };
+        const jointColor = '#1a1e35';
+        const highlightColor = '#2a2e46';
+        const shadowColor = '#101420';
 
         // Dessiner la grille de joints
         context.fillStyle = jointColor;
