@@ -287,25 +287,75 @@ export default class NewHouseRenderer {
         roofGroup.position.y = wallHeight + roofOffsetY; // Positionner par rapport au haut des murs
         houseGroup.add(roofGroup);
 
-        // 1. Pignons (ExtrudeGeometry) - Corrigé pour fermer les trous
+        // 1. Pignons (BufferGeometry manuelle) - Corrigé pour avoir des faces visibles
         const gableBaseWidth = wallWidth;
-        const gableShape = new THREE.Shape();
-        gableShape.moveTo(-gableBaseWidth / 2, 0);
-        gableShape.lineTo(gableBaseWidth / 2, 0);
-        gableShape.lineTo(0, roofHeight);
-        gableShape.closePath(); // Fermer la forme
+        const gableThickness = roofThickness * 3; // Épaisseur du pignon
         
-        // Épaisseur pour combler l'espace entre les pans de toit et les extrémités
-        const gableThickness = roofThickness * 3; // Plus épais pour être visible et fermer les trous
-        const extrudeSettings = { 
-            depth: gableThickness, 
-            bevelEnabled: false,
-            steps: 1,
-            curveSegments: 1
+        // Créer manuellement la géométrie du pignon triangulaire
+        const createGableGeometry = () => {
+            const vertices = [];
+            const normals = [];
+            const uvs = [];
+            const indices = [];
+            
+            const halfWidth = gableBaseWidth / 2;
+            const halfThickness = gableThickness / 2;
+            
+            // Calculer les normales des faces inclinées
+            const leftNormal = new THREE.Vector3(-1, roofHeight/halfWidth, 0).normalize();
+            const rightNormal = new THREE.Vector3(1, roofHeight/halfWidth, 0).normalize();
+            
+            // Vertices du triangle avant (z = halfThickness)
+            vertices.push(-halfWidth, 0, halfThickness); // 0: bottom left front
+            vertices.push(halfWidth, 0, halfThickness);  // 1: bottom right front
+            vertices.push(0, roofHeight, halfThickness); // 2: top front
+            
+            // Vertices du triangle arrière (z = -halfThickness)
+            vertices.push(-halfWidth, 0, -halfThickness); // 3: bottom left back
+            vertices.push(halfWidth, 0, -halfThickness);  // 4: bottom right back
+            vertices.push(0, roofHeight, -halfThickness); // 5: top back
+            
+            // Normales pour chaque vertex (moyennées des faces adjacentes)
+            normals.push(leftNormal.x, leftNormal.y, 0.5); // 0: bottom left front
+            normals.push(rightNormal.x, rightNormal.y, 0.5); // 1: bottom right front  
+            normals.push(0, 0, 1); // 2: top front
+            normals.push(leftNormal.x, leftNormal.y, -0.5); // 3: bottom left back
+            normals.push(rightNormal.x, rightNormal.y, -0.5); // 4: bottom right back
+            normals.push(0, 0, -1); // 5: top back
+            
+            // UVs correspondant aux 6 vertices
+            uvs.push(0, 0); // 0: bottom left front
+            uvs.push(1, 0); // 1: bottom right front
+            uvs.push(0.5, 1); // 2: top front
+            uvs.push(0, 0); // 3: bottom left back
+            uvs.push(1, 0); // 4: bottom right back
+            uvs.push(0.5, 1); // 5: top back
+            
+            // Face avant (triangle)
+            indices.push(0, 1, 2);
+            
+            // Face arrière (triangle, ordre inversé pour normale vers l'extérieur)
+            indices.push(3, 5, 4);
+            
+            // Côté gauche (rectangle)
+            indices.push(3, 0, 2, 3, 2, 5);
+            
+            // Côté droit (rectangle)
+            indices.push(1, 4, 5, 1, 5, 2);
+            
+            // Base (rectangle)
+            indices.push(3, 4, 1, 3, 1, 0);
+            
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+            geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+            geometry.setIndex(indices);
+            
+            return geometry;
         };
-        const gableGeometry = new THREE.ExtrudeGeometry(gableShape, extrudeSettings);
-        // S'assurer que les normales sont correctement calculées
-        gableGeometry.computeVertexNormals();
+        
+        const gableGeometry = createGableGeometry();
         
         const frontGableMesh = new THREE.Mesh(gableGeometry, gableMaterial);
         // Positionner exactement à l'extrémité avant pour fermer le trou
