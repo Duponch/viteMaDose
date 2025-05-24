@@ -229,17 +229,47 @@ export default class InstancedMeshManager {
                                     const count = matrices.length;
                                     assetData.parts.forEach((part, idx) => {
                                         if (!part.geometry || !part.material) return;
+                                        
+                                        // Vérifier si cette partie est une fenêtre AVANT de changer le nom
+                                        const isPartWindow = (
+                                            part.material.name === "HouseWindowPaneMat" ||
+                                            part.material.name === "HouseWindowFrameMat" ||
+                                            part.material.name?.startsWith("HouseWindow")
+                                        );
+                                        
                                         const matClone = part.material.clone();
                                         const meshName = `${idOrKey}_part${idx}`;
-                                        matClone.name = `Inst_${meshName}`;
+                                        
+                                        // Si c'est une fenêtre, préserver des informations pour l'identification
+                                        if (isPartWindow) {
+                                            matClone.name = part.material.name; // Préserver le nom original pour les fenêtres
+                                            // Ajouter une propriété personnalisée pour l'identification
+                                            matClone.userData = matClone.userData || {};
+                                            matClone.userData.isNewHouseWindow = true;
+                                        } else {
+                                            matClone.name = `Inst_${meshName}`; // Nom habituel pour les non-fenêtres
+                                        }
+                                        
                                         const instMesh = new THREE.InstancedMesh(part.geometry, matClone, count);
                                         instMesh.castShadow = true;
-                                        instMesh.receiveShadow = true;
+                                        instMesh.receiveShadow = !isPartWindow; // Les fenêtres ne reçoivent pas d'ombres
                                         instMesh.name = `house_${meshName}`;
                                         matrices.forEach((m, i) => instMesh.setMatrixAt(i, m));
                                         instMesh.instanceMatrix.needsUpdate = true;
                                         this.parentGroup.add(instMesh);
                                         this.instancedMeshes[`house_${meshName}`] = instMesh;
+                                        
+                                        // IMPORTANT: Ajouter les fenêtres à la liste de surveillance
+                                        if (isPartWindow) {
+                                            this.windowMeshes.push(instMesh);
+                                            // Appliquer envMap si nécessaire
+                                            if (this.experience?.scene?.environment) {
+                                                if (!matClone.envMap) matClone.envMap = this.experience.scene.environment;
+                                            }
+                                        }
+                                        
+                                        totalMeshesCreated++;
+                                        totalInstancesCreated += count;
                                     });
                                     continue;
                                 }
@@ -252,16 +282,42 @@ export default class InstancedMeshManager {
                                     const idx = parseInt(partKey.replace('part',''), 10);
                                     const part = assetData.parts[idx];
                                     if (part && part.geometry && part.material) {
+                                        // Vérifier si cette partie est une fenêtre AVANT de changer le nom
+                                        const isPartWindow = (
+                                            part.material.name === "HouseWindowPaneMat" ||
+                                            part.material.name === "HouseWindowFrameMat" ||
+                                            part.material.name?.startsWith("HouseWindow")
+                                        );
+                                        
                                         const matClone = part.material.clone();
-                                        matClone.name = `Inst_${assetId}_${partKey}`;
+                                        
+                                        // Si c'est une fenêtre, préserver des informations pour l'identification
+                                        if (isPartWindow) {
+                                            matClone.name = part.material.name; // Préserver le nom original pour les fenêtres
+                                            matClone.userData = matClone.userData || {};
+                                            matClone.userData.isNewHouseWindow = true;
+                                        } else {
+                                            matClone.name = `Inst_${assetId}_${partKey}`; // Nom habituel pour les non-fenêtres
+                                        }
+                                        
                                         const instMesh = new THREE.InstancedMesh(part.geometry, matClone, matrices.length);
                                         instMesh.castShadow = true;
-                                        instMesh.receiveShadow = true;
+                                        instMesh.receiveShadow = !isPartWindow; // Les fenêtres ne reçoivent pas d'ombres
                                         instMesh.name = `house_${assetId}_${partKey}`;
                                         matrices.forEach((m, i) => instMesh.setMatrixAt(i, m));
                                         instMesh.instanceMatrix.needsUpdate = true;
                                         this.parentGroup.add(instMesh);
                                         this.instancedMeshes[`house_${assetId}_${partKey}`] = instMesh;
+                                        
+                                        // IMPORTANT: Ajouter les fenêtres à la liste de surveillance
+                                        if (isPartWindow) {
+                                            this.windowMeshes.push(instMesh);
+                                            // Appliquer envMap si nécessaire
+                                            if (this.experience?.scene?.environment) {
+                                                if (!matClone.envMap) matClone.envMap = this.experience.scene.environment;
+                                            }
+                                        }
+                                        
                                         continue;
                                     }
                                 }
@@ -460,6 +516,7 @@ export default class InstancedMeshManager {
                             "NewBuildingWindow",
                             "NewBuildingBalconyWindow",
                             "HouseWindowMat",
+                            "HouseWindowPaneMat",
                             "IndustrialWindowPaneMat",
 							"NewSkyscraperWindowMat"
                         ];
@@ -585,6 +642,7 @@ export default class InstancedMeshManager {
             const isSkyscraperWindow = material.name === "SkyscraperWindowMat_Standard";
 			const isNewSkyscraperWindow = material.name === "NewSkyscraperWindowMat"; // <-- AJOUTER CETTE VÉRIFICATION
             const isHouseWindow = material.name.startsWith("Inst_HouseWindow_");
+            const isNewHouseWindow = material.name === "HouseWindowPaneMat"; // <-- AJOUTER CETTE NOUVELLE VÉRIFICATION
             const isBuildingWindow = material.name === "BuildingWindowMat";
             const isNewBuildingWindow = material.name === "NewBuildingWindow" || material.name === "NewBuildingBalconyWindow";
 
@@ -605,6 +663,8 @@ export default class InstancedMeshManager {
                 }
             } else if (isHouseWindow) {
                 targetIntensity = lightsOn ? 1.23 : 0.0; // Valeur spécifique maison
+            } else if (isNewHouseWindow) { // <-- AJOUTER CE BLOC POUR LES NOUVELLES MAISONS
+                targetIntensity = lightsOn ? 1.2 : 0.0; // Intensité similaire aux maisons classiques
             } else if (isBuildingWindow) {
                 targetIntensity = lightsOn ? 0.8 : 0.0; // Valeur spécifique immeuble
             } else if (isNewBuildingWindow) {

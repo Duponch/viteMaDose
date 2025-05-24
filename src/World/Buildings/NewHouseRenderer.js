@@ -230,7 +230,15 @@ export default class NewHouseRenderer {
             door: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8, name: "HouseDoorMat" }),
             garageDoor: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8, name: "HouseGarageDoorMat" }),
             windowFrame: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8, name: "HouseWindowFrameMat" }),
-            windowPane: new THREE.MeshStandardMaterial({ color: 0xadd8e6, transparent: true, opacity: 0.6, roughness: 0.3, name: "HouseWindowPaneMat" }),
+            windowPane: new THREE.MeshStandardMaterial({ 
+                color: 0xadd8e6, 
+                transparent: true, 
+                opacity: 0.6, 
+                roughness: 0.3,
+                emissive: 0xffaa44, // Couleur émissive orange chaud (sera modifiée par l'intensité)
+                emissiveIntensity: 0.0, // Intensité émissive (0 le jour, > 0 la nuit)
+                name: "HouseWindowPaneMat" 
+            }),
             step: new THREE.MeshStandardMaterial({ color: 0xc0c0c0, roughness: 0.8, name: "HouseStepMat" }),
         };
     }
