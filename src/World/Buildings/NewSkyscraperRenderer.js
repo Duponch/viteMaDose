@@ -324,6 +324,14 @@ export default class NewSkyscraperRenderer {
 				const topSection = new THREE.Mesh(horizontalSectionGeo, horizontalBeamMaterial); topSection.position.set(0, floorH - horizontalBeamSize / 2, zPos); floorGroup.add(topSection);
 				if (windowGeoFB && mullionGeoFB && windowPanelWidthFB > 0) { let currentX = -horizontalSectionLength / 2; const windowBaseY = horizontalBeamSize; const windowCenterY = windowBaseY + windowHeight / 2; for (let i = 0; i < numPanels; i++) { const isDoorPanel = isGroundFloor && isFrontFace && i >= doorPanelIndex && i < doorPanelIndex + doorPanelCount && doorWidth > 0 && doorHeight > 0; const isFirstDoorPanel = isDoorPanel && i === doorPanelIndex; const isMiddleDoorMullionToSkip = (doorPanelCount === 2) && i === doorPanelIndex; if (isDoorPanel) { if (isFirstDoorPanel) { const doorGeo = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth); const doorMesh = new THREE.Mesh(doorGeo, doorMaterial); doorMesh.position.set(doorXPos, doorYPos, zPosWindow); floorGroup.add(doorMesh); doorGeo.dispose(); 
 					
+					// Bande verticale au milieu de la porte
+					const dividerWidth = frameThickness * 0.8;
+					const dividerGeo = new THREE.BoxGeometry(dividerWidth, doorHeight * 0.9, frameDepth);
+					const divider = new THREE.Mesh(dividerGeo, frameMaterial);
+					divider.position.set(doorXPos, doorYPos, zPosWindow + doorDepth / 2 + frameDepth / 2);
+					floorGroup.add(divider);
+					dividerGeo.dispose();
+					
 					// Ajouter un marqueur bleu émissif devant la porte pour indiquer l'orientation
 					// Seulement pour la porte principale au rez-de-chaussée
 					/*if (isGroundFloor && isFrontFace) {
