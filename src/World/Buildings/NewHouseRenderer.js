@@ -209,7 +209,17 @@ export default class NewHouseRenderer {
         this.localMaterials = {
             wall: new THREE.MeshStandardMaterial({ map: this.sharedTextures.wall, roughness: 0.9, name: "HouseBase1Mat" }),
             roof: new THREE.MeshStandardMaterial({ map: this.sharedTextures.roof, roughness: 0.8, name: "HouseRoofMat" }),
-            gable: new THREE.MeshStandardMaterial({ map: this.sharedTextures.wall.clone(), roughness: 0.9, side: THREE.DoubleSide, name: "HouseBase2Mat" }),
+            gable: new THREE.MeshStandardMaterial({ 
+                map: this.sharedTextures.wall,
+                roughness: 0.9, 
+                side: THREE.FrontSide, 
+                transparent: false, 
+                opacity: 1.0,
+                alphaTest: 0,
+                depthWrite: true,
+                depthTest: true,
+                name: "HouseGableMat" 
+            }),
             chimneyBrick: new THREE.MeshStandardMaterial({ map: this.sharedTextures.brick, roughness: 0.85, name: "HouseBase1Mat" }),
             chimneyTop: new THREE.MeshStandardMaterial({ map: this.sharedTextures.chimneyTop, roughness: 0.85, name: "HouseBase2Mat" }),
             door: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8, name: "HouseDoorMat" }),
@@ -262,6 +272,8 @@ export default class NewHouseRenderer {
         if (gableMaterial.map) {
             const gableBaseWidth = wallWidth;
             const gableVerticalStretchFactor = 1.5; // Facteur d'étirement vertical pour texture pignon
+            // Créer une texture clonée pour les pignons pour éviter d'affecter la texture des murs
+            gableMaterial.map = this.sharedTextures.wall.clone();
             gableMaterial.map.repeat.set(
                 gableBaseWidth / wallTextureWorldScaleU,
                 roofHeight / (wallTextureWorldScaleV * gableVerticalStretchFactor)
@@ -271,7 +283,6 @@ export default class NewHouseRenderer {
             gableMaterial.map.wrapS = THREE.RepeatWrapping;
             gableMaterial.map.wrapT = THREE.RepeatWrapping;
         }
-
 
         // --- Création des Géométries et Meshes (Adapté de createHouse) ---
 
@@ -301,50 +312,66 @@ export default class NewHouseRenderer {
             const halfWidth = gableBaseWidth / 2;
             const halfThickness = gableThickness / 2;
             
-            // Calculer les normales des faces inclinées
-            const leftNormal = new THREE.Vector3(-1, roofHeight/halfWidth, 0).normalize();
-            const rightNormal = new THREE.Vector3(1, roofHeight/halfWidth, 0).normalize();
+            let vertexIndex = 0;
             
-            // Vertices du triangle avant (z = halfThickness)
-            vertices.push(-halfWidth, 0, halfThickness); // 0: bottom left front
-            vertices.push(halfWidth, 0, halfThickness);  // 1: bottom right front
-            vertices.push(0, roofHeight, halfThickness); // 2: top front
+            // Face avant (triangle) - normale vers +Z
+            vertices.push(-halfWidth, 0, halfThickness);     // 0
+            vertices.push(halfWidth, 0, halfThickness);      // 1
+            vertices.push(0, roofHeight, halfThickness);     // 2
+            normals.push(0, 0, 1, 0, 0, 1, 0, 0, 1);
+            uvs.push(0, 0, 1, 0, 0.5, 1);
+            indices.push(vertexIndex, vertexIndex + 1, vertexIndex + 2);
+            vertexIndex += 3;
             
-            // Vertices du triangle arrière (z = -halfThickness)
-            vertices.push(-halfWidth, 0, -halfThickness); // 3: bottom left back
-            vertices.push(halfWidth, 0, -halfThickness);  // 4: bottom right back
-            vertices.push(0, roofHeight, -halfThickness); // 5: top back
-            
-            // Normales pour chaque vertex (moyennées des faces adjacentes)
-            normals.push(leftNormal.x, leftNormal.y, 0.5); // 0: bottom left front
-            normals.push(rightNormal.x, rightNormal.y, 0.5); // 1: bottom right front  
-            normals.push(0, 0, 1); // 2: top front
-            normals.push(leftNormal.x, leftNormal.y, -0.5); // 3: bottom left back
-            normals.push(rightNormal.x, rightNormal.y, -0.5); // 4: bottom right back
-            normals.push(0, 0, -1); // 5: top back
-            
-            // UVs correspondant aux 6 vertices
-            uvs.push(0, 0); // 0: bottom left front
-            uvs.push(1, 0); // 1: bottom right front
-            uvs.push(0.5, 1); // 2: top front
-            uvs.push(0, 0); // 3: bottom left back
-            uvs.push(1, 0); // 4: bottom right back
-            uvs.push(0.5, 1); // 5: top back
-            
-            // Face avant (triangle)
-            indices.push(0, 1, 2);
-            
-            // Face arrière (triangle, ordre inversé pour normale vers l'extérieur)
-            indices.push(3, 5, 4);
+            // Face arrière (triangle) - normale vers -Z
+            vertices.push(-halfWidth, 0, -halfThickness);    // 3
+            vertices.push(0, roofHeight, -halfThickness);    // 4
+            vertices.push(halfWidth, 0, -halfThickness);     // 5
+            normals.push(0, 0, -1, 0, 0, -1, 0, 0, -1);
+            uvs.push(0, 0, 0.5, 1, 1, 0);
+            indices.push(vertexIndex, vertexIndex + 1, vertexIndex + 2);
+            vertexIndex += 3;
             
             // Côté gauche (rectangle)
-            indices.push(3, 0, 2, 3, 2, 5);
+            const leftNormal = new THREE.Vector3(-roofHeight, halfWidth, 0).normalize();
+            vertices.push(-halfWidth, 0, -halfThickness);    // 6
+            vertices.push(-halfWidth, 0, halfThickness);     // 7
+            vertices.push(0, roofHeight, halfThickness);     // 8
+            vertices.push(0, roofHeight, -halfThickness);    // 9
+            normals.push(
+                leftNormal.x, leftNormal.y, leftNormal.z,
+                leftNormal.x, leftNormal.y, leftNormal.z,
+                leftNormal.x, leftNormal.y, leftNormal.z,
+                leftNormal.x, leftNormal.y, leftNormal.z
+            );
+            uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+            indices.push(vertexIndex, vertexIndex + 1, vertexIndex + 2, vertexIndex, vertexIndex + 2, vertexIndex + 3);
+            vertexIndex += 4;
             
             // Côté droit (rectangle)
-            indices.push(1, 4, 5, 1, 5, 2);
+            const rightNormal = new THREE.Vector3(roofHeight, halfWidth, 0).normalize();
+            vertices.push(halfWidth, 0, halfThickness);      // 10
+            vertices.push(halfWidth, 0, -halfThickness);     // 11
+            vertices.push(0, roofHeight, -halfThickness);    // 12
+            vertices.push(0, roofHeight, halfThickness);     // 13
+            normals.push(
+                rightNormal.x, rightNormal.y, rightNormal.z,
+                rightNormal.x, rightNormal.y, rightNormal.z,
+                rightNormal.x, rightNormal.y, rightNormal.z,
+                rightNormal.x, rightNormal.y, rightNormal.z
+            );
+            uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+            indices.push(vertexIndex, vertexIndex + 1, vertexIndex + 2, vertexIndex, vertexIndex + 2, vertexIndex + 3);
+            vertexIndex += 4;
             
-            // Base (rectangle)
-            indices.push(3, 4, 1, 3, 1, 0);
+            // Base (rectangle) - normale vers -Y
+            vertices.push(-halfWidth, 0, -halfThickness);    // 14
+            vertices.push(halfWidth, 0, -halfThickness);     // 15
+            vertices.push(halfWidth, 0, halfThickness);      // 16
+            vertices.push(-halfWidth, 0, halfThickness);     // 17
+            normals.push(0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0);
+            uvs.push(0, 0, 1, 0, 1, 1, 0, 1);
+            indices.push(vertexIndex, vertexIndex + 1, vertexIndex + 2, vertexIndex, vertexIndex + 2, vertexIndex + 3);
             
             const geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
