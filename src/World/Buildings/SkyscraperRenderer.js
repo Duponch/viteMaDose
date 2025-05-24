@@ -28,6 +28,12 @@ export default class SkyscraperRenderer {
         // Ajustement pour réduire l'étirement horizontal sur la structure intermédiaire
         this.sharedIntermediateTexture.repeat.set(4.5, 1.5 / 3); // Réduction de la répétition X pour moins d'étirement horizontal
         
+        // Créer une quatrième texture pour la partie inférieure de base avec encore moins d'étirement horizontal
+        this.sharedBaseTexture = this.sharedFacadeTexture.clone();
+        this.sharedBaseTexture.needsUpdate = true;
+        // Ajustement pour réduire davantage l'étirement horizontal sur la base
+        this.sharedBaseTexture.repeat.set(3.5, 1.5 / 3); // Réduction encore plus importante de la répétition X pour la base
+        
         this.defineSkyscraperBaseMaterials();
         this.defineSkyscraperBaseGeometries();
         this.initializeSkyscraperMatrixArrays();
@@ -149,6 +155,12 @@ export default class SkyscraperRenderer {
             name: "DefaultSkyscraperMat",
             map: this.sharedFacadeTexture
         });
+        const baseMaterial = new THREE.MeshStandardMaterial({
+            color: 0x6e7883,
+            flatShading: true,
+            name: "SkyscraperBaseMat",
+            map: this.sharedBaseTexture
+        });
     }
 
     /**
@@ -236,7 +248,7 @@ export default class SkyscraperRenderer {
             color: 0x6e7883,
             flatShading: true,
             name: "SkyscraperBaseMat",
-            map: this.sharedFacadeTexture
+            map: this.sharedBaseTexture
         });
         // Matériau spécialisé pour la partie supérieure de la base (structure intermédiaire)
         const intermediateMaterial = new THREE.MeshStandardMaterial({
