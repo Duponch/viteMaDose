@@ -17,8 +17,9 @@ export default class NewSkyscraperRenderer {
         const beamTexture = wallTexture.clone();
         beamTexture.needsUpdate = true;
         // Ajustement pour compenser l'étirement sur les poutres horizontales fines
+        // wallTexture utilise maintenant (1.5, 1), donc il faut recalculer pour les poutres
         // Ratio des proportions : murs (12x3.5) vs poutres (12x0.5) = facteur 7 en hauteur
-        beamTexture.repeat.set(2, 1.5 / 7); // DIMINUTION de la répétition Y pour éviter l'écrasement
+        beamTexture.repeat.set(2, 1.5 / 7); // Retour aux valeurs qui fonctionnaient bien pour les poutres
 
         // --- Define materials specific to this skyscraper ---
         // Adapt colors and textures as needed from your create...Texture functions or shared materials
@@ -135,8 +136,8 @@ export default class NewSkyscraperRenderer {
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        // Paramètres optimisés pour les murs verticaux (proportions 12x3.5 environ)
-        texture.repeat.set(2, 1.5);
+        // Paramètres optimisés pour les murs verticaux - échelle augmentée et étirement horizontal
+        texture.repeat.set(1, 1); // Diminution de X pour étirer horizontalement
         return texture;
     }
 
