@@ -207,10 +207,15 @@ export default class NewHouseRenderer {
 
         // Définition des matériaux utilisant ces textures partagées
         this.localMaterials = {
-            wall: new THREE.MeshStandardMaterial({ map: this.sharedTextures.wall, roughness: 0.9, name: "HouseBase1Mat" }),
-            roof: new THREE.MeshStandardMaterial({ map: this.sharedTextures.roof, roughness: 0.8, name: "HouseRoofMat" }),
+            wall: new THREE.MeshStandardMaterial({ 
+                map: createWallTexture(this.rendererInstance),
+                color: 0xffffff, // Couleur blanche pour ne pas affecter la texture
+                roughness: 0.9, 
+                name: "HouseWallMat" 
+            }),
+            roof: new THREE.MeshStandardMaterial({ map: createRoofTexture(this.rendererInstance), roughness: 0.8, name: "HouseRoofMat" }),
             gable: new THREE.MeshStandardMaterial({ 
-                map: this.sharedTextures.wall,
+                map: createWallTexture(this.rendererInstance), // Créer une nouvelle texture
                 roughness: 0.9, 
                 side: THREE.FrontSide, 
                 transparent: false, 
@@ -220,13 +225,13 @@ export default class NewHouseRenderer {
                 depthTest: true,
                 name: "HouseGableMat" 
             }),
-            chimneyBrick: new THREE.MeshStandardMaterial({ map: this.sharedTextures.brick, roughness: 0.85, name: "HouseBase1Mat" }),
-            chimneyTop: new THREE.MeshStandardMaterial({ map: this.sharedTextures.chimneyTop, roughness: 0.85, name: "HouseBase2Mat" }),
+            chimneyBrick: new THREE.MeshStandardMaterial({ map: createBrickTexture(this.rendererInstance), roughness: 0.85, name: "HouseChimneyBrickMat" }),
+            chimneyTop: new THREE.MeshStandardMaterial({ map: createChimneyCapTopTexture(this.rendererInstance), roughness: 0.85, name: "HouseChimneyTopMat" }),
             door: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8, name: "HouseDoorMat" }),
             garageDoor: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8, name: "HouseGarageDoorMat" }),
-            windowFrame: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8, name: "HouseBase1Mat" }),
-            windowPane: new THREE.MeshStandardMaterial({ color: 0xadd8e6, transparent: true, opacity: 0.6, roughness: 0.3, name: "HouseBase2Mat" }),
-            step: new THREE.MeshStandardMaterial({ color: 0xc0c0c0, roughness: 0.8, name: "HouseBase1Mat" }),
+            windowFrame: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8, name: "HouseWindowFrameMat" }),
+            windowPane: new THREE.MeshStandardMaterial({ color: 0xadd8e6, transparent: true, opacity: 0.6, roughness: 0.3, name: "HouseWindowPaneMat" }),
+            step: new THREE.MeshStandardMaterial({ color: 0xc0c0c0, roughness: 0.8, name: "HouseStepMat" }),
         };
     }
 
@@ -269,15 +274,26 @@ export default class NewHouseRenderer {
         // Appliquer repeat aux textures clonées/locales si nécessaire (pour gable etc.)
         // Note: l'application du repeat se fait souvent sur la texture elle-même avant de l'assigner
         //       au matériau, ou via material.map.repeat.set()
+        
+        // Appliquer la répétition de texture pour les murs
+        if (wallMaterial.map) {
+            wallMaterial.map.repeat.set(2, 2); // Valeurs simples pour test
+            wallMaterial.map.needsUpdate = true;
+            wallMaterial.map.wrapS = THREE.RepeatWrapping;
+            wallMaterial.map.wrapT = THREE.RepeatWrapping;
+        }
+        
+        // Appliquer la répétition de texture pour le toit
+        if (roofMaterial.map) {
+            roofMaterial.map.repeat.set(2, 2); // Valeurs simples pour test
+            roofMaterial.map.needsUpdate = true;
+            roofMaterial.map.wrapS = THREE.RepeatWrapping;
+            roofMaterial.map.wrapT = THREE.RepeatWrapping;
+        }
+        
+        // Appliquer la répétition de texture pour les pignons
         if (gableMaterial.map) {
-            const gableBaseWidth = wallWidth;
-            const gableVerticalStretchFactor = 1.5; // Facteur d'étirement vertical pour texture pignon
-            // Créer une texture clonée pour les pignons pour éviter d'affecter la texture des murs
-            gableMaterial.map = this.sharedTextures.wall.clone();
-            gableMaterial.map.repeat.set(
-                gableBaseWidth / wallTextureWorldScaleU,
-                roofHeight / (wallTextureWorldScaleV * gableVerticalStretchFactor)
-            );
+            gableMaterial.map.repeat.set(2, 1); // Valeurs simples pour test
             gableMaterial.map.needsUpdate = true;
             // Assurer wrapS/wrapT si ce n'est pas le défaut
             gableMaterial.map.wrapS = THREE.RepeatWrapping;
@@ -484,13 +500,19 @@ export default class NewHouseRenderer {
             const verticalBarGeo = new THREE.BoxGeometry(barThickness, frameHeight - barThickness * 2, frameDepth * 0.8);
             const horizontalBarGeo = new THREE.BoxGeometry(frameWidth - barThickness * 2, barThickness, frameDepth * 0.8);
 
+            // Cloner les matériaux pour éviter les conflits
+            const windowFrameMat = windowFrameMaterial.clone();
+            windowFrameMat.name = "HouseWindowFrameMat"; // S'assurer que le nom correspond à la materialMap
+            const windowPaneMat = windowPaneMaterial.clone();
+            windowPaneMat.name = "HouseWindowPaneMat"; // S'assurer que le nom correspond à la materialMap
+            
             const frameMeshes = [
-                new THREE.Mesh(sideBarGeo, windowFrameMaterial), // Left
-                new THREE.Mesh(sideBarGeo, windowFrameMaterial), // Right
-                new THREE.Mesh(topBotBarGeo, windowFrameMaterial), // Top
-                new THREE.Mesh(topBotBarGeo, windowFrameMaterial), // Bottom
-                new THREE.Mesh(verticalBarGeo, windowFrameMaterial), // Vertical Center
-                new THREE.Mesh(horizontalBarGeo, windowFrameMaterial) // Horizontal Center
+                new THREE.Mesh(sideBarGeo, windowFrameMat), // Left
+                new THREE.Mesh(sideBarGeo, windowFrameMat), // Right
+                new THREE.Mesh(topBotBarGeo, windowFrameMat), // Top
+                new THREE.Mesh(topBotBarGeo, windowFrameMat), // Bottom
+                new THREE.Mesh(verticalBarGeo, windowFrameMat), // Vertical Center
+                new THREE.Mesh(horizontalBarGeo, windowFrameMat) // Horizontal Center
             ];
             frameMeshes[0].position.x = -frameWidth / 2 + barThickness / 2;
             frameMeshes[1].position.x = frameWidth / 2 - barThickness / 2;
@@ -502,7 +524,7 @@ export default class NewHouseRenderer {
 
             // Vitre (PlaneGeometry)
             const paneGeometry = new THREE.PlaneGeometry(frameWidth - barThickness * 2, frameHeight - barThickness * 2);
-            const paneMesh = new THREE.Mesh(paneGeometry, windowPaneMaterial);
+            const paneMesh = new THREE.Mesh(paneGeometry, windowPaneMat);
             // Positionner la vitre légèrement en retrait derrière le cadre
             paneMesh.position.z = -frameDepth / 2 + 0.01 * scale;
             windowGroup.add(paneMesh);
