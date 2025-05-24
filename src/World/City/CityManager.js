@@ -227,12 +227,14 @@ export default class CityManager {
         this.buildingRenderer = new BuildingRenderer(this.config, this.materials);
         this.skyscraperRenderer = new SkyscraperRenderer(this.config, this.materials);
         this.commercialRenderer = new CommercialRenderer(this.config, this.materials);
+        this.movieTheaterRenderer = this.assetLoader.movieTheaterRenderer; // Utiliser celui du CityAssetLoader
         this.renderers = {
             houseRenderer: this.houseRenderer,
             newHouseRenderer: this.newHouseRenderer,
             buildingRenderer: this.buildingRenderer,
             skyscraperRenderer: this.skyscraperRenderer,
-            commercialRenderer: this.commercialRenderer
+            commercialRenderer: this.commercialRenderer,
+            movieTheaterRenderer: this.movieTheaterRenderer
         };
 
         // --- Navigation via NavigationManager ---
@@ -548,6 +550,7 @@ export default class CityManager {
         this.buildingRenderer?.reset();
         this.skyscraperRenderer?.reset();
         this.commercialRenderer?.reset();
+        this.movieTheaterRenderer?.destroy?.(); // Dispose du MovieTheaterRenderer
         // Idéalement, les renderers devraient avoir une méthode destroy qui dispose leurs géométries/matériaux de base
 
          // Dispose LampPostManager (qui devrait disposer ses propres géométries)
@@ -583,6 +586,7 @@ export default class CityManager {
         this.buildingRenderer = null;
         this.skyscraperRenderer = null;
         this.commercialRenderer = null;
+        this.movieTheaterRenderer = null;
         this.renderers = null;
 
 

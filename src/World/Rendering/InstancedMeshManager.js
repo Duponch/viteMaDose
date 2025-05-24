@@ -194,6 +194,78 @@ export default class InstancedMeshManager {
                             }
                         }
                         
+                        case 'movietheater': {
+                            // Génération d'un bâtiment cinéma procédural
+                            if (!this.renderers.movieTheaterRenderer) {
+                                console.warn(`[IMM] MovieTheater renderer not found, falling back to basic cube`);
+                                // Fallback au cube de base si le renderer n'est pas disponible
+                                geometry = new THREE.BoxGeometry(1, 1, 1);
+                                material = new THREE.MeshStandardMaterial({
+                                    color: 0xff0000,  // Rouge
+                                    emissive: 0x440000, // Émission rouge
+                                    emissiveIntensity: 0.3,
+                                    name: "MovieTheaterBuildingFallbackMat"
+                                });
+                                break;
+                            }
+                            
+                            // Utiliser un identifiant de clé pour le cinéma
+                            const movieTheaterKey = 'movietheater_proc_0';
+                            // Vérifier si l'asset existe déjà dans l'assetLoader
+                            let assetData = this.assetLoader.getAssetDataById(movieTheaterKey);
+                            
+                            if (!assetData) {
+                                // Générer l'asset cinéma s'il n'existe pas encore
+                                const movieTheaterAsset = this.renderers.movieTheaterRenderer.generateProceduralBuilding(1, 1, 1);
+                                if (movieTheaterAsset) {
+                                    // Enregistrer l'asset généré
+                                    this.assetLoader.registerAssetData(movieTheaterKey, movieTheaterAsset);
+                                    assetData = movieTheaterAsset;
+                                } else {
+                                    console.error(`[IMM] Failed to generate movietheater building asset`);
+                                    continue;
+                                }
+                            }
+                            
+                            // Gérer les parties (comme pour les autres assets procéduraux)
+                            if (assetData.parts && assetData.parts.length > 0) {
+                                assetData.parts.forEach((part, index) => {
+                                    if (!part.geometry || !part.material) {
+                                        console.warn(`[IMM] Invalid part data for movietheater asset, part index: ${index}`);
+                                        return;
+                                    }
+
+                                    // Aucune fenêtre dans les cinémas pour l'instant (cube simple)
+                                    const isPartWindow = false;
+
+                                    const count = matrices.length;
+                                    // Cloner le matériau pour éviter les modifications partagées
+                                    const partMaterialClone = part.material.clone();
+                                    partMaterialClone.name = `Inst_${movieTheaterKey}_part${index}`;
+
+                                    const instancedMesh = new THREE.InstancedMesh(part.geometry, partMaterialClone, count);
+                                    instancedMesh.castShadow = castShadow;
+                                    instancedMesh.receiveShadow = !isPartWindow;
+                                    instancedMesh.name = `${movieTheaterKey}_part${index}`;
+
+                                    matrices.forEach((matrix, mIndex) => {
+                                        instancedMesh.setMatrixAt(mIndex, matrix);
+                                    });
+                                    instancedMesh.instanceMatrix.needsUpdate = true;
+
+                                    this.parentGroup.add(instancedMesh);
+                                    this.instancedMeshes[`movietheater_${movieTheaterKey}_part${index}`] = instancedMesh;
+                                    totalMeshesCreated++;
+                                    totalInstancesCreated += count;
+                                });
+                                // Important : continuer à la prochaine clé car les meshes ont déjà été créés
+                                continue; // Passe à l'itération suivante de la boucle idOrKey
+                            } else {
+                                console.warn(`[IMM] MovieTheater asset has no parts, unexpected state`);
+                                continue;
+                            }
+                        }
+                        
                         case 'house': {
                             // 0) Vérifier d'abord si c'est une partie legacy de HouseRenderer
                             const legacyParts = ['base_part1', 'base_part2', 'roof', 'door', 'garageDoor', 'windowXY', 'windowYZ'];

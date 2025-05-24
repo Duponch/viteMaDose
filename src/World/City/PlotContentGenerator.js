@@ -7,6 +7,7 @@ import PlotGroundGenerator from './PlotGroundGenerator.js'; // Placeholder impor
 import CrosswalkInstancer from './CrosswalkInstancer.js'; // Placeholder import
 import ShaderGrassInstancer from '../Vegetation/ShaderGrassInstancer.js'; // Nouvelle implémentation d'herbe
 import CommercialManager from './CommercialManager.js'; // Import du nouveau gestionnaire
+import MovieTheaterManager from './MovieTheaterManager.js'; // Import du gestionnaire de cinémas
 
 // Stratégies de placement
 import HousePlacementStrategy from '../Strategies/HousePlacementStrategy.js';
@@ -16,6 +17,7 @@ import SkyscraperPlacementStrategy from '../Strategies/SkyscraperPlacementStrate
 import ParkPlacementStrategy from '../Strategies/ParkPlacementStrategy.js';
 import TreePlacementStrategy from '../Strategies/TreePlacementStrategy.js'; // Placeholder import
 import CommercialPlacementStrategy from '../Strategies/CommercialPlacementStrategy.js'; // Nouvelle stratégie
+import MovieTheaterPlacementStrategy from '../Strategies/MovieTheaterPlacementStrategy.js'; // Stratégie de cinéma
 
 /**
  * @typedef {import('./Plot.js').default} Plot
@@ -49,6 +51,7 @@ export default class PlotContentGenerator {
         // InstancedMeshManager a besoin de beaucoup de dépendances
         this.instancedMeshManager = null; // Sera créé dans generateContent une fois les renderers disponibles
         this.commercialManager = new CommercialManager(config); // Nouveau gestionnaire de commerces
+        this.movieTheaterManager = new MovieTheaterManager(config); // Gestionnaire de cinémas
 
         // --- Générateurs Spécifiques ---
         this.sidewalkGenerator = new SidewalkGenerator(config, materials);
@@ -106,7 +109,8 @@ export default class PlotContentGenerator {
             'industrial': new IndustrialPlacementStrategy(this.config, assetLoader, renderers, this.experience),
             'skyscraper': new SkyscraperPlacementStrategy(this.config, assetLoader, renderers, this.experience),
             'park': new ParkPlacementStrategy(this.config, assetLoader, renderers, this.experience),
-            'commercial': new CommercialPlacementStrategy(this.config, assetLoader, renderers, this.experience)
+            'commercial': new CommercialPlacementStrategy(this.config, assetLoader, renderers, this.experience),
+            'movietheater': new MovieTheaterPlacementStrategy(this.config, assetLoader, renderers, this.experience)
             // Ajouter 'unbuildable' ou une stratégie par défaut si nécessaire
         };
         this.treePlacementStrategy = new TreePlacementStrategy(this.config, assetLoader, renderers, this.experience);
@@ -129,9 +133,18 @@ export default class PlotContentGenerator {
             console.error(`Error during commercial plots selection:`, error);
         }
 
+        // --- Sélection des parcelles qui auront des cinémas (1 par quartier) ---
+        try {
+            const districts = cityManager.getDistricts();
+            this.movieTheaterManager.selectPlotsForMovieTheater(districts);
+        } catch (error) {
+            console.error(`Error during movietheater plots selection:`, error);
+        }
+
         // --- Placement du Contenu Principal (via Stratégies) ---
         const plotGroundY = this.config.plotGroundY ?? 0.005; // Hauteur du sol des parcelles
         const commercialPositions = new Map(); // Pour stocker les positions commerciales par parcelle
+        const movieTheaterPositions = new Map(); // Pour stocker les positions de cinémas par parcelle
         
         leafPlots.forEach((plot) => {
             // Réinitialiser les données spécifiques à la parcelle si nécessaire
@@ -163,13 +176,36 @@ export default class PlotContentGenerator {
                             commercialPositions.set(plot.id, commercialPositionsOnPlot);
                         }
                     }
+
+                    // Vérifier si cette parcelle doit avoir un cinéma
+                    const shouldHaveMovieTheater = this.movieTheaterManager.shouldPlotHaveMovieTheater(plot);
+                    
+                    if (shouldHaveMovieTheater && (plot.zoneType === 'house' || plot.zoneType === 'building')) {
+                        // Calculer la grille de disposition selon le type de parcelle
+                        const gridPlacement = this._calculateGridForPlotType(plot, strategy);
+                        
+                        if (gridPlacement) {
+                            // Placer les cinémas selon la grille
+                            const movieTheaterPositionsOnPlot = this._placeMovieTheatersOnPlot(
+                                plot, 
+                                strategy, 
+                                gridPlacement, 
+                                this.instanceDataManager, 
+                                cityManager, 
+                                plotGroundY
+                            );
+                            
+                            // Stocker les positions des cinémas pour éviter la duplication
+                            movieTheaterPositions.set(plot.id, movieTheaterPositionsOnPlot);
+                        }
+                    }
                     
                     // Utiliser la stratégie normale pour placer le reste des bâtiments
-                    // Si c'est une parcelle avec des commerces, on les ignorera aux positions déjà occupées
+                    // Si c'est une parcelle avec des commerces/cinémas, on les ignorera aux positions déjà occupées
                     this._populatePlotWithStrategy(
                         plot, 
                         strategy, 
-                        commercialPositions.get(plot.id) || [], 
+                        [...(commercialPositions.get(plot.id) || []), ...(movieTheaterPositions.get(plot.id) || [])], 
                         this.instanceDataManager, 
                         cityManager, 
                         plotGroundY
@@ -303,7 +339,58 @@ export default class PlotContentGenerator {
             commercialStrategy // Passer la stratégie commerciale
         );
     }
-    
+
+    /**
+     * Place des cinémas sur une parcelle selon la grille.
+     * @param {Plot} plot - La parcelle.
+     * @param {IZonePlacementStrategy} strategy - La stratégie de placement.
+     * @param {object} gridPlacement - Informations sur la grille.
+     * @param {InstanceDataManager} instanceDataManager - Gestionnaire des données d'instance.
+     * @param {CityManager} cityManager - Gestionnaire de la ville.
+     * @param {number} groundLevel - Hauteur du sol.
+     * @returns {Array<{x: number, y: number}>} - Positions des cinémas placés.
+     * @private
+     */
+    _placeMovieTheatersOnPlot(plot, strategy, gridPlacement, instanceDataManager, cityManager, groundLevel) {
+        // Déterminer la taille des bâtiments selon le type de parcelle
+        let targetWidth, targetDepth, minSpacing;
+        
+        if (plot.zoneType === 'house') {
+            const baseScaleFactor = this.config.gridHouseBaseScale ?? 1.5;
+            targetWidth = 2.5 * baseScaleFactor; // Légèrement plus grand que les commerces
+            targetDepth = 2.5 * baseScaleFactor;
+            minSpacing = this.config.minHouseSpacing ?? 0;
+        } else if (plot.zoneType === 'building') {
+            const baseScaleFactor = this.config.gridBuildingBaseScale ?? 1.0;
+            const assetLoader = strategy.assetLoader;
+            const representativeAsset = assetLoader.getAssetDataById(assetLoader.assets.building[0]?.id);
+            if (!representativeAsset || !representativeAsset.sizeAfterFitting) {
+                return [];
+            }
+            targetWidth = representativeAsset.sizeAfterFitting.x * baseScaleFactor * 1.2; // Légèrement plus grand
+            targetDepth = representativeAsset.sizeAfterFitting.z * baseScaleFactor * 1.2;
+            minSpacing = this.config.minBuildingSpacing ?? 0;
+        } else {
+            return []; // Type non pris en charge
+        }
+        
+        // Récupérer la stratégie de cinéma pour l'orientation et les flèches
+        const movieTheaterStrategy = this.zoneStrategies['movietheater'];
+        
+        // Utiliser MovieTheaterManager pour placer les cinémas
+        return this.movieTheaterManager.placeMovieTheaterOnGrid(
+            plot,
+            gridPlacement,
+            targetWidth,
+            targetDepth,
+            minSpacing,
+            instanceDataManager,
+            cityManager,
+            groundLevel,
+            movieTheaterStrategy // Passer la stratégie de cinéma
+        );
+    }
+
     /**
      * Peuple une parcelle en utilisant une stratégie, en évitant les positions occupées par des commerces.
      * @param {Plot} plot - La parcelle à peupler.

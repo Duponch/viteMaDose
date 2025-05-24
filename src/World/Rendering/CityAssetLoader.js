@@ -14,6 +14,7 @@ import IndustrialRenderer, { generateProceduralIndustrial } from '../Buildings/I
 import TreeRenderer from '../Vegetation/TreeRenderer.js';
 import FirTreeRenderer from '../Vegetation/FirTreeRenderer.js';
 import CommercialRenderer from '../Buildings/CommercialRenderer.js';
+import MovieTheaterRenderer from '../Buildings/MovieTheaterRenderer.js';
 
 export default class CityAssetLoader {
     // ----- CONSTRUCTEUR -----
@@ -31,7 +32,8 @@ export default class CityAssetLoader {
             tree: [],
             skyscraper: [],
             crosswalk: [],
-            commercial: []
+            commercial: [],
+            movietheater: []
         };
         this.assetIdCounter = 0;
         this.loadedAssets = new Map();
@@ -46,6 +48,7 @@ export default class CityAssetLoader {
         this.treeRenderer = new TreeRenderer(config, materials);
         this.firTreeRenderer = new FirTreeRenderer(config, materials);
         this.commercialRenderer = new CommercialRenderer(config, materials);
+        this.movieTheaterRenderer = new MovieTheaterRenderer(config, materials);
         //console.log("CityAssetLoader initialisé. Utilisation de HouseRenderer pour les maisons, BuildingRenderer pour les immeubles, SkyscraperRenderer pour les gratte-ciels et CommercialRenderer pour les commerces.");
     }
 
@@ -293,7 +296,8 @@ export default class CityAssetLoader {
             tree: [], 
             skyscraper: [], 
             crosswalk: [],
-            commercial: []
+            commercial: [],
+            movietheater: []
         };
         this.assetIdCounter = 0;
     }
@@ -491,6 +495,31 @@ export default class CityAssetLoader {
                         console.error("Error during procedural industrial generation:", error);
                         resolve(null);
                     }
+                } else if (type === 'movietheater') {
+                    if (!this.movieTheaterRenderer) {
+                        console.error('MovieTheaterRenderer not initialized for movietheater generation.');
+                        resolve(null);
+                        return;
+                    }
+                    
+                    try {
+                        assetData = this.movieTheaterRenderer.generateProceduralBuilding(baseWidth, baseHeight, baseDepth, userScale);
+                        if (assetData) {
+                            finalModelId = `movietheater_proc_${internalCounterId}`;
+                            assetData.id = finalModelId;
+                            assetData.procedural = true;
+                            assetData.rendererType = 'MovieTheaterRenderer';
+                            this.loadedAssets.set(finalModelId, assetData);
+                            console.log(`  - Generated procedural movietheater asset '${finalModelId}'`);
+                            resolve(assetData);
+                        } else {
+                            console.warn("Procedural generation for movietheater returned null.");
+                            resolve(null);
+                        }
+                    } catch (error) {
+                        console.error("Error during procedural movietheater generation:", error);
+                        resolve(null);
+                    }
                 }
                 else {
                     console.warn(`Procedural generation not implemented for type: ${type}`);
@@ -654,7 +683,7 @@ export default class CityAssetLoader {
         if (disposedGeometries > 0 || disposedMaterials > 0) {
             //console.log(`  - ${disposedGeometries} géométries et ${disposedMaterials} matériaux disposés.`);
         }
-        this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [], crosswalk: [], commercial: [] };
+        this.assets = { house: [], building: [], industrial: [], park: [], tree: [], skyscraper: [], crosswalk: [], commercial: [], movietheater: [] };
     }
 
     /**
@@ -678,6 +707,7 @@ export default class CityAssetLoader {
         else if (id.startsWith('tree_')) type = 'tree';
         else if (id.startsWith('skyscraper_')) type = 'skyscraper';
         else if (id.startsWith('commercial_')) type = 'commercial';
+        else if (id.startsWith('movietheater_')) type = 'movietheater';
         
         // S'assurer que l'ID est attribué à l'asset
         assetData.id = id;
