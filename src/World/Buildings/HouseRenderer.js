@@ -34,10 +34,13 @@ export default class HouseRenderer {
         this.houseInstanceMatrices = {
             wall: [],
             roof: [],
-            windowFrame: [],
-            windowGlass: [],
             door: [],
-            garageDoor: []
+            garageDoor: [],
+            windowFrameSide: [],
+            windowFrameTopBot: [],
+            windowFrameVerticalCenter: [],
+            windowFrameHorizontalCenter: [],
+            windowPane: []
             // Ajoutez d'autres parties si nécessaire
         };
     }
@@ -363,7 +366,8 @@ export default class HouseRenderer {
         const roofColor = 0x8B4513;
         const doorColor = 0x4a2c2a;
         const garageDoorColor = 0xd3d3d3;
-        const windowColor = 0xadd8e6;
+        const windowFrameColor = 0x8b4513;
+        const windowPaneColor = 0xadd8e6;
 
         this.baseHouseMaterials = {};
 
@@ -406,11 +410,25 @@ export default class HouseRenderer {
         this.baseHouseMaterials.garageDoor = new THREE.MeshStandardMaterial({
             color: garageDoorColor, roughness: 0.2, metalness: 0.6, name: "HouseGarageDoorMat"
         });
-        this.baseHouseMaterials.window = new THREE.MeshStandardMaterial({
-            color: windowColor, roughness: 0, metalness: 0.4,
-            transparent: true, opacity: 0.7, name: "HouseWindowMat",
+        
+        // Nouveau matériau pour les cadres de fenêtres
+        this.baseHouseMaterials.windowFrame = new THREE.MeshStandardMaterial({
+            color: windowFrameColor, 
+            roughness: 0.8, 
+            metalness: 0.0, 
+            name: "HouseWindowFrameMat"
+        });
+        
+        // Nouveau matériau pour les vitres
+        this.baseHouseMaterials.windowPane = new THREE.MeshStandardMaterial({
+            color: windowPaneColor, 
+            roughness: 0.3, 
+            metalness: 0.4,
+            transparent: true, 
+            opacity: 0.6, 
+            name: "HouseWindowPaneMat",
             emissive: new THREE.Color(0xFFFF99),
-            emissiveIntensity: 0.2
+            emissiveIntensity: 0.0
         });
         
         // Matériau pour le marqueur de porte
@@ -442,9 +460,12 @@ export default class HouseRenderer {
         const doorDepth = 0.02;
         const garageDoorHeight = 0.8 * armDepth;
         const garageDoorWidth = 0.55;
-        const windowHeight = 0.4 * armDepth;
-        const windowWidth = 0.2;
-        const windowDepth = 0.01; // Épaisseur réduite pour les fenêtres
+        
+        // Dimensions des fenêtres avec cadres détaillés
+        const frameWidth = 0.2;
+        const frameHeight = 0.4 * armDepth;
+        const frameDepth = 0.02;
+        const barThickness = 0.015;
     
         // Ajout d'un petit décalage pour éviter le z-fighting
         const zFightingOffset = 0.001; // Petit décalage de 1mm
@@ -456,7 +477,27 @@ export default class HouseRenderer {
         this.baseHouseGeometries.base_part2.translate(armWidth / 2, armDepth / 2, armLength / 2 - zFightingOffset);
         this.baseHouseGeometries.base_part1.userData = { height: armDepth, minY: 0 };
         this.baseHouseGeometries.base_part2.userData = { height: armDepth, minY: 0 };
-    
+
+        // --- Géométries pour les portes ---
+        this.baseHouseGeometries.door = new THREE.BoxGeometry(doorDepth, doorHeight, doorWidth);
+        this.baseHouseGeometries.garageDoor = new THREE.BoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth);
+
+        // --- Géométries pour les cadres de fenêtres ---
+        // Barres latérales du cadre
+        this.baseHouseGeometries.windowFrameSide = new THREE.BoxGeometry(barThickness, frameHeight, frameDepth);
+        
+        // Barres horizontales du cadre (haut et bas)
+        this.baseHouseGeometries.windowFrameTopBot = new THREE.BoxGeometry(frameWidth, barThickness, frameDepth);
+        
+        // Barre verticale centrale
+        this.baseHouseGeometries.windowFrameVerticalCenter = new THREE.BoxGeometry(barThickness, frameHeight - barThickness * 2, frameDepth * 0.8);
+        
+        // Barre horizontale centrale  
+        this.baseHouseGeometries.windowFrameHorizontalCenter = new THREE.BoxGeometry(frameWidth - barThickness * 2, barThickness, frameDepth * 0.8);
+        
+        // Vitre (plane)
+        this.baseHouseGeometries.windowPane = new THREE.PlaneGeometry(frameWidth - barThickness * 2, frameHeight - barThickness * 2);
+
         // --- Géométrie du toit épaissi ---
         const roofWidth = armWidth + 2 * roofOverhang;
         const roofDepth = armLength + 2 * roofOverhang;
@@ -630,13 +671,79 @@ export default class HouseRenderer {
         roofGeometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2));
         
         this.baseHouseGeometries.roof = roofGeometry;
-    
-        // --- Géométries pour les portes et fenêtres ---
-        this.baseHouseGeometries.door = new THREE.BoxGeometry(doorDepth, doorHeight, doorWidth);
-        this.baseHouseGeometries.garageDoor = new THREE.BoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth);
-        this.baseHouseGeometries.windowYZ = new THREE.BoxGeometry(windowDepth, windowHeight, windowWidth);
-        this.baseHouseGeometries.windowXY = new THREE.BoxGeometry(windowWidth, windowHeight, windowDepth);
-    }	
+    }
+
+    /**
+     * Crée une fenêtre détaillée avec cadre et vitre.
+     * @param {number} x - Position X locale
+     * @param {number} y - Position Y locale  
+     * @param {number} z - Position Z locale
+     * @param {number} rotY - Rotation Y en radians
+     * @returns {object} Un objet contenant les matrices pour chaque partie de la fenêtre
+     */
+    createDetailedWindow(x, y, z, rotY = 0) {
+        const frameWidth = 0.2;
+        const frameHeight = 0.4 * (0.5 * 1.1); // armDepth
+        const frameDepth = 0.02;
+        const barThickness = 0.015;
+        
+        const windowParts = {
+            windowFrameSide: [],
+            windowFrameTopBot: [],
+            windowFrameVerticalCenter: [],
+            windowFrameHorizontalCenter: [],
+            windowPane: []
+        };
+
+        // Créer une matrice de base pour la position et rotation de la fenêtre
+        const baseTransform = new THREE.Matrix4()
+            .makeRotationY(rotY)
+            .setPosition(x, y, z);
+
+        // Barre gauche du cadre
+        const leftBarMatrix = new THREE.Matrix4()
+            .makeTranslation(-frameWidth / 2 + barThickness / 2, 0, 0)
+            .premultiply(baseTransform);
+        windowParts.windowFrameSide.push(leftBarMatrix);
+
+        // Barre droite du cadre
+        const rightBarMatrix = new THREE.Matrix4()
+            .makeTranslation(frameWidth / 2 - barThickness / 2, 0, 0)
+            .premultiply(baseTransform);
+        windowParts.windowFrameSide.push(rightBarMatrix);
+
+        // Barre haute du cadre
+        const topBarMatrix = new THREE.Matrix4()
+            .makeTranslation(0, frameHeight / 2 - barThickness / 2, 0)
+            .premultiply(baseTransform);
+        windowParts.windowFrameTopBot.push(topBarMatrix);
+
+        // Barre basse du cadre
+        const bottomBarMatrix = new THREE.Matrix4()
+            .makeTranslation(0, -frameHeight / 2 + barThickness / 2, 0)
+            .premultiply(baseTransform);
+        windowParts.windowFrameTopBot.push(bottomBarMatrix);
+
+        // Barre verticale centrale
+        const verticalCenterMatrix = new THREE.Matrix4()
+            .makeTranslation(0, 0, -frameDepth * 0.1)
+            .premultiply(baseTransform);
+        windowParts.windowFrameVerticalCenter.push(verticalCenterMatrix);
+
+        // Barre horizontale centrale
+        const horizontalCenterMatrix = new THREE.Matrix4()
+            .makeTranslation(0, 0, -frameDepth * 0.1)
+            .premultiply(baseTransform);
+        windowParts.windowFrameHorizontalCenter.push(horizontalCenterMatrix);
+
+        // Vitre
+        const paneMatrix = new THREE.Matrix4()
+            .makeTranslation(0, 0, -frameDepth / 2 + 0.005)
+            .premultiply(baseTransform);
+        windowParts.windowPane.push(paneMatrix);
+
+        return windowParts;
+    }
 
     /**
      * Génère les matrices d'instances pour une maison et retourne un objet
@@ -721,23 +828,48 @@ export default class HouseRenderer {
         const garagePos = new THREE.Vector3(armLength, garageDoorHeight / 2, armWidth / 2);
         addPartInstance('garageDoor', new THREE.Matrix4().makeTranslation(garagePos.x, garagePos.y, garagePos.z));
 
-        // Ajout des parties fenêtres (pour windowXY et windowYZ)
-        addWindowPart('windowXY', 0.25, 0, window_Y_pos_Base, false);
-        addWindowPart('windowXY', 0.75, 0, window_Y_pos_Base, false);
-        addWindowPart('windowXY', 1.25, 0, window_Y_pos_Base, false);
-        addWindowPart('windowXY', 1.75, 0, window_Y_pos_Base, false);
-        addWindowPart('windowXY', 0.25, armWidth, window_Y_pos_Base, false);
-        addWindowPart('windowXY', 0.75, armWidth, window_Y_pos_Base, false);
-        addWindowPart('windowXY', 1.25, armWidth, window_Y_pos_Base, false);
-        addWindowPart('windowXY', 1.75, armWidth, window_Y_pos_Base, false);
-        addWindowPart('windowYZ', 0, 0.25, window_Y_pos_Base, true);
-        addWindowPart('windowYZ', 0, 0.75, window_Y_pos_Base, true);
-        addWindowPart('windowYZ', armWidth, 0.25, window_Y_pos_Base, true);
-        addWindowPart('windowYZ', armWidth, 0.75, window_Y_pos_Base, true);
+        // Ajout des fenêtres détaillées avec cadres
+        const frameHeight = 0.4 * armDepth;
+        const windowY = armDepth * 0.3 + frameHeight / 2;
+        const windowOffset = 0.01; // Décalage par rapport à la surface du mur
+
+        // Fonction helper pour ajouter une fenêtre complète
+        const addDetailedWindow = (x, y, z, rotY = 0) => {
+            const windowParts = this.createDetailedWindow(x, y, z, rotY);
+            // Ajouter chaque partie de la fenêtre aux matrices d'instances
+            Object.keys(windowParts).forEach(partKey => {
+                if (!houseInstanceData[partKey]) {
+                    houseInstanceData[partKey] = [];
+                }
+                // Appliquer la matrice globale de la maison à chaque matrice de fenêtre
+                windowParts[partKey].forEach(localMatrix => {
+                    const finalMatrix = new THREE.Matrix4().multiplyMatrices(globalHouseMatrix, localMatrix);
+                    houseInstanceData[partKey].push(finalMatrix);
+                });
+            });
+        };
+
+        // Fenêtres sur les faces avant et arrière (plan XY)
+        addDetailedWindow(0.25, windowY, armWidth + windowOffset, 0);
+        addDetailedWindow(0.75, windowY, armWidth + windowOffset, 0);
+        addDetailedWindow(1.25, windowY, armWidth + windowOffset, 0);
+        addDetailedWindow(1.75, windowY, armWidth + windowOffset, 0);
+        addDetailedWindow(0.25, windowY, -windowOffset, Math.PI);
+        addDetailedWindow(0.75, windowY, -windowOffset, Math.PI);
+        addDetailedWindow(1.25, windowY, -windowOffset, Math.PI);
+        addDetailedWindow(1.75, windowY, -windowOffset, Math.PI);
+
+        // Fenêtres sur les côtés (plan YZ)
+        addDetailedWindow(-windowOffset, windowY, 0.25, -Math.PI / 2);
+        addDetailedWindow(-windowOffset, windowY, 0.75, -Math.PI / 2);
+        addDetailedWindow(armWidth + windowOffset, windowY, 0.25, Math.PI / 2);
+        addDetailedWindow(armWidth + windowOffset, windowY, 0.75, Math.PI / 2);
+        
+        // Fenêtres à côté de la porte (en évitant la zone de la porte)
         const doorEdgeLeft = armLength * 0.75 - doorWidth / 2;
         const doorEdgeRight = armLength * 0.75 + doorWidth / 2;
-        addWindowPart('windowYZ', armWidth, (armWidth + doorEdgeLeft) / 2, window_Y_pos_Base, true);
-        addWindowPart('windowYZ', armWidth, (doorEdgeRight + armLength) / 2, window_Y_pos_Base, true);
+        addDetailedWindow(armWidth + windowOffset, windowY, (armWidth + doorEdgeLeft) / 2, Math.PI / 2);
+        addDetailedWindow(armWidth + windowOffset, windowY, (doorEdgeRight + armLength) / 2, Math.PI / 2);
 
         return houseInstanceData;
     }
@@ -757,20 +889,26 @@ export default class HouseRenderer {
                 const matrices = instanceData[partName];
                 const geometry = this.baseHouseGeometries[partName];
                 let material = null;
-                const isHouseWindowPart = (partName === 'windowXY' || partName === 'windowYZ');
+                const isHouseWindowPart = (partName.startsWith('windowFrame') || partName === 'windowPane');
 
                 if (isHouseWindowPart) {
-                    material = this.baseHouseMaterials.window.clone();
-                    material.name = `HouseWindowMat_Inst_${partName}`;
-                    material.emissive = new THREE.Color(0xFFFF99);
-                    material.emissiveIntensity = 0.0;
-                    if (experience && experience.scene && experience.scene.environment) {
-                        material.envMap = experience.scene.environment;
-                        material.roughness = 0.9;
-                        material.metalness = 0;
-                        material.needsUpdate = true;
+                    if (partName === 'windowPane') {
+                        material = this.baseHouseMaterials.windowPane.clone();
+                        material.name = `HouseWindowPaneMat_Inst_${partName}`;
+                        material.emissive = new THREE.Color(0xFFFF99);
+                        material.emissiveIntensity = 0.0;
+                        if (experience && experience.scene && experience.scene.environment) {
+                            material.envMap = experience.scene.environment;
+                            material.roughness = 0.9;
+                            material.metalness = 0;
+                            material.needsUpdate = true;
+                        } else {
+                            console.warn(`[InstancedMesh] Env map non trouvée pour vitre maison (${partName}).`);
+                        }
                     } else {
-                        console.warn(`[InstancedMesh] Env map non trouvée pour fenêtres maison (${partName}).`);
+                        // Cadres de fenêtres
+                        material = this.baseHouseMaterials.windowFrame.clone();
+                        material.name = `HouseWindowFrameMat_Inst_${partName}`;
                     }
                 } else {
                     if (partName.startsWith('base_')) {
@@ -796,7 +934,7 @@ export default class HouseRenderer {
                     const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
                     instancedMesh.name = `House_${partName}_Instanced`;
                     instancedMesh.castShadow = true;
-                    instancedMesh.receiveShadow = !isHouseWindowPart;
+                    instancedMesh.receiveShadow = !(partName === 'windowPane');
                     matrices.forEach((matrix, index) => {
                         instancedMesh.setMatrixAt(index, matrix);
                     });
@@ -839,179 +977,252 @@ export default class HouseRenderer {
      * Ces données permettront de créer des InstancedMesh dans PlotContentGenerator.
      */
     generateProceduralHouse(baseWidth, baseHeight, baseDepth, userScale = 10) {
-        // Regrouper les géométries de chaque partie selon leur matériau
-        const materialMap = new Map();
-        
-        // Créer un groupe pour la maison
+        // Créer un groupe pour la maison de manière similaire à NewHouseRenderer
         const houseGroup = new THREE.Group();
         
-        for (const partName in this.baseHouseGeometries) {
-            if (this.baseHouseGeometries.hasOwnProperty(partName)) {
-                // Clone la géométrie de la partie
-                const geomClone = this.baseHouseGeometries[partName].clone();
-                const material = this.baseHouseMaterials[partName];
-                if (!material) {
-                    console.warn(`Matériau manquant pour la partie ${partName}.`);
-                    continue;
-                }
-                const matName = material.name;
-                if (!materialMap.has(matName)) {
-                    materialMap.set(matName, { material: material.clone(), geoms: [] });
-                }
-                materialMap.get(matName).geoms.push(geomClone);
-            }
-        }
+        // Dimensions de base adaptées
+        const scale = userScale * 0.2; // Adapter l'échelle pour correspondre aux dimensions
+        const armLength = 2 * scale;
+        const armWidth = 1 * scale;
+        const armDepth = 0.55 * scale;
+        const roofPitchHeight = 0.33 * scale;
+        const roofOverhang = 0.08 * scale;
+        const doorHeight = 0.7 * armDepth;
+        const doorWidth = 0.3 * scale;
+        const doorDepth = 0.02 * scale;
+        const garageDoorHeight = 0.8 * armDepth;
+        const garageDoorWidth = 0.55 * scale;
+
+        // Créer les murs principaux
+        const wall1Geo = new THREE.BoxGeometry(armLength, armDepth, armWidth);
+        const wall1Mesh = new THREE.Mesh(wall1Geo, this.baseHouseMaterials.base_part1);
+        wall1Mesh.position.set(armLength / 2, armDepth / 2, armWidth / 2);
+        houseGroup.add(wall1Mesh);
+
+        const wall2Geo = new THREE.BoxGeometry(armWidth, armDepth, armLength);
+        const wall2Mesh = new THREE.Mesh(wall2Geo, this.baseHouseMaterials.base_part2);
+        wall2Mesh.position.set(armWidth / 2, armDepth / 2, armLength / 2);
+        houseGroup.add(wall2Mesh);
+
+        // Créer les toits
+        const roofPos1 = new THREE.Vector3(armLength / 2, armDepth, armWidth / 2);
+        const roofPos2 = new THREE.Vector3(armWidth / 2, armDepth, armLength / 2);
         
-        // Fusionner les géométries de chaque groupe
-        const parts = [];
-        const allGeoms = [];
-        materialMap.forEach((groupData, key) => {
-            if (groupData.geoms.length === 0) return;
-            
-            // Vérifier si toutes les géométries ont des attributs compatibles
-            const hasIndex = groupData.geoms.some(g => g.index !== null);
-            const allHaveIndex = groupData.geoms.every(g => g.index !== null);
-            
-            // Si certaines géométries ont un index et d'autres non, ajouter un index à toutes
-            if (hasIndex && !allHaveIndex) {
-                groupData.geoms.forEach(geom => {
-                    if (geom.index === null) {
-                        // Créer un index séquentiel pour les géométries qui n'en ont pas
-                        const position = geom.attributes.position;
-                        if (position) {
-                            const count = position.count;
-                            const indices = new Uint16Array(count);
-                            for (let i = 0; i < count; i++) {
-                                indices[i] = i;
-                            }
-                            geom.setIndex(new THREE.BufferAttribute(indices, 1));
-                        }
-                    }
-                });
+        // Utiliser la géométrie de toit complexe existante mais l'adapter
+        const roofGeo = this.baseHouseGeometries.roof.clone();
+        const roof1Mesh = new THREE.Mesh(roofGeo, this.baseHouseMaterials.roof);
+        roof1Mesh.position.copy(roofPos1);
+        roof1Mesh.rotation.y = Math.PI / 2;
+        houseGroup.add(roof1Mesh);
+
+        const roof2Mesh = new THREE.Mesh(roofGeo.clone(), this.baseHouseMaterials.roof);
+        roof2Mesh.position.copy(roofPos2);
+        houseGroup.add(roof2Mesh);
+
+        // Créer les portes
+        const doorGeo = new THREE.BoxGeometry(doorDepth, doorHeight, doorWidth);
+        const doorMesh = new THREE.Mesh(doorGeo, this.baseHouseMaterials.door);
+        doorMesh.position.set(armWidth, doorHeight / 2, armLength * 0.75);
+        houseGroup.add(doorMesh);
+
+        const garageGeo = new THREE.BoxGeometry(doorDepth, garageDoorHeight, garageDoorWidth);
+        const garageMesh = new THREE.Mesh(garageGeo, this.baseHouseMaterials.garageDoor);
+        garageMesh.position.set(armLength, garageDoorHeight / 2, armWidth / 2);
+        houseGroup.add(garageMesh);
+
+        // Créer les fenêtres détaillées comme dans NewHouseRenderer
+        const createWindow = (x, y, z, rotY = 0) => {
+            const windowGroup = new THREE.Group();
+            const frameWidth = 0.2 * scale;
+            const frameHeight = 0.4 * armDepth;
+            const frameDepth = 0.02 * scale;
+            const barThickness = 0.015 * scale;
+
+            // Créer les géométries des barres du cadre
+            const sideBarGeo = new THREE.BoxGeometry(barThickness, frameHeight, frameDepth);
+            const topBotBarGeo = new THREE.BoxGeometry(frameWidth, barThickness, frameDepth);
+            const verticalBarGeo = new THREE.BoxGeometry(barThickness, frameHeight - barThickness * 2, frameDepth * 0.8);
+            const horizontalBarGeo = new THREE.BoxGeometry(frameWidth - barThickness * 2, barThickness, frameDepth * 0.8);
+
+            // Cloner les matériaux pour éviter les conflits
+            const windowFrameMat = this.baseHouseMaterials.windowFrame.clone();
+            const windowPaneMat = this.baseHouseMaterials.windowPane.clone();
+
+            // Créer les éléments du cadre
+            const frameMeshes = [
+                new THREE.Mesh(sideBarGeo, windowFrameMat), // Left
+                new THREE.Mesh(sideBarGeo.clone(), windowFrameMat), // Right
+                new THREE.Mesh(topBotBarGeo, windowFrameMat), // Top
+                new THREE.Mesh(topBotBarGeo.clone(), windowFrameMat), // Bottom
+                new THREE.Mesh(verticalBarGeo, windowFrameMat), // Vertical Center
+                new THREE.Mesh(horizontalBarGeo, windowFrameMat) // Horizontal Center
+            ];
+
+            // Positionner les éléments du cadre
+            frameMeshes[0].position.x = -frameWidth / 2 + barThickness / 2;
+            frameMeshes[1].position.x = frameWidth / 2 - barThickness / 2;
+            frameMeshes[2].position.y = frameHeight / 2 - barThickness / 2;
+            frameMeshes[3].position.y = -frameHeight / 2 + barThickness / 2;
+            frameMeshes[4].position.z = -frameDepth * 0.1;
+            frameMeshes[5].position.z = -frameDepth * 0.1;
+            frameMeshes.forEach(m => windowGroup.add(m));
+
+            // Créer la vitre
+            const paneGeometry = new THREE.PlaneGeometry(frameWidth - barThickness * 2, frameHeight - barThickness * 2);
+            const paneMesh = new THREE.Mesh(paneGeometry, windowPaneMat);
+            paneMesh.position.z = -frameDepth / 2 + 0.005 * scale;
+            windowGroup.add(paneMesh);
+
+            // Positionner et orienter le groupe fenêtre
+            windowGroup.position.set(x, y, z);
+            windowGroup.rotation.y = rotY;
+            return windowGroup;
+        };
+
+        // Ajouter les fenêtres aux positions appropriées
+        const frameHeight = 0.4 * armDepth;
+        const windowY = armDepth * 0.3 + frameHeight / 2;
+        const windowOffset = 0.01 * scale;
+
+        // Fenêtres sur les faces avant et arrière
+        houseGroup.add(createWindow(0.25 * scale, windowY, armWidth + windowOffset));
+        houseGroup.add(createWindow(0.75 * scale, windowY, armWidth + windowOffset));
+        houseGroup.add(createWindow(1.25 * scale, windowY, armWidth + windowOffset));
+        houseGroup.add(createWindow(1.75 * scale, windowY, armWidth + windowOffset));
+        houseGroup.add(createWindow(0.25 * scale, windowY, -windowOffset, Math.PI));
+        houseGroup.add(createWindow(0.75 * scale, windowY, -windowOffset, Math.PI));
+        houseGroup.add(createWindow(1.25 * scale, windowY, -windowOffset, Math.PI));
+        houseGroup.add(createWindow(1.75 * scale, windowY, -windowOffset, Math.PI));
+
+        // Fenêtres sur les côtés
+        houseGroup.add(createWindow(-windowOffset, windowY, 0.25 * scale, -Math.PI / 2));
+        houseGroup.add(createWindow(-windowOffset, windowY, 0.75 * scale, -Math.PI / 2));
+        houseGroup.add(createWindow(armWidth + windowOffset, windowY, 0.25 * scale, Math.PI / 2));
+        houseGroup.add(createWindow(armWidth + windowOffset, windowY, 0.75 * scale, Math.PI / 2));
+
+        // Fenêtres à côté de la porte
+        const doorEdgeLeft = armLength * 0.75 - doorWidth / 2;
+        const doorEdgeRight = armLength * 0.75 + doorWidth / 2;
+        houseGroup.add(createWindow(armWidth + windowOffset, windowY, (armWidth + doorEdgeLeft) / 2, Math.PI / 2));
+        houseGroup.add(createWindow(armWidth + windowOffset, windowY, (doorEdgeRight + armLength) / 2, Math.PI / 2));
+
+        // Forcer la mise à jour de toutes les matrices
+        houseGroup.updateMatrixWorld(true);
+
+        // --- Regroupement par matériau pour l'asset final ---
+        const allGeometries = [];
+        const materialMap = new Map();
+
+        // Initialiser la map avec les matériaux utilisés
+        Object.values(this.baseHouseMaterials).forEach(mat => {
+            if (mat) {
+                materialMap.set(mat.name, { material: mat.clone(), geoms: [] });
             }
-            
-            // Si aucune géométrie n'a d'index, en ajouter un à toutes
-            if (!hasIndex) {
-                groupData.geoms.forEach(geom => {
-                    const position = geom.attributes.position;
-                    if (position) {
-                        const count = position.count;
-                        const indices = new Uint16Array(count);
-                        for (let i = 0; i < count; i++) {
-                            indices[i] = i;
-                        }
-                        geom.setIndex(new THREE.BufferAttribute(indices, 1));
-                    }
-                });
-            }
-            
-            // Maintenant, toutes les géométries devraient avoir des attributs compatibles
-            const mergedGeom = mergeGeometries(groupData.geoms, false);
-            if (!mergedGeom) {
-                console.error(`Échec de fusion des géométries pour le groupe "${key}".`);
-                groupData.geoms.forEach(g => g.dispose());
-                return;
-            }
-            // Conserver cette géométrie pour le calcul global
-            allGeoms.push(mergedGeom);
-            groupData.mergedGeom = mergedGeom;
-            // Libérer les géométries individuelles
-            groupData.geoms.forEach(g => g.dispose());
-            groupData.geoms = [];
         });
 
-        // Calculer la fusion globale pour obtenir la bounding box
-        if (allGeoms.length === 0) {
-            console.error("Aucune géométrie valide pour générer la maison procédurale.");
-            return null;
-        }
-        
-        // Vérifier si toutes les géométries ont des attributs compatibles
-        const hasIndex = allGeoms.some(g => g.index !== null);
-        const allHaveIndex = allGeoms.every(g => g.index !== null);
-        
-        // Si certaines géométries ont un index et d'autres non, ajouter un index à toutes
-        if (hasIndex && !allHaveIndex) {
-            allGeoms.forEach(geom => {
-                if (geom.index === null) {
-                    // Créer un index séquentiel pour les géométries qui n'en ont pas
-                    const position = geom.attributes.position;
-                    if (position) {
-                        const count = position.count;
-                        const indices = new Uint16Array(count);
-                        for (let i = 0; i < count; i++) {
-                            indices[i] = i;
+        // Parcourir tous les meshes du groupe maison
+        houseGroup.traverse((child) => {
+            if (child.isMesh && child.geometry && child.material) {
+                child.updateMatrixWorld(true);
+                let clonedGeom = child.geometry.clone();
+                if (clonedGeom.index) clonedGeom = clonedGeom.toNonIndexed();
+                clonedGeom.applyMatrix4(child.matrixWorld);
+                allGeometries.push(clonedGeom);
+
+                const matName = child.material.name;
+                const groupData = materialMap.get(matName);
+                if (groupData) {
+                    groupData.geoms.push(clonedGeom);
+                } else {
+                    console.warn(`[HouseProc] Matériau non trouvé dans la map: ${matName}`);
+                }
+            }
+            // Gérer les groupes de fenêtres
+            else if (child.isGroup && child !== houseGroup) {
+                child.updateMatrixWorld(true);
+                child.children.forEach(grandChild => {
+                    if (grandChild.isMesh && grandChild.geometry && grandChild.material) {
+                        grandChild.updateMatrixWorld(true);
+                        let clonedGeom = grandChild.geometry.clone();
+                        if (clonedGeom.index) clonedGeom = clonedGeom.toNonIndexed();
+                        clonedGeom.applyMatrix4(grandChild.matrixWorld);
+                        allGeometries.push(clonedGeom);
+
+                        const matName = grandChild.material.name;
+                        const groupData = materialMap.get(matName);
+                        if (groupData) {
+                            groupData.geoms.push(clonedGeom);
+                        } else {
+                            console.warn(`[HouseProc Window] Matériau non trouvé dans la map: ${matName}`);
                         }
-                        geom.setIndex(new THREE.BufferAttribute(indices, 1));
                     }
-                }
-            });
-        }
-        
-        // Si aucune géométrie n'a d'index, en ajouter un à toutes
-        if (!hasIndex) {
-            allGeoms.forEach(geom => {
-                const position = geom.attributes.position;
-                if (position) {
-                    const count = position.count;
-                    const indices = new Uint16Array(count);
-                    for (let i = 0; i < count; i++) {
-                        indices[i] = i;
-                    }
-                    geom.setIndex(new THREE.BufferAttribute(indices, 1));
-                }
-            });
-        }
-        
-        const globalMerged = mergeGeometries(allGeoms, false);
-        if (!globalMerged) {
-            console.error("Échec de fusion globale des géométries.");
+                });
+            }
+        });
+
+        if (allGeometries.length === 0) {
+            console.error("[HouseProc] Aucune géométrie valide trouvée.");
             return null;
         }
-        
+
+        // Fusionner toutes les géométries pour calculer la BBox globale
+        const globalMerged = mergeGeometries(allGeometries, false);
+        if (!globalMerged) {
+            console.error("[HouseProc] Échec de la fusion globale.");
+            allGeometries.forEach(g => g.dispose());
+            return null;
+        }
+
         globalMerged.computeBoundingBox();
         const globalBBox = globalMerged.boundingBox;
-        const globalMin = globalBBox.min.clone();
+        const globalMinY = globalBBox.min.y;
         const globalCenter = new THREE.Vector3();
         globalBBox.getCenter(globalCenter);
         const globalSize = new THREE.Vector3();
         globalBBox.getSize(globalSize);
-        // Éviter la division par zéro
+        globalMerged.dispose();
+
         globalSize.x = Math.max(globalSize.x, 0.001);
         globalSize.y = Math.max(globalSize.y, 0.001);
         globalSize.z = Math.max(globalSize.z, 0.001);
+
         const fittingScaleFactor = Math.min(baseWidth / globalSize.x, baseHeight / globalSize.y, baseDepth / globalSize.z);
         const sizeAfterFitting = globalSize.clone().multiplyScalar(fittingScaleFactor);
 
-        // Ajuster chaque partie par rapport au centre global
-        materialMap.forEach((groupData, key) => {
-            if (groupData.mergedGeom) {
-                groupData.mergedGeom.translate(-globalCenter.x, -globalCenter.y, -globalCenter.z);
+        // Fusionner les géométries par matériau et recentrer
+        const parts = [];
+        materialMap.forEach((groupData, matName) => {
+            if (groupData.geoms.length === 0) return;
+
+            const mergedPartGeom = mergeGeometries(groupData.geoms, false);
+            if (!mergedPartGeom) {
+                console.error(`[HouseProc] Échec de fusion du groupe "${matName}".`);
+                groupData.geoms.forEach(g => g.dispose());
+                return;
             }
+            
+            mergedPartGeom.translate(-globalCenter.x, -globalMinY, -globalCenter.z);
+            parts.push({
+                geometry: mergedPartGeom,
+                material: groupData.material
+            });
+            groupData.geoms.forEach(g => g.dispose());
         });
 
-        // Constituer le tableau final des parties
-        materialMap.forEach((groupData, key) => {
-            if (groupData.mergedGeom) {
-                parts.push({
-                    geometry: groupData.mergedGeom,
-                    material: groupData.material
-                });
-            }
-        });
-
-        // Nettoyage final
-        allGeoms.forEach(g => g.dispose());
-        globalMerged.dispose();
+        // Nettoyer
+        allGeometries.forEach(g => g.dispose());
+        houseGroup.traverse(obj => { if (obj.isMesh) obj.geometry?.dispose(); });
 
         const asset = {
             id: `house_procedural_${this.assetIdCounter++}`,
             parts: parts,
             fittingScaleFactor: fittingScaleFactor,
             userScale: userScale,
-            centerOffset: globalCenter,
+            centerOffset: new THREE.Vector3(0, globalSize.y / 2, 0),
             sizeAfterFitting: sizeAfterFitting
         };
+
+        console.log(`[HouseProc] Asset généré avec ${parts.length} parties. ID: ${asset.id}`);
         return asset;
     }
 }

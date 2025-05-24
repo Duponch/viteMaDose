@@ -197,27 +197,42 @@ export default class InstancedMeshManager {
                         case 'house': {
                             // 0) Vérifier d'abord si c'est une partie legacy de HouseRenderer
                             const legacyParts = ['base_part1', 'base_part2', 'roof', 'door', 'garageDoor', 'windowXY', 'windowYZ'];
-                            if (legacyParts.includes(idOrKey)) {
+                            // Ajouter les nouvelles parties de fenêtres détaillées
+                            const newWindowParts = ['windowFrameSide', 'windowFrameTopBot', 'windowFrameVerticalCenter', 'windowFrameHorizontalCenter', 'windowPane'];
+                            
+                            if (legacyParts.includes(idOrKey) || newWindowParts.includes(idOrKey)) {
                                 // Fallback legacy : partie fixe de HouseRenderer
                                 const partName = idOrKey;
                                 geometry = this.renderers.houseRenderer?.baseHouseGeometries[partName];
-                                material = this.renderers.houseRenderer?.baseHouseMaterials[partName];
+                                
+                                // Gestion des matériaux pour les nouvelles parties de fenêtres
+                                if (newWindowParts.includes(partName)) {
+                                    if (partName === 'windowPane') {
+                                        material = this.renderers.houseRenderer?.baseHouseMaterials?.windowPane;
+                                        if (material) isHouseWindowPart = true;
+                                    } else if (partName.startsWith('windowFrame')) {
+                                        material = this.renderers.houseRenderer?.baseHouseMaterials?.windowFrame;
+                                    }
+                                } else {
+                                    // Parties legacy existantes
+                                    material = this.renderers.houseRenderer?.baseHouseMaterials[partName];
+                                }
                                 
                                 if (!geometry) {
-                                    console.warn(`[IMM] Géométrie manquante pour partie house legacy: ${partName}`);
+                                    console.warn(`[IMM] Géométrie manquante pour partie house: ${partName}`);
                                     continue;
                                 }
                                 if (!material) {
-                                    // Si parties fenêtre
+                                    // Si parties fenêtre legacy
                                     if (partName === 'windowXY' || partName === 'windowYZ') {
                                         material = this.renderers.houseRenderer?.baseHouseMaterials?.window;
                                         if (material) isHouseWindowPart = true;
                                         else { console.warn(`[IMM] Matériau fenêtre manquant pour house part: ${partName}`); continue; }
                                     } else {
-                                        console.warn(`[IMM] Matériau manquant pour house part non fenêtre: ${partName}`);
+                                        console.warn(`[IMM] Matériau manquant pour house part: ${partName}`);
                                         continue;
                                     }
-                                } else if (material.name === "HouseWindowMat") {
+                                } else if (material.name === "HouseWindowMat" || material.name === "HouseWindowPaneMat") {
                                     isHouseWindowPart = true;
                                 }
                                 break;
