@@ -55,7 +55,7 @@ export default class NewSkyscraperRenderer {
                 name: "NewSkyscraperRoofMat" 
             }),
             antenna: new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.6, metalness: 0.6, side: THREE.DoubleSide, name: "NewSkyscraperAntennaMat" }),
-            door: new THREE.MeshStandardMaterial({ color: 0xA0522D, roughness: 0.8, name: "NewSkyscraperDoorMat" }),
+            door: new THREE.MeshStandardMaterial({ color: 0x582812, roughness: 0.8, name: "NewSkyscraperDoorMat" }),
             threshold: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperThresholdMat" }),
             floor: new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 0.8, name: "NewSkyscraperFloorMat" }),
             redLight: new THREE.MeshBasicMaterial({ color: 0xff0000, name: "NewSkyscraperRedLightMat" }), // Non-lit material
@@ -298,7 +298,27 @@ export default class NewSkyscraperRenderer {
 			let windowPanelWidthFB = 0; if (numPanels > 0 && horizontalSectionLength > numMullions * mullionSize) { windowPanelWidthFB = (horizontalSectionLength - numMullions * mullionSize) / numPanels; } else if (numPanels > 0) { windowPanelWidthFB = 0.01; }
 			const windowGeoFB = windowHeight > 0 ? new THREE.BoxGeometry(windowPanelWidthFB, windowHeight, pillarSize - windowRecess * 2) : null; const mullionGeoFB = windowHeight > 0 ? new THREE.BoxGeometry(mullionSize, windowHeight, pillarSize - windowRecess * 2) : null; const horizontalSectionGeo = new THREE.BoxGeometry(horizontalSectionLength, horizontalBeamSize, pillarSize);
 			let doorPanelIndex = -1, doorPanelCount = 0, doorWidth = 0, doorHeight = 0, doorDepth = 0, doorXPos = 0, doorYPos = 0;
-			if (isGroundFloor && numPanels > 0 && windowPanelWidthFB > 0 && windowHeight > 0) { doorPanelCount = (numPanels % 2 === 0 && numPanels >= 2) ? 2 : 1; doorPanelIndex = Math.floor(numPanels / 2) - (doorPanelCount === 2 ? 1 : 0); doorWidth = doorPanelCount * windowPanelWidthFB + (doorPanelCount - 1) * mullionSize; doorHeight = (floorH - horizontalBeamSize - floorThickness) * 0.8; doorDepth = pillarSize - windowRecess * 2; doorYPos = horizontalBeamSize + floorThickness + doorHeight / 2; let startXForDoor = -horizontalSectionLength / 2; for (let i = 0; i < doorPanelIndex; i++) { startXForDoor += windowPanelWidthFB; if (i < numMullions) { startXForDoor += mullionSize; } } doorXPos = startXForDoor + doorWidth / 2; }
+			if (isGroundFloor && numPanels > 0 && windowPanelWidthFB > 0 && windowHeight > 0) { 
+				doorPanelCount = (numPanels % 2 === 0 && numPanels >= 2) ? 2 : 1; 
+				doorPanelIndex = Math.floor(numPanels / 2) - (doorPanelCount === 2 ? 1 : 0); 
+				doorWidth = doorPanelCount * windowPanelWidthFB + (doorPanelCount - 1) * mullionSize; 
+				// Correction: La porte doit remplir tout l'espace entre le seuil et la poutre du haut
+				// Le seuil fait horizontalBeamSize * 0.5 de hauteur, donc la porte commence à cette hauteur
+				const thresholdHeight = horizontalBeamSize * 0.5;
+				const availableSpaceBottom = thresholdHeight; // Base de la porte = sommet du seuil
+				const availableSpaceTop = floorH - horizontalBeamSize; // Haut de la porte = bas de la poutre supérieure
+				doorHeight = availableSpaceTop - availableSpaceBottom; // Hauteur complète de l'espace disponible
+				doorDepth = pillarSize - windowRecess * 2; 
+				doorYPos = availableSpaceBottom + doorHeight / 2; // Centre de la porte dans l'espace disponible
+				let startXForDoor = -horizontalSectionLength / 2; 
+				for (let i = 0; i < doorPanelIndex; i++) { 
+					startXForDoor += windowPanelWidthFB; 
+					if (i < numMullions) { 
+						startXForDoor += mullionSize; 
+					} 
+				} 
+				doorXPos = startXForDoor + doorWidth / 2; 
+			}
 			[-1, 1].forEach(sideZ => { const zPos = (depth / 2 - pillarSize / 2) * sideZ; const zPosWindow = zPos - windowRecess * sideZ; const isFrontFace = sideZ === 1;
 				if (isGroundFloor && isFrontFace && doorWidth > 0 && doorHeight > 0) { const sectionWidthLeft = doorXPos - doorWidth / 2 - (-horizontalSectionLength / 2); const sectionWidthRight = (horizontalSectionLength / 2) - (doorXPos + doorWidth / 2); if (sectionWidthLeft > 0.01) { const leftSectionGeo = new THREE.BoxGeometry(sectionWidthLeft, horizontalBeamSize, pillarSize); const leftSection = new THREE.Mesh(leftSectionGeo, horizontalBeamMaterial); leftSection.position.set((-horizontalSectionLength / 2 + sectionWidthLeft / 2), horizontalBeamSize / 2, zPos); floorGroup.add(leftSection); leftSectionGeo.dispose(); } if (sectionWidthRight > 0.01) { const rightSectionGeo = new THREE.BoxGeometry(sectionWidthRight, horizontalBeamSize, pillarSize); const rightSection = new THREE.Mesh(rightSectionGeo, horizontalBeamMaterial); rightSection.position.set((horizontalSectionLength / 2 - sectionWidthRight / 2), horizontalBeamSize / 2, zPos); floorGroup.add(rightSection); rightSectionGeo.dispose(); } const thresholdGeo = new THREE.BoxGeometry(doorWidth, horizontalBeamSize * 0.5, pillarSize); const thresholdMesh = new THREE.Mesh(thresholdGeo, thresholdMaterial); thresholdMesh.position.set(doorXPos, horizontalBeamSize * 0.25, zPos); floorGroup.add(thresholdMesh); thresholdGeo.dispose(); } else { const bottomSection = new THREE.Mesh(horizontalSectionGeo, horizontalBeamMaterial); bottomSection.position.set(0, horizontalBeamSize / 2, zPos); floorGroup.add(bottomSection); }
 				const topSection = new THREE.Mesh(horizontalSectionGeo, horizontalBeamMaterial); topSection.position.set(0, floorH - horizontalBeamSize / 2, zPos); floorGroup.add(topSection);
