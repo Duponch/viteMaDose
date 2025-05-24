@@ -445,6 +445,10 @@ export default class NewHouseRenderer {
         houseGroup.add(createWindow(wallWidth / 2 + windowOffset, windowY, 0, Math.PI / 2)); // Côté Droit
         houseGroup.add(createWindow(-wallWidth / 2 - windowOffset, windowY, 0, -Math.PI / 2)); // Côté Gauche
 
+        // Appliquer une rotation de -π/2 à tout le groupe pour que la face avec la porte soit sur +X
+        // Ceci correspond aux attentes du système d'orientation qui soustrait π/2 à la rotation calculée
+        houseGroup.rotation.y = -Math.PI / 2;
+
         // --- Regroupement final par matériau pour l'asset ---
         const allGeometries = []; // Pour calculer la BBox globale
         const materialMap = new Map();
