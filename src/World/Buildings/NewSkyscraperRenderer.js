@@ -43,7 +43,7 @@ export default class NewSkyscraperRenderer {
                 roughness: 0.2,
                 metalness: 0.1,
                 transparent: true,
-                opacity: 0.7, // Base opacity
+                opacity: 0.4, // Base opacity - réduite pour plus de transparence
                 emissive: new THREE.Color(0xffff99), // Yellowish light when on
                 emissiveIntensity: 0.0, // Start with lights off
                 name: "NewSkyscraperWindowMat" // Unique name for InstancedMeshManager
@@ -79,8 +79,8 @@ export default class NewSkyscraperRenderer {
         canvas.height = 512;
         const context = canvas.getContext('2d');
 
-        // Fond gris moderne
-        context.fillStyle = '#a8a8a8';
+        // Fond gris moderne avec teinte bleue et plus foncé
+        context.fillStyle = '#5a6080';
         context.fillRect(0, 0, canvas.width, canvas.height);
 
         // Paramètres pour les dalles
@@ -88,10 +88,10 @@ export default class NewSkyscraperRenderer {
         const tileHeight = 64;  // Hauteur d'une dalle
         const jointWidth = 2;   // Épaisseur des joints
 
-        // Couleurs pour les dalles
-        const baseColor = { r: 168, g: 168, b: 168 };
-        const darkJoint = '#888888';
-        const lightHighlight = '#c0c0c0';
+        // Couleurs pour les dalles - plus foncées avec teinte bleue accentuée
+        const baseColor = { r: 90, g: 96, b: 128 };
+        const darkJoint = '#3a4056';
+        const lightHighlight = '#6a7090';
 
         // Dessiner les joints horizontaux
         context.fillStyle = darkJoint;
@@ -116,11 +116,11 @@ export default class NewSkyscraperRenderer {
             
             for (let x = -offset; x < canvas.width; x += tileWidth + jointWidth) {
                 if (x + tileWidth > 0 && x < canvas.width) {
-                    // Variation de couleur pour chaque dalle
+                    // Variation de couleur pour chaque dalle avec teinte bleue accentuée
                     const variation = (Math.random() - 0.5) * 0.1;
-                    const r = Math.max(0, Math.min(255, baseColor.r + variation * 255));
-                    const g = Math.max(0, Math.min(255, baseColor.g + variation * 255));
-                    const b = Math.max(0, Math.min(255, baseColor.b + variation * 255));
+                    const r = Math.max(0, Math.min(255, baseColor.r + variation * 150));
+                    const g = Math.max(0, Math.min(255, baseColor.g + variation * 160));
+                    const b = Math.max(0, Math.min(255, baseColor.b + variation * 120)); // Composante bleue plus forte
                     
                     context.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
                     context.fillRect(x + jointWidth, y + jointWidth, tileWidth, tileHeight);
@@ -151,8 +151,8 @@ export default class NewSkyscraperRenderer {
         canvas.height = 512;
         const context = canvas.getContext('2d');
 
-        // Fond gris foncé pour le toit
-        context.fillStyle = '#666666';
+        // Fond gris foncé pour le toit avec teinte bleue accentuée
+        context.fillStyle = '#303860';
         context.fillRect(0, 0, canvas.width, canvas.height);
 
         // Paramètres pour les dalles de toit
@@ -160,11 +160,11 @@ export default class NewSkyscraperRenderer {
         const jointWidth = 2;     // Largeur des joints
         const pattern = tileSize + jointWidth;
 
-        // Couleurs
-        const baseColor = { r: 102, g: 102, b: 102 };
-        const jointColor = '#555555';
-        const highlightColor = '#777777';
-        const shadowColor = '#4a4a4a';
+        // Couleurs - plus foncées avec teinte bleue accentuée
+        const baseColor = { r: 48, g: 56, b: 96 };
+        const jointColor = '#252a50';
+        const highlightColor = '#3a426a';
+        const shadowColor = '#1a1e35';
 
         // Dessiner la grille de joints
         context.fillStyle = jointColor;
@@ -182,11 +182,11 @@ export default class NewSkyscraperRenderer {
         // Remplir les dalles avec des variations
         for (let y = 0; y < canvas.height; y += pattern) {
             for (let x = 0; x < canvas.width; x += pattern) {
-                // Variation de couleur pour chaque dalle
+                // Variation de couleur pour chaque dalle avec teinte bleue accentuée
                 const variation = (Math.random() - 0.5) * 0.15;
-                const r = Math.max(0, Math.min(255, baseColor.r + variation * 100));
-                const g = Math.max(0, Math.min(255, baseColor.g + variation * 100));
-                const b = Math.max(0, Math.min(255, baseColor.b + variation * 100));
+                const r = Math.max(0, Math.min(255, baseColor.r + variation * 60));
+                const g = Math.max(0, Math.min(255, baseColor.g + variation * 70));
+                const b = Math.max(0, Math.min(255, baseColor.b + variation * 50)); // Composante bleue plus forte
                 
                 context.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
                 context.fillRect(x + jointWidth, y + jointWidth, tileSize, tileSize);
