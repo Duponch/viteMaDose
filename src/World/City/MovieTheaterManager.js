@@ -24,22 +24,51 @@ export default class MovieTheaterManager {
 
     /**
      * Analyse les quartiers et les parcelles pour déterminer où placer les cinémas.
-     * Sélectionne une parcelle par quartier qui aura un cinéma.
+     * Sélectionne environ un quartier sur 4 qui aura un cinéma, en s'assurant qu'ils soient bien espacés.
      * @param {Array<District>} districts - Liste des districts de la ville.
      */
     selectPlotsForMovieTheater(districts) {
-        districts.forEach(district => {
-            // On ignore les districts industriels qui n'ont pas de cinémas
-            if (district.type === 'industrial') {
-                return;
-            }
+        // Filtrer les quartiers éligibles (non industriels)
+        const eligibleDistricts = districts.filter(district => district.type !== 'industrial');
+        
+        if (eligibleDistricts.length === 0) {
+            console.log('MovieTheaterManager: Aucun quartier éligible pour les cinémas');
+            return;
+        }
 
-            // Filtrer les parcelles éligibles pour les cinémas (maisons et immeubles)
+        // Calculer le centre de chaque quartier éligible
+        const districtsWithCenters = eligibleDistricts.map(district => {
+            let totalX = 0, totalZ = 0, plotCount = 0;
+            
+            district.plots.forEach(plot => {
+                totalX += plot.x + plot.width / 2;
+                totalZ += plot.z + plot.depth / 2;
+                plotCount++;
+            });
+            
+            return {
+                district: district,
+                center: {
+                    x: totalX / plotCount,
+                    z: totalZ / plotCount
+                }
+            };
+        });
+
+        // Sélectionner les quartiers en s'assurant qu'ils soient bien espacés
+        const selectedDistricts = this._selectWellSpacedDistricts(districtsWithCenters);
+        
+        // Pour chaque quartier sélectionné, choisir une parcelle éligible
+        selectedDistricts.forEach(districtWithCenter => {
+            const district = districtWithCenter.district;
+            
+            // Filtrer les parcelles éligibles pour les cinémas (UNIQUEMENT les immeubles)
             const eligiblePlots = district.plots.filter(plot => 
-                plot.zoneType === 'house' || plot.zoneType === 'building'
+                plot.zoneType === 'building'
             );
 
             if (eligiblePlots.length === 0) {
+                console.warn(`MovieTheaterManager: Aucune parcelle d'immeuble éligible dans le quartier ${district.id}`);
                 return; // Pas de parcelles éligibles dans ce quartier
             }
 
@@ -51,7 +80,88 @@ export default class MovieTheaterManager {
             this.plotsWithMovieTheater.add(selectedPlot.id);
         });
 
-        console.log(`MovieTheaterManager: ${this.plotsWithMovieTheater.size} parcelles sélectionnées pour avoir un cinéma`);
+        console.log(`MovieTheaterManager: ${this.plotsWithMovieTheater.size} parcelles sélectionnées pour avoir un cinéma (${selectedDistricts.length} quartiers sur ${eligibleDistricts.length} éligibles)`);
+    }
+
+    /**
+     * Sélectionne des quartiers bien espacés pour placer les cinémas.
+     * Utilise un algorithme glouton pour maximiser la distance entre les quartiers sélectionnés.
+     * @param {Array<{district: District, center: {x: number, z: number}}>} districtsWithCenters - Quartiers avec leurs centres calculés.
+     * @returns {Array<{district: District, center: {x: number, z: number}}>} - Quartiers sélectionnés.
+     * @private
+     */
+    _selectWellSpacedDistricts(districtsWithCenters) {
+        if (districtsWithCenters.length === 0) return [];
+        
+        // Nombre cible de cinémas : environ 1 quartier sur 4, minimum 1, MAXIMUM 3
+        const rawTargetCount = Math.max(1, Math.floor(districtsWithCenters.length / 4));
+        const targetCount = Math.min(3, rawTargetCount); // Limiter à 3 cinémas maximum
+        
+        // Distance minimale entre les cinémas (ajustable selon la taille de la carte)
+        const minDistanceBetweenCinemas = 150; // Distance en unités de la carte
+        
+        const selectedDistricts = [];
+        const remainingDistricts = [...districtsWithCenters];
+        
+        // Sélectionner le premier quartier (celui le plus proche du centre de la carte ou aléatoire)
+        const firstIndex = Math.floor(Math.random() * remainingDistricts.length);
+        selectedDistricts.push(remainingDistricts[firstIndex]);
+        remainingDistricts.splice(firstIndex, 1);
+        
+        // Sélectionner les quartiers suivants en s'assurant qu'ils soient suffisamment éloignés
+        while (selectedDistricts.length < targetCount && remainingDistricts.length > 0) {
+            let bestCandidate = null;
+            let bestMinDistance = 0;
+            let bestIndex = -1;
+            
+            // Pour chaque quartier restant, calculer sa distance minimale aux quartiers déjà sélectionnés
+            for (let i = 0; i < remainingDistricts.length; i++) {
+                const candidate = remainingDistricts[i];
+                
+                let minDistanceToSelected = Infinity;
+                for (const selected of selectedDistricts) {
+                    const distance = this._calculateDistance(candidate.center, selected.center);
+                    minDistanceToSelected = Math.min(minDistanceToSelected, distance);
+                }
+                
+                // Choisir le candidat qui est le plus loin de tous les quartiers déjà sélectionnés
+                if (minDistanceToSelected > bestMinDistance) {
+                    bestMinDistance = minDistanceToSelected;
+                    bestCandidate = candidate;
+                    bestIndex = i;
+                }
+            }
+            
+            // Si le meilleur candidat est suffisamment loin, le sélectionner
+            if (bestCandidate && bestMinDistance >= minDistanceBetweenCinemas) {
+                selectedDistricts.push(bestCandidate);
+                remainingDistricts.splice(bestIndex, 1);
+            } else {
+                // Si aucun candidat n'est assez loin, prendre le plus éloigné disponible
+                if (bestCandidate) {
+                    selectedDistricts.push(bestCandidate);
+                    remainingDistricts.splice(bestIndex, 1);
+                } else {
+                    break; // Plus de candidats disponibles
+                }
+            }
+        }
+        
+        console.log(`MovieTheaterManager: Sélectionné ${selectedDistricts.length} quartiers bien espacés pour les cinémas (maximum 3 autorisés)`);
+        return selectedDistricts;
+    }
+
+    /**
+     * Calcule la distance euclidienne entre deux points.
+     * @param {{x: number, z: number}} point1 - Premier point.
+     * @param {{x: number, z: number}} point2 - Deuxième point.
+     * @returns {number} - Distance entre les deux points.
+     * @private
+     */
+    _calculateDistance(point1, point2) {
+        const dx = point1.x - point2.x;
+        const dz = point1.z - point2.z;
+        return Math.sqrt(dx * dx + dz * dz);
     }
     
     /**
@@ -74,42 +184,64 @@ export default class MovieTheaterManager {
     }
     
     /**
-     * Sélectionne une position centrale ou visible pour placer le cinéma.
+     * Sélectionne une position harmonieuse pour placer le cinéma par rapport aux autres bâtiments.
      * @param {number} numItemsX - Nombre d'éléments en X dans la grille.
      * @param {number} numItemsY - Nombre d'éléments en Y dans la grille.
      * @param {number} count - Nombre de positions à sélectionner (toujours 1).
      * @returns {Array<{x: number, y: number}>} - Position sélectionnée.
      */
     selectMovieTheaterPosition(numItemsX, numItemsY, count) {
-        // Préférer une position sur le périmètre pour la visibilité
-        const perimeterPositions = [];
+        // Pour une parcelle d'immeubles, privilégier une position qui s'harmonise avec les autres bâtiments
         
-        // Bordure supérieure et inférieure
-        for (let x = 0; x < numItemsX; x++) {
-            perimeterPositions.push({x, y: 0});
-            if (numItemsY > 1) {
-                perimeterPositions.push({x, y: numItemsY - 1});
-            }
-        }
-        
-        // Bordures gauche et droite (sans les coins qui sont déjà inclus)
-        for (let y = 1; y < numItemsY - 1; y++) {
-            perimeterPositions.push({x: 0, y});
-            if (numItemsX > 1) {
-                perimeterPositions.push({x: numItemsX - 1, y});
-            }
-        }
-        
-        // Si pas de positions de périmètre disponibles, utiliser le centre
-        if (perimeterPositions.length === 0) {
+        // Si la grille est petite (2x2 ou moins), utiliser une position centrale
+        if (numItemsX <= 2 && numItemsY <= 2) {
             const centerX = Math.floor(numItemsX / 2);
             const centerY = Math.floor(numItemsY / 2);
             return [{x: centerX, y: centerY}];
         }
         
-        // Sélectionner une position aléatoire sur le périmètre
-        const randomIndex = Math.floor(Math.random() * perimeterPositions.length);
-        return [perimeterPositions[randomIndex]];
+        // Pour des grilles plus grandes, privilégier une position qui crée une composition harmonieuse
+        const positions = [];
+        
+        // Calculer des positions "golden ratio" pour une meilleure composition
+        const goldenRatio = 0.618;
+        
+        // Positions basées sur la règle des tiers et le nombre d'or
+        const preferredPositions = [
+            // Positions "règle des tiers" 
+            {x: Math.floor(numItemsX * 0.33), y: Math.floor(numItemsY * 0.33)},
+            {x: Math.floor(numItemsX * 0.67), y: Math.floor(numItemsY * 0.33)},
+            {x: Math.floor(numItemsX * 0.33), y: Math.floor(numItemsY * 0.67)},
+            {x: Math.floor(numItemsX * 0.67), y: Math.floor(numItemsY * 0.67)},
+            
+            // Positions "golden ratio"
+            {x: Math.floor(numItemsX * goldenRatio), y: Math.floor(numItemsY * goldenRatio)},
+            {x: Math.floor(numItemsX * (1 - goldenRatio)), y: Math.floor(numItemsY * goldenRatio)},
+            
+            // Position centrale comme fallback
+            {x: Math.floor(numItemsX / 2), y: Math.floor(numItemsY / 2)}
+        ];
+        
+        // Filtrer les positions valides (dans les limites de la grille)
+        const validPositions = preferredPositions.filter(pos => 
+            pos.x >= 0 && pos.x < numItemsX && pos.y >= 0 && pos.y < numItemsY
+        );
+        
+        // Éliminer les doublons
+        const uniquePositions = validPositions.filter((pos, index, array) => 
+            array.findIndex(p => p.x === pos.x && p.y === pos.y) === index
+        );
+        
+        // Sélectionner une position aléatoire parmi les positions harmonieuses
+        if (uniquePositions.length > 0) {
+            const randomIndex = Math.floor(Math.random() * uniquePositions.length);
+            return [uniquePositions[randomIndex]];
+        }
+        
+        // Fallback : position centrale
+        const centerX = Math.floor(numItemsX / 2);
+        const centerY = Math.floor(numItemsY / 2);
+        return [{x: centerX, y: centerY}];
     }
     
     /**

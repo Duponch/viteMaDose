@@ -180,7 +180,7 @@ export default class PlotContentGenerator {
                     // Vérifier si cette parcelle doit avoir un cinéma
                     const shouldHaveMovieTheater = this.movieTheaterManager.shouldPlotHaveMovieTheater(plot);
                     
-                    if (shouldHaveMovieTheater && (plot.zoneType === 'house' || plot.zoneType === 'building')) {
+                    if (shouldHaveMovieTheater && plot.zoneType === 'building') {
                         // Calculer la grille de disposition selon le type de parcelle
                         const gridPlacement = this._calculateGridForPlotType(plot, strategy);
                         
@@ -352,27 +352,23 @@ export default class PlotContentGenerator {
      * @private
      */
     _placeMovieTheatersOnPlot(plot, strategy, gridPlacement, instanceDataManager, cityManager, groundLevel) {
-        // Déterminer la taille des bâtiments selon le type de parcelle
-        let targetWidth, targetDepth, minSpacing;
-        
-        if (plot.zoneType === 'house') {
-            const baseScaleFactor = this.config.gridHouseBaseScale ?? 1.5;
-            targetWidth = 2.5 * baseScaleFactor; // Légèrement plus grand que les commerces
-            targetDepth = 2.5 * baseScaleFactor;
-            minSpacing = this.config.minHouseSpacing ?? 0;
-        } else if (plot.zoneType === 'building') {
-            const baseScaleFactor = this.config.gridBuildingBaseScale ?? 1.0;
-            const assetLoader = strategy.assetLoader;
-            const representativeAsset = assetLoader.getAssetDataById(assetLoader.assets.building[0]?.id);
-            if (!representativeAsset || !representativeAsset.sizeAfterFitting) {
-                return [];
-            }
-            targetWidth = representativeAsset.sizeAfterFitting.x * baseScaleFactor * 1.2; // Légèrement plus grand
-            targetDepth = representativeAsset.sizeAfterFitting.z * baseScaleFactor * 1.2;
-            minSpacing = this.config.minBuildingSpacing ?? 0;
-        } else {
-            return []; // Type non pris en charge
+        // Vérifier que c'est bien une parcelle d'immeubles
+        if (plot.zoneType !== 'building') {
+            console.warn(`_placeMovieTheatersOnPlot: Tentative de placement de cinéma sur une parcelle non-immeuble (${plot.zoneType})`);
+            return [];
         }
+        
+        // Déterminer la taille des bâtiments pour les immeubles
+        const baseScaleFactor = this.config.gridBuildingBaseScale ?? 1.0;
+        const assetLoader = strategy.assetLoader;
+        const representativeAsset = assetLoader.getAssetDataById(assetLoader.assets.building[0]?.id);
+        if (!representativeAsset || !representativeAsset.sizeAfterFitting) {
+            console.warn('_placeMovieTheatersOnPlot: Impossible de déterminer la taille des immeubles');
+            return [];
+        }
+        const targetWidth = representativeAsset.sizeAfterFitting.x * baseScaleFactor * 1.2; // Légèrement plus grand
+        const targetDepth = representativeAsset.sizeAfterFitting.z * baseScaleFactor * 1.2;
+        const minSpacing = this.config.minBuildingSpacing ?? 0;
         
         // Récupérer la stratégie de cinéma pour l'orientation et les flèches
         const movieTheaterStrategy = this.zoneStrategies['movietheater'];

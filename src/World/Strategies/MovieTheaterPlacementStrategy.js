@@ -57,12 +57,12 @@ export default class MovieTheaterPlacementStrategy extends IZonePlacementStrateg
         const { numItemsX, numItemsY, gapX, gapZ } = gridPlacement;
         const sidewalkHeight = this.config.sidewalkHeight ?? 0.2;
 
-        // Pour un cinéma, on place généralement un seul bâtiment au centre ou dans une position visible
-        const centerRowIndex = Math.floor(numItemsY / 2);
-        const centerColIndex = Math.floor(numItemsX / 2);
-
-        const cellCenterX = plot.x + gapX + (centerColIndex * (targetBuildingWidth + minSpacing)) + targetBuildingWidth / 2;
-        const cellCenterZ = plot.z + gapZ + (centerRowIndex * (targetBuildingDepth + minSpacing)) + targetBuildingDepth / 2;
+        // Utiliser une position harmonieuse au lieu du simple centre
+        const positions = this._selectHarmoniousPosition(numItemsX, numItemsY);
+        const selectedPosition = positions[0]; // On prend la première position recommandée
+        
+        const cellCenterX = plot.x + gapX + (selectedPosition.x * (targetBuildingWidth + minSpacing)) + targetBuildingWidth / 2;
+        const cellCenterZ = plot.z + gapZ + (selectedPosition.y * (targetBuildingDepth + minSpacing)) + targetBuildingDepth / 2;
         const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
 
         // Déterminer la rotation en fonction de la position par rapport aux trottoirs
@@ -71,8 +71,8 @@ export default class MovieTheaterPlacementStrategy extends IZonePlacementStrateg
             cellCenterZ, 
             plot, 
             this.config.sidewalkWidth ?? 0, 
-            centerRowIndex, 
-            centerColIndex, 
+            selectedPosition.y, 
+            selectedPosition.x, 
             numItemsX, 
             numItemsY
         );
@@ -234,5 +234,60 @@ export default class MovieTheaterPlacementStrategy extends IZonePlacementStrateg
         else if (minDist === distToRight) return Math.PI/2; // Vers la droite (+X)
         else if (minDist === distToTop) return Math.PI;     // Vers le haut (-Z)
         else return 0;                                      // Vers le bas (+Z)
+    }
+
+    /**
+     * Sélectionne une position harmonieuse pour le cinéma basée sur des principes de composition.
+     * @param {number} numItemsX - Nombre d'éléments en X dans la grille.
+     * @param {number} numItemsY - Nombre d'éléments en Y dans la grille.
+     * @returns {Array<{x: number, y: number}>} - Position harmonieuse sélectionnée.
+     * @private
+     */
+    _selectHarmoniousPosition(numItemsX, numItemsY) {
+        // Si la grille est petite, utiliser une position centrale
+        if (numItemsX <= 2 && numItemsY <= 2) {
+            const centerX = Math.floor(numItemsX / 2);
+            const centerY = Math.floor(numItemsY / 2);
+            return [{x: centerX, y: centerY}];
+        }
+        
+        // Calculer des positions basées sur la règle des tiers et le nombre d'or
+        const goldenRatio = 0.618;
+        
+        const preferredPositions = [
+            // Positions "règle des tiers" 
+            {x: Math.floor(numItemsX * 0.33), y: Math.floor(numItemsY * 0.33)},
+            {x: Math.floor(numItemsX * 0.67), y: Math.floor(numItemsY * 0.33)},
+            {x: Math.floor(numItemsX * 0.33), y: Math.floor(numItemsY * 0.67)},
+            {x: Math.floor(numItemsX * 0.67), y: Math.floor(numItemsY * 0.67)},
+            
+            // Positions "golden ratio"
+            {x: Math.floor(numItemsX * goldenRatio), y: Math.floor(numItemsY * goldenRatio)},
+            {x: Math.floor(numItemsX * (1 - goldenRatio)), y: Math.floor(numItemsY * goldenRatio)},
+            
+            // Position centrale comme fallback
+            {x: Math.floor(numItemsX / 2), y: Math.floor(numItemsY / 2)}
+        ];
+        
+        // Filtrer les positions valides
+        const validPositions = preferredPositions.filter(pos => 
+            pos.x >= 0 && pos.x < numItemsX && pos.y >= 0 && pos.y < numItemsY
+        );
+        
+        // Éliminer les doublons
+        const uniquePositions = validPositions.filter((pos, index, array) => 
+            array.findIndex(p => p.x === pos.x && p.y === pos.y) === index
+        );
+        
+        // Retourner une position aléatoire parmi les positions harmonieuses
+        if (uniquePositions.length > 0) {
+            const randomIndex = Math.floor(Math.random() * uniquePositions.length);
+            return [uniquePositions[randomIndex]];
+        }
+        
+        // Fallback : position centrale
+        const centerX = Math.floor(numItemsX / 2);
+        const centerY = Math.floor(numItemsY / 2);
+        return [{x: centerX, y: centerY}];
     }
 } 
