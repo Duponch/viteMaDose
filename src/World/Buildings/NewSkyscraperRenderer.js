@@ -9,10 +9,16 @@ export default class NewSkyscraperRenderer {
         this.materials = materials; // Main project materials
         this.assetIdCounter = 0; // Unique IDs for procedural assets
 
-        // Création des textures procédurales
+        // Création des textures procédurales avec paramètres spécifiques
         const wallTexture = this.createWallTexture();
-        const beamTexture = this.createBeamTexture();
         const roofTexture = this.createRoofTexture();
+        
+        // Créer une seconde texture identique pour les poutres avec paramètres ajustés
+        const beamTexture = wallTexture.clone();
+        beamTexture.needsUpdate = true;
+        // Ajustement pour compenser l'étirement sur les poutres horizontales fines
+        // Ratio des proportions : murs (12x3.5) vs poutres (12x0.5) = facteur 7 en hauteur
+        beamTexture.repeat.set(2, 1.5 / 7); // DIMINUTION de la répétition Y pour éviter l'écrasement
 
         // --- Define materials specific to this skyscraper ---
         // Adapt colors and textures as needed from your create...Texture functions or shared materials
@@ -24,7 +30,7 @@ export default class NewSkyscraperRenderer {
                 name: "NewSkyscraperStructureMat" 
             }),
             beam: new THREE.MeshStandardMaterial({ 
-                map: wallTexture,
+                map: beamTexture, // Utilise la texture ajustée pour les poutres
                 roughness: 0.7, 
                 metalness: 0.2, 
                 name: "NewSkyscraperBeamMat" 
@@ -59,111 +65,83 @@ export default class NewSkyscraperRenderer {
             balconyWindow: new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.7, name: "NewSkyscraperBalconyWindowMat" })
         };
 
-        // Ajustement des paramètres de répétition pour les poutres
-        wallTexture.repeat.set(2, 2);
-        wallTexture.offset.set(0, 0);
-        wallTexture.center.set(0.5, 0.5);
-        wallTexture.rotation = 0;
-        wallTexture.needsUpdate = true;
-
         //console.log("NewSkyscraperRenderer initialized.");
     }
 
     /**
-     * Crée une texture procédurale pour les murs
+     * Crée une texture procédurale pour les murs avec un motif de dalles
      * @returns {THREE.Texture}
      */
     createWallTexture() {
         const canvas = document.createElement('canvas');
-        canvas.width = 1024;
-        canvas.height = 1024;
+        canvas.width = 512;
+        canvas.height = 512;
         const context = canvas.getContext('2d');
 
-        // Fond gris plus clair
-        context.fillStyle = '#8a8a8a';
+        // Fond gris moderne
+        context.fillStyle = '#a8a8a8';
         context.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Ajout de motifs de briques plus grands
-        const brickWidth = 1024; // Briques beaucoup plus grandes
-        const brickHeight = 512;
-        const mortarWidth = 16; // Joints légèrement plus épais
+        // Paramètres pour les dalles
+        const tileWidth = 128;  // Largeur d'une dalle
+        const tileHeight = 64;  // Hauteur d'une dalle
+        const jointWidth = 2;   // Épaisseur des joints
 
-        // Motif de briques avec décalage
-        for (let y = 0; y < canvas.height; y += brickHeight + mortarWidth) {
-            const offset = (y / (brickHeight + mortarWidth)) % 2 === 0 ? 0 : brickWidth / 2;
-            for (let x = -offset; x < canvas.width; x += brickWidth + mortarWidth) {
-                // Variation de couleur pour chaque brique
-                const variation = Math.random() * 0.1 - 0.05;
-                const r = Math.max(0, Math.min(255, 30 + variation * 255));
-				const g = Math.max(0, Math.min(255, 30 + variation * 255));
-				const b = Math.max(0, Math.min(255, 30 + variation * 255));
-                context.fillStyle = `rgb(${r},${g},${b})`;
-                
-                context.fillRect(x, y, brickWidth, brickHeight);
+        // Couleurs pour les dalles
+        const baseColor = { r: 168, g: 168, b: 168 };
+        const darkJoint = '#888888';
+        const lightHighlight = '#c0c0c0';
+
+        // Dessiner les joints horizontaux
+        context.fillStyle = darkJoint;
+        for (let y = 0; y < canvas.height; y += tileHeight + jointWidth) {
+            context.fillRect(0, y, canvas.width, jointWidth);
+        }
+
+        // Dessiner les joints verticaux avec décalage pour effet brique
+        for (let y = 0; y < canvas.height; y += tileHeight + jointWidth) {
+            const rowIndex = Math.floor(y / (tileHeight + jointWidth));
+            const offset = (rowIndex % 2) * (tileWidth / 2);
+            
+            for (let x = -offset; x < canvas.width; x += tileWidth + jointWidth) {
+                context.fillRect(x, y, jointWidth, tileHeight);
             }
         }
 
-        // Ajout de variations de texture plus subtiles
-        context.fillStyle = 'rgba(255, 255, 255, 0.05)';
-        for (let i = 0; i < 100; i++) { // Moins de variations mais plus grandes
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            const size = Math.random() * 80 + 40; // Variations plus grandes
-            context.beginPath();
-            context.arc(x, y, size, 0, Math.PI * 2);
-            context.fill();
+        // Remplir les dalles avec des variations de couleur
+        for (let y = 0; y < canvas.height; y += tileHeight + jointWidth) {
+            const rowIndex = Math.floor(y / (tileHeight + jointWidth));
+            const offset = (rowIndex % 2) * (tileWidth / 2);
+            
+            for (let x = -offset; x < canvas.width; x += tileWidth + jointWidth) {
+                if (x + tileWidth > 0 && x < canvas.width) {
+                    // Variation de couleur pour chaque dalle
+                    const variation = (Math.random() - 0.5) * 0.1;
+                    const r = Math.max(0, Math.min(255, baseColor.r + variation * 255));
+                    const g = Math.max(0, Math.min(255, baseColor.g + variation * 255));
+                    const b = Math.max(0, Math.min(255, baseColor.b + variation * 255));
+                    
+                    context.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
+                    context.fillRect(x + jointWidth, y + jointWidth, tileWidth, tileHeight);
+                    
+                    // Ajouter un léger highlight sur le bord supérieur gauche
+                    context.fillStyle = lightHighlight;
+                    context.fillRect(x + jointWidth, y + jointWidth, tileWidth, 1);
+                    context.fillRect(x + jointWidth, y + jointWidth, 1, tileHeight);
+                }
+            }
         }
 
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(2, 2); // Réduction de la répétition pour des motifs plus grands
+        // Paramètres optimisés pour les murs verticaux (proportions 12x3.5 environ)
+        texture.repeat.set(2, 1.5);
         return texture;
     }
 
     /**
-     * Crée une texture procédurale pour les poutres horizontales
-     * @returns {THREE.Texture}
-     */
-    createBeamTexture() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 128; // Hauteur réduite pour une texture plus adaptée aux poutres
-        const context = canvas.getContext('2d');
-
-        // Fond gris clair
-        context.fillStyle = '#9e9e9e';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Ajout de motifs horizontaux
-        const segmentWidth = 64;
-        const segmentHeight = 16;
-        const jointWidth = 4;
-
-        context.fillStyle = '#8a8a8a';
-        for (let x = 0; x < canvas.width; x += segmentWidth + jointWidth) {
-            context.fillRect(x, 0, segmentWidth, canvas.height);
-        }
-
-        // Ajout de variations de texture horizontales
-        context.fillStyle = '#a8a8a8';
-        for (let i = 0; i < 50; i++) {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            const width = Math.random() * 20 + 10;
-            const height = Math.random() * 10 + 5;
-            context.fillRect(x, y, width, height);
-        }
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(2, 1); // Plus de répétitions en largeur qu'en hauteur
-        return texture;
-    }
-
-    /**
-     * Crée une texture procédurale pour le toit
+     * Crée une texture procédurale pour le toit avec un motif de dalles modernes
      * @returns {THREE.Texture}
      */
     createRoofTexture() {
@@ -172,39 +150,69 @@ export default class NewSkyscraperRenderer {
         canvas.height = 512;
         const context = canvas.getContext('2d');
 
-        // Fond gris foncé
+        // Fond gris foncé pour le toit
         context.fillStyle = '#666666';
         context.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Ajout de motifs de tuiles
-        const tileSize = 64;
-        context.fillStyle = '#555555';
-        for (let y = 0; y < canvas.height; y += tileSize) {
-            for (let x = 0; x < canvas.width; x += tileSize) {
-                context.beginPath();
-                context.moveTo(x, y);
-                context.lineTo(x + tileSize, y);
-                context.lineTo(x + tileSize/2, y + tileSize/2);
-                context.closePath();
-                context.fill();
-            }
+        // Paramètres pour les dalles de toit
+        const tileSize = 64;      // Taille d'une dalle carrée
+        const jointWidth = 2;     // Largeur des joints
+        const pattern = tileSize + jointWidth;
+
+        // Couleurs
+        const baseColor = { r: 102, g: 102, b: 102 };
+        const jointColor = '#555555';
+        const highlightColor = '#777777';
+        const shadowColor = '#4a4a4a';
+
+        // Dessiner la grille de joints
+        context.fillStyle = jointColor;
+        
+        // Joints horizontaux
+        for (let y = 0; y < canvas.height; y += pattern) {
+            context.fillRect(0, y, canvas.width, jointWidth);
+        }
+        
+        // Joints verticaux
+        for (let x = 0; x < canvas.width; x += pattern) {
+            context.fillRect(x, 0, jointWidth, canvas.height);
         }
 
-        // Ajout de variations de texture
-        context.fillStyle = '#777777';
-        for (let i = 0; i < 50; i++) {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            const size = Math.random() * 30 + 15;
-            context.beginPath();
-            context.arc(x, y, size, 0, Math.PI * 2);
-            context.fill();
+        // Remplir les dalles avec des variations
+        for (let y = 0; y < canvas.height; y += pattern) {
+            for (let x = 0; x < canvas.width; x += pattern) {
+                // Variation de couleur pour chaque dalle
+                const variation = (Math.random() - 0.5) * 0.15;
+                const r = Math.max(0, Math.min(255, baseColor.r + variation * 100));
+                const g = Math.max(0, Math.min(255, baseColor.g + variation * 100));
+                const b = Math.max(0, Math.min(255, baseColor.b + variation * 100));
+                
+                context.fillStyle = `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
+                context.fillRect(x + jointWidth, y + jointWidth, tileSize, tileSize);
+                
+                // Ajouter un effet de relief avec highlight et ombre
+                context.fillStyle = highlightColor;
+                context.fillRect(x + jointWidth, y + jointWidth, tileSize, 1); // Ligne du haut
+                context.fillRect(x + jointWidth, y + jointWidth, 1, tileSize); // Ligne de gauche
+                
+                context.fillStyle = shadowColor;
+                context.fillRect(x + jointWidth, y + jointWidth + tileSize - 1, tileSize, 1); // Ligne du bas
+                context.fillRect(x + jointWidth + tileSize - 1, y + jointWidth, 1, tileSize); // Ligne de droite
+                
+                // Ajouter quelques détails de texture à l'intérieur de certaines dalles
+                if (Math.random() > 0.7) {
+                    context.fillStyle = highlightColor;
+                    const dotX = x + jointWidth + tileSize * 0.3 + Math.random() * tileSize * 0.4;
+                    const dotY = y + jointWidth + tileSize * 0.3 + Math.random() * tileSize * 0.4;
+                    context.fillRect(dotX, dotY, 2, 2);
+                }
+            }
         }
 
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(1, 1);
+        texture.repeat.set(2, 2); // Répétition appropriée pour le toit
         return texture;
     }
 
