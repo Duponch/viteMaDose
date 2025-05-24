@@ -1,7 +1,6 @@
 // src/World/Buildings/NewHouseRenderer.js
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 // --- Fonctions de création de textures (extraites du HTML) ---
 
@@ -210,7 +209,7 @@ export default class NewHouseRenderer {
         this.localMaterials = {
             wall: new THREE.MeshStandardMaterial({ map: this.sharedTextures.wall, roughness: 0.9, name: "HouseBase1Mat" }),
             roof: new THREE.MeshStandardMaterial({ map: this.sharedTextures.roof, roughness: 0.8, name: "HouseRoofMat" }),
-            gable: new THREE.MeshStandardMaterial({ map: this.sharedTextures.wall.clone(), roughness: 0.9, name: "HouseBase2Mat" }),
+            gable: new THREE.MeshStandardMaterial({ map: this.sharedTextures.wall.clone(), roughness: 0.9, side: THREE.DoubleSide, name: "HouseBase2Mat" }),
             chimneyBrick: new THREE.MeshStandardMaterial({ map: this.sharedTextures.brick, roughness: 0.85, name: "HouseBase1Mat" }),
             chimneyTop: new THREE.MeshStandardMaterial({ map: this.sharedTextures.chimneyTop, roughness: 0.85, name: "HouseBase2Mat" }),
             door: new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.8, name: "HouseDoorMat" }),
@@ -225,14 +224,21 @@ export default class NewHouseRenderer {
      * Génère un asset procédural pour la maison de type B.
      * Retourne un objet { id, parts:[{ geometry, material }], fittingScaleFactor, centerOffset, sizeAfterFitting }.
      */
-    generateProceduralHouse(baseWidth = 6, baseHeight = 4, baseDepth = 5, userScale = 1) {
+    generateProceduralHouse(baseWidth = 6, baseHeight = 4, baseDepth = 5, userScale = 2) {
         const houseGroup = new THREE.Group(); // Groupe temporaire pour assemblage
 
         // --- Copier/Adapter les Dimensions & Logique de createHouse ---
-        const wallHeight = 4; const wallWidth = 6; const wallDepth = 5;
-        const roofHeight = 2; const roofOverhang = 0.4; const wallRadius = 0.1;
-        const wallSegments = 4; const roofThickness = 0.15; const gableInset = 0.075;
-        const roofOffsetY = -0.1; // Ajustement vertical du toit par rapport aux murs
+        // Appliquer le scale global directement aux dimensions de base
+        const scale = userScale; // Variable scale globale pour modifier facilement la taille
+        const wallHeight = 4 * scale; 
+        const wallWidth = 6 * scale; 
+        const wallDepth = 5 * scale;
+        const roofHeight = 2 * scale; 
+        const roofOverhang = 0.4 * scale; 
+        const wallSegments = 4; 
+        const roofThickness = 0.15 * scale; 
+        const gableInset = 0.075 * scale;
+        const roofOffsetY = -0.1 * scale; // Ajustement vertical du toit par rapport aux murs
 
         // Échelles "mondiales" des textures (adaptées du HTML)
         const wallTextureWorldScaleU = 4; const wallTextureWorldScaleV = 4;
@@ -269,8 +275,8 @@ export default class NewHouseRenderer {
 
         // --- Création des Géométries et Meshes (Adapté de createHouse) ---
 
-        // Murs (RoundedBox)
-        const wallGeometry = new RoundedBoxGeometry(wallWidth, wallHeight, wallDepth, wallSegments, wallRadius);
+        // Murs (BoxGeometry sans arrondi)
+        const wallGeometry = new THREE.BoxGeometry(wallWidth, wallHeight, wallDepth);
         const wallsMesh = new THREE.Mesh(wallGeometry, wallMaterial);
         // Positionner le centre de la base à l'origine locale Y=0
         wallsMesh.position.y = wallHeight / 2;
@@ -281,44 +287,36 @@ export default class NewHouseRenderer {
         roofGroup.position.y = wallHeight + roofOffsetY; // Positionner par rapport au haut des murs
         houseGroup.add(roofGroup);
 
-        // 1. Pignons (ExtrudeGeometry)
+        // 1. Pignons (ExtrudeGeometry) - Corrigé pour fermer les trous
         const gableBaseWidth = wallWidth;
         const gableShape = new THREE.Shape();
         gableShape.moveTo(-gableBaseWidth / 2, 0);
         gableShape.lineTo(gableBaseWidth / 2, 0);
         gableShape.lineTo(0, roofHeight);
         gableShape.closePath(); // Fermer la forme
-        const extrudeSettings = { depth: roofThickness, bevelEnabled: false };
+        
+        // Épaisseur pour combler l'espace entre les pans de toit et les extrémités
+        const gableThickness = roofThickness * 3; // Plus épais pour être visible et fermer les trous
+        const extrudeSettings = { 
+            depth: gableThickness, 
+            bevelEnabled: false,
+            steps: 1,
+            curveSegments: 1
+        };
         const gableGeometry = new THREE.ExtrudeGeometry(gableShape, extrudeSettings);
+        // S'assurer que les normales sont correctement calculées
+        gableGeometry.computeVertexNormals();
+        
         const frontGableMesh = new THREE.Mesh(gableGeometry, gableMaterial);
-        frontGableMesh.position.z = wallDepth / 2 - roofThickness / 2 - gableInset; // Position avant
+        // Positionner exactement à l'extrémité avant pour fermer le trou
+        frontGableMesh.position.z = wallDepth / 2 - gableThickness / 2;
         roofGroup.add(frontGableMesh);
+        
         const backGableMesh = new THREE.Mesh(gableGeometry.clone(), gableMaterial); // Cloner géométrie
-        backGableMesh.position.z = -wallDepth / 2 + roofThickness / 2 + gableInset; // Position arrière
+        // Positionner exactement à l'extrémité arrière pour fermer le trou
+        backGableMesh.position.z = -wallDepth / 2 + gableThickness / 2;
         backGableMesh.rotation.y = Math.PI; // Retourner le pignon arrière
         roofGroup.add(backGableMesh);
-
-        // Pignons latéraux pour fermer les espaces triangulaires
-        const sideGableBaseWidth = wallDepth;
-        const sideGableShape = new THREE.Shape();
-        sideGableShape.moveTo(-sideGableBaseWidth / 2, 0);
-        sideGableShape.lineTo(sideGableBaseWidth / 2, 0);
-        sideGableShape.lineTo(0, roofHeight);
-        sideGableShape.closePath();
-        const sideExtrudeSettings = { depth: roofThickness, bevelEnabled: false };
-        const sideGableGeometry = new THREE.ExtrudeGeometry(sideGableShape, sideExtrudeSettings);
-        
-        // Pignon gauche
-        const leftGableMesh = new THREE.Mesh(sideGableGeometry, gableMaterial);
-        leftGableMesh.position.x = -wallWidth / 2 + roofThickness / 2 + gableInset;
-        leftGableMesh.rotation.y = Math.PI / 2; // Orienter vers la droite
-        roofGroup.add(leftGableMesh);
-        
-        // Pignon droit
-        const rightGableMesh = new THREE.Mesh(sideGableGeometry.clone(), gableMaterial);
-        rightGableMesh.position.x = wallWidth / 2 - roofThickness / 2 - gableInset;
-        rightGableMesh.rotation.y = -Math.PI / 2; // Orienter vers la gauche
-        roofGroup.add(rightGableMesh);
 
         // 2. Pans inclinés (BoxGeometry)
         const roofPaneLength = wallDepth + roofOverhang * 2;
@@ -336,12 +334,14 @@ export default class NewHouseRenderer {
         roofGroup.add(roofPaneRightMesh);
 
         // Cheminée (Groupe pour corps et chapeau)
-        const chimneyWidth = 0.6; const chimneyHeight = 1.5; const chimneyDepth = 0.6;
+        const chimneyWidth = 0.6 * scale; 
+        const chimneyHeight = 1.5 * scale; 
+        const chimneyDepth = 0.6 * scale;
         const chimneyGroup = new THREE.Group();
         // Positionner la cheminée (logique complexe du HTML à adapter)
         const chimneyPosZRelative = -0.1; const chimneyPosXRelative = 0.6;
         const slopeX = roofSlopeBase * chimneyPosXRelative; const slopeY = roofHeight * chimneyPosXRelative;
-        const chimneyLowerAmount = 0.5;
+        const chimneyLowerAmount = 0.5 * scale;
         const chimneyGroupBaseY = roofGroup.position.y + slopeY - chimneyLowerAmount; // Y base du groupe cheminée
         const chimneyBaseZ = wallDepth * chimneyPosZRelative;
         const chimneyBaseX = slopeX;
@@ -356,7 +356,9 @@ export default class NewHouseRenderer {
         chimneyGroup.add(chimneyMesh);
 
         // Chapeau cheminée
-        const capHeight = 0.15; const capWidth = chimneyWidth * 1.2; const capDepth = chimneyDepth * 1.2;
+        const capHeight = 0.15 * scale; 
+        const capWidth = chimneyWidth * 1.2; 
+        const capDepth = chimneyDepth * 1.2;
         const chimneyCapGeometry = new THREE.BoxGeometry(capWidth, capHeight, capDepth);
         // Créer les matériaux pour les faces du chapeau
         const chimneyCapMaterials = [
@@ -373,15 +375,19 @@ export default class NewHouseRenderer {
         chimneyGroup.add(chimneyCapMesh);
 
         // Porte
-        const doorWidth = 1; const doorHeight = 2; const doorDepth = 0.1;
+        const doorWidth = 1 * scale; 
+        const doorHeight = 2 * scale; 
+        const doorDepth = 0.1 * scale;
         const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth);
         const doorMesh = new THREE.Mesh(doorGeometry, doorMaterial);
         // Position par rapport au centre de la maison, sur la face avant
-        doorMesh.position.set(0, doorHeight / 2, wallDepth / 2 + doorDepth / 2 + 0.001);
+        doorMesh.position.set(0, doorHeight / 2, wallDepth / 2 + doorDepth / 2 + 0.001 * scale);
         houseGroup.add(doorMesh);
 
         // Marche
-        const stepWidth = 1.2; const stepHeight = 0.2; const stepDepth = 0.5;
+        const stepWidth = 1.2 * scale; 
+        const stepHeight = 0.2 * scale; 
+        const stepDepth = 0.5 * scale;
         const stepGeometry = new THREE.BoxGeometry(stepWidth, stepHeight, stepDepth);
         const stepMesh = new THREE.Mesh(stepGeometry, stepMaterial);
         stepMesh.position.set(0, stepHeight / 2, wallDepth / 2 + doorDepth + stepDepth / 2);
@@ -390,8 +396,10 @@ export default class NewHouseRenderer {
         // Fenêtres (Utilisation d'une fonction helper pour éviter répétition)
         const createWindow = (x, y, z, rotY = 0) => {
             const windowGroup = new THREE.Group(); // Groupe pour cadre + vitre
-            const frameWidth = 1.2; const frameHeight = 1.4; const frameDepth = 0.1;
-            const barThickness = 0.08;
+            const frameWidth = 1.2 * scale; 
+            const frameHeight = 1.4 * scale; 
+            const frameDepth = 0.1 * scale;
+            const barThickness = 0.08 * scale;
 
             // Cadre (assemblage de boîtes)
             const sideBarGeo = new THREE.BoxGeometry(barThickness, frameHeight, frameDepth);
@@ -419,7 +427,7 @@ export default class NewHouseRenderer {
             const paneGeometry = new THREE.PlaneGeometry(frameWidth - barThickness * 2, frameHeight - barThickness * 2);
             const paneMesh = new THREE.Mesh(paneGeometry, windowPaneMaterial);
             // Positionner la vitre légèrement en retrait derrière le cadre
-            paneMesh.position.z = -frameDepth / 2 + 0.01;
+            paneMesh.position.z = -frameDepth / 2 + 0.01 * scale;
             windowGroup.add(paneMesh);
 
             // Positionner et orienter le groupe fenêtre complet
@@ -428,8 +436,8 @@ export default class NewHouseRenderer {
             return windowGroup; // Retourner le groupe pour l'ajouter à houseGroup
         };
 
-        const windowY = wallHeight / 2 + 0.1;
-        const windowOffset = 0.05; // Décalage par rapport à la surface du mur
+        const windowY = wallHeight / 2 + 0.1 * scale;
+        const windowOffset = 0.05 * scale; // Décalage par rapport à la surface du mur
         houseGroup.add(createWindow(-wallWidth / 4, windowY, wallDepth / 2 + windowOffset)); // Avant Gauche
         houseGroup.add(createWindow( wallWidth / 4, windowY, wallDepth / 2 + windowOffset)); // Avant Droit
         houseGroup.add(createWindow(-wallWidth / 4, windowY, -wallDepth / 2 - windowOffset, Math.PI)); // Arrière Gauche
@@ -510,7 +518,7 @@ export default class NewHouseRenderer {
         if (allGeometries.length === 0) {
             console.error("[NewHouse Proc] Aucune géométrie valide trouvée après parcours.");
             // Nettoyer les géométries locales
-             wallGeometry.dispose(); gableGeometry.dispose(); sideGableGeometry.dispose(); roofPaneGeometry.dispose();
+             wallGeometry.dispose(); gableGeometry.dispose(); roofPaneGeometry.dispose();
              chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose();
             // Nettoyer les géométries de fenêtres
             houseGroup.traverse(obj => { if (obj.isMesh) obj.geometry?.dispose(); });
@@ -570,7 +578,7 @@ export default class NewHouseRenderer {
         // Nettoyer toutes les géométries initiales de allGeometries
         allGeometries.forEach(g => g.dispose());
         // Nettoyer les géométries de base qui ont été utilisées pour les clones
-        wallGeometry.dispose(); gableGeometry.dispose(); sideGableGeometry.dispose(); roofPaneGeometry.dispose();
+        wallGeometry.dispose(); gableGeometry.dispose(); roofPaneGeometry.dispose();
         chimneyGeometry.dispose(); chimneyCapGeometry.dispose(); doorGeometry.dispose(); stepGeometry.dispose();
         // Nettoyer les géométries de fenêtres
         houseGroup.traverse(obj => { if (obj.isMesh) obj.geometry?.dispose(); });

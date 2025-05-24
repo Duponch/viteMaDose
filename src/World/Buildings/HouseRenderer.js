@@ -838,7 +838,7 @@ export default class HouseRenderer {
      *
      * Ces données permettront de créer des InstancedMesh dans PlotContentGenerator.
      */
-    generateProceduralHouse(baseWidth, baseHeight, baseDepth, userScale = 1) {
+    generateProceduralHouse(baseWidth, baseHeight, baseDepth, userScale = 10) {
         // Regrouper les géométries de chaque partie selon leur matériau
         const materialMap = new Map();
         

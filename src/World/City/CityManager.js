@@ -86,9 +86,9 @@ export default class CityManager {
             // Assets (Simplifié - les détails restent dans la config passée)
             houseModelDir: "Assets/Models/Houses/",
             houseModelFiles: [ { file: "House1.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 } ],
-            houseBaseWidth: 5,
-            houseBaseHeight: 6,
-            houseBaseDepth: 5,
+            houseBaseWidth: 8,
+            houseBaseHeight: 7,
+            houseBaseDepth: 8,
             buildingModelDir: "Assets/Models/Buildings/",
             buildingModelFiles: [ { file: "Building1.fbx", scale: 0.8 }, { file: "Building10.glb", scale: 0.8 } ],
             buildingBaseWidth: 10,
