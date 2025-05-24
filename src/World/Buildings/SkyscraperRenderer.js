@@ -290,6 +290,15 @@ export default class SkyscraperRenderer {
             name: "SkyscraperRedLightMat"
         });
 
+        // Matériau pour le cadre des portes (gris foncé)
+        const doorFrameMaterial = new THREE.MeshStandardMaterial({
+            color: 0x363939,
+            flatShading: true,
+            name: "SkyscraperDoorFrameMat",
+            roughness: 0.7,
+            metalness: 0.2
+        });
+
         // --- Dimensions générales ---
         const mainWidth = 9, mainDepth = 9;
         const standardFloorHeight = 3.0; // Hauteur fixe pour chaque étage
@@ -326,7 +335,7 @@ export default class SkyscraperRenderer {
         const originalBaseSideWindowPanelWidth = (mainDepth - 3 * pillarThickness) / 2;
         const doorWidth = originalBaseWindowPanelWidth * doorWidthFactor * doorWidthFactorAdjustment;
         const sideDoorWidth = originalBaseSideWindowPanelWidth * doorWidthFactor * doorWidthFactorAdjustment;
-        const doorPanelDepth = (pillarThickness * 0.8) / 4;
+        const doorPanelDepth = (pillarThickness * 0.8) / 8;
         let doorGeomX = null, doorGeomZ = null;
         if (doorWidth > 0.01 && doorHeight > 0.01) {
             doorGeomX = new THREE.BoxGeometry(doorWidth, doorHeight, doorPanelDepth);
@@ -357,6 +366,110 @@ export default class SkyscraperRenderer {
                 doorFront.castShadow = true;
                 skyscraper.add(doorFront);
             }
+        }
+
+        // --- Cadres des portes ---
+        const frameThickness = 0.04; // Épaisseur du cadre
+        const frameDepth = doorPanelDepth + 0.01; // Profondeur légèrement supérieure à la porte
+        
+        // Cadres pour les portes frontales/arrière (doorGeomX)
+        if (doorWidth > 0.01 && doorHeight > 0.01) {
+            const doorCenterX = doorWidth * 0.75;
+            const frameWidth = doorWidth + frameThickness * 2;
+            const frameHeight = doorHeight + frameThickness * 2;
+            
+            // Géométries du cadre
+            const frameTopBottomGeom = new THREE.BoxGeometry(frameWidth, frameThickness, frameDepth);
+            const frameSideGeom = new THREE.BoxGeometry(frameThickness, doorHeight, frameDepth);
+            
+            for (let i = 0; i < 2; i++) {
+                const zPos = (mainDepth / 2) * (i === 0 ? 1 : -1) + (frameDepth / 2 * (i === 0 ? 1 : -1));
+                
+                // Cadres pour porte gauche (sans partie inférieure)
+                const frameTopLeft = new THREE.Mesh(frameTopBottomGeom, doorFrameMaterial);
+                frameTopLeft.position.set(-doorCenterX, doorHeight + frameThickness / 2, zPos);
+                frameTopLeft.castShadow = true;
+                skyscraper.add(frameTopLeft);
+                
+                const frameLeftLeft = new THREE.Mesh(frameSideGeom, doorFrameMaterial);
+                frameLeftLeft.position.set(-doorCenterX - doorWidth / 2 - frameThickness / 2, doorHeight / 2, zPos);
+                frameLeftLeft.castShadow = true;
+                skyscraper.add(frameLeftLeft);
+                
+                const frameRightLeft = new THREE.Mesh(frameSideGeom, doorFrameMaterial);
+                frameRightLeft.position.set(-doorCenterX + doorWidth / 2 + frameThickness / 2, doorHeight / 2, zPos);
+                frameRightLeft.castShadow = true;
+                skyscraper.add(frameRightLeft);
+                
+                // Cadres pour porte droite (sans partie inférieure)
+                const frameTopRight = new THREE.Mesh(frameTopBottomGeom, doorFrameMaterial);
+                frameTopRight.position.set(doorCenterX, doorHeight + frameThickness / 2, zPos);
+                frameTopRight.castShadow = true;
+                skyscraper.add(frameTopRight);
+                
+                const frameLeftRight = new THREE.Mesh(frameSideGeom, doorFrameMaterial);
+                frameLeftRight.position.set(doorCenterX - doorWidth / 2 - frameThickness / 2, doorHeight / 2, zPos);
+                frameLeftRight.castShadow = true;
+                skyscraper.add(frameLeftRight);
+                
+                const frameRightRight = new THREE.Mesh(frameSideGeom, doorFrameMaterial);
+                frameRightRight.position.set(doorCenterX + doorWidth / 2 + frameThickness / 2, doorHeight / 2, zPos);
+                frameRightRight.castShadow = true;
+                skyscraper.add(frameRightRight);
+            }
+            
+            frameTopBottomGeom.dispose();
+            frameSideGeom.dispose();
+        }
+        
+        // Cadres pour les portes latérales (doorGeomZ)
+        if (sideDoorWidth > 0.01 && doorHeight > 0.01) {
+            const doorCenterZ = sideDoorWidth * 0.75;
+            const frameWidth = sideDoorWidth + frameThickness * 2;
+            const frameHeight = doorHeight + frameThickness * 2;
+            
+            // Géométries du cadre pour les portes latérales
+            const frameTopBottomGeomZ = new THREE.BoxGeometry(frameDepth, frameThickness, frameWidth);
+            const frameSideGeomZ = new THREE.BoxGeometry(frameDepth, doorHeight, frameThickness);
+            
+            for (let i = 0; i < 2; i++) {
+                const xPos = (mainWidth / 2) * (i === 0 ? 1 : -1) + (frameDepth / 2 * (i === 0 ? 1 : -1));
+                
+                // Cadres pour porte arrière (sans partie inférieure)
+                const frameTopBack = new THREE.Mesh(frameTopBottomGeomZ, doorFrameMaterial);
+                frameTopBack.position.set(xPos, doorHeight + frameThickness / 2, -doorCenterZ);
+                frameTopBack.castShadow = true;
+                skyscraper.add(frameTopBack);
+                
+                const frameLeftBack = new THREE.Mesh(frameSideGeomZ, doorFrameMaterial);
+                frameLeftBack.position.set(xPos, doorHeight / 2, -doorCenterZ - sideDoorWidth / 2 - frameThickness / 2);
+                frameLeftBack.castShadow = true;
+                skyscraper.add(frameLeftBack);
+                
+                const frameRightBack = new THREE.Mesh(frameSideGeomZ, doorFrameMaterial);
+                frameRightBack.position.set(xPos, doorHeight / 2, -doorCenterZ + sideDoorWidth / 2 + frameThickness / 2);
+                frameRightBack.castShadow = true;
+                skyscraper.add(frameRightBack);
+                
+                // Cadres pour porte avant (sans partie inférieure)
+                const frameTopFront = new THREE.Mesh(frameTopBottomGeomZ, doorFrameMaterial);
+                frameTopFront.position.set(xPos, doorHeight + frameThickness / 2, doorCenterZ);
+                frameTopFront.castShadow = true;
+                skyscraper.add(frameTopFront);
+                
+                const frameLeftFront = new THREE.Mesh(frameSideGeomZ, doorFrameMaterial);
+                frameLeftFront.position.set(xPos, doorHeight / 2, doorCenterZ - sideDoorWidth / 2 - frameThickness / 2);
+                frameLeftFront.castShadow = true;
+                skyscraper.add(frameLeftFront);
+                
+                const frameRightFront = new THREE.Mesh(frameSideGeomZ, doorFrameMaterial);
+                frameRightFront.position.set(xPos, doorHeight / 2, doorCenterZ + sideDoorWidth / 2 + frameThickness / 2);
+                frameRightFront.castShadow = true;
+                skyscraper.add(frameRightFront);
+            }
+            
+            frameTopBottomGeomZ.dispose();
+            frameSideGeomZ.dispose();
         }
 
         // --- Structure intermédiaire ---
@@ -584,6 +697,7 @@ export default class SkyscraperRenderer {
         materialMap.set(floorMaterial.name, { material: floorMaterial.clone(), geoms: [] });
         materialMap.set(skyscraperWindowMaterial.name, { material: skyscraperWindowMaterial.clone(), geoms: [] });
         materialMap.set(redLightMaterial.name, { material: redLightMaterial.clone(), geoms: [] });
+        materialMap.set(doorFrameMaterial.name, { material: doorFrameMaterial.clone(), geoms: [] });
         //materialMap.set(doorMarkerMaterial.name, { material: doorMarkerMaterial.clone(), geoms: [] });
 
         skyscraper.traverse(child => {
