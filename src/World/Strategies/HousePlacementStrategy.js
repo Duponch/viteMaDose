@@ -28,6 +28,8 @@ export default class HousePlacementStrategy extends IZonePlacementStrategy {
         }
         // Raccourci pratique
         this.houseRenderer = this.renderers.houseRenderer;
+        // Renderer alternatif pour nouvelle maison
+        this.newHouseRenderer = this.renderers.newHouseRenderer;
         
         // Créer le helper de visualisation des façades
         if (experience && experience.scene) {
@@ -44,114 +46,90 @@ export default class HousePlacementStrategy extends IZonePlacementStrategy {
      */
     populatePlot(plot, instanceDataManager, cityManager, groundLevel) {
         const baseScaleFactor = this.config.gridHouseBaseScale ?? 1.5;
-        // Dimensions cibles basées sur la logique interne de HouseRenderer (armLength=2.0)
-        const targetBuildingWidth = 2.0 * baseScaleFactor;
-        const targetBuildingDepth = 2.0 * baseScaleFactor;
         const minSpacing = this.config.minHouseSpacing ?? 0;
-
-        const gridPlacement = this.calculateGridPlacement(
-            plot,
-            targetBuildingWidth,
-            targetBuildingDepth,
-            minSpacing
-        );
-
-        if (!gridPlacement) {
-            // console.warn(`HousePlacementStrategy: Impossible de placer des maisons sur Plot ${plot.id}`);
-            return; // Pas assez d'espace
-        }
-
-        const { numItemsX, numItemsY, gapX, gapZ } = gridPlacement;
-        const plotGroundY = this.config.plotGroundY ?? 0.005; // Utiliser pour la position Y
-        const sidewalkHeight = this.config.sidewalkHeight ?? 0.2; // Pour enregistrer la position du bâtiment
-        
-        // Récupérer les positions des commerces (si elles existent)
+        const targetWidth = 2.0 * baseScaleFactor;
+        const targetDepth = 2.0 * baseScaleFactor;
+        const grid = this.calculateGridPlacement(plot, targetWidth, targetDepth, minSpacing);
+        if (!grid) return;
+        const { numItemsX, numItemsY, gapX, gapZ } = grid;
+        const plotGroundY = this.config.plotGroundY ?? 0.005;
+        const sidewalkHeight = this.config.sidewalkHeight ?? 0.2;
         const commercialPositions = plot.commercialPositions || [];
 
         for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
             for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
-				// === ne garder que la périphérie ===
-				if (rowIndex > 0 && rowIndex < numItemsY - 1 && colIndex > 0 && colIndex < numItemsX - 1) {
-					continue;
-				}
-                
-                // Vérifier si cette position est occupée par un commerce
-                const isCommercialPosition = commercialPositions.some(pos => 
-                    pos.x === colIndex && pos.y === rowIndex);
-                
-                // Si c'est un commerce, ne pas placer de maison ici
-                if (isCommercialPosition) {
-                    continue;
-                }
-                
-                // Calculer le centre de la cellule de la grille
-                const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + minSpacing)) + targetBuildingWidth / 2;
-                const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + minSpacing)) + targetBuildingDepth / 2;
-                const worldCellCenterPos = new THREE.Vector3(cellCenterX, groundLevel, cellCenterZ);
+                // Périphérie uniquement
+                if (rowIndex > 0 && rowIndex < numItemsY - 1 && colIndex > 0 && colIndex < numItemsX - 1) continue;
+                // Ne pas placer sur positions commerciales
+                if (commercialPositions.some(pos => pos.x === colIndex && pos.y === rowIndex)) continue;
 
-                // Déterminer la rotation en fonction de la position par rapport aux trottoirs
-                const arrowRotationY = this.determineOrientationTowardsSidewalk(
-                    cellCenterX, 
-                    cellCenterZ, 
-                    plot, 
-                    this.config.sidewalkWidth ?? 0, 
-                    rowIndex, 
-                    colIndex, 
-                    numItemsX, 
-                    numItemsY
+                const cx = plot.x + gapX + colIndex * (targetWidth + minSpacing) + targetWidth / 2;
+                const cz = plot.z + gapZ + rowIndex * (targetDepth + minSpacing) + targetDepth / 2;
+                // Orientation vers trottoir
+                const arrowY = this.determineOrientationTowardsSidewalk(
+                    cx, cz, plot, this.config.sidewalkWidth ?? 0,
+                    rowIndex, colIndex, numItemsX, numItemsY
                 );
-
-                // --- NOUVEAU: Ajouter un helper de façade si disponible ---
+                // Helper façades
                 if (this.facadeHelper) {
-                    const buildingPosition = new THREE.Vector3(cellCenterX, sidewalkHeight, cellCenterZ);
                     this.facadeHelper.addFacadeHelper(
-                        buildingPosition, 
-                        arrowRotationY, 
-                        targetBuildingWidth, 
-                        targetBuildingDepth
+                        new THREE.Vector3(cx, sidewalkHeight, cz),
+                        arrowY,
+                        targetWidth,
+                        targetDepth
                     );
                 }
+                const rotationY = arrowY - Math.PI / 2;
 
-                // Ajuster la rotation pour la maison (soustraire 90° par rapport à la flèche)
-                // car le modèle de maison a sa façade à -90° par rapport à la direction vers laquelle pointe la flèche
-                const targetRotationY = arrowRotationY - Math.PI/2;
+                // Choix entre ancien et nouveau système
+                const useNew = this.newHouseRenderer && ((rowIndex + colIndex) % 2 === 0);
+                
+                if (useNew) {
+                    // Nouveau système : utiliser les assets procéduraux de NewHouseRenderer
+                    let variants = this.assetLoader.assets.house.filter(a => a.rendererType === 'NewHouseRenderer');
+                    if (variants.length === 0) variants = this.assetLoader.assets.house;
+                    const assetInfo = variants[Math.floor(Math.random() * variants.length)];
+                    if (!assetInfo || !assetInfo.parts) continue;
 
-                // Générer les données d'instance pour une maison
-                // HouseRenderer retourne un objet { partName: [matrix, ...], ... }
-                const houseInstanceData = this.houseRenderer.generateHouseInstance(
-                    worldCellCenterPos,
-                    plotGroundY, // Utiliser la hauteur configurée pour le positionnement vertical
-                    targetRotationY,
-                    baseScaleFactor
-                );
-
-                if (houseInstanceData) {
-                    // Ajouter chaque partie (et ses matrices) au gestionnaire d'instances
+                    // Génération des matrices d'instance pour chaque partie
+                    assetInfo.parts.forEach((part, index) => {
+                        const matrix = this.calculateInstanceMatrix(
+                            cx, cz,
+                            assetInfo.sizeAfterFitting.y,
+                            assetInfo.fittingScaleFactor,
+                            assetInfo.centerOffset,
+                            assetInfo.userScale,
+                            rotationY,
+                            plotGroundY
+                        );
+                        const key = `${assetInfo.id}_part${index}`;
+                        instanceDataManager.addData('house', key, matrix);
+                    });
+                } else {
+                    // Ancien système : utiliser directement generateHouseInstance de HouseRenderer
+                    const worldCellCenterPos = new THREE.Vector3(cx, 0, cz);
+                    const houseInstanceData = this.houseRenderer.generateHouseInstance(
+                        worldCellCenterPos,
+                        plotGroundY,
+                        rotationY,
+                        baseScaleFactor
+                    );
+                    
+                    // Ajouter chaque partie directement à InstanceDataManager
                     for (const partName in houseInstanceData) {
-                        if (houseInstanceData.hasOwnProperty(partName) && Array.isArray(houseInstanceData[partName])) {
-                            houseInstanceData[partName].forEach(matrix => {
-                                instanceDataManager.addData('house', partName, matrix);
-                            });
-                        }
-                    }
-
-                    // Enregistrer l'instance de bâtiment auprès de CityManager
-                    // Utiliser le centre de la cellule, mais à la hauteur du trottoir pour la logique de citoyen
-                    const buildingPosition = new THREE.Vector3(cellCenterX, sidewalkHeight, cellCenterZ);
-                    const registeredBuilding = cityManager.registerBuildingInstance(plot.id, 'house', buildingPosition);
-
-                    if (registeredBuilding) {
-                        plot.addBuildingInstance({
-                            id: registeredBuilding.id,
-                            type: 'house',
-                            position: buildingPosition.clone()
+                        const matrices = houseInstanceData[partName];
+                        matrices.forEach(matrix => {
+                            instanceDataManager.addData('house', partName, matrix);
                         });
                     }
-                } else {
-                    console.warn(`HouseRenderer n'a retourné aucune donnée d'instance pour Plot ${plot.id}, cellule (${colIndex},${rowIndex})`);
                 }
-            } // Fin boucle colIndex
-        } // Fin boucle rowIndex
+
+                // Enregistrement pour la logique des citoyens
+                const regPos = new THREE.Vector3(cx, sidewalkHeight, cz);
+                const reg = cityManager.registerBuildingInstance(plot.id, 'house', regPos);
+                if (reg) plot.addBuildingInstance({ id: reg.id, type: 'house', position: regPos.clone() });
+            }
+        }
     }
     
     /**

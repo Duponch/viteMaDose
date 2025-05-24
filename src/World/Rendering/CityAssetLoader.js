@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import HouseRenderer from '../Buildings/HouseRenderer.js';
 import BuildingRenderer from '../Buildings/BuildingRenderer.js';
 import NewBuildingRenderer from '../Buildings/NewBuildingRenderer.js';
+import NewHouseRenderer from '../Buildings/NewHouseRenderer.js';
 import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
 import NewSkyscraperRenderer from '../Buildings/NewSkyscraperRenderer.js';
 import IndustrialRenderer, { generateProceduralIndustrial } from '../Buildings/IndustrialRenderer.js'; // Ajustez le chemin si nécessaire
@@ -37,6 +38,7 @@ export default class CityAssetLoader {
         this.loadingPromises = new Map();
         // Création des instances de HouseRenderer, BuildingRenderer et SkyscraperRenderer
         this.houseRenderer = new HouseRenderer(config, {});
+        this.newHouseRenderer = new NewHouseRenderer(config, {}, this.experience?.renderer?.instance);
         this.buildingRenderer = new BuildingRenderer(config, {});
         this.newBuildingRenderer = new NewBuildingRenderer(config, {});
         this.skyscraperRenderer = new SkyscraperRenderer(config, {});
@@ -49,9 +51,12 @@ export default class CityAssetLoader {
 
     // ----- getRandomAssetData -----
     getRandomAssetData(type) {
-        // Pour les maisons générées procéduralement, on retourne null.
+        // Pour les maisons procédurales, on pioche aléatoirement dans les variants générés.
         if (type === 'house') {
-            return null;
+            const list = this.assets.house;
+            if (!list || list.length === 0) return null;
+            const idx = Math.floor(Math.random() * list.length);
+            return list[idx];
         }
         const modelList = this.assets[type];
         if (!modelList || modelList.length === 0) {
@@ -63,12 +68,8 @@ export default class CityAssetLoader {
 
     // ----- getAssetDataById -----
     getAssetDataById(id) {
-        // On ignore les maisons car elles sont générées procéduralement.
-        if (id && id.startsWith('house_')) {
-            return null;
-        }
+        // Retourne l'asset correspondant dans tous les types
         for (const type in this.assets) {
-            if (type === 'house') continue;
             if (this.assets.hasOwnProperty(type)) {
                 const found = this.assets[type].find(asset => asset.id === id);
                 if (found) return found;
@@ -85,15 +86,24 @@ export default class CityAssetLoader {
 
         // Fonction interne createLoadPromises mise à jour pour gérer les types procéduraux.
         const createLoadPromises = (assetConfigs, dir, type, width, height, depth) => { //
-            if (type === 'house') { // Keep original logic for house
-                //console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`); //
-                return [ //
-                    this.loadAssetModel(null, type, width, height, depth, 1.0, null) // Pass null for renderer hint
-                        .catch(error => { //
-                            console.error(`Echec génération procédurale ${type}:`, error); //
-                            return null; //
-                        })
-                ];
+            if (type === 'house') {
+                // Générer plusieurs variantes 50/50 entre ancien et nouveau renderer
+                const numVariants = this.config.proceduralHouseVariants ?? 10;
+                const half = Math.ceil(numVariants / 2);
+                const promises = [];
+                for (let i = 0; i < half; i++) {
+                    promises.push(
+                        this.loadAssetModel(null, type, width, height, depth, 1.0, 'new')
+                            .catch(error => { console.error(`Echec génération nouvelle maison variant ${i}:`, error); return null; })
+                    );
+                }
+                for (let i = 0; i < numVariants - half; i++) {
+                    promises.push(
+                        this.loadAssetModel(null, type, width, height, depth, 1.0, 'old')
+                            .catch(error => { console.error(`Echec génération maison classique variant ${i}:`, error); return null; })
+                    );
+                }
+                return promises;
             } else if (type === 'tree') { // Génération d'une instance par couleur et sapin
                 const treePromises = [];
                 // Une instance par couleur de feuillage
@@ -311,29 +321,33 @@ export default class CityAssetLoader {
                 //console.log(`Attempting procedural generation for type: ${type} ${rendererTypeHint ? `(Hint: ${rendererTypeHint})` : ''}`);
 
                 if (type === 'house') {
-                    if (!this.houseRenderer) {
-                        console.error("HouseRenderer not initialized.");
+                    // Choix du renderer selon le hint
+                    const useNew = rendererTypeHint === 'new';
+                    const renderer = useNew ? this.newHouseRenderer : this.houseRenderer;
+                    const rendererName = useNew ? 'NewHouseRenderer' : 'HouseRenderer';
+                    if (!renderer) {
+                        console.error(`Renderer (${rendererName}) not initialisé pour 'house'.`);
                         resolve(null);
                         return;
                     }
                     try {
-                        assetData = this.houseRenderer.generateProceduralHouse(baseWidth, baseHeight, baseDepth, userScale);
+                        const assetData = renderer.generateProceduralHouse(baseWidth, baseHeight, baseDepth, userScale);
                         if (assetData) {
-                            finalModelId = `house_proc_${internalCounterId}`;
+                            finalModelId = `house_proc_${rendererName}_${internalCounterId}`;
                             assetData.id = finalModelId;
                             assetData.procedural = true;
-                            assetData.rendererType = 'HouseRenderer';
+                            assetData.rendererType = rendererName;
                             this.loadedAssets.set(finalModelId, assetData);
-                            //console.log(`  - Generated procedural house asset '${finalModelId}'`);
                             resolve(assetData);
                         } else {
-                            console.warn("Procedural generation for house returned null.");
+                            console.warn(`Procedural house generation (${rendererName}) retourné null.`);
                             resolve(null);
                         }
                     } catch (error) {
-                        console.error("Error during procedural house generation:", error);
+                        console.error(`Erreur génération procédurale maison (${rendererName}):`, error);
                         resolve(null);
                     }
+                    return;
                 } else if (type === 'building') {
                     // *** MODIFICATION START ***
                     const useNewRenderer = rendererTypeHint === 'new'; // Use the hint

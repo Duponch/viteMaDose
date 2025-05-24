@@ -465,7 +465,8 @@ export default class NewHouseRenderer {
         houseGroup.traverse((child) => {
             if (child.isMesh && child.geometry && child.material) {
                 child.updateMatrixWorld(true); // S'assurer que la matrice monde est à jour
-                const clonedGeom = child.geometry.clone();
+                let clonedGeom = child.geometry.clone();
+                if (clonedGeom.index) clonedGeom = clonedGeom.toNonIndexed();
                 clonedGeom.applyMatrix4(child.matrixWorld); // Appliquer la transformation MONDIALE
                 allGeometries.push(clonedGeom);
 
@@ -490,7 +491,8 @@ export default class NewHouseRenderer {
                   child.children.forEach(grandChild => {
                       if (grandChild.isMesh && grandChild.geometry && grandChild.material) {
                            grandChild.updateMatrixWorld(true); // Matrice du petit-enfant
-                           const clonedGeom = grandChild.geometry.clone();
+                           let clonedGeom = grandChild.geometry.clone();
+                           if (clonedGeom.index) clonedGeom = clonedGeom.toNonIndexed();
                            clonedGeom.applyMatrix4(grandChild.matrixWorld); // Transformation MONDIALE
                            allGeometries.push(clonedGeom);
 

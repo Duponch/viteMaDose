@@ -195,32 +195,73 @@ export default class InstancedMeshManager {
                         }
                         
                         case 'house': {
-                            const partName = idOrKey; // Pour 'house', idOrKey est le partName
+                            // 1) Clé assetId seul : créer un mesh par partie de l'asset procédural
+                            if (!idOrKey.includes('_part')) {
+                                const assetData = this.assetLoader.getAssetDataById(idOrKey);
+                                if (assetData?.parts && assetData.parts.length > 0) {
+                                    const count = matrices.length;
+                                    assetData.parts.forEach((part, idx) => {
+                                        if (!part.geometry || !part.material) return;
+                                        const matClone = part.material.clone();
+                                        const meshName = `${idOrKey}_part${idx}`;
+                                        matClone.name = `Inst_${meshName}`;
+                                        const instMesh = new THREE.InstancedMesh(part.geometry, matClone, count);
+                                        instMesh.castShadow = true;
+                                        instMesh.receiveShadow = true;
+                                        instMesh.name = `house_${meshName}`;
+                                        matrices.forEach((m, i) => instMesh.setMatrixAt(i, m));
+                                        instMesh.instanceMatrix.needsUpdate = true;
+                                        this.parentGroup.add(instMesh);
+                                        this.instancedMeshes[`house_${meshName}`] = instMesh;
+                                    });
+                                    continue;
+                                }
+                            }
+                            // 2) Clé assetId_partN : mesh d'une seule partie
+                            if (idOrKey.includes('_part')) {
+                                const [assetId, partKey] = idOrKey.split(/_(?=part\d+$)/);
+                                const assetData = this.assetLoader.getAssetDataById(assetId);
+                                if (assetData?.parts && assetData.parts.length > 0) {
+                                    const idx = parseInt(partKey.replace('part',''), 10);
+                                    const part = assetData.parts[idx];
+                                    if (part && part.geometry && part.material) {
+                                        const matClone = part.material.clone();
+                                        matClone.name = `Inst_${assetId}_${partKey}`;
+                                        const instMesh = new THREE.InstancedMesh(part.geometry, matClone, matrices.length);
+                                        instMesh.castShadow = true;
+                                        instMesh.receiveShadow = true;
+                                        instMesh.name = `house_${assetId}_${partKey}`;
+                                        matrices.forEach((m, i) => instMesh.setMatrixAt(i, m));
+                                        instMesh.instanceMatrix.needsUpdate = true;
+                                        this.parentGroup.add(instMesh);
+                                        this.instancedMeshes[`house_${assetId}_${partKey}`] = instMesh;
+                                        continue;
+                                    }
+                                }
+                                console.warn(`[IMM] Asset data house introuvable ou sans parts pour ID: ${assetId}`);
+                                continue;
+                            }
+                            // 3) Fallback legacy : partie fixe de HouseRenderer
+                            const partName = idOrKey;
                             geometry = this.renderers.houseRenderer?.baseHouseGeometries[partName];
                             material = this.renderers.houseRenderer?.baseHouseMaterials[partName];
-
+                            
                             if (!geometry) {
-                                console.warn(`[IMM] Missing geometry for house part: ${partName}`);
+                                console.warn(`[IMM] Géométrie manquante pour partie house: ${partName}`);
                                 continue;
                             }
                             if (!material) {
-                                // Tenter de récupérer le matériau 'window' si c'est une partie fenêtre nommée
+                                // Si parties fenêtre
                                 if (partName === 'windowXY' || partName === 'windowYZ') {
                                     material = this.renderers.houseRenderer?.baseHouseMaterials?.window;
-                                    if (material) {
-                                        isHouseWindowPart = true; // Marquer comme fenêtre de maison
-                                        // Le clonage et la configuration se feront APRES la vérification isWindowFinal
-                                    } else {
-                                        console.warn(`[IMM] Missing specific material and base window material for house part: ${partName}`);
-                                        continue;
-                                    }
+                                    if (material) isHouseWindowPart = true;
+                                    else { console.warn(`[IMM] Matériau fenêtre manquant pour house part: ${partName}`); continue; }
                                 } else {
-                                    console.warn(`[IMM] Missing material for non-window house part: ${partName}`);
+                                    console.warn(`[IMM] Matériau manquant pour house part non fenêtre: ${partName}`);
                                     continue;
                                 }
-                            } else if (material.name === "HouseWindowMat") { // Vérifier aussi le nom du matériau récupéré
+                            } else if (material.name === "HouseWindowMat") {
                                 isHouseWindowPart = true;
-                                // Le clonage et la configuration se feront APRES la vérification isWindowFinal
                             }
                             break;
                         } // Fin case 'house'

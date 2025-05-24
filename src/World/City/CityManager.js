@@ -15,6 +15,7 @@ import HouseRenderer from '../Buildings/HouseRenderer.js';
 import BuildingRenderer from '../Buildings/BuildingRenderer.js';
 import SkyscraperRenderer from '../Buildings/SkyscraperRenderer.js';
 import CommercialRenderer from '../Buildings/CommercialRenderer.js';
+import NewHouseRenderer from '../Buildings/NewHouseRenderer.js';
 import CityMapVisualizer from '../Rendering/CityMapVisualizer.js';
 import MayorMoney from './MayorMoney.js';
 
@@ -213,7 +214,7 @@ export default class CityManager {
         };
 
         // --- Composants ---
-        this.assetLoader = new CityAssetLoader(this.config);
+        this.assetLoader = new CityAssetLoader(this.config, this.materials, this.experience);
         this.layoutGenerator = new CityLayoutGenerator(this.config);
         this.roadGenerator = new RoadNetworkGenerator(this.config, this.materials);
         // Instanciation du PlotContentGenerator refactoré
@@ -222,11 +223,13 @@ export default class CityManager {
         // --- Renderers Spécialisés ---
         // Créés ici pour être passés à PlotContentGenerator lors de la génération
         this.houseRenderer = new HouseRenderer(this.config, this.materials);
+        this.newHouseRenderer = new NewHouseRenderer(this.config, this.materials, this.experience.renderer.instance);
         this.buildingRenderer = new BuildingRenderer(this.config, this.materials);
         this.skyscraperRenderer = new SkyscraperRenderer(this.config, this.materials);
         this.commercialRenderer = new CommercialRenderer(this.config, this.materials);
         this.renderers = {
             houseRenderer: this.houseRenderer,
+            newHouseRenderer: this.newHouseRenderer,
             buildingRenderer: this.buildingRenderer,
             skyscraperRenderer: this.skyscraperRenderer,
             commercialRenderer: this.commercialRenderer
@@ -541,6 +544,7 @@ export default class CityManager {
 
         // Dispose Renderers spécialisés
         this.houseRenderer?.reset(); // Utiliser reset ou une méthode destroy si ajoutée
+        this.newHouseRenderer?.reset();
         this.buildingRenderer?.reset();
         this.skyscraperRenderer?.reset();
         this.commercialRenderer?.reset();
@@ -575,6 +579,7 @@ export default class CityManager {
         this.lampPostManager = null;
         this.debugVisualManager = null; // Supposant qu'il n'a pas de ressources lourdes à libérer autres que ses enfants nettoyés dans clearCity
         this.houseRenderer = null;
+        this.newHouseRenderer = null;
         this.buildingRenderer = null;
         this.skyscraperRenderer = null;
         this.commercialRenderer = null;

@@ -986,7 +986,7 @@ export default class HouseRenderer {
         // Ajuster chaque partie par rapport au centre global
         materialMap.forEach((groupData, key) => {
             if (groupData.mergedGeom) {
-                groupData.mergedGeom.translate(-globalCenter.x, -globalMin.y, -globalCenter.z);
+                groupData.mergedGeom.translate(-globalCenter.x, -globalCenter.y, -globalCenter.z);
             }
         });
 
