@@ -245,13 +245,13 @@ export default class NewHouseRenderer {
         // --- Copier/Adapter les Dimensions & Logique de createHouse ---
         // Appliquer le scale global directement aux dimensions de base
         const scale = userScale; // Variable scale globale pour modifier facilement la taille
-        const wallHeight = 4 * scale; 
-        const wallWidth = 6 * scale; 
-        const wallDepth = 5 * scale;
+        const wallHeight = 4.4 * scale; // Diminué de 4 à 3.5 pour réduire la hauteur
+        const wallWidth = 10 * scale; // Augmenté de 6 à 8 pour étirer en largeur
+        const wallDepth = 10 * scale; // Augmenté de 5 à 7 pour étirer en longueur
         const roofHeight = 2 * scale; 
         const roofOverhang = 0.4 * scale; 
         const wallSegments = 4; 
-        const roofThickness = 0.15 * scale; 
+        const roofThickness = 0.35 * scale; 
         const gableInset = 0.075 * scale;
         const roofOffsetY = -0.1 * scale; // Ajustement vertical du toit par rapport aux murs
 
@@ -468,8 +468,8 @@ export default class NewHouseRenderer {
         chimneyGroup.add(chimneyCapMesh);
 
         // Porte
-        const doorWidth = 1 * scale; 
-        const doorHeight = 2 * scale; 
+        const doorWidth = 2 * scale; 
+        const doorHeight = 2.8 * scale; 
         const doorDepth = 0.1 * scale;
         const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, doorDepth);
         const doorMesh = new THREE.Mesh(doorGeometry, doorMaterial);
