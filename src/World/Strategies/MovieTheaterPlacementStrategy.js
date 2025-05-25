@@ -38,7 +38,7 @@ export default class MovieTheaterPlacementStrategy extends IZonePlacementStrateg
      * @param {number} groundLevel - La hauteur Y du sol de la parcelle.
      */
     populatePlot(plot, instanceDataManager, cityManager, groundLevel) {
-        const baseScaleFactor = this.config.movieTheaterBaseScale ?? 2.5; // Légèrement plus grand que commercial
+        const baseScaleFactor = this.config.movieTheaterBaseScale ?? 1.8; // Réduit de 2.5 à 1.8 pour harmoniser avec le nouveau defaultScaleMultiplier
         const targetBuildingWidth = 2.5 * baseScaleFactor;
         const targetBuildingDepth = 2.5 * baseScaleFactor;
         const minSpacing = this.config.minMovieTheaterSpacing ?? 0;
