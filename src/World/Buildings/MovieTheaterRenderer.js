@@ -183,8 +183,8 @@ export default class MovieTheaterRenderer {
 
         const shingleWidth = 40;
         const shingleHeight = 25;
-        const shingleColor = '#696969'; 
-        const gapColor = '#808080';    
+        const shingleColor = '#404040'; // Gris foncé pour les tuiles
+        const gapColor = '#505050';     // Gris foncé pour les espaces
 
         ctx.fillStyle = gapColor;
         ctx.fillRect(0, 0, width, height);
@@ -528,7 +528,7 @@ export default class MovieTheaterRenderer {
         );
 
         // 8. Fenêtres latérales avec cadres
-        const windowY = 2.7 * verticalScaleFactor + baseHeight;
+        const windowY = 2.0 * verticalScaleFactor + baseHeight;
 
         // Fenêtre gauche
         const window1X = -scaledBuildingSideLength / 2 - scaledWindowDepth / 2;
@@ -540,8 +540,37 @@ export default class MovieTheaterRenderer {
         );
         window1.castShadow = true;
 
-        // Cadre fenêtre gauche
-        this.createWindowFrame(buildingGroup, window1X, windowY, 0, scaledWindowWidth, scaledWindowHeight, scaledWindowDepth, scaledFramePartThickness, this.localMaterials.frame, 'frame1');
+        // Cadre fenêtre gauche (créé directement comme pour la porte)
+        // Linteau
+        const window1Lintel = createBox(
+            scaledWindowDepth, scaledFrameThickness, scaledWindowWidth + 2 * scaledFrameThickness,
+            this.localMaterials.frame,
+            window1X, windowY + scaledWindowHeight / 2 + scaledFrameThickness / 2, 0,
+            'window1Lintel'
+        );
+
+        // Seuil
+        const window1Sill = createBox(
+            scaledWindowDepth, scaledFrameThickness, scaledWindowWidth + 2 * scaledFrameThickness,
+            this.localMaterials.frame,
+            window1X, windowY - scaledWindowHeight / 2 - scaledFrameThickness / 2, 0,
+            'window1Sill'
+        );
+
+        // Montants gauche et droit
+        const window1JambLeft = createBox(
+            scaledWindowDepth, scaledWindowHeight + 2 * scaledFrameThickness, scaledFrameThickness,
+            this.localMaterials.frame,
+            window1X, windowY, -scaledWindowWidth / 2 - scaledFrameThickness / 2,
+            'window1JambLeft'
+        );
+
+        const window1JambRight = createBox(
+            scaledWindowDepth, scaledWindowHeight + 2 * scaledFrameThickness, scaledFrameThickness,
+            this.localMaterials.frame,
+            window1X, windowY, scaledWindowWidth / 2 + scaledFrameThickness / 2,
+            'window1JambRight'
+        );
 
         // Auvent fenêtre gauche
         const awning1 = createBox(
@@ -562,8 +591,37 @@ export default class MovieTheaterRenderer {
         );
         window2.castShadow = true;
 
-        // Cadre fenêtre droite
-        this.createWindowFrame(buildingGroup, window2X, windowY, 0, scaledWindowWidth, scaledWindowHeight, scaledWindowDepth, scaledFramePartThickness, this.localMaterials.frame, 'frame2');
+        // Cadre fenêtre droite (créé directement comme pour la porte)
+        // Linteau
+        const window2Lintel = createBox(
+            scaledWindowDepth, scaledFrameThickness, scaledWindowWidth + 2 * scaledFrameThickness,
+            this.localMaterials.frame,
+            window2X, windowY + scaledWindowHeight / 2 + scaledFrameThickness / 2, 0,
+            'window2Lintel'
+        );
+
+        // Seuil
+        const window2Sill = createBox(
+            scaledWindowDepth, scaledFrameThickness, scaledWindowWidth + 2 * scaledFrameThickness,
+            this.localMaterials.frame,
+            window2X, windowY - scaledWindowHeight / 2 - scaledFrameThickness / 2, 0,
+            'window2Sill'
+        );
+
+        // Montants gauche et droit
+        const window2JambLeft = createBox(
+            scaledWindowDepth, scaledWindowHeight + 2 * scaledFrameThickness, scaledFrameThickness,
+            this.localMaterials.frame,
+            window2X, windowY, -scaledWindowWidth / 2 - scaledFrameThickness / 2,
+            'window2JambLeft'
+        );
+
+        const window2JambRight = createBox(
+            scaledWindowDepth, scaledWindowHeight + 2 * scaledFrameThickness, scaledFrameThickness,
+            this.localMaterials.frame,
+            window2X, windowY, scaledWindowWidth / 2 + scaledFrameThickness / 2,
+            'window2JambRight'
+        );
 
         // Auvent fenêtre droite
         const awning2 = createBox(
@@ -719,52 +777,6 @@ export default class MovieTheaterRenderer {
             allGeometries.forEach(g => g.dispose());
             return null;
         }
-    }
-
-    /**
-     * Crée un cadre de fenêtre avec tous ses éléments
-     */
-    createWindowFrame(parentGroup, x, y, z, windowWidth, windowHeight, windowDepth, frameThickness, frameMaterial, namePrefix) {
-        const createBox = (width, height, depth, material, posX, posY, posZ, name) => {
-            const geometry = new THREE.BoxGeometry(width, height, depth);
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.set(posX, posY, posZ);
-            mesh.name = name;
-            mesh.castShadow = true;
-            parentGroup.add(mesh);
-            return mesh;
-        };
-
-        // Cadre supérieur
-        createBox(
-            windowWidth, frameThickness, windowDepth,
-            frameMaterial,
-            x, y + windowHeight / 2 + frameThickness / 2, z,
-            `${namePrefix}Top`
-        );
-
-        // Cadre inférieur
-        createBox(
-            windowWidth, frameThickness, windowDepth,
-            frameMaterial,
-            x, y - windowHeight / 2 - frameThickness / 2, z,
-            `${namePrefix}Bottom`
-        );
-
-        // Montants gauche et droit
-        createBox(
-            frameThickness, windowHeight + 2 * frameThickness, windowDepth,
-            frameMaterial,
-            x, y, z - windowWidth / 2 - frameThickness / 2,
-            `${namePrefix}Left`
-        );
-
-        createBox(
-            frameThickness, windowHeight + 2 * frameThickness, windowDepth,
-            frameMaterial,
-            x, y, z + windowWidth / 2 + frameThickness / 2,
-            `${namePrefix}Right`
-        );
     }
 
     /**
