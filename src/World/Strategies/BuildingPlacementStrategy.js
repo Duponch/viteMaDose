@@ -318,12 +318,13 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
 
         const plotGroundY = this.config.plotGroundY ?? 0.005;
         
-        // Utiliser une échelle légèrement plus grande pour les cinémas
-        const movieTheaterScaleFactor = baseScaleFactor * 1.2;
+        // Utiliser l'échelle configurée pour les cinémas
+        const movieTheaterBaseScale = this.config.movieTheaterBaseScale ?? 2.2;
+        const movieTheaterScaleFactor = movieTheaterBaseScale; // Utiliser directement la valeur de config
 
-        // Générer l'asset procédural avec les bonnes dimensions
-        const targetBuildingWidth = 2.5 * movieTheaterScaleFactor;
-        const targetBuildingDepth = 2.5 * movieTheaterScaleFactor;
+        // Générer l'asset procédural avec des dimensions basées sur la configuration
+        const targetBuildingWidth = 3.5 * movieTheaterScaleFactor;
+        const targetBuildingDepth = 3.5 * movieTheaterScaleFactor;
         
         const assetInfo = movieTheaterRenderer.generateProceduralBuilding(
             targetBuildingWidth,

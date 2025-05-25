@@ -83,7 +83,7 @@ export default class CityManager {
             gridIndustrialBaseScale: 1.2,
             gridSkyscraperBaseScale: 1.7,
             gridParkBaseScale: 1.0, // Ajout pour parcs
-            movieTheaterBaseScale: 1.8, // Ajout pour cinémas
+            movieTheaterBaseScale: 1.85, // Augmenté de 1.8 à 2.2 pour des cinémas plus grands
             // Assets (Simplifié - les détails restent dans la config passée)
             houseModelDir: "Assets/Models/Houses/",
             houseModelFiles: [ { file: "House1.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 } ],
