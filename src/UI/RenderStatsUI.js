@@ -12,6 +12,7 @@ export default class RenderStatsUI {
         
         this.createUI();
         this.bindEvents();
+        this.setupRenderHook();
         
         // Démarrer les mises à jour
         this.startUpdating();
@@ -56,6 +57,10 @@ export default class RenderStatsUI {
                     <span class="render-stats-label">Matériaux:</span>
                     <span class="render-stats-value" id="materials">0</span>
                 </div>
+                <div class="render-stats-item">
+                    <span class="render-stats-label">Meshes Visibles:</span>
+                    <span class="render-stats-value" id="visible-meshes">0</span>
+                </div>
             </div>
         `;
 
@@ -75,7 +80,8 @@ export default class RenderStatsUI {
             textures: document.getElementById('textures'),
             memory: document.getElementById('memory'),
             instances: document.getElementById('instances'),
-            materials: document.getElementById('materials')
+            materials: document.getElementById('materials'),
+            visibleMeshes: document.getElementById('visible-meshes')
         };
     }
 
@@ -234,20 +240,27 @@ export default class RenderStatsUI {
         // Calculer les statistiques
         const stats = this.calculateStats();
         
+        // Utiliser les statistiques du rendu principal si disponibles
+        const mainStats = this.experience.renderer.mainRenderStats;
+        const drawCalls = mainStats ? mainStats.calls : info.render.calls;
+        const triangles = mainStats ? mainStats.triangles : info.render.triangles;
+        
         // Mettre à jour l'affichage
-        this.elements.drawCalls.textContent = info.render.calls.toLocaleString();
-        this.elements.triangles.textContent = info.render.triangles.toLocaleString();
+        this.elements.drawCalls.textContent = drawCalls.toLocaleString();
+        this.elements.triangles.textContent = triangles.toLocaleString();
         this.elements.geometries.textContent = memory.geometries.toLocaleString();
         this.elements.textures.textContent = memory.textures.toLocaleString();
         this.elements.memory.textContent = `${stats.memoryMB} MB`;
         this.elements.instances.textContent = stats.instances.toLocaleString();
         this.elements.materials.textContent = stats.materials.toLocaleString();
+        this.elements.visibleMeshes.textContent = stats.visibleMeshes.toLocaleString();
     }
 
     calculateStats() {
         let instances = 0;
         let materials = 0;
         let memoryBytes = 0;
+        let visibleMeshes = 0;
 
         // Compter les instances depuis InstancedMeshManager
         const instancedMeshManager = this.experience.world?.cityManager?.contentGenerator?.instancedMeshManager;
@@ -290,14 +303,18 @@ export default class RenderStatsUI {
             });
         }
 
-        // Compter les matériaux uniques dans la scène
+        // Compter les matériaux uniques et meshes visibles dans la scène
         const materialSet = new Set();
         this.scene.traverse((object) => {
-            if (object.material) {
-                if (Array.isArray(object.material)) {
-                    object.material.forEach(mat => materialSet.add(mat.uuid));
-                } else {
-                    materialSet.add(object.material.uuid);
+            if (object.isMesh && object.visible) {
+                visibleMeshes++;
+                
+                if (object.material) {
+                    if (Array.isArray(object.material)) {
+                        object.material.forEach(mat => materialSet.add(mat.uuid));
+                    } else {
+                        materialSet.add(object.material.uuid);
+                    }
                 }
             }
         });
@@ -316,8 +333,14 @@ export default class RenderStatsUI {
         return {
             instances,
             materials,
-            memoryMB
+            memoryMB,
+            visibleMeshes
         };
+    }
+
+    setupRenderHook() {
+        // Pas besoin de hook, on utilise directement les stats du renderer
+        // Les statistiques sont maintenant capturées dans Renderer.js
     }
 
     destroy() {

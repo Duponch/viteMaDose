@@ -63,9 +63,26 @@ export default class Renderer {
 	}	
 
     update() {
-		// Au lieu de :
-		// this.instance.render(this.scene, this.camera.instance);
-		// Nous appelons :
+		// Réinitialiser les compteurs avant le rendu
+		this.instance.info.reset();
+		
+		// Capturer les stats avant le post-processing
+		// Faire un rendu direct pour compter les draw calls réels
+		const oldAutoClear = this.instance.autoClear;
+		this.instance.autoClear = false;
+		this.instance.clear();
+		this.instance.render(this.scene, this.camera.instance);
+		
+		// Sauvegarder les statistiques du rendu principal
+		this.mainRenderStats = {
+			calls: this.instance.info.render.calls,
+			triangles: this.instance.info.render.triangles,
+			points: this.instance.info.render.points,
+			lines: this.instance.info.render.lines
+		};
+		
+		// Restaurer autoClear et faire le rendu avec post-processing
+		this.instance.autoClear = oldAutoClear;
 		this.composer.render();
 	}	
 }
