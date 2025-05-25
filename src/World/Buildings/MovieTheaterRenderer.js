@@ -183,8 +183,8 @@ export default class MovieTheaterRenderer {
 
         const shingleWidth = 40;
         const shingleHeight = 25;
-        const shingleColor = '#404040'; // Gris foncé pour les tuiles
-        const gapColor = '#505050';     // Gris foncé pour les espaces
+        const shingleColor = '#1a1a1a'; // Gris très foncé, presque noir pour les tuiles
+        const gapColor = '#262626';     // Gris très foncé pour les espaces
 
         ctx.fillStyle = gapColor;
         ctx.fillRect(0, 0, width, height);
