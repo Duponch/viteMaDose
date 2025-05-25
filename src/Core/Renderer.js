@@ -76,7 +76,27 @@ export default class Renderer {
 			const oldAutoClear = this.instance.autoClear;
 			this.instance.autoClear = false;
 			this.instance.clear();
+			
+			// Hook pour capturer les statistiques par catégorie
+			this.categoryStats = {
+				buildings: { drawCalls: 0, triangles: 0 },
+				trees: { drawCalls: 0, triangles: 0 },
+				cityElements: { drawCalls: 0, triangles: 0 },
+				environment: { drawCalls: 0, triangles: 0 },
+				agents: { drawCalls: 0, triangles: 0 },
+				vehicles: { drawCalls: 0, triangles: 0 }
+			};
+			
+			// Intercepter les appels de rendu pour catégoriser
+			const originalRender = this.instance.render;
+			this.instance.render = (scene, camera) => {
+				this._interceptRenderCalls(scene, camera, originalRender);
+			};
+			
 			this.instance.render(this.scene, this.camera.instance);
+			
+			// Restaurer la méthode de rendu originale
+			this.instance.render = originalRender;
 			
 			// Sauvegarder les statistiques du rendu principal
 			this.mainRenderStats = {
@@ -93,6 +113,117 @@ export default class Renderer {
 			// Mode performance (rendu simple)
 			this.composer.render();
 		}
+	}
+
+	/**
+	 * Intercepte les appels de rendu pour catégoriser les statistiques
+	 * @private
+	 */
+	_interceptRenderCalls(scene, camera, originalRender) {
+		// Analyser la scène avant le rendu pour catégoriser les objets
+		const beforeCalls = this.instance.info.render.calls;
+		const beforeTriangles = this.instance.info.render.triangles;
+		
+		// Effectuer le rendu normal
+		originalRender.call(this.instance, scene, camera);
+		
+		// Les statistiques globales sont maintenant à jour
+		// Pour les catégories, on utilise une approche différente basée sur l'analyse des objets visibles
+		this._analyzeVisibleObjects(scene, camera);
+	}
+
+	/**
+	 * Analyse les objets visibles pour calculer les statistiques par catégorie
+	 * @private
+	 */
+	_analyzeVisibleObjects(scene, camera) {
+		// Réinitialiser les compteurs
+		Object.keys(this.categoryStats).forEach(key => {
+			this.categoryStats[key].drawCalls = 0;
+			this.categoryStats[key].triangles = 0;
+		});
+
+		// Parcourir tous les objets visibles dans la scène
+		scene.traverse((object) => {
+			if (object.visible && object.isMesh) {
+				const category = this._categorizeObject(object);
+				if (category) {
+					this.categoryStats[category].drawCalls++;
+					
+					// Calculer les triangles
+					if (object instanceof THREE.InstancedMesh) {
+						const trianglesPerInstance = this._getTriangleCount(object.geometry);
+						this.categoryStats[category].triangles += trianglesPerInstance * object.count;
+					} else {
+						this.categoryStats[category].triangles += this._getTriangleCount(object.geometry);
+					}
+				}
+			}
+		});
+	}
+
+	/**
+	 * Catégorise un objet selon son nom ou ses propriétés
+	 * @private
+	 */
+	_categorizeObject(object) {
+		const name = object.name.toLowerCase();
+		
+		// Bâtiments
+		if (name.includes('house') || name.includes('building') || name.includes('skyscraper') || 
+			name.includes('industrial') || name.includes('commercial') || name.includes('movietheater')) {
+			return 'buildings';
+		}
+		
+		// Arbres
+		if (name.includes('tree') || name.includes('fir')) {
+			return 'trees';
+		}
+		
+		// Éléments de ville
+		if (name.includes('crosswalk') || name.includes('lamppost') || name.includes('sidewalk') || 
+			name.includes('road') || name.includes('park') || name.includes('ground') || 
+			name.includes('grass') || name.includes('lamp')) {
+			return 'cityElements';
+		}
+		
+		// Agents
+		if (name.includes('agent') || name.includes('citizen') || name.includes('torso') || name.includes('head')) {
+			return 'agents';
+		}
+		
+		// Véhicules
+		if (name.includes('car') || name.includes('vehicle') || name.includes('wheel') || name.includes('body')) {
+			return 'vehicles';
+		}
+		
+		// Environnement (oiseaux, ciel, montagnes, etc.)
+		if (name.includes('bird') || name.includes('sky') || name.includes('mountain') || 
+			name.includes('cloud') || name.includes('moon') || name.includes('sun')) {
+			return 'environment';
+		}
+		
+		// Par défaut, considérer comme environnement
+		return 'environment';
+	}
+
+	/**
+	 * Calcule le nombre de triangles dans une géométrie
+	 * @private
+	 */
+	_getTriangleCount(geometry) {
+		if (!geometry) return 0;
+		
+		if (geometry.index) {
+			return geometry.index.count / 3;
+		} else {
+			const positionAttribute = geometry.getAttribute('position');
+			if (positionAttribute) {
+				return positionAttribute.count / 3;
+			}
+		}
+		
+		return 0;
 	}
 
 	/**

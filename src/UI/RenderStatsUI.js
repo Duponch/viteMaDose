@@ -68,34 +68,113 @@ export default class RenderStatsUI {
             </div>
             <div class="render-stats-details">
                 <div class="render-stats-section-header">
-                    <span>Détails par Catégorie</span>
+                    <span>Statistiques par Catégorie</span>
                     <button class="render-stats-details-toggle" title="Masquer/Afficher les détails">▼</button>
                 </div>
                 <div class="render-stats-categories-content">
-                <div class="render-stats-category">
-                    <span class="render-stats-category-label">🏢 Bâtiments:</span>
-                    <span class="render-stats-category-value" id="buildings-stats">0 meshes, 0 instances</span>
+                <div class="render-stats-category-detailed">
+                    <div class="render-stats-category-header">🏢 Bâtiments</div>
+                    <div class="render-stats-category-stats">
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Draw Calls:</span>
+                            <span class="render-stats-mini-value" id="buildings-draw-calls">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Triangles:</span>
+                            <span class="render-stats-mini-value" id="buildings-triangles">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Instances:</span>
+                            <span class="render-stats-mini-value" id="buildings-instances">0</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="render-stats-category">
-                    <span class="render-stats-category-label">🌳 Arbres:</span>
-                    <span class="render-stats-category-value" id="trees-stats">0 meshes, 0 instances</span>
+                <div class="render-stats-category-detailed">
+                    <div class="render-stats-category-header">🌳 Arbres</div>
+                    <div class="render-stats-category-stats">
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Draw Calls:</span>
+                            <span class="render-stats-mini-value" id="trees-draw-calls">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Triangles:</span>
+                            <span class="render-stats-mini-value" id="trees-triangles">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Instances:</span>
+                            <span class="render-stats-mini-value" id="trees-instances">0</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="render-stats-category">
-                    <span class="render-stats-category-label">🏙️ Éléments de ville:</span>
-                    <span class="render-stats-category-value" id="city-elements-stats">0 meshes, 0 instances</span>
+                <div class="render-stats-category-detailed">
+                    <div class="render-stats-category-header">🏙️ Éléments de ville</div>
+                    <div class="render-stats-category-stats">
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Draw Calls:</span>
+                            <span class="render-stats-mini-value" id="city-elements-draw-calls">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Triangles:</span>
+                            <span class="render-stats-mini-value" id="city-elements-triangles">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Instances:</span>
+                            <span class="render-stats-mini-value" id="city-elements-instances">0</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="render-stats-category">
-                    <span class="render-stats-category-label">🌍 Environnement:</span>
-                    <span class="render-stats-category-value" id="environment-stats">0 meshes, 0 instances</span>
+                <div class="render-stats-category-detailed">
+                    <div class="render-stats-category-header">🌍 Environnement</div>
+                    <div class="render-stats-category-stats">
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Draw Calls:</span>
+                            <span class="render-stats-mini-value" id="environment-draw-calls">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Triangles:</span>
+                            <span class="render-stats-mini-value" id="environment-triangles">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Instances:</span>
+                            <span class="render-stats-mini-value" id="environment-instances">0</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="render-stats-category">
-                    <span class="render-stats-category-label">👥 Agents:</span>
-                    <span class="render-stats-category-value" id="agents-stats">0 meshes, 0 instances</span>
+                <div class="render-stats-category-detailed">
+                    <div class="render-stats-category-header">👥 Agents</div>
+                    <div class="render-stats-category-stats">
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Draw Calls:</span>
+                            <span class="render-stats-mini-value" id="agents-draw-calls">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Triangles:</span>
+                            <span class="render-stats-mini-value" id="agents-triangles">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Instances:</span>
+                            <span class="render-stats-mini-value" id="agents-instances">0</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="render-stats-category">
-                    <span class="render-stats-category-label">🚗 Véhicules:</span>
-                    <span class="render-stats-category-value" id="vehicles-stats">0 meshes, 0 instances</span>
+                <div class="render-stats-category-detailed">
+                    <div class="render-stats-category-header">🚗 Véhicules</div>
+                    <div class="render-stats-category-stats">
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Draw Calls:</span>
+                            <span class="render-stats-mini-value" id="vehicles-draw-calls">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Triangles:</span>
+                            <span class="render-stats-mini-value" id="vehicles-triangles">0</span>
+                        </div>
+                        <div class="render-stats-mini-item">
+                            <span class="render-stats-mini-label">Instances:</span>
+                            <span class="render-stats-mini-value" id="vehicles-instances">0</span>
+                        </div>
+                    </div>
                 </div>
+
                 </div>
             </div>
         `;
@@ -121,12 +200,25 @@ export default class RenderStatsUI {
             instances: document.getElementById('instances'),
             materials: document.getElementById('materials'),
             visibleMeshes: document.getElementById('visible-meshes'),
-            buildingsStats: document.getElementById('buildings-stats'),
-            treesStats: document.getElementById('trees-stats'),
-            cityElementsStats: document.getElementById('city-elements-stats'),
-            environmentStats: document.getElementById('environment-stats'),
-            agentsStats: document.getElementById('agents-stats'),
-            vehiclesStats: document.getElementById('vehicles-stats')
+            // Statistiques détaillées par catégorie
+            buildingsDrawCalls: document.getElementById('buildings-draw-calls'),
+            buildingsTriangles: document.getElementById('buildings-triangles'),
+            buildingsInstances: document.getElementById('buildings-instances'),
+            treesDrawCalls: document.getElementById('trees-draw-calls'),
+            treesTriangles: document.getElementById('trees-triangles'),
+            treesInstances: document.getElementById('trees-instances'),
+            cityElementsDrawCalls: document.getElementById('city-elements-draw-calls'),
+            cityElementsTriangles: document.getElementById('city-elements-triangles'),
+            cityElementsInstances: document.getElementById('city-elements-instances'),
+            environmentDrawCalls: document.getElementById('environment-draw-calls'),
+            environmentTriangles: document.getElementById('environment-triangles'),
+            environmentInstances: document.getElementById('environment-instances'),
+            agentsDrawCalls: document.getElementById('agents-draw-calls'),
+            agentsTriangles: document.getElementById('agents-triangles'),
+            agentsInstances: document.getElementById('agents-instances'),
+            vehiclesDrawCalls: document.getElementById('vehicles-draw-calls'),
+            vehiclesTriangles: document.getElementById('vehicles-triangles'),
+            vehiclesInstances: document.getElementById('vehicles-instances')
         };
     }
 
@@ -308,6 +400,48 @@ export default class RenderStatsUI {
                 text-align: right;
                 font-size: 10px;
             }
+
+            .render-stats-category-detailed {
+                margin-bottom: 8px;
+                padding: 6px;
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 4px;
+                border-left: 3px solid #00ff88;
+            }
+
+            .render-stats-category-header {
+                color: #00ff88;
+                font-weight: bold;
+                font-size: 11px;
+                margin-bottom: 4px;
+            }
+
+            .render-stats-category-stats {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 4px;
+            }
+
+            .render-stats-mini-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                padding: 2px;
+                background: rgba(0, 0, 0, 0.3);
+                border-radius: 2px;
+            }
+
+            .render-stats-mini-label {
+                color: #cccccc;
+                font-size: 8px;
+                margin-bottom: 1px;
+            }
+
+            .render-stats-mini-value {
+                color: #00ff88;
+                font-weight: bold;
+                font-size: 9px;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -405,13 +539,46 @@ export default class RenderStatsUI {
         this.elements.materials.textContent = stats.materials.toLocaleString();
         this.elements.visibleMeshes.textContent = stats.visibleMeshes.toLocaleString();
         
-        // Mettre à jour les statistiques par catégorie
-        this.elements.buildingsStats.textContent = `${stats.categories.buildings.meshes} meshes, ${stats.categories.buildings.instances.toLocaleString()} instances`;
-        this.elements.treesStats.textContent = `${stats.categories.trees.meshes} meshes, ${stats.categories.trees.instances.toLocaleString()} instances`;
-        this.elements.cityElementsStats.textContent = `${stats.categories.cityElements.meshes} meshes, ${stats.categories.cityElements.instances.toLocaleString()} instances`;
-        this.elements.environmentStats.textContent = `${stats.categories.environment.meshes} meshes, ${stats.categories.environment.instances.toLocaleString()} instances`;
-        this.elements.agentsStats.textContent = `${stats.categories.agents.meshes} meshes, ${stats.categories.agents.instances.toLocaleString()} instances`;
-        this.elements.vehiclesStats.textContent = `${stats.categories.vehicles.meshes} meshes, ${stats.categories.vehicles.instances.toLocaleString()} instances`;
+        // Mettre à jour les statistiques détaillées par catégorie
+        // Utiliser les statistiques du renderer si disponibles et activées, sinon utiliser les calculées
+        const categoryStats = this.isStatsEnabled && this.experience.renderer.categoryStats ? 
+                             this.experience.renderer.categoryStats : stats.categories;
+        
+        this.elements.buildingsDrawCalls.textContent = this.isStatsEnabled ? 
+            categoryStats.buildings.drawCalls.toLocaleString() : 'N/A';
+        this.elements.buildingsTriangles.textContent = this.isStatsEnabled ? 
+            categoryStats.buildings.triangles.toLocaleString() : 'N/A';
+        this.elements.buildingsInstances.textContent = stats.categories.buildings.instances.toLocaleString();
+        
+        this.elements.treesDrawCalls.textContent = this.isStatsEnabled ? 
+            categoryStats.trees.drawCalls.toLocaleString() : 'N/A';
+        this.elements.treesTriangles.textContent = this.isStatsEnabled ? 
+            categoryStats.trees.triangles.toLocaleString() : 'N/A';
+        this.elements.treesInstances.textContent = stats.categories.trees.instances.toLocaleString();
+        
+        this.elements.cityElementsDrawCalls.textContent = this.isStatsEnabled ? 
+            categoryStats.cityElements.drawCalls.toLocaleString() : 'N/A';
+        this.elements.cityElementsTriangles.textContent = this.isStatsEnabled ? 
+            categoryStats.cityElements.triangles.toLocaleString() : 'N/A';
+        this.elements.cityElementsInstances.textContent = stats.categories.cityElements.instances.toLocaleString();
+        
+        this.elements.environmentDrawCalls.textContent = this.isStatsEnabled ? 
+            categoryStats.environment.drawCalls.toLocaleString() : 'N/A';
+        this.elements.environmentTriangles.textContent = this.isStatsEnabled ? 
+            categoryStats.environment.triangles.toLocaleString() : 'N/A';
+        this.elements.environmentInstances.textContent = stats.categories.environment.instances.toLocaleString();
+        
+        this.elements.agentsDrawCalls.textContent = this.isStatsEnabled ? 
+            categoryStats.agents.drawCalls.toLocaleString() : 'N/A';
+        this.elements.agentsTriangles.textContent = this.isStatsEnabled ? 
+            categoryStats.agents.triangles.toLocaleString() : 'N/A';
+        this.elements.agentsInstances.textContent = stats.categories.agents.instances.toLocaleString();
+        
+        this.elements.vehiclesDrawCalls.textContent = this.isStatsEnabled ? 
+            categoryStats.vehicles.drawCalls.toLocaleString() : 'N/A';
+        this.elements.vehiclesTriangles.textContent = this.isStatsEnabled ? 
+            categoryStats.vehicles.triangles.toLocaleString() : 'N/A';
+        this.elements.vehiclesInstances.textContent = stats.categories.vehicles.instances.toLocaleString();
     }
 
     calculateStats() {
@@ -420,7 +587,7 @@ export default class RenderStatsUI {
         let memoryBytes = 0;
         let visibleMeshes = 0;
 
-        // Initialiser les catégories
+        // Initialiser les catégories (seulement meshes et instances, les draw calls et triangles viennent du renderer)
         const categories = {
             buildings: { meshes: 0, instances: 0 },
             trees: { meshes: 0, instances: 0 },
@@ -601,6 +768,28 @@ export default class RenderStatsUI {
             this.elements.categoriesContent.classList.remove('hidden');
             this.elements.detailsToggleButton.textContent = '▼';
         }
+    }
+
+    /**
+     * Calcule le nombre de triangles dans une géométrie
+     * @param {THREE.BufferGeometry} geometry - La géométrie à analyser
+     * @returns {number} Le nombre de triangles
+     */
+    getTriangleCount(geometry) {
+        if (!geometry) return 0;
+        
+        if (geometry.index) {
+            // Géométrie indexée
+            return geometry.index.count / 3;
+        } else {
+            // Géométrie non-indexée
+            const positionAttribute = geometry.getAttribute('position');
+            if (positionAttribute) {
+                return positionAttribute.count / 3;
+            }
+        }
+        
+        return 0;
     }
 
     destroy() {
