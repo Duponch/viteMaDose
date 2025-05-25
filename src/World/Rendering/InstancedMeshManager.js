@@ -70,8 +70,9 @@ export default class InstancedMeshManager {
             return null;
         }
 
-        // Grouper les parties par matériau
+        // Grouper les parties par matériau avec optimisation agressive
         const materialGroups = new Map();
+        const materialCompatibilityMap = new Map(); // Pour fusionner des matériaux compatibles
         
         parts.forEach((part, index) => {
             if (!part.geometry || !part.material) return;
@@ -83,16 +84,23 @@ export default class InstancedMeshManager {
                     material: part.material,
                     geometries: [],
                     isWindow: this.isWindowMaterial(part.material),
-                    partIndices: []
+                    partIndices: [],
+                    materials: [part.material] // Stocker tous les matériaux du groupe
                 });
             }
             
             materialGroups.get(materialKey).geometries.push(part.geometry);
             materialGroups.get(materialKey).partIndices.push(index);
+            materialGroups.get(materialKey).materials.push(part.material);
         });
+
+        // Optimisation supplémentaire : fusionner les groupes très similaires
+        this.mergeCompatibleGroups(materialGroups);
 
         const optimizedMeshes = [];
         let groupIndex = 0;
+
+        console.log(`[IMM] Optimizing ${buildingType} ${assetId}: ${parts.length} parts → ${materialGroups.size} material groups`);
 
         // Créer un mesh optimisé pour chaque groupe de matériau
         materialGroups.forEach((group, materialKey) => {
@@ -139,20 +147,178 @@ export default class InstancedMeshManager {
             }
         });
 
+        console.log(`[IMM] ${buildingType} ${assetId} optimization result: ${parts.length} parts → ${optimizedMeshes.length} meshes (${Math.round((1 - optimizedMeshes.length / parts.length) * 100)}% reduction)`);
+        
         return optimizedMeshes;
     }
 
     /**
-     * Génère une clé unique pour un matériau
+     * Génère une clé unique pour un matériau (optimisée pour plus de fusion)
      * @param {THREE.Material} material - Le matériau
      * @returns {string} La clé du matériau
      */
     getMaterialKey(material) {
-        // Utiliser le nom du matériau et quelques propriétés clés pour créer une clé unique
-        const name = material.name || 'unnamed';
+        // Stratégie plus agressive pour fusionner les matériaux similaires
         const type = material.type;
         const color = material.color ? material.color.getHexString() : 'nocolor';
-        return `${type}_${name}_${color}`;
+        
+        // Grouper par type de matériau et couleur principale, ignorer les noms spécifiques
+        let category = 'other';
+        
+        // Catégoriser les matériaux par fonction plutôt que par nom exact
+        if (this.isWindowMaterial(material)) {
+            category = 'window';
+        } else if (material.name && (
+            material.name.includes('Wall') || 
+            material.name.includes('wall') ||
+            material.name.includes('Ground') ||
+            material.name.includes('Floor')
+        )) {
+            category = 'wall';
+        } else if (material.name && (
+            material.name.includes('Roof') || 
+            material.name.includes('roof')
+        )) {
+            category = 'roof';
+        } else if (material.name && (
+            material.name.includes('Door') || 
+            material.name.includes('door')
+        )) {
+            category = 'door';
+        } else if (material.name && (
+            material.name.includes('Frame') || 
+            material.name.includes('frame') ||
+            material.name.includes('Trim') ||
+            material.name.includes('trim')
+        )) {
+            category = 'frame';
+        }
+        
+        // Simplifier les couleurs similaires
+        const simplifiedColor = this.simplifyColor(color);
+        
+        return `${type}_${category}_${simplifiedColor}`;
+    }
+
+    /**
+     * Simplifie une couleur pour permettre plus de regroupements
+     * @param {string} hexColor - Couleur en hexadécimal
+     * @returns {string} Couleur simplifiée
+     */
+    simplifyColor(hexColor) {
+        if (hexColor === 'nocolor') return 'nocolor';
+        
+        // Convertir en RGB et simplifier
+        const r = parseInt(hexColor.substr(0, 2), 16);
+        const g = parseInt(hexColor.substr(2, 2), 16);
+        const b = parseInt(hexColor.substr(4, 2), 16);
+        
+        // Regrouper les couleurs similaires (tolérance de 32 sur chaque canal)
+        const tolerance = 32;
+        const simplifiedR = Math.floor(r / tolerance) * tolerance;
+        const simplifiedG = Math.floor(g / tolerance) * tolerance;
+        const simplifiedB = Math.floor(b / tolerance) * tolerance;
+        
+        return `${simplifiedR.toString(16).padStart(2, '0')}${simplifiedG.toString(16).padStart(2, '0')}${simplifiedB.toString(16).padStart(2, '0')}`;
+    }
+
+    /**
+     * Fusionne les groupes de matériaux compatibles pour réduire encore plus les draw calls
+     * @param {Map} materialGroups - Les groupes de matériaux
+     */
+    mergeCompatibleGroups(materialGroups) {
+        const groupsToMerge = [];
+        const groupKeys = Array.from(materialGroups.keys());
+        
+        // Chercher des groupes qui peuvent être fusionnés
+        for (let i = 0; i < groupKeys.length; i++) {
+            for (let j = i + 1; j < groupKeys.length; j++) {
+                const key1 = groupKeys[i];
+                const key2 = groupKeys[j];
+                const group1 = materialGroups.get(key1);
+                const group2 = materialGroups.get(key2);
+                
+                if (this.areGroupsCompatible(group1, group2, key1, key2)) {
+                    groupsToMerge.push([key1, key2]);
+                }
+            }
+        }
+        
+        // Fusionner les groupes compatibles
+        groupsToMerge.forEach(([key1, key2]) => {
+            if (materialGroups.has(key1) && materialGroups.has(key2)) {
+                const group1 = materialGroups.get(key1);
+                const group2 = materialGroups.get(key2);
+                
+                // Fusionner group2 dans group1
+                group1.geometries.push(...group2.geometries);
+                group1.partIndices.push(...group2.partIndices);
+                group1.materials.push(...group2.materials);
+                
+                // Supprimer group2
+                materialGroups.delete(key2);
+                
+                console.log(`[IMM] Merged compatible groups: ${key1} + ${key2}`);
+            }
+        });
+    }
+
+    /**
+     * Vérifie si deux groupes de matériaux peuvent être fusionnés
+     * @param {Object} group1 - Premier groupe
+     * @param {Object} group2 - Deuxième groupe
+     * @param {string} key1 - Clé du premier groupe
+     * @param {string} key2 - Clé du deuxième groupe
+     * @returns {boolean} True si les groupes peuvent être fusionnés
+     */
+    areGroupsCompatible(group1, group2, key1, key2) {
+        // Ne pas fusionner les fenêtres avec les non-fenêtres
+        if (group1.isWindow !== group2.isWindow) {
+            return false;
+        }
+        
+        // Vérifier si les clés sont dans la même catégorie
+        const category1 = key1.split('_')[1]; // ex: 'wall', 'roof', etc.
+        const category2 = key2.split('_')[1];
+        
+        if (category1 !== category2) {
+            return false;
+        }
+        
+        // Vérifier si les couleurs sont suffisamment proches
+        const color1 = key1.split('_')[2];
+        const color2 = key2.split('_')[2];
+        
+        return this.areColorsCompatible(color1, color2);
+    }
+
+    /**
+     * Vérifie si deux couleurs sont suffisamment proches pour être fusionnées
+     * @param {string} color1 - Première couleur (hex)
+     * @param {string} color2 - Deuxième couleur (hex)
+     * @returns {boolean} True si les couleurs peuvent être fusionnées
+     */
+    areColorsCompatible(color1, color2) {
+        if (color1 === color2) return true;
+        if (color1 === 'nocolor' || color2 === 'nocolor') return false;
+        
+        // Calculer la distance entre les couleurs
+        const r1 = parseInt(color1.substr(0, 2), 16);
+        const g1 = parseInt(color1.substr(2, 2), 16);
+        const b1 = parseInt(color1.substr(4, 2), 16);
+        
+        const r2 = parseInt(color2.substr(0, 2), 16);
+        const g2 = parseInt(color2.substr(2, 2), 16);
+        const b2 = parseInt(color2.substr(4, 2), 16);
+        
+        const distance = Math.sqrt(
+            Math.pow(r1 - r2, 2) + 
+            Math.pow(g1 - g2, 2) + 
+            Math.pow(b1 - b2, 2)
+        );
+        
+        // Fusionner si la distance est inférieure à 64 (sur une échelle de 0-441)
+        return distance < 64;
     }
 
     /**
