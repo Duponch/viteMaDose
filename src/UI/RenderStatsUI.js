@@ -66,6 +66,38 @@ export default class RenderStatsUI {
                     <span class="render-stats-value" id="visible-meshes">0</span>
                 </div>
             </div>
+            <div class="render-stats-details">
+                <div class="render-stats-section-header">
+                    <span>Détails par Catégorie</span>
+                    <button class="render-stats-details-toggle" title="Masquer/Afficher les détails">▼</button>
+                </div>
+                <div class="render-stats-categories-content">
+                <div class="render-stats-category">
+                    <span class="render-stats-category-label">🏢 Bâtiments:</span>
+                    <span class="render-stats-category-value" id="buildings-stats">0 meshes, 0 instances</span>
+                </div>
+                <div class="render-stats-category">
+                    <span class="render-stats-category-label">🌳 Arbres:</span>
+                    <span class="render-stats-category-value" id="trees-stats">0 meshes, 0 instances</span>
+                </div>
+                <div class="render-stats-category">
+                    <span class="render-stats-category-label">🏙️ Éléments de ville:</span>
+                    <span class="render-stats-category-value" id="city-elements-stats">0 meshes, 0 instances</span>
+                </div>
+                <div class="render-stats-category">
+                    <span class="render-stats-category-label">🌍 Environnement:</span>
+                    <span class="render-stats-category-value" id="environment-stats">0 meshes, 0 instances</span>
+                </div>
+                <div class="render-stats-category">
+                    <span class="render-stats-category-label">👥 Agents:</span>
+                    <span class="render-stats-category-value" id="agents-stats">0 meshes, 0 instances</span>
+                </div>
+                <div class="render-stats-category">
+                    <span class="render-stats-category-label">🚗 Véhicules:</span>
+                    <span class="render-stats-category-value" id="vehicles-stats">0 meshes, 0 instances</span>
+                </div>
+                </div>
+            </div>
         `;
 
         // Ajouter les styles CSS
@@ -79,6 +111,8 @@ export default class RenderStatsUI {
             enableButton: this.container.querySelector('.render-stats-enable'),
             toggleButton: this.container.querySelector('.render-stats-toggle'),
             content: this.container.querySelector('.render-stats-content'),
+            detailsToggleButton: this.container.querySelector('.render-stats-details-toggle'),
+            categoriesContent: this.container.querySelector('.render-stats-categories-content'),
             drawCalls: document.getElementById('draw-calls'),
             triangles: document.getElementById('triangles'),
             geometries: document.getElementById('geometries'),
@@ -86,7 +120,13 @@ export default class RenderStatsUI {
             memory: document.getElementById('memory'),
             instances: document.getElementById('instances'),
             materials: document.getElementById('materials'),
-            visibleMeshes: document.getElementById('visible-meshes')
+            visibleMeshes: document.getElementById('visible-meshes'),
+            buildingsStats: document.getElementById('buildings-stats'),
+            treesStats: document.getElementById('trees-stats'),
+            cityElementsStats: document.getElementById('city-elements-stats'),
+            environmentStats: document.getElementById('environment-stats'),
+            agentsStats: document.getElementById('agents-stats'),
+            vehiclesStats: document.getElementById('vehicles-stats')
         };
     }
 
@@ -201,6 +241,73 @@ export default class RenderStatsUI {
                 border-radius: 3px;
                 padding: 2px 4px;
             }
+
+            .render-stats-details {
+                margin-top: 10px;
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                padding-top: 8px;
+            }
+
+            .render-stats-section-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                color: #00ff88;
+                font-weight: bold;
+                font-size: 11px;
+                margin-bottom: 6px;
+            }
+
+            .render-stats-details-toggle {
+                background: none;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                width: 16px;
+                height: 16px;
+                border-radius: 2px;
+                cursor: pointer;
+                font-size: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .render-stats-details-toggle:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            .render-stats-categories-content {
+                transition: all 0.3s ease;
+            }
+
+            .render-stats-categories-content.hidden {
+                display: none;
+            }
+
+            .render-stats-category {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 3px;
+                padding: 1px 2px;
+                font-size: 10px;
+            }
+
+            .render-stats-category:nth-child(even) {
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 2px;
+            }
+
+            .render-stats-category-label {
+                color: #cccccc;
+                font-size: 10px;
+            }
+
+            .render-stats-category-value {
+                color: #00ff88;
+                font-weight: bold;
+                text-align: right;
+                font-size: 10px;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -214,6 +321,11 @@ export default class RenderStatsUI {
         // Toggle visibility
         this.elements.toggleButton.addEventListener('click', () => {
             this.toggleContent();
+        });
+
+        // Toggle details visibility
+        this.elements.detailsToggleButton.addEventListener('click', () => {
+            this.toggleDetails();
         });
 
         // Keyboard shortcut (Ctrl+R pour toggle)
@@ -292,6 +404,14 @@ export default class RenderStatsUI {
         this.elements.instances.textContent = stats.instances.toLocaleString();
         this.elements.materials.textContent = stats.materials.toLocaleString();
         this.elements.visibleMeshes.textContent = stats.visibleMeshes.toLocaleString();
+        
+        // Mettre à jour les statistiques par catégorie
+        this.elements.buildingsStats.textContent = `${stats.categories.buildings.meshes} meshes, ${stats.categories.buildings.instances.toLocaleString()} instances`;
+        this.elements.treesStats.textContent = `${stats.categories.trees.meshes} meshes, ${stats.categories.trees.instances.toLocaleString()} instances`;
+        this.elements.cityElementsStats.textContent = `${stats.categories.cityElements.meshes} meshes, ${stats.categories.cityElements.instances.toLocaleString()} instances`;
+        this.elements.environmentStats.textContent = `${stats.categories.environment.meshes} meshes, ${stats.categories.environment.instances.toLocaleString()} instances`;
+        this.elements.agentsStats.textContent = `${stats.categories.agents.meshes} meshes, ${stats.categories.agents.instances.toLocaleString()} instances`;
+        this.elements.vehiclesStats.textContent = `${stats.categories.vehicles.meshes} meshes, ${stats.categories.vehicles.instances.toLocaleString()} instances`;
     }
 
     calculateStats() {
@@ -300,17 +420,48 @@ export default class RenderStatsUI {
         let memoryBytes = 0;
         let visibleMeshes = 0;
 
-        // Compter les instances depuis InstancedMeshManager
+        // Initialiser les catégories
+        const categories = {
+            buildings: { meshes: 0, instances: 0 },
+            trees: { meshes: 0, instances: 0 },
+            cityElements: { meshes: 0, instances: 0 },
+            environment: { meshes: 0, instances: 0 },
+            agents: { meshes: 0, instances: 0 },
+            vehicles: { meshes: 0, instances: 0 }
+        };
+
+        // Analyser les instances depuis InstancedMeshManager
         const instancedMeshManager = this.experience.world?.cityManager?.contentGenerator?.instancedMeshManager;
         if (instancedMeshManager?.instancedMeshes) {
-            Object.values(instancedMeshManager.instancedMeshes).forEach(mesh => {
+            Object.entries(instancedMeshManager.instancedMeshes).forEach(([key, mesh]) => {
                 if (mesh instanceof THREE.InstancedMesh) {
                     instances += mesh.count;
+                    
+                    // Catégoriser selon le nom de la clé
+                    if (key.startsWith('house_') || key.startsWith('building_') || 
+                        key.startsWith('skyscraper_') || key.startsWith('industrial_') || 
+                        key.startsWith('commercial_') || key.startsWith('movietheater_')) {
+                        categories.buildings.meshes++;
+                        categories.buildings.instances += mesh.count;
+                    } else if (key.startsWith('tree_')) {
+                        categories.trees.meshes++;
+                        categories.trees.instances += mesh.count;
+                    } else if (key.startsWith('crosswalk_') || key.startsWith('lamppost_') || 
+                               key.startsWith('sidewalk_') || key.startsWith('road_') || 
+                               key.startsWith('park_') || key.includes('ground') || 
+                               key.includes('grass')) {
+                        categories.cityElements.meshes++;
+                        categories.cityElements.instances += mesh.count;
+                    } else {
+                        // Autres éléments non catégorisés -> environnement
+                        categories.environment.meshes++;
+                        categories.environment.instances += mesh.count;
+                    }
                 }
             });
         }
 
-        // Compter les instances d'agents
+        // Analyser les instances d'agents
         const agentManager = this.experience.world?.agentManager;
         if (agentManager?.instanceMeshes) {
             // Agents haute qualité
@@ -318,6 +469,8 @@ export default class RenderStatsUI {
                 Object.values(agentManager.instanceMeshes.highDetail).forEach(mesh => {
                     if (mesh instanceof THREE.InstancedMesh) {
                         instances += mesh.count;
+                        categories.agents.meshes++;
+                        categories.agents.instances += mesh.count;
                     }
                 });
             }
@@ -326,19 +479,58 @@ export default class RenderStatsUI {
                 Object.values(agentManager.instanceMeshes.lowDetail).forEach(mesh => {
                     if (mesh instanceof THREE.InstancedMesh) {
                         instances += mesh.count;
+                        categories.agents.meshes++;
+                        categories.agents.instances += mesh.count;
                     }
                 });
             }
         }
 
-        // Compter les instances de voitures
+        // Analyser les instances de voitures
         const carManager = this.experience.world?.carManager;
         if (carManager?.instancedMeshes) {
             Object.values(carManager.instancedMeshes).forEach(mesh => {
                 if (mesh instanceof THREE.InstancedMesh) {
                     instances += mesh.count;
+                    categories.vehicles.meshes++;
+                    categories.vehicles.instances += mesh.count;
                 }
             });
+        }
+
+        // Analyser les éléments d'environnement (herbe, montagnes, ciel, etc.)
+        const environmentSystem = this.experience.world?.environment?.environmentSystem;
+        if (environmentSystem) {
+            // Herbe shader
+            if (environmentSystem.grassInstancer?.instancedMesh) {
+                const grassMesh = environmentSystem.grassInstancer.instancedMesh;
+                if (grassMesh instanceof THREE.InstancedMesh) {
+                    instances += grassMesh.count;
+                    categories.cityElements.meshes++; // L'herbe est plutôt un élément de ville
+                    categories.cityElements.instances += grassMesh.count;
+                }
+            }
+            
+            // Oiseaux
+            if (environmentSystem.birdSystem?.instancedMesh) {
+                const birdMesh = environmentSystem.birdSystem.instancedMesh;
+                if (birdMesh instanceof THREE.InstancedMesh) {
+                    instances += birdMesh.count;
+                    categories.environment.meshes++;
+                    categories.environment.instances += birdMesh.count;
+                }
+            }
+        }
+
+        // Analyser les autres éléments de la scène (lampadaires, etc.)
+        const lampPostManager = this.experience.world?.cityManager?.lampPostManager;
+        if (lampPostManager?.instancedMesh) {
+            const lampMesh = lampPostManager.instancedMesh;
+            if (lampMesh instanceof THREE.InstancedMesh) {
+                instances += lampMesh.count;
+                categories.cityElements.meshes++;
+                categories.cityElements.instances += lampMesh.count;
+            }
         }
 
         // Compter les matériaux uniques et meshes visibles dans la scène
@@ -359,7 +551,6 @@ export default class RenderStatsUI {
         materials = materialSet.size;
 
         // Estimer la mémoire utilisée (approximation)
-        // Basé sur les informations du renderer et quelques heuristiques
         const rendererMemory = this.renderer.info.memory;
         memoryBytes += rendererMemory.geometries * 50000; // ~50KB par géométrie en moyenne
         memoryBytes += rendererMemory.textures * 200000;  // ~200KB par texture en moyenne
@@ -372,7 +563,8 @@ export default class RenderStatsUI {
             instances,
             materials,
             memoryMB,
-            visibleMeshes
+            visibleMeshes,
+            categories
         };
     }
 
@@ -397,6 +589,18 @@ export default class RenderStatsUI {
         }
         
         console.log(`Statistiques de rendu ${this.isStatsEnabled ? 'activées' : 'désactivées'}`);
+    }
+
+    toggleDetails() {
+        const isDetailsVisible = !this.elements.categoriesContent.classList.contains('hidden');
+        
+        if (isDetailsVisible) {
+            this.elements.categoriesContent.classList.add('hidden');
+            this.elements.detailsToggleButton.textContent = '▶';
+        } else {
+            this.elements.categoriesContent.classList.remove('hidden');
+            this.elements.detailsToggleButton.textContent = '▼';
+        }
     }
 
     destroy() {
