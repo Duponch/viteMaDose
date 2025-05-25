@@ -506,16 +506,16 @@ export default class MovieTheaterRenderer {
 
         // Montants gauche et droit
         const jambLeft = createBox(
-            scaledFrameThickness, scaledDoorHeight + scaledFrameThickness, scaledDoorDepth,
+            scaledFrameThickness, scaledDoorHeight, scaledDoorDepth,
             this.localMaterials.frame,
-            -scaledDoorWidth / 2 - scaledFrameThickness / 2, doorY - scaledFrameThickness / 2, doorZ,
+            -scaledDoorWidth / 2 - scaledFrameThickness / 2, doorY, doorZ,
             'doorJambLeft'
         );
 
         const jambRight = createBox(
-            scaledFrameThickness, scaledDoorHeight + scaledFrameThickness, scaledDoorDepth,
+            scaledFrameThickness, scaledDoorHeight, scaledDoorDepth,
             this.localMaterials.frame,
-            scaledDoorWidth / 2 + scaledFrameThickness / 2, doorY - scaledFrameThickness / 2, doorZ,
+            scaledDoorWidth / 2 + scaledFrameThickness / 2, doorY, doorZ,
             'doorJambRight'
         );
 
