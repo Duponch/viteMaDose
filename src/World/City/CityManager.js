@@ -83,6 +83,7 @@ export default class CityManager {
             gridIndustrialBaseScale: 1.2,
             gridSkyscraperBaseScale: 1.7,
             gridParkBaseScale: 1.0, // Ajout pour parcs
+            movieTheaterBaseScale: 1.8, // Ajout pour cinémas
             // Assets (Simplifié - les détails restent dans la config passée)
             houseModelDir: "Assets/Models/Houses/",
             houseModelFiles: [ { file: "House1.fbx", scale: 1.3 }, { file: "House24.fbx", scale: 1.3 } ],
@@ -274,6 +275,16 @@ export default class CityManager {
         // Passage de experience à CitizenManager pour initialiser le système de santé
         this.citizenManager.initializeHealthSystem(experience);
 
+        // --- Gestionnaire des règles de placement spéciales ---
+        this.specialPlacementRules = {
+            movietheater: {
+                maxTotal: 3,
+                maxPerDistrict: 1,
+                allowedZoneTypes: ['building'],
+                selectedPlots: new Set()
+            }
+        };
+
         // --- LampPostManager ---
         // Passe le cityContainer où ajouter les lampadaires
         this.lampPostManager = new LampPostManager(this.config, this.materials, this.cityContainer);
@@ -410,6 +421,9 @@ export default class CityManager {
                 // if (this.carManager) this.carManager.activateAllCars();
                 // ou toute autre logique de spawn/configuration de voitures
             }
+
+            // --- Sélection des parcelles pour les bâtiments spéciaux ---
+            this.selectPlotsForSpecialBuilding('movietheater');
 
             //console.time("ContentGeneration");
             // Appel à PlotContentGenerator refactoré
@@ -642,5 +656,163 @@ export default class CityManager {
         if (this.cityMapVisualizer) {
             this.cityMapVisualizer.toggle();
         }
+    }
+
+    /**
+     * Sélectionne les parcelles qui auront des bâtiments avec des règles de placement spéciales.
+     * @param {string} buildingType - Type de bâtiment (ex: 'movietheater')
+     */
+    selectPlotsForSpecialBuilding(buildingType) {
+        const rules = this.specialPlacementRules[buildingType];
+        if (!rules) {
+            console.warn(`CityManager: Aucune règle de placement spéciale trouvée pour ${buildingType}`);
+            return;
+        }
+
+        // Réinitialiser les sélections précédentes
+        rules.selectedPlots.clear();
+
+        // Filtrer les quartiers éligibles selon les règles
+        const eligibleDistricts = this.districts.filter(district => 
+            district.type !== 'industrial' // Les cinémas ne vont pas dans les zones industrielles
+        );
+
+        if (eligibleDistricts.length === 0) {
+            console.log(`CityManager: Aucun quartier éligible pour ${buildingType}`);
+            return;
+        }
+
+        // Calculer le centre de chaque quartier éligible
+        const districtsWithCenters = eligibleDistricts.map(district => {
+            let totalX = 0, totalZ = 0, plotCount = 0;
+            
+            district.plots.forEach(plot => {
+                totalX += plot.x + plot.width / 2;
+                totalZ += plot.z + plot.depth / 2;
+                plotCount++;
+            });
+            
+            return {
+                district: district,
+                center: {
+                    x: totalX / plotCount,
+                    z: totalZ / plotCount
+                }
+            };
+        });
+
+        // Sélectionner les quartiers en s'assurant qu'ils soient bien espacés
+        const selectedDistricts = this._selectWellSpacedDistricts(districtsWithCenters, rules.maxTotal);
+        
+        // Pour chaque quartier sélectionné, choisir une parcelle éligible
+        selectedDistricts.forEach(districtWithCenter => {
+            const district = districtWithCenter.district;
+            
+            // Filtrer les parcelles éligibles selon les règles
+            const eligiblePlots = district.plots.filter(plot => 
+                rules.allowedZoneTypes.includes(plot.zoneType)
+            );
+
+            if (eligiblePlots.length === 0) {
+                console.warn(`CityManager: Aucune parcelle éligible pour ${buildingType} dans le quartier ${district.id}`);
+                return;
+            }
+
+            // Sélectionner une parcelle aléatoire parmi les éligibles
+            const selectedPlotIndex = Math.floor(Math.random() * eligiblePlots.length);
+            const selectedPlot = eligiblePlots[selectedPlotIndex];
+            
+            // Marquer cette parcelle comme devant avoir ce type de bâtiment spécial
+            rules.selectedPlots.add(selectedPlot.id);
+        });
+
+        console.log(`CityManager: ${rules.selectedPlots.size} parcelles sélectionnées pour ${buildingType} (${selectedDistricts.length} quartiers sur ${eligibleDistricts.length} éligibles)`);
+    }
+
+    /**
+     * Sélectionne des quartiers bien espacés pour placer des bâtiments spéciaux.
+     * @param {Array} districtsWithCenters - Quartiers avec leurs centres calculés.
+     * @param {number} maxCount - Nombre maximum de quartiers à sélectionner.
+     * @returns {Array} - Quartiers sélectionnés.
+     * @private
+     */
+    _selectWellSpacedDistricts(districtsWithCenters, maxCount) {
+        if (districtsWithCenters.length === 0) return [];
+        
+        // Nombre cible : environ 1 quartier sur 4, minimum 1, maximum selon les règles
+        const rawTargetCount = Math.max(1, Math.floor(districtsWithCenters.length / 4));
+        const targetCount = Math.min(maxCount, rawTargetCount);
+        
+        // Distance minimale entre les bâtiments spéciaux
+        const minDistanceBetween = 150;
+        
+        const selectedDistricts = [];
+        const remainingDistricts = [...districtsWithCenters];
+        
+        // Sélectionner le premier quartier aléatoirement
+        const firstIndex = Math.floor(Math.random() * remainingDistricts.length);
+        selectedDistricts.push(remainingDistricts[firstIndex]);
+        remainingDistricts.splice(firstIndex, 1);
+        
+        // Sélectionner les quartiers suivants en s'assurant qu'ils soient suffisamment éloignés
+        while (selectedDistricts.length < targetCount && remainingDistricts.length > 0) {
+            let bestCandidate = null;
+            let bestMinDistance = 0;
+            let bestIndex = -1;
+            
+            for (let i = 0; i < remainingDistricts.length; i++) {
+                const candidate = remainingDistricts[i];
+                
+                let minDistanceToSelected = Infinity;
+                for (const selected of selectedDistricts) {
+                    const distance = this._calculateDistance(candidate.center, selected.center);
+                    minDistanceToSelected = Math.min(minDistanceToSelected, distance);
+                }
+                
+                if (minDistanceToSelected > bestMinDistance) {
+                    bestMinDistance = minDistanceToSelected;
+                    bestCandidate = candidate;
+                    bestIndex = i;
+                }
+            }
+            
+            if (bestCandidate && bestMinDistance >= minDistanceBetween) {
+                selectedDistricts.push(bestCandidate);
+                remainingDistricts.splice(bestIndex, 1);
+            } else {
+                if (bestCandidate) {
+                    selectedDistricts.push(bestCandidate);
+                    remainingDistricts.splice(bestIndex, 1);
+                } else {
+                    break;
+                }
+            }
+        }
+        
+        return selectedDistricts;
+    }
+
+    /**
+     * Calcule la distance euclidienne entre deux points.
+     * @param {{x: number, z: number}} point1 - Premier point.
+     * @param {{x: number, z: number}} point2 - Deuxième point.
+     * @returns {number} - Distance entre les deux points.
+     * @private
+     */
+    _calculateDistance(point1, point2) {
+        const dx = point1.x - point2.x;
+        const dz = point1.z - point2.z;
+        return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    /**
+     * Vérifie si une parcelle doit avoir un bâtiment spécial.
+     * @param {string} buildingType - Type de bâtiment (ex: 'movietheater')
+     * @param {Plot} plot - La parcelle à vérifier.
+     * @returns {boolean} - True si la parcelle doit avoir ce type de bâtiment.
+     */
+    shouldPlotHaveSpecialBuilding(buildingType, plot) {
+        const rules = this.specialPlacementRules[buildingType];
+        return rules ? rules.selectedPlots.has(plot.id) : false;
     }
 }

@@ -77,6 +77,15 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
         // Récupérer les positions des commerces (si elles existent)
         const commercialPositions = plot.commercialPositions || [];
 
+        // Vérifier si cette parcelle doit avoir un cinéma
+        const shouldHaveMovieTheater = cityManager.shouldPlotHaveSpecialBuilding('movietheater', plot);
+        let movieTheaterPosition = null;
+
+        // Si cette parcelle doit avoir un cinéma, sélectionner une position harmonieuse
+        if (shouldHaveMovieTheater) {
+            movieTheaterPosition = this._selectHarmoniousPosition(numItemsX, numItemsY);
+        }
+
         for (let rowIndex = 0; rowIndex < numItemsY; rowIndex++) {
             for (let colIndex = 0; colIndex < numItemsX; colIndex++) {
 				// === on skippe tout ce qui n'est pas en bordure ===
@@ -92,6 +101,10 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
                 if (isCommercialPosition) {
                     continue;
                 }
+
+                // Vérifier si cette position doit avoir un cinéma
+                const isMovieTheaterPosition = movieTheaterPosition && 
+                    movieTheaterPosition.x === colIndex && movieTheaterPosition.y === rowIndex;
                 
                 const cellCenterX = plot.x + gapX + (colIndex * (targetBuildingWidth + minSpacing)) + targetBuildingWidth / 2;
                 const cellCenterZ = plot.z + gapZ + (rowIndex * (targetBuildingDepth + minSpacing)) + targetBuildingDepth / 2;
@@ -121,6 +134,22 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
                         targetBuildingWidth, 
                         targetBuildingDepth
                     );
+                }
+
+                // Si cette position doit avoir un cinéma, utiliser le renderer de cinéma
+                if (isMovieTheaterPosition) {
+                    this._placeMovieTheater(
+                        worldCellCenterPos,
+                        targetRotationY,
+                        baseScaleFactor,
+                        instanceDataManager,
+                        cityManager,
+                        plot,
+                        cellCenterX,
+                        cellCenterZ,
+                        sidewalkHeight
+                    );
+                    continue;
                 }
 
                 const assetInfo = this.assetLoader.getRandomAssetData('building');
@@ -265,5 +294,151 @@ export default class BuildingPlacementStrategy extends IZonePlacementStrategy {
         else if (minDist === distToRight) return Math.PI/2; // Vers la droite (+X)
         else if (minDist === distToTop) return Math.PI;     // Vers le haut (-Z)
         else return 0;                                      // Vers le bas (+Z)
+    }
+
+    /**
+     * Place un cinéma à la position spécifiée.
+     * @param {THREE.Vector3} worldCellCenterPos - Position du centre de la cellule.
+     * @param {number} targetRotationY - Rotation Y cible.
+     * @param {number} baseScaleFactor - Facteur d'échelle de base.
+     * @param {InstanceDataManager} instanceDataManager - Gestionnaire des données d'instance.
+     * @param {CityManager} cityManager - Gestionnaire de la ville.
+     * @param {Plot} plot - La parcelle.
+     * @param {number} cellCenterX - Position X du centre de la cellule.
+     * @param {number} cellCenterZ - Position Z du centre de la cellule.
+     * @param {number} sidewalkHeight - Hauteur du trottoir.
+     * @private
+     */
+    _placeMovieTheater(worldCellCenterPos, targetRotationY, baseScaleFactor, instanceDataManager, cityManager, plot, cellCenterX, cellCenterZ, sidewalkHeight) {
+        const movieTheaterRenderer = this.renderers.movieTheaterRenderer;
+        if (!movieTheaterRenderer) {
+            console.error('BuildingPlacementStrategy: MovieTheaterRenderer non disponible');
+            return;
+        }
+
+        const plotGroundY = this.config.plotGroundY ?? 0.005;
+        
+        // Utiliser une échelle légèrement plus grande pour les cinémas
+        const movieTheaterScaleFactor = baseScaleFactor * 1.2;
+
+        // Générer l'asset procédural avec les bonnes dimensions
+        const targetBuildingWidth = 2.5 * movieTheaterScaleFactor;
+        const targetBuildingDepth = 2.5 * movieTheaterScaleFactor;
+        
+        const assetInfo = movieTheaterRenderer.generateProceduralBuilding(
+            targetBuildingWidth,
+            targetBuildingWidth * 0.8, // Hauteur proportionnelle
+            targetBuildingDepth,
+            1.0, // userScale
+            0.8  // verticalScale
+        );
+
+        if (!assetInfo || !assetInfo.parts) {
+            console.error('BuildingPlacementStrategy: Échec de génération de l\'asset procédural de cinéma');
+            return;
+        }
+
+        // Utiliser la même logique de centrage que les autres bâtiments
+        const finalScaleValue = assetInfo.fittingScaleFactor * movieTheaterScaleFactor;
+        const scaleMatrix = new THREE.Matrix4().makeScale(finalScaleValue, finalScaleValue, finalScaleValue);
+        const rotationMatrix = new THREE.Matrix4().makeRotationY(targetRotationY);
+        const recenterMatrix = new THREE.Matrix4().makeTranslation(
+            -assetInfo.centerOffset.x,
+            -assetInfo.centerOffset.y,
+            -assetInfo.centerOffset.z
+        );
+        const finalHeight = assetInfo.sizeAfterFitting.y * movieTheaterScaleFactor;
+        const finalY = finalHeight / 2 + plotGroundY;
+        const translationMatrix = new THREE.Matrix4().makeTranslation(worldCellCenterPos.x, finalY, worldCellCenterPos.z);
+
+        // Construire la matrice finale
+        const instanceMatrix = new THREE.Matrix4();
+        instanceMatrix.multiplyMatrices(scaleMatrix, recenterMatrix);
+        instanceMatrix.premultiply(rotationMatrix);
+        instanceMatrix.premultiply(translationMatrix);
+
+        // Ajouter les données d'instance pour chaque partie du cinéma
+        assetInfo.parts.forEach((part, index) => {
+            const partKey = `${assetInfo.id}_part${index}`;
+            instanceDataManager.addData('movietheater', partKey, instanceMatrix.clone());
+        });
+
+        // Enregistrer l'instance de bâtiment auprès de CityManager
+        const buildingPosition = new THREE.Vector3(cellCenterX, sidewalkHeight, cellCenterZ);
+        const registeredBuilding = cityManager.registerBuildingInstance(plot.id, 'movietheater', buildingPosition);
+
+        if (registeredBuilding) {
+            plot.addBuildingInstance({
+                id: registeredBuilding.id,
+                type: 'movietheater',
+                position: buildingPosition.clone()
+            });
+        }
+    }
+
+    /**
+     * Sélectionne une position harmonieuse pour un bâtiment spécial basée sur des principes de composition.
+     * @param {number} numItemsX - Nombre d'éléments en X dans la grille.
+     * @param {number} numItemsY - Nombre d'éléments en Y dans la grille.
+     * @returns {{x: number, y: number}} - Position harmonieuse sélectionnée.
+     * @private
+     */
+    _selectHarmoniousPosition(numItemsX, numItemsY) {
+        // Si la grille est petite, utiliser une position centrale
+        if (numItemsX <= 2 && numItemsY <= 2) {
+            const centerX = Math.floor(numItemsX / 2);
+            const centerY = Math.floor(numItemsY / 2);
+            return {x: centerX, y: centerY};
+        }
+        
+        // Calculer des positions basées sur la règle des tiers et le nombre d'or
+        const goldenRatio = 0.618;
+        
+        const preferredPositions = [
+            // Positions "règle des tiers" 
+            {x: Math.floor(numItemsX * 0.33), y: Math.floor(numItemsY * 0.33)},
+            {x: Math.floor(numItemsX * 0.67), y: Math.floor(numItemsY * 0.33)},
+            {x: Math.floor(numItemsX * 0.33), y: Math.floor(numItemsY * 0.67)},
+            {x: Math.floor(numItemsX * 0.67), y: Math.floor(numItemsY * 0.67)},
+            
+            // Positions "golden ratio"
+            {x: Math.floor(numItemsX * goldenRatio), y: Math.floor(numItemsY * goldenRatio)},
+            {x: Math.floor(numItemsX * (1 - goldenRatio)), y: Math.floor(numItemsY * goldenRatio)},
+            
+            // Position centrale comme fallback
+            {x: Math.floor(numItemsX / 2), y: Math.floor(numItemsY / 2)}
+        ];
+        
+        // Filtrer les positions valides et en bordure uniquement
+        const validPositions = preferredPositions.filter(pos => {
+            if (pos.x < 0 || pos.x >= numItemsX || pos.y < 0 || pos.y >= numItemsY) {
+                return false;
+            }
+            // Vérifier que la position est en bordure (même logique que pour les immeubles)
+            return !(pos.y > 0 && pos.y < numItemsY - 1 && pos.x > 0 && pos.x < numItemsX - 1);
+        });
+        
+        // Éliminer les doublons
+        const uniquePositions = validPositions.filter((pos, index, array) => 
+            array.findIndex(p => p.x === pos.x && p.y === pos.y) === index
+        );
+        
+        // Retourner une position aléatoire parmi les positions harmonieuses
+        if (uniquePositions.length > 0) {
+            const randomIndex = Math.floor(Math.random() * uniquePositions.length);
+            return uniquePositions[randomIndex];
+        }
+        
+        // Fallback : position centrale en bordure
+        const centerX = Math.floor(numItemsX / 2);
+        const centerY = Math.floor(numItemsY / 2);
+        
+        // Ajuster pour être en bordure si nécessaire
+        if (centerY > 0 && centerY < numItemsY - 1 && centerX > 0 && centerX < numItemsX - 1) {
+            // Position centrale n'est pas en bordure, choisir une bordure
+            return {x: 0, y: centerY}; // Bordure gauche
+        }
+        
+        return {x: centerX, y: centerY};
     }
 }
