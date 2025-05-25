@@ -300,6 +300,7 @@ export default class MovieTheaterRenderer {
         }
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping; 
+        texture.wrapT = THREE.RepeatWrapping;
         texture.needsUpdate = true;
         return texture;
     }
@@ -775,15 +776,36 @@ export default class MovieTheaterRenderer {
         const bucketRadiusBottom = 0.9 * scale;
         const bucketSegments = 16;
 
-        // Seau de popcorn
-        const bucketGeometry = new THREE.CylinderGeometry(bucketRadiusTop, bucketRadiusBottom, bucketHeight, bucketSegments);
-        const bucketMaterials = [this.localMaterials.popcornBucket, this.localMaterials.popcornBucketTop, this.localMaterials.popcornBucketBottom];
-        const bucket = new THREE.Mesh(bucketGeometry, bucketMaterials);
-        bucket.position.set(x, y + bucketHeight / 2, z);
-        bucket.name = 'popcornBucket';
-        bucket.castShadow = true;
-        bucket.receiveShadow = true;
-        parentGroup.add(bucket);
+        // Seau de popcorn - créer des parties séparées pour éviter les problèmes de matériaux multiples
+        
+        // Côtés du seau avec texture rayée
+        const bucketSideGeometry = new THREE.CylinderGeometry(bucketRadiusTop, bucketRadiusBottom, bucketHeight, bucketSegments, 1, true); // openEnded = true
+        const bucketSide = new THREE.Mesh(bucketSideGeometry, this.localMaterials.popcornBucket);
+        bucketSide.position.set(x, y + bucketHeight / 2, z);
+        bucketSide.name = 'popcornBucketSide';
+        bucketSide.castShadow = true;
+        bucketSide.receiveShadow = true;
+        parentGroup.add(bucketSide);
+
+        // Dessus du seau (blanc)
+        const bucketTopGeometry = new THREE.CircleGeometry(bucketRadiusTop, bucketSegments);
+        const bucketTop = new THREE.Mesh(bucketTopGeometry, this.localMaterials.popcornBucketTop);
+        bucketTop.position.set(x, y + bucketHeight, z);
+        bucketTop.rotation.x = -Math.PI / 2; // Orienter horizontalement
+        bucketTop.name = 'popcornBucketTop';
+        bucketTop.castShadow = true;
+        bucketTop.receiveShadow = true;
+        parentGroup.add(bucketTop);
+
+        // Dessous du seau avec texture rayée
+        const bucketBottomGeometry = new THREE.CircleGeometry(bucketRadiusBottom, bucketSegments);
+        const bucketBottom = new THREE.Mesh(bucketBottomGeometry, this.localMaterials.popcornBucket);
+        bucketBottom.position.set(x, y, z);
+        bucketBottom.rotation.x = Math.PI / 2; // Orienter horizontalement (face vers le bas)
+        bucketBottom.name = 'popcornBucketBottom';
+        bucketBottom.castShadow = true;
+        bucketBottom.receiveShadow = true;
+        parentGroup.add(bucketBottom);
 
         // Grains de popcorn
         const numKernels = 25;
