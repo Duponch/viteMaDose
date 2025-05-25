@@ -1,5 +1,6 @@
 // src/World/InstancedMeshManager.js
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /**
  * @typedef {import('../CityAssetLoader.js').default} CityAssetLoader
@@ -36,6 +37,9 @@ export default class InstancedMeshManager {
         /** @type {Array<THREE.InstancedMesh>} */
         this.windowMeshes = []; // Références spécifiques aux meshes de fenêtres pour l'update
 
+        // Optimisation des draw calls pour les bâtiments
+        this.enableBuildingOptimization = true; // Flag pour activer/désactiver l'optimisation
+
         // Géométrie de base pour les passages piétons (si applicable)
         this.stripeBaseGeometry = null;
         if (this.config.crosswalkStripeWidth > 0 && this.config.crosswalkHeight > 0) {
@@ -51,6 +55,138 @@ export default class InstancedMeshManager {
         // puisque ceux-ci utiliseront désormais le renderer procédural
 
         //console.log("InstancedMeshManager initialized.");
+    }
+
+    /**
+     * Optimise les parties de bâtiments en fusionnant les géométries par matériau
+     * @param {Array} parts - Les parties du bâtiment
+     * @param {Array<THREE.Matrix4>} matrices - Les matrices de transformation
+     * @param {string} buildingType - Le type de bâtiment (house, building, etc.)
+     * @param {string} assetId - L'ID de l'asset
+     * @returns {Array} Les meshes optimisés
+     */
+    optimizeBuildingParts(parts, matrices, buildingType, assetId) {
+        if (!this.enableBuildingOptimization || !parts || parts.length === 0) {
+            return null;
+        }
+
+        // Grouper les parties par matériau
+        const materialGroups = new Map();
+        
+        parts.forEach((part, index) => {
+            if (!part.geometry || !part.material) return;
+            
+            const materialKey = this.getMaterialKey(part.material);
+            
+            if (!materialGroups.has(materialKey)) {
+                materialGroups.set(materialKey, {
+                    material: part.material,
+                    geometries: [],
+                    isWindow: this.isWindowMaterial(part.material),
+                    partIndices: []
+                });
+            }
+            
+            materialGroups.get(materialKey).geometries.push(part.geometry);
+            materialGroups.get(materialKey).partIndices.push(index);
+        });
+
+        const optimizedMeshes = [];
+        let groupIndex = 0;
+
+        // Créer un mesh optimisé pour chaque groupe de matériau
+        materialGroups.forEach((group, materialKey) => {
+            try {
+                // Fusionner les géométries du même matériau
+                const mergedGeometry = mergeGeometries(group.geometries, false);
+                
+                if (!mergedGeometry) {
+                    console.warn(`[IMM] Failed to merge geometries for material ${materialKey}`);
+                    return;
+                }
+
+                const count = matrices.length;
+                const materialClone = group.material.clone();
+                materialClone.name = `Optimized_${buildingType}_${assetId}_${materialKey}_${groupIndex}`;
+
+                const instancedMesh = new THREE.InstancedMesh(mergedGeometry, materialClone, count);
+                instancedMesh.castShadow = true;
+                instancedMesh.receiveShadow = !group.isWindow;
+                instancedMesh.name = `${buildingType}_${assetId}_optimized_${groupIndex}`;
+
+                matrices.forEach((matrix, mIndex) => {
+                    instancedMesh.setMatrixAt(mIndex, matrix);
+                });
+                instancedMesh.instanceMatrix.needsUpdate = true;
+
+                // Gestion spéciale pour les fenêtres
+                if (group.isWindow) {
+                    this.windowMeshes.push(instancedMesh);
+                    if (this.experience?.scene?.environment) {
+                        if (!materialClone.envMap) materialClone.envMap = this.experience.scene.environment;
+                    }
+                }
+
+                optimizedMeshes.push({
+                    mesh: instancedMesh,
+                    key: `${buildingType}_${assetId}_optimized_${groupIndex}`,
+                    isWindow: group.isWindow
+                });
+
+                groupIndex++;
+            } catch (error) {
+                console.error(`[IMM] Error merging geometries for material ${materialKey}:`, error);
+            }
+        });
+
+        return optimizedMeshes;
+    }
+
+    /**
+     * Génère une clé unique pour un matériau
+     * @param {THREE.Material} material - Le matériau
+     * @returns {string} La clé du matériau
+     */
+    getMaterialKey(material) {
+        // Utiliser le nom du matériau et quelques propriétés clés pour créer une clé unique
+        const name = material.name || 'unnamed';
+        const type = material.type;
+        const color = material.color ? material.color.getHexString() : 'nocolor';
+        return `${type}_${name}_${color}`;
+    }
+
+    /**
+     * Vérifie si un matériau est un matériau de fenêtre
+     * @param {THREE.Material} material - Le matériau à vérifier
+     * @returns {boolean} True si c'est un matériau de fenêtre
+     */
+    isWindowMaterial(material) {
+        const windowMaterialNames = [
+            "BuildingWindowMat",
+            "SkyscraperWindowMat_Standard",
+            "NewBuildingWindow",
+            "NewBuildingBalconyWindow",
+            "HouseWindowMat",
+            "HouseWindowPaneMat",
+            "HouseWindowFrameMat",
+            "IndustrialWindowPaneMat",
+            "NewSkyscraperWindowMat",
+            "CommercialWindowMat",
+            "CommercialBalconyWindowMat"
+        ];
+        
+        return windowMaterialNames.includes(material.name) || 
+               material.name?.startsWith("Inst_HouseWindow_") ||
+               material.name?.startsWith("HouseWindow");
+    }
+
+    /**
+     * Active ou désactive l'optimisation des bâtiments
+     * @param {boolean} enabled - True pour activer l'optimisation
+     */
+    setBuildingOptimization(enabled) {
+        this.enableBuildingOptimization = enabled;
+        console.log(`Building optimization ${enabled ? 'enabled' : 'disabled'}`);
     }
 
     /**
@@ -118,76 +254,56 @@ export default class InstancedMeshManager {
                                 }
                             }
                             
-                            // Gérer les parties (comme pour les autres assets procéduraux)
+                            // Gérer les parties avec optimisation pour les bâtiments commerciaux
                             if (assetData.parts && assetData.parts.length > 0) {
-                                assetData.parts.forEach((part, index) => {
-                                    if (!part.geometry || !part.material) {
-                                        console.warn(`[IMM] Invalid part data for commercial asset, part index: ${index}`);
-                                        return;
-                                    }
-
-                                    // Déterminer si cette partie est une fenêtre
-                                    const isPartWindow = (
-                                        part.material.name === "CommercialWindowMat" || 
-                                        part.material.name === "CommercialBalconyWindowMat" 
-                                    );
-
-                                    const count = matrices.length;
-                                    // Cloner le matériau pour éviter les modifications partagées
-                                    const partMaterialClone = part.material.clone();
-                                    partMaterialClone.name = `Inst_${commercialKey}_part${index}`;
-
-                                    const instancedMesh = new THREE.InstancedMesh(part.geometry, partMaterialClone, count);
-                                    instancedMesh.castShadow = castShadow;
-                                    instancedMesh.receiveShadow = !isPartWindow;
-                                    instancedMesh.name = `${commercialKey}_part${index}`;
-
-                                    matrices.forEach((matrix, mIndex) => {
-                                        instancedMesh.setMatrixAt(mIndex, matrix);
+                                // Essayer d'optimiser les parties
+                                const optimizedMeshes = this.optimizeBuildingParts(assetData.parts, matrices, 'commercial', commercialKey);
+                                
+                                if (optimizedMeshes && optimizedMeshes.length > 0) {
+                                    // Utiliser les meshes optimisés
+                                    optimizedMeshes.forEach((optimizedMesh) => {
+                                        this.parentGroup.add(optimizedMesh.mesh);
+                                        this.instancedMeshes[`commercial_${optimizedMesh.key}`] = optimizedMesh.mesh;
+                                        totalMeshesCreated++;
+                                        totalInstancesCreated += optimizedMesh.mesh.count;
                                     });
-                                    instancedMesh.instanceMatrix.needsUpdate = true;
-
-                                    // Calculer un facteur d'amplitude pour le tronc vs feuillage
-                                    const partFactor = part.material.name.includes('TreeTrunkMat') ? 0.7 : 1.0;
-
-                                    // Ajout: animation de balancement pour les arbres
-                                    if (type === 'tree') {
-                                        const phases = new Float32Array(count);
-                                        for (let i = 0; i < count; i++) {
-                                            phases[i] = Math.random() * Math.PI * 2;
+                                } else {
+                                    // Fallback à l'ancienne méthode si l'optimisation échoue
+                                    assetData.parts.forEach((part, index) => {
+                                        if (!part.geometry || !part.material) {
+                                            console.warn(`[IMM] Invalid part data for commercial asset, part index: ${index}`);
+                                            return;
                                         }
-                                        instancedMesh.geometry.setAttribute('instanceSwayPhase', new THREE.InstancedBufferAttribute(phases, 1));
-                                        instancedMesh.material.onBeforeCompile = (shader) => {
-                                            shader.uniforms.uTime = { value: 0 };
-                                            shader.uniforms.uSwayAmplitude = { value: 0.05 };
-                                            shader.uniforms.uSwayFrequency = { value: 1.0 };
-                                            shader.uniforms.uPartFactor = { value: partFactor };
-                                            shader.vertexShader = 'attribute float instanceSwayPhase;\nuniform float uTime;\nuniform float uSwayAmplitude;\nuniform float uSwayFrequency;\nuniform float uPartFactor;\n' + shader.vertexShader;
-                                            shader.vertexShader = shader.vertexShader.replace(
-                                                '#include <begin_vertex>',
-                                                `#include <begin_vertex>
-                                                float sway = sin(uTime * uSwayFrequency + instanceSwayPhase) * uSwayAmplitude * uPartFactor;
-                                                transformed.z += sway * transformed.y;`
-                                            );
-                                            instancedMesh.userData.shader = shader;
-                                        };
-                                    }
-                                    this.parentGroup.add(instancedMesh);
-                                    this.instancedMeshes[`commercial_${commercialKey}_part${index}`] = instancedMesh;
-                                    totalMeshesCreated++;
-                                    totalInstancesCreated += count;
 
-                                    // Ajouter aux fenêtres si applicable
-                                    if (isPartWindow) {
-                                        this.windowMeshes.push(instancedMesh);
-                                        // Appliquer envMap si nécessaire
-                                        if (this.experience?.scene?.environment) {
-                                            if (!partMaterialClone.envMap) partMaterialClone.envMap = this.experience.scene.environment;
+                                        const isPartWindow = this.isWindowMaterial(part.material);
+                                        const count = matrices.length;
+                                        const partMaterialClone = part.material.clone();
+                                        partMaterialClone.name = `Inst_${commercialKey}_part${index}`;
+
+                                        const instancedMesh = new THREE.InstancedMesh(part.geometry, partMaterialClone, count);
+                                        instancedMesh.castShadow = castShadow;
+                                        instancedMesh.receiveShadow = !isPartWindow;
+                                        instancedMesh.name = `${commercialKey}_part${index}`;
+
+                                        matrices.forEach((matrix, mIndex) => {
+                                            instancedMesh.setMatrixAt(mIndex, matrix);
+                                        });
+                                        instancedMesh.instanceMatrix.needsUpdate = true;
+
+                                        this.parentGroup.add(instancedMesh);
+                                        this.instancedMeshes[`commercial_${commercialKey}_part${index}`] = instancedMesh;
+                                        totalMeshesCreated++;
+                                        totalInstancesCreated += count;
+
+                                        if (isPartWindow) {
+                                            this.windowMeshes.push(instancedMesh);
+                                            if (this.experience?.scene?.environment) {
+                                                if (!partMaterialClone.envMap) partMaterialClone.envMap = this.experience.scene.environment;
+                                            }
                                         }
-                                    }
-                                });
-                                // Important : continuer à la prochaine clé car les meshes ont déjà été créés
-                                continue; // Passe à l'itération suivante de la boucle idOrKey
+                                    });
+                                }
+                                continue;
                             } else {
                                 console.warn(`[IMM] Commercial asset has no parts, unexpected state`);
                                 continue;
@@ -309,55 +425,59 @@ export default class InstancedMeshManager {
                                 }
                                 break;
                             }
-                            // 1) Clé assetId seul : créer un mesh par partie de l'asset procédural
+                            // 1) Clé assetId seul : créer un mesh par partie de l'asset procédural avec optimisation
                             else if (!idOrKey.includes('_part')) {
                                 const assetData = this.assetLoader.getAssetDataById(idOrKey);
                                 if (assetData?.parts && assetData.parts.length > 0) {
-                                    const count = matrices.length;
-                                    assetData.parts.forEach((part, idx) => {
-                                        if (!part.geometry || !part.material) return;
-                                        
-                                        // Vérifier si cette partie est une fenêtre AVANT de changer le nom
-                                        const isPartWindow = (
-                                            part.material.name === "HouseWindowPaneMat" ||
-                                            part.material.name === "HouseWindowFrameMat" ||
-                                            part.material.name?.startsWith("HouseWindow")
-                                        );
-                                        
-                                        const matClone = part.material.clone();
-                                        const meshName = `${idOrKey}_part${idx}`;
-                                        
-                                        // Si c'est une fenêtre, préserver des informations pour l'identification
-                                        if (isPartWindow) {
-                                            matClone.name = part.material.name; // Préserver le nom original pour les fenêtres
-                                            // Ajouter une propriété personnalisée pour l'identification
-                                            matClone.userData = matClone.userData || {};
-                                            matClone.userData.isNewHouseWindow = true;
-                                        } else {
-                                            matClone.name = `Inst_${meshName}`; // Nom habituel pour les non-fenêtres
-                                        }
-                                        
-                                        const instMesh = new THREE.InstancedMesh(part.geometry, matClone, count);
-                                        instMesh.castShadow = true;
-                                        instMesh.receiveShadow = !isPartWindow; // Les fenêtres ne reçoivent pas d'ombres
-                                        instMesh.name = `house_${meshName}`;
-                                        matrices.forEach((m, i) => instMesh.setMatrixAt(i, m));
-                                        instMesh.instanceMatrix.needsUpdate = true;
-                                        this.parentGroup.add(instMesh);
-                                        this.instancedMeshes[`house_${meshName}`] = instMesh;
-                                        
-                                        // IMPORTANT: Ajouter les fenêtres à la liste de surveillance
-                                        if (isPartWindow) {
-                                            this.windowMeshes.push(instMesh);
-                                            // Appliquer envMap si nécessaire
-                                            if (this.experience?.scene?.environment) {
-                                                if (!matClone.envMap) matClone.envMap = this.experience.scene.environment;
+                                    // Essayer d'optimiser les parties
+                                    const optimizedMeshes = this.optimizeBuildingParts(assetData.parts, matrices, 'house', idOrKey);
+                                    
+                                    if (optimizedMeshes && optimizedMeshes.length > 0) {
+                                        // Utiliser les meshes optimisés
+                                        optimizedMeshes.forEach((optimizedMesh) => {
+                                            this.parentGroup.add(optimizedMesh.mesh);
+                                            this.instancedMeshes[`house_${optimizedMesh.key}`] = optimizedMesh.mesh;
+                                            totalMeshesCreated++;
+                                            totalInstancesCreated += optimizedMesh.mesh.count;
+                                        });
+                                    } else {
+                                        // Fallback à l'ancienne méthode si l'optimisation échoue
+                                        const count = matrices.length;
+                                        assetData.parts.forEach((part, idx) => {
+                                            if (!part.geometry || !part.material) return;
+                                            
+                                            const isPartWindow = this.isWindowMaterial(part.material);
+                                            const matClone = part.material.clone();
+                                            const meshName = `${idOrKey}_part${idx}`;
+                                            
+                                            if (isPartWindow) {
+                                                matClone.name = part.material.name;
+                                                matClone.userData = matClone.userData || {};
+                                                matClone.userData.isNewHouseWindow = true;
+                                            } else {
+                                                matClone.name = `Inst_${meshName}`;
                                             }
-                                        }
-                                        
-                                        totalMeshesCreated++;
-                                        totalInstancesCreated += count;
-                                    });
+                                            
+                                            const instMesh = new THREE.InstancedMesh(part.geometry, matClone, count);
+                                            instMesh.castShadow = true;
+                                            instMesh.receiveShadow = !isPartWindow;
+                                            instMesh.name = `house_${meshName}`;
+                                            matrices.forEach((m, i) => instMesh.setMatrixAt(i, m));
+                                            instMesh.instanceMatrix.needsUpdate = true;
+                                            this.parentGroup.add(instMesh);
+                                            this.instancedMeshes[`house_${meshName}`] = instMesh;
+                                            
+                                            if (isPartWindow) {
+                                                this.windowMeshes.push(instMesh);
+                                                if (this.experience?.scene?.environment) {
+                                                    if (!matClone.envMap) matClone.envMap = this.experience.scene.environment;
+                                                }
+                                            }
+                                            
+                                            totalMeshesCreated++;
+                                            totalInstancesCreated += count;
+                                        });
+                                    }
                                     continue;
                                 }
                             }
@@ -437,8 +557,25 @@ export default class InstancedMeshManager {
                                 continue;
                              }
 
+                             // Si c'est un asset avec parties et qu'on traite l'asset complet (pas une partie spécifique)
+                             if (assetData.parts && assetData.parts.length > 0 && partName === 'default') {
+                                 // Essayer d'optimiser toutes les parties ensemble
+                                 const optimizedMeshes = this.optimizeBuildingParts(assetData.parts, matrices, type, assetId);
+                                 
+                                 if (optimizedMeshes && optimizedMeshes.length > 0) {
+                                     // Utiliser les meshes optimisés
+                                     optimizedMeshes.forEach((optimizedMesh) => {
+                                         this.parentGroup.add(optimizedMesh.mesh);
+                                         this.instancedMeshes[`${type}_${optimizedMesh.key}`] = optimizedMesh.mesh;
+                                         totalMeshesCreated++;
+                                         totalInstancesCreated += optimizedMesh.mesh.count;
+                                     });
+                                     continue; // Passer au prochain élément
+                                 }
+                             }
+
                              if (assetData.parts && assetData.parts.length > 0 && partName !== 'default') {
-                                 // Asset procédural avec parties
+                                 // Asset procédural avec parties - traitement d'une partie spécifique
                                  let partIndex = -1;
                                  if (partName.startsWith('part')) {
                                      partIndex = parseInt(partName.substring(4), 10);
@@ -478,10 +615,23 @@ export default class InstancedMeshManager {
                             }
 
                             if (assetData.parts && assetData.parts.length > 0) {
-                                // Gérer les parties séparément (chaque partie devient un InstancedMesh)
-                                // Note : Cette logique crée plusieurs InstancedMesh par asset à parts,
-                                // elle doit rester ici et ne pas passer par la création unique plus bas.
-                                // Nouveau: génère une phase partagée pour chaque instance d'arbre
+                                // Pour les bâtiments (industrial), essayer l'optimisation
+                                if (type === 'industrial') {
+                                    const optimizedMeshes = this.optimizeBuildingParts(assetData.parts, matrices, type, assetId);
+                                    
+                                    if (optimizedMeshes && optimizedMeshes.length > 0) {
+                                        // Utiliser les meshes optimisés
+                                        optimizedMeshes.forEach((optimizedMesh) => {
+                                            this.parentGroup.add(optimizedMesh.mesh);
+                                            this.instancedMeshes[`${type}_${optimizedMesh.key}`] = optimizedMesh.mesh;
+                                            totalMeshesCreated++;
+                                            totalInstancesCreated += optimizedMesh.mesh.count;
+                                        });
+                                        continue;
+                                    }
+                                }
+                                
+                                // Logique existante pour les arbres et fallback pour les bâtiments
                                 let treeSwayPhases;
                                 if (type === 'tree') {
                                     const count = matrices.length;
@@ -496,25 +646,14 @@ export default class InstancedMeshManager {
                                         return;
                                     }
 
-                                    // Déterminer si CETTE partie est une fenêtre
-                                    const isPartWindow = (
-                                        part.material.name === "BuildingWindowMat" || // Noms génériques
-                                        part.material.name === "SkyscraperWindowMat_Standard" ||
-                                        part.material.name === "NewBuildingWindow" ||
-                                        part.material.name === "NewBuildingBalconyWindow" ||
-                                        part.material.name?.startsWith("Inst_HouseWindow_") ||
-                                        part.material.name === "HouseWindowMat" ||
-                                        part.material.name === "IndustrialWindowPaneMat" // Ajouter noms spécifiques si besoin
-                                    );
-
+                                    const isPartWindow = this.isWindowMaterial(part.material);
                                     const count = matrices.length;
-                                    // Utiliser le matériau cloné pour éviter les modifications partagées
                                     const partMaterialClone = part.material.clone();
-                                    partMaterialClone.name = `Inst_${meshKey}_part${index}`; // Donner un nom unique à l'instance clonée
+                                    partMaterialClone.name = `Inst_${meshKey}_part${index}`;
 
                                     const instancedMesh = new THREE.InstancedMesh(part.geometry, partMaterialClone, count);
                                     instancedMesh.castShadow = castShadow;
-                                    instancedMesh.receiveShadow = !isPartWindow; // Ombre si ce n'est pas une fenêtre
+                                    instancedMesh.receiveShadow = !isPartWindow;
                                     instancedMesh.name = `${meshKey}_part${index}`;
 
                                     matrices.forEach((matrix, mIndex) => {
@@ -555,14 +694,12 @@ export default class InstancedMeshManager {
                                     // Ajouter aux fenêtres si applicable
                                     if (isPartWindow) {
                                         this.windowMeshes.push(instancedMesh);
-                                        // Appliquer envMap ici si nécessaire
                                         if (this.experience?.scene?.environment) {
                                             if (!partMaterialClone.envMap) partMaterialClone.envMap = this.experience.scene.environment;
                                         }
                                     }
                                 });
-                                // Important : continuer à la prochaine clé car les meshes ont déjà été créés
-                                continue; // Passe à l'itération suivante de la boucle idOrKey
+                                continue;
                             }
 
                             // Si l'asset n'a pas de parts (cas standard pour ces types)
@@ -701,7 +838,10 @@ export default class InstancedMeshManager {
         } // Fin boucle type
 
         if (totalMeshesCreated > 0) {
-            //console.log(`InstancedMeshManager: ${totalMeshesCreated} InstancedMesh(es) created (${totalInstancesCreated} total instances). ${this.windowMeshes.length} window mesh(es) tracked.`);
+            console.log(`InstancedMeshManager: ${totalMeshesCreated} InstancedMesh(es) created (${totalInstancesCreated} total instances). ${this.windowMeshes.length} window mesh(es) tracked.`);
+            if (this.enableBuildingOptimization) {
+                console.log(`Building optimization enabled - draw calls reduced by geometry merging.`);
+            }
         } else {
             //console.log("InstancedMeshManager: No InstancedMesh created.");
         }
