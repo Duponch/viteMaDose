@@ -13,6 +13,7 @@ import WeatherControlUI from './UI/WeatherControlUI.js';
 import EnvironmentControlUI from './UI/EnvironmentControlUI.js';
 import FpsControlUI from './UI/FpsControlUI.js';
 import BirdCameraUI from './UI/BirdCameraUI.js';
+import RenderStatsUI from './UI/RenderStatsUI.js';
 import ControlManager from './Core/Controls/ControlManager.js';
 import './UI/WeatherUI.css';
 import './UI/EnvironmentUI.css';
@@ -63,6 +64,7 @@ export default class Experience extends EventTarget {
         this.controlManager = new ControlManager(this);
         this.fpsControlUI = new FpsControlUI(this);
         this.birdCameraUI = new BirdCameraUI(this);
+        this.renderStatsUI = new RenderStatsUI(this);
         
         this.stats = new Stats();
         this.stats.showPanel(0);
@@ -1430,6 +1432,7 @@ export default class Experience extends EventTarget {
         this.environmentControlUI.destroy();
         this.fpsControlUI.destroy();
         this.birdCameraUI.destroy();
+        this.renderStatsUI.destroy();
         
         this.sizes.removeEventListener('resize', this.resizeHandler);
         this.time.removeEventListener('tick', this.updateHandler);
@@ -1516,6 +1519,7 @@ export default class Experience extends EventTarget {
         this.environmentControlUI?.destroy(); this.environmentControlUI = null;
         this.fpsControlUI?.destroy(); this.fpsControlUI = null;
         this.birdCameraUI?.destroy(); this.birdCameraUI = null;
+        this.renderStatsUI?.destroy(); this.renderStatsUI = null;
 
         if (this.stats?.dom.parentNode) { document.body.removeChild(this.stats.dom); }
         this.stats = null;
