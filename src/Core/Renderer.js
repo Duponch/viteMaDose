@@ -11,6 +11,10 @@ export default class Renderer {
         this.scene = this.experience.scene;
         this.camera = this.experience.camera;
 
+        // Flag pour activer/désactiver la capture des statistiques détaillées
+        this.enableDetailedStats = false;
+        this.mainRenderStats = null;
+
         this.setInstance();
     }
 
@@ -63,26 +67,42 @@ export default class Renderer {
 	}	
 
     update() {
-		// Réinitialiser les compteurs avant le rendu
-		this.instance.info.reset();
-		
-		// Capturer les stats avant le post-processing
-		// Faire un rendu direct pour compter les draw calls réels
-		const oldAutoClear = this.instance.autoClear;
-		this.instance.autoClear = false;
-		this.instance.clear();
-		this.instance.render(this.scene, this.camera.instance);
-		
-		// Sauvegarder les statistiques du rendu principal
-		this.mainRenderStats = {
-			calls: this.instance.info.render.calls,
-			triangles: this.instance.info.render.triangles,
-			points: this.instance.info.render.points,
-			lines: this.instance.info.render.lines
-		};
-		
-		// Restaurer autoClear et faire le rendu avec post-processing
-		this.instance.autoClear = oldAutoClear;
-		this.composer.render();
+		if (this.enableDetailedStats) {
+			// Mode avec statistiques détaillées (double rendu)
+			this.instance.info.reset();
+			
+			// Capturer les stats avant le post-processing
+			// Faire un rendu direct pour compter les draw calls réels
+			const oldAutoClear = this.instance.autoClear;
+			this.instance.autoClear = false;
+			this.instance.clear();
+			this.instance.render(this.scene, this.camera.instance);
+			
+			// Sauvegarder les statistiques du rendu principal
+			this.mainRenderStats = {
+				calls: this.instance.info.render.calls,
+				triangles: this.instance.info.render.triangles,
+				points: this.instance.info.render.points,
+				lines: this.instance.info.render.lines
+			};
+			
+			// Restaurer autoClear et faire le rendu avec post-processing
+			this.instance.autoClear = oldAutoClear;
+			this.composer.render();
+		} else {
+			// Mode performance (rendu simple)
+			this.composer.render();
+		}
+	}
+
+	/**
+	 * Active ou désactive la capture des statistiques détaillées
+	 * @param {boolean} enabled - True pour activer, false pour désactiver
+	 */
+	setDetailedStatsEnabled(enabled) {
+		this.enableDetailedStats = enabled;
+		if (!enabled) {
+			this.mainRenderStats = null;
+		}
 	}	
 }

@@ -45,6 +45,9 @@ export default class TimeControlUI {
         this.elements.speedDisplay.id = 'speed-display';
         this.elements.speedDisplay.textContent = `${this.time.timeScale}x`;
 
+        // --- Bouton Statistiques de Rendu ---
+        this.elements.renderStatsButton = this._createButton('render-stats-button', '📊', "Activer/Désactiver les statistiques de rendu");
+
         // --- Bouton Carte de la Ville ---
         this.elements.cityMapButton = this._createButton('city-map-button', '🗺', "Afficher/Masquer la carte de la ville");
 
@@ -151,6 +154,7 @@ export default class TimeControlUI {
         } // Fin boucle sur layerStructure
 
         // --- Ajout final au container principal de l'UI (en bas à droite) ---
+        this.container.appendChild(this.elements.renderStatsButton);
         this.container.appendChild(this.elements.cityMapButton);
         this.container.appendChild(this.elements.weatherUIButton);
         this.container.appendChild(this.elements.environmentUIButton);
@@ -184,6 +188,16 @@ export default class TimeControlUI {
         });
         this.elements.decreaseButton.addEventListener('click', () => {
             this.time.decreaseSpeed();
+        });
+
+        // --- Listener Bouton Statistiques de Rendu ---
+        this.elements.renderStatsButton.addEventListener('click', () => {
+            if (this.experience.renderStatsUI) {
+                this.experience.renderStatsUI.toggleStats();
+                // Mettre à jour l'apparence du bouton
+                const isEnabled = this.experience.renderStatsUI.isStatsEnabled;
+                this.elements.renderStatsButton.classList.toggle('active', isEnabled);
+            }
         });
 
         // --- Listeners Boutons Météo et Environnement ---

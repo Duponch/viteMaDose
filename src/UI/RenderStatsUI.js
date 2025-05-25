@@ -9,6 +9,7 @@ export default class RenderStatsUI {
         this.isVisible = true;
         this.updateInterval = 100; // Mise à jour toutes les 100ms
         this.lastUpdateTime = 0;
+        this.isStatsEnabled = false; // Stats désactivées par défaut pour les performances
         
         this.createUI();
         this.bindEvents();
@@ -26,7 +27,10 @@ export default class RenderStatsUI {
         this.container.innerHTML = `
             <div class="render-stats-header">
                 <h3>Statistiques de Rendu</h3>
-                <button class="render-stats-toggle" title="Masquer/Afficher">−</button>
+                <div class="render-stats-controls">
+                    <button class="render-stats-enable" title="Activer/Désactiver les statistiques">OFF</button>
+                    <button class="render-stats-toggle" title="Masquer/Afficher">−</button>
+                </div>
             </div>
             <div class="render-stats-content">
                 <div class="render-stats-item">
@@ -72,6 +76,7 @@ export default class RenderStatsUI {
         
         // Références aux éléments
         this.elements = {
+            enableButton: this.container.querySelector('.render-stats-enable'),
             toggleButton: this.container.querySelector('.render-stats-toggle'),
             content: this.container.querySelector('.render-stats-content'),
             drawCalls: document.getElementById('draw-calls'),
@@ -116,6 +121,34 @@ export default class RenderStatsUI {
             .render-stats-header h3 {
                 margin: 0;
                 font-size: 14px;
+                color: #00ff88;
+            }
+
+            .render-stats-controls {
+                display: flex;
+                gap: 5px;
+                align-items: center;
+            }
+
+            .render-stats-enable {
+                background: none;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                padding: 2px 6px;
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 10px;
+                font-family: 'Courier New', monospace;
+                min-width: 30px;
+            }
+
+            .render-stats-enable:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            .render-stats-enable.enabled {
+                background: rgba(0, 255, 136, 0.2);
+                border-color: #00ff88;
                 color: #00ff88;
             }
 
@@ -173,6 +206,11 @@ export default class RenderStatsUI {
     }
 
     bindEvents() {
+        // Enable/Disable stats
+        this.elements.enableButton.addEventListener('click', () => {
+            this.toggleStats();
+        });
+
         // Toggle visibility
         this.elements.toggleButton.addEventListener('click', () => {
             this.toggleContent();
@@ -240,14 +278,14 @@ export default class RenderStatsUI {
         // Calculer les statistiques
         const stats = this.calculateStats();
         
-        // Utiliser les statistiques du rendu principal si disponibles
-        const mainStats = this.experience.renderer.mainRenderStats;
-        const drawCalls = mainStats ? mainStats.calls : info.render.calls;
-        const triangles = mainStats ? mainStats.triangles : info.render.triangles;
+        // Utiliser les statistiques du rendu principal si disponibles et activées
+        const mainStats = this.isStatsEnabled ? this.experience.renderer.mainRenderStats : null;
+        const drawCalls = mainStats ? mainStats.calls : (this.isStatsEnabled ? info.render.calls : 'N/A');
+        const triangles = mainStats ? mainStats.triangles : (this.isStatsEnabled ? info.render.triangles : 'N/A');
         
         // Mettre à jour l'affichage
-        this.elements.drawCalls.textContent = drawCalls.toLocaleString();
-        this.elements.triangles.textContent = triangles.toLocaleString();
+        this.elements.drawCalls.textContent = typeof drawCalls === 'number' ? drawCalls.toLocaleString() : drawCalls;
+        this.elements.triangles.textContent = typeof triangles === 'number' ? triangles.toLocaleString() : triangles;
         this.elements.geometries.textContent = memory.geometries.toLocaleString();
         this.elements.textures.textContent = memory.textures.toLocaleString();
         this.elements.memory.textContent = `${stats.memoryMB} MB`;
@@ -341,6 +379,24 @@ export default class RenderStatsUI {
     setupRenderHook() {
         // Pas besoin de hook, on utilise directement les stats du renderer
         // Les statistiques sont maintenant capturées dans Renderer.js
+    }
+
+    toggleStats() {
+        this.isStatsEnabled = !this.isStatsEnabled;
+        
+        // Activer/désactiver la capture des stats dans le renderer
+        this.experience.renderer.setDetailedStatsEnabled(this.isStatsEnabled);
+        
+        // Mettre à jour l'apparence du bouton
+        if (this.isStatsEnabled) {
+            this.elements.enableButton.textContent = 'ON';
+            this.elements.enableButton.classList.add('enabled');
+        } else {
+            this.elements.enableButton.textContent = 'OFF';
+            this.elements.enableButton.classList.remove('enabled');
+        }
+        
+        console.log(`Statistiques de rendu ${this.isStatsEnabled ? 'activées' : 'désactivées'}`);
     }
 
     destroy() {
