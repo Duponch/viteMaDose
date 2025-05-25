@@ -113,59 +113,6 @@ export default class MovieTheaterPlacementStrategy extends IZonePlacementStrateg
     }
     
     /**
-     * Méthode pour placer un cinéma à une position spécifique
-     * @param {Plot} plot - La parcelle où placer le cinéma
-     * @param {InstanceDataManager} instanceDataManager - Gestionnaire de données d'instance
-     * @param {CityManager} cityManager - Gestionnaire de la ville
-     * @param {THREE.Vector3} position - Position du cinéma
-     * @param {number} baseScaleFactor - Facteur d'échelle pour le cinéma
-     * @param {number} rotationY - Rotation Y en radians
-     * @returns {boolean} - Vrai si le placement a réussi
-     */
-    placeSingleMovieTheater(plot, instanceDataManager, cityManager, position, baseScaleFactor, rotationY) {
-        const sidewalkHeight = this.config.sidewalkHeight ?? 0.2;
-        
-        // Ajouter un helper de façade si disponible
-        if (this.facadeHelper) {
-            const buildingPosition = new THREE.Vector3(position.x, sidewalkHeight, position.z);
-            const targetBuildingWidth = 2.5 * baseScaleFactor;
-            const targetBuildingDepth = 2.5 * baseScaleFactor;
-            this.facadeHelper.addFacadeHelper(
-                buildingPosition, 
-                rotationY, 
-                targetBuildingWidth, 
-                targetBuildingDepth
-            );
-        }
-        
-        // Création d'un cube rouge émissif
-        const matrix = new THREE.Matrix4();
-        matrix.compose(
-            position,
-            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotationY, 0)),
-            new THREE.Vector3(baseScaleFactor, baseScaleFactor, baseScaleFactor)
-        );
-        
-        // Ajouter les données d'instance pour un cube de cinéma
-        instanceDataManager.addData('movietheater', 'default', matrix);
-        
-        // Enregistrer l'instance de bâtiment auprès de CityManager
-        const buildingPosition = new THREE.Vector3(position.x, sidewalkHeight, position.z);
-        const registeredBuilding = cityManager.registerBuildingInstance(plot.id, 'movietheater', buildingPosition);
-        
-        if (registeredBuilding) {
-            plot.addBuildingInstance({
-                id: registeredBuilding.id,
-                type: 'movietheater',
-                position: buildingPosition.clone()
-            });
-            return true;
-        }
-        
-        return false;
-    }
-    
-    /**
      * Détermine l'orientation optimale d'un cinéma pour qu'il soit face à un trottoir.
      * Identique à la logique commerciale.
      * @param {number} cellCenterX - Position X du centre de la cellule
