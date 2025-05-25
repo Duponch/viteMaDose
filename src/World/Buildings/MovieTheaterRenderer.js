@@ -315,7 +315,7 @@ export default class MovieTheaterRenderer {
      */
     generateProceduralBuilding(baseWidth, baseHeight, baseDepth, userScale = 1, verticalScale = 0.8) {
         // Ajuster les dimensions de base - réduction de l'échelle pour harmoniser avec les autres bâtiments
-        const defaultScaleMultiplier = 1; // Réduit de 2 à 1.2 pour une meilleure harmonie
+        const defaultScaleMultiplier = 1.2; // Ajusté à 1.2 pour une taille appropriée tout en restant harmonieux
         const adjustedBaseWidth = baseWidth * defaultScaleMultiplier;
         const adjustedBaseHeight = baseHeight * defaultScaleMultiplier * verticalScale;
         const adjustedBaseDepth = baseDepth * defaultScaleMultiplier;

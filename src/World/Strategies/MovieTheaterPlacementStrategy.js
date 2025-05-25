@@ -88,16 +88,52 @@ export default class MovieTheaterPlacementStrategy extends IZonePlacementStrateg
             );
         }
 
-        // Création d'un cube rouge émissif pour représenter le cinéma
-        const matrix = new THREE.Matrix4();
-        matrix.compose(
-            worldCellCenterPos,
-            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, targetRotationY, 0)),
-            new THREE.Vector3(baseScaleFactor, baseScaleFactor, baseScaleFactor)
+        // Générer un asset procédural de cinéma pour assurer un centrage correct
+        const movieTheaterRenderer = this.renderers.movieTheaterRenderer;
+        if (!movieTheaterRenderer) {
+            console.error('MovieTheaterPlacementStrategy: MovieTheaterRenderer non disponible');
+            return;
+        }
+
+        // Générer l'asset procédural avec les bonnes dimensions
+        const assetInfo = movieTheaterRenderer.generateProceduralBuilding(
+            targetBuildingWidth,
+            targetBuildingWidth * 0.8, // Hauteur proportionnelle
+            targetBuildingDepth,
+            1.0, // userScale
+            0.8  // verticalScale
         );
 
-        // Ajouter les données d'instance pour un cube de cinéma
-        instanceDataManager.addData('movietheater', 'default', matrix);
+        if (!assetInfo || !assetInfo.parts) {
+            console.error('MovieTheaterPlacementStrategy: Échec de génération de l\'asset procédural');
+            return;
+        }
+
+        // Utiliser la même logique de centrage que les autres bâtiments
+        const finalScaleValue = assetInfo.fittingScaleFactor * baseScaleFactor;
+        const scaleMatrix = new THREE.Matrix4().makeScale(finalScaleValue, finalScaleValue, finalScaleValue);
+        const rotationMatrix = new THREE.Matrix4().makeRotationY(targetRotationY);
+        const recenterMatrix = new THREE.Matrix4().makeTranslation(
+            -assetInfo.centerOffset.x,
+            -assetInfo.centerOffset.y,
+            -assetInfo.centerOffset.z
+        );
+        const finalHeight = assetInfo.sizeAfterFitting.y * baseScaleFactor;
+        const plotGroundY = this.config.plotGroundY ?? 0.005;
+        const finalY = finalHeight / 2 + plotGroundY;
+        const translationMatrix = new THREE.Matrix4().makeTranslation(worldCellCenterPos.x, finalY, worldCellCenterPos.z);
+
+        // Construire la matrice finale
+        const instanceMatrix = new THREE.Matrix4();
+        instanceMatrix.multiplyMatrices(scaleMatrix, recenterMatrix);
+        instanceMatrix.premultiply(rotationMatrix);
+        instanceMatrix.premultiply(translationMatrix);
+
+        // Ajouter les données d'instance pour chaque partie du cinéma
+        assetInfo.parts.forEach((part, index) => {
+            const partKey = `${assetInfo.id}_part${index}`;
+            instanceDataManager.addData('movietheater', partKey, instanceMatrix.clone());
+        });
 
         // Enregistrer l'instance de bâtiment auprès de CityManager
         const buildingPosition = new THREE.Vector3(cellCenterX, sidewalkHeight, cellCenterZ);

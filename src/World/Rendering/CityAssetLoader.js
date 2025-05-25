@@ -186,6 +186,22 @@ export default class CityAssetLoader {
                 this.assets['industrial'] = [asset]; //
                 return [Promise.resolve(asset)]; //
             }
+            if (type === 'movietheater') { //
+                // Génération procédurale de cinéma
+                //console.log(`-> Préparation de la génération procédurale pour le type '${type}'...`);
+                const numVariants = this.config.proceduralMovieTheaterVariants ?? 3; // Générer quelques variantes
+                const promises = [];
+                for (let i = 0; i < numVariants; i++) {
+                    promises.push(
+                        this.loadAssetModel(null, type, width, height, depth, 1.0)
+                            .catch(error => {
+                                console.error(`Echec génération procédurale ${type} variant ${i}:`, error);
+                                return null;
+                            })
+                    );
+                }
+                return promises;
+            }
             if (!assetConfigs || !dir || !type || width == null || height == null || depth == null) { //
                 console.warn(`Configuration incomplète ou invalide pour le type '${type}', chargement ignoré.`); //
                 return []; //
@@ -257,15 +273,24 @@ export default class CityAssetLoader {
             this.config.skyscraperBaseHeight, //
             this.config.skyscraperBaseDepth //
         );
+        const movietheaterPromises = createLoadPromises( //
+            null, // Pas de fichiers, génération procédurale uniquement
+            null, //
+            'movietheater', //
+            this.config.movieTheaterBaseWidth ?? 8, //
+            this.config.movieTheaterBaseHeight ?? 6, //
+            this.config.movieTheaterBaseDepth ?? 8 //
+        );
 
         try { //
-            const [houseResults, buildingResults, industrialResults, parkResults, treeResults, skyscraperResults] = await Promise.all([ //
+            const [houseResults, buildingResults, industrialResults, parkResults, treeResults, skyscraperResults, movietheaterResults] = await Promise.all([ //
                 Promise.all(housePromises), //
                 Promise.all(buildingPromises), //
                 Promise.all(industrialPromises), //
                 Promise.all(parkPromises), //
                 Promise.all(treePromises), //
-                Promise.all(skyscraperPromises) //
+                Promise.all(skyscraperPromises), //
+                Promise.all(movietheaterPromises) //
             ]);
 
             // Attribution des résultats aux assets, en filtrant les null.
@@ -275,6 +300,7 @@ export default class CityAssetLoader {
             this.assets.park = parkResults.filter(r => r !== null); //
             this.assets.tree = treeResults.filter(r => r !== null); //
             this.assets.skyscraper = skyscraperResults.filter(r => r !== null); //
+            this.assets.movietheater = movietheaterResults.filter(r => r !== null); //
 
             //console.log(`Assets chargés: ${this.assets.house.length} maisons (procédurales), ${this.assets.building.length} immeubles (procéduraux), ${this.assets.industrial.length} usines, ${this.assets.park.length} parcs, ${this.assets.tree.length} arbres, ${this.assets.skyscraper.length} gratte-ciels.`); //
             return this.assets; //
