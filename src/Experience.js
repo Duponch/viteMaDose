@@ -1372,6 +1372,21 @@ export default class Experience extends EventTarget {
             this.camera.update(deltaTime);
         }
 
+        // Optimisations de rendu pour les bâtiments
+        if (this.world?.cityManager?.contentGenerator?.instancedMeshManager) {
+            const meshManager = this.world.cityManager.contentGenerator.instancedMeshManager;
+            
+            // Mise à jour du LOD et frustum culling (optimisé pour ne pas s'exécuter à chaque frame)
+            if (this.time.current % 100 < deltaTime) { // Environ toutes les 100ms
+                meshManager.optimizeInstanceVisibility(this.camera.instance, 500);
+            }
+            
+            // Mise à jour du LOD basé sur la distance (moins fréquent)
+            if (this.time.current % 200 < deltaTime) { // Environ toutes les 200ms
+                meshManager.updateBuildingLOD(this.camera.instance.position);
+            }
+        }
+
         // Update world
         if (this.world) {
             this.world.update();

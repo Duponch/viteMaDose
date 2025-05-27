@@ -40,6 +40,19 @@ export default class InstancedMeshManager {
         // Optimisation des draw calls pour les bâtiments
         this.enableBuildingOptimization = true; // Flag pour activer/désactiver l'optimisation
 
+        // Système de LOD pour les bâtiments
+        this.enableBuildingLOD = true;
+        this.lodDistances = {
+            high: 50,    // Distance maximale pour les détails élevés
+            medium: 150, // Distance maximale pour les détails moyens
+            low: 300     // Distance maximale pour les détails bas
+        };
+        this.lodMeshes = {
+            high: {},    // Meshes haute qualité
+            medium: {},  // Meshes qualité moyenne
+            low: {}      // Meshes basse qualité
+        };
+
         // Géométrie de base pour les passages piétons (si applicable)
         this.stripeBaseGeometry = null;
         if (this.config.crosswalkStripeWidth > 0 && this.config.crosswalkHeight > 0) {
@@ -58,47 +71,48 @@ export default class InstancedMeshManager {
     }
 
     /**
-     * Optimise les parties de bâtiments en fusionnant les géométries par matériau
-     * @param {Array} parts - Les parties du bâtiment
-     * @param {Array<THREE.Matrix4>} matrices - Les matrices de transformation
-     * @param {string} buildingType - Le type de bâtiment (house, building, etc.)
-     * @param {string} assetId - L'ID de l'asset
-     * @returns {Array} Les meshes optimisés
+     * Optimise les parties d'un bâtiment en fusionnant les géométries par matériau compatible
+     * @param {Array} parts - Les parties du bâtiment avec geometry et material
+     * @param {Array} matrices - Les matrices d'instance
+     * @param {string} buildingType - Type de bâtiment (house, building, etc.)
+     * @param {string} assetId - ID de l'asset
+     * @returns {Array} Array d'objets {mesh, key, isWindow}
      */
     optimizeBuildingParts(parts, matrices, buildingType, assetId) {
         if (!this.enableBuildingOptimization || !parts || parts.length === 0) {
             return null;
         }
 
-        // Grouper les parties par matériau avec optimisation agressive
         const materialGroups = new Map();
-        const materialCompatibilityMap = new Map(); // Pour fusionner des matériaux compatibles
-        
-        parts.forEach((part, index) => {
+        let groupIndex = 0;
+
+        // Regrouper les parties par matériau compatible
+        parts.forEach((part, partIndex) => {
             if (!part.geometry || !part.material) return;
-            
-            const materialKey = this.getMaterialKey(part.material);
+
+            const isWindow = this.isWindowMaterial(part.material);
+            const materialKey = this.getMaterialGroupKey(part.material, isWindow);
             
             if (!materialGroups.has(materialKey)) {
                 materialGroups.set(materialKey, {
                     material: part.material,
                     geometries: [],
-                    isWindow: this.isWindowMaterial(part.material),
                     partIndices: [],
-                    materials: [part.material] // Stocker tous les matériaux du groupe
+                    isWindow: isWindow,
+                    materials: [] // Pour garder trace des matériaux originaux
                 });
             }
-            
-            materialGroups.get(materialKey).geometries.push(part.geometry);
-            materialGroups.get(materialKey).partIndices.push(index);
-            materialGroups.get(materialKey).materials.push(part.material);
+
+            const group = materialGroups.get(materialKey);
+            group.geometries.push(part.geometry.clone());
+            group.partIndices.push(partIndex);
+            group.materials.push(part.material);
         });
 
-        // Optimisation supplémentaire : fusionner les groupes très similaires
+        // Fusionner les groupes compatibles pour réduire encore plus les draw calls
         this.mergeCompatibleGroups(materialGroups);
 
         const optimizedMeshes = [];
-        let groupIndex = 0;
 
         console.log(`[IMM] Optimizing ${buildingType} ${assetId}: ${parts.length} parts → ${materialGroups.size} material groups`);
 
@@ -114,13 +128,18 @@ export default class InstancedMeshManager {
                 }
 
                 const count = matrices.length;
-                const materialClone = group.material.clone();
+                const materialClone = this.createOptimizedMaterial(group.material, group.isWindow);
                 materialClone.name = `Optimized_${buildingType}_${assetId}_${materialKey}_${groupIndex}`;
 
                 const instancedMesh = new THREE.InstancedMesh(mergedGeometry, materialClone, count);
                 instancedMesh.castShadow = true;
                 instancedMesh.receiveShadow = !group.isWindow;
                 instancedMesh.name = `${buildingType}_${assetId}_optimized_${groupIndex}`;
+
+                // Optimisation: utiliser DynamicDrawUsage seulement si nécessaire
+                if (count < 100) {
+                    instancedMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+                }
 
                 matrices.forEach((matrix, mIndex) => {
                     instancedMesh.setMatrixAt(mIndex, matrix);
@@ -150,6 +169,57 @@ export default class InstancedMeshManager {
         console.log(`[IMM] ${buildingType} ${assetId} optimization result: ${parts.length} parts → ${optimizedMeshes.length} meshes (${Math.round((1 - optimizedMeshes.length / parts.length) * 100)}% reduction)`);
         
         return optimizedMeshes;
+    }
+
+    /**
+     * Crée une clé de regroupement pour les matériaux compatibles
+     * @param {THREE.Material} material - Le matériau
+     * @param {boolean} isWindow - Si c'est un matériau de fenêtre
+     * @returns {string} Clé de regroupement
+     */
+    getMaterialGroupKey(material, isWindow) {
+        // Regrouper par propriétés similaires plutôt que par nom exact
+        const props = {
+            type: material.type,
+            color: material.color ? material.color.getHex() : 0,
+            metalness: material.metalness || 0,
+            roughness: material.roughness || 0,
+            transparent: material.transparent || false,
+            isWindow: isWindow,
+            hasMap: !!material.map,
+            hasNormalMap: !!material.normalMap,
+            hasEmissive: material.emissive ? material.emissive.getHex() : 0
+        };
+        
+        return JSON.stringify(props);
+    }
+
+    /**
+     * Crée un matériau optimisé basé sur le matériau original
+     * @param {THREE.Material} originalMaterial - Matériau original
+     * @param {boolean} isWindow - Si c'est un matériau de fenêtre
+     * @returns {THREE.Material} Matériau optimisé
+     */
+    createOptimizedMaterial(originalMaterial, isWindow) {
+        const optimized = originalMaterial.clone();
+        
+        // Optimisations spécifiques selon le type
+        if (isWindow) {
+            // Optimisations pour les fenêtres
+            optimized.transparent = true;
+            optimized.opacity = Math.min(optimized.opacity || 1, 0.9);
+            optimized.metalness = Math.max(optimized.metalness || 0, 0.8);
+            optimized.roughness = Math.min(optimized.roughness || 1, 0.2);
+        } else {
+            // Optimisations pour les matériaux opaques
+            optimized.transparent = false;
+            optimized.alphaTest = 0;
+        }
+        
+        // Désactiver les mises à jour inutiles
+        optimized.needsUpdate = false;
+        
+        return optimized;
     }
 
     /**
@@ -244,9 +314,12 @@ export default class InstancedMeshManager {
             }
         }
         
-        // Fusionner les groupes compatibles
+        // Fusionner les groupes compatibles en évitant les conflits
+        const processedKeys = new Set();
         groupsToMerge.forEach(([key1, key2]) => {
-            if (materialGroups.has(key1) && materialGroups.has(key2)) {
+            if (materialGroups.has(key1) && materialGroups.has(key2) && 
+                !processedKeys.has(key1) && !processedKeys.has(key2)) {
+                
                 const group1 = materialGroups.get(key1);
                 const group2 = materialGroups.get(key2);
                 
@@ -254,6 +327,10 @@ export default class InstancedMeshManager {
                 group1.geometries.push(...group2.geometries);
                 group1.partIndices.push(...group2.partIndices);
                 group1.materials.push(...group2.materials);
+                
+                // Marquer les clés comme traitées
+                processedKeys.add(key1);
+                processedKeys.add(key2);
                 
                 // Supprimer group2
                 materialGroups.delete(key2);
@@ -277,19 +354,42 @@ export default class InstancedMeshManager {
             return false;
         }
         
-        // Vérifier si les clés sont dans la même catégorie
-        const category1 = key1.split('_')[1]; // ex: 'wall', 'roof', etc.
-        const category2 = key2.split('_')[1];
+        const mat1 = group1.material;
+        const mat2 = group2.material;
         
-        if (category1 !== category2) {
-            return false;
+        // Vérifier la compatibilité des propriétés principales
+        const typeCompatible = mat1.type === mat2.type;
+        const transparencyCompatible = mat1.transparent === mat2.transparent;
+        const opacityCompatible = Math.abs((mat1.opacity || 1) - (mat2.opacity || 1)) < 0.1;
+        const metalnessCompatible = Math.abs((mat1.metalness || 0) - (mat2.metalness || 0)) < 0.2;
+        const roughnessCompatible = Math.abs((mat1.roughness || 1) - (mat2.roughness || 1)) < 0.2;
+        
+        // Vérifier la compatibilité des couleurs (si elles existent)
+        let colorCompatible = true;
+        if (mat1.color && mat2.color) {
+            const color1 = mat1.color.getHex();
+            const color2 = mat2.color.getHex();
+            // Permettre une petite différence de couleur
+            colorCompatible = Math.abs(color1 - color2) < 0x111111;
         }
         
-        // Vérifier si les couleurs sont suffisamment proches
-        const color1 = key1.split('_')[2];
-        const color2 = key2.split('_')[2];
+        // Vérifier la compatibilité des textures
+        const textureCompatible = (!!mat1.map) === (!!mat2.map) && 
+                                 (!!mat1.normalMap) === (!!mat2.normalMap);
         
-        return this.areColorsCompatible(color1, color2);
+        // Vérifier la compatibilité des émissions
+        let emissiveCompatible = true;
+        if (mat1.emissive && mat2.emissive) {
+            const emissive1 = mat1.emissive.getHex();
+            const emissive2 = mat2.emissive.getHex();
+            emissiveCompatible = Math.abs(emissive1 - emissive2) < 0x111111;
+        }
+        
+        const compatible = typeCompatible && transparencyCompatible && opacityCompatible && 
+                          metalnessCompatible && roughnessCompatible && colorCompatible && 
+                          textureCompatible && emissiveCompatible;
+            
+        return compatible;
     }
 
     /**
@@ -353,6 +453,286 @@ export default class InstancedMeshManager {
     setBuildingOptimization(enabled) {
         this.enableBuildingOptimization = enabled;
         console.log(`Building optimization ${enabled ? 'enabled' : 'disabled'}`);
+    }
+
+    /**
+     * Active ou désactive le système de LOD pour les bâtiments
+     * @param {boolean} enabled - True pour activer le LOD
+     */
+    setBuildingLOD(enabled) {
+        this.enableBuildingLOD = enabled;
+        console.log(`Building LOD ${enabled ? 'enabled' : 'disabled'}`);
+    }
+
+    /**
+     * Configure les distances de LOD
+     * @param {Object} distances - Objet contenant high, medium, low
+     */
+    setLODDistances(distances) {
+        this.lodDistances = { ...this.lodDistances, ...distances };
+        console.log(`LOD distances updated:`, this.lodDistances);
+    }
+
+    /**
+     * Crée des versions LOD simplifiées d'un bâtiment
+     * @param {Array} parts - Les parties du bâtiment original
+     * @param {string} buildingType - Type de bâtiment
+     * @param {string} assetId - ID de l'asset
+     * @returns {Object} Objet contenant les versions LOD {high, medium, low}
+     */
+    createBuildingLODVersions(parts, buildingType, assetId) {
+        if (!this.enableBuildingLOD || !parts || parts.length === 0) {
+            return { high: parts };
+        }
+
+        const lodVersions = {
+            high: parts, // Version originale
+            medium: this.createMediumLOD(parts),
+            low: this.createLowLOD(parts)
+        };
+
+        return lodVersions;
+    }
+
+    /**
+     * Crée une version LOD moyenne en fusionnant certaines parties
+     * @param {Array} parts - Parties originales
+     * @returns {Array} Parties simplifiées
+     */
+    createMediumLOD(parts) {
+        const simplifiedParts = [];
+        const materialGroups = new Map();
+
+        // Regrouper par type de matériau
+        parts.forEach(part => {
+            if (!part.geometry || !part.material) return;
+
+            const isWindow = this.isWindowMaterial(part.material);
+            const materialType = isWindow ? 'window' : 
+                               part.material.name.includes('Roof') ? 'roof' :
+                               part.material.name.includes('Wall') ? 'wall' : 'other';
+
+            if (!materialGroups.has(materialType)) {
+                materialGroups.set(materialType, {
+                    geometries: [],
+                    material: part.material,
+                    isWindow: isWindow
+                });
+            }
+
+            materialGroups.get(materialType).geometries.push(part.geometry.clone());
+        });
+
+        // Fusionner les géométries par groupe
+        materialGroups.forEach((group, type) => {
+            if (group.geometries.length > 0) {
+                const mergedGeometry = mergeGeometries(group.geometries, false);
+                if (mergedGeometry) {
+                    simplifiedParts.push({
+                        geometry: mergedGeometry,
+                        material: group.material.clone()
+                    });
+                }
+            }
+        });
+
+        return simplifiedParts;
+    }
+
+    /**
+     * Crée une version LOD basse avec une géométrie très simplifiée
+     * @param {Array} parts - Parties originales
+     * @returns {Array} Parties très simplifiées
+     */
+    createLowLOD(parts) {
+        // Pour le LOD bas, créer juste une boîte simple avec la couleur dominante
+        if (!parts || parts.length === 0) return [];
+
+        // Calculer la couleur dominante
+        let dominantColor = 0xcccccc;
+        const wallParts = parts.filter(part => 
+            part.material && !this.isWindowMaterial(part.material) && 
+            !part.material.name.includes('Roof')
+        );
+
+        if (wallParts.length > 0) {
+            const firstWall = wallParts[0];
+            if (firstWall.material.color) {
+                dominantColor = firstWall.material.color.getHex();
+            }
+        }
+
+        // Créer une géométrie de boîte simple
+        const simpleGeometry = new THREE.BoxGeometry(1, 1, 1);
+        const simpleMaterial = new THREE.MeshStandardMaterial({
+            color: dominantColor,
+            roughness: 0.8,
+            metalness: 0.1,
+            name: 'LOD_Simple'
+        });
+
+        return [{
+            geometry: simpleGeometry,
+            material: simpleMaterial
+        }];
+    }
+
+    /**
+     * Met à jour la visibilité des LOD selon la distance de la caméra
+     * @param {THREE.Vector3} cameraPosition - Position de la caméra
+     */
+    updateBuildingLOD(cameraPosition) {
+        if (!this.enableBuildingLOD || !cameraPosition) return;
+
+        // Parcourir tous les meshes de bâtiments et ajuster leur visibilité
+        Object.keys(this.instancedMeshes).forEach(key => {
+            const mesh = this.instancedMeshes[key];
+            if (!mesh || !key.includes('building') && !key.includes('house') && !key.includes('skyscraper')) {
+                return;
+            }
+
+            // Calculer la distance moyenne des instances
+            const averageDistance = this.calculateAverageDistance(mesh, cameraPosition);
+            
+            // Déterminer le niveau de LOD approprié
+            let targetLOD = 'high';
+            if (averageDistance > this.lodDistances.low) {
+                mesh.visible = false; // Trop loin, masquer complètement
+                return;
+            } else if (averageDistance > this.lodDistances.medium) {
+                targetLOD = 'low';
+            } else if (averageDistance > this.lodDistances.high) {
+                targetLOD = 'medium';
+            }
+
+            // Ajuster la visibilité selon le LOD
+            mesh.visible = true;
+            
+            // Optionnel : réduire le nombre d'instances visibles pour les LOD distants
+            if (targetLOD === 'low' && mesh.count > 50) {
+                // Réduire le nombre d'instances visibles
+                mesh.count = Math.floor(mesh.count * 0.5);
+                mesh.instanceMatrix.needsUpdate = true;
+            }
+        });
+    }
+
+    /**
+     * Calcule la distance moyenne des instances d'un mesh par rapport à la caméra
+     * @param {THREE.InstancedMesh} mesh - Le mesh instancié
+     * @param {THREE.Vector3} cameraPosition - Position de la caméra
+     * @returns {number} Distance moyenne
+     */
+    calculateAverageDistance(mesh, cameraPosition) {
+        if (!mesh.instanceMatrix) return Infinity;
+
+        let totalDistance = 0;
+        let count = 0;
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+
+        // Échantillonner quelques instances pour calculer la distance moyenne
+        const sampleSize = Math.min(10, mesh.count);
+        const step = Math.max(1, Math.floor(mesh.count / sampleSize));
+
+        for (let i = 0; i < mesh.count; i += step) {
+            mesh.getMatrixAt(i, matrix);
+            position.setFromMatrixPosition(matrix);
+            totalDistance += cameraPosition.distanceTo(position);
+            count++;
+        }
+
+        return count > 0 ? totalDistance / count : Infinity;
+    }
+
+    /**
+     * Active le frustum culling amélioré pour les bâtiments
+     * @param {THREE.Camera} camera - La caméra pour le frustum culling
+     */
+    updateFrustumCulling(camera) {
+        if (!camera) return;
+
+        const frustum = new THREE.Frustum();
+        const matrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        frustum.setFromProjectionMatrix(matrix);
+
+        Object.keys(this.instancedMeshes).forEach(key => {
+            const mesh = this.instancedMeshes[key];
+            if (!mesh || (!key.includes('building') && !key.includes('house') && !key.includes('skyscraper'))) {
+                return;
+            }
+
+            // Vérifier si le mesh est dans le frustum
+            mesh.computeBoundingSphere();
+            if (mesh.boundingSphere) {
+                mesh.visible = frustum.intersectsSphere(mesh.boundingSphere);
+            }
+        });
+    }
+
+    /**
+     * Optimise les instances en masquant celles qui sont trop loin ou hors du frustum
+     * @param {THREE.Camera} camera - La caméra
+     * @param {number} maxDistance - Distance maximale de rendu
+     */
+    optimizeInstanceVisibility(camera, maxDistance = 500) {
+        if (!camera) return;
+
+        const cameraPosition = camera.position;
+        const frustum = new THREE.Frustum();
+        const matrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+        frustum.setFromProjectionMatrix(matrix);
+
+        Object.keys(this.instancedMeshes).forEach(key => {
+            const mesh = this.instancedMeshes[key];
+            if (!mesh || (!key.includes('building') && !key.includes('house') && !key.includes('skyscraper'))) {
+                return;
+            }
+
+            // Calculer la distance et vérifier le frustum
+            const averageDistance = this.calculateAverageDistance(mesh, cameraPosition);
+            
+            // Masquer si trop loin
+            if (averageDistance > maxDistance) {
+                mesh.visible = false;
+                return;
+            }
+
+            // Vérifier le frustum culling
+            mesh.computeBoundingSphere();
+            if (mesh.boundingSphere) {
+                mesh.visible = frustum.intersectsSphere(mesh.boundingSphere);
+            }
+
+            // Ajuster le niveau de détail selon la distance
+            if (mesh.visible && this.enableBuildingLOD) {
+                this.adjustMeshLOD(mesh, averageDistance);
+            }
+        });
+    }
+
+    /**
+     * Ajuste le niveau de détail d'un mesh selon la distance
+     * @param {THREE.InstancedMesh} mesh - Le mesh à ajuster
+     * @param {number} distance - Distance à la caméra
+     */
+    adjustMeshLOD(mesh, distance) {
+        // Ajuster la fréquence de mise à jour des matrices selon la distance
+        if (distance > this.lodDistances.medium) {
+            // Pour les objets lointains, réduire la fréquence de mise à jour
+            if (Math.random() > 0.1) { // 10% de chance de mise à jour
+                return;
+            }
+        } else if (distance > this.lodDistances.high) {
+            if (Math.random() > 0.3) { // 30% de chance de mise à jour
+                return;
+            }
+        }
+
+        // Forcer la mise à jour si nécessaire
+        if (mesh.instanceMatrix.needsUpdate) {
+            mesh.instanceMatrix.needsUpdate = true;
+        }
     }
 
     /**
