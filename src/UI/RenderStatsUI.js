@@ -248,6 +248,25 @@ export default class RenderStatsUI {
                     </div>
                 </div>
             </div>
+            <div class="render-stats-lod-controls">
+                <div class="render-stats-section-header">
+                    <span>Contrôles LOD Bâtiments</span>
+                    <button class="render-stats-lod-toggle" title="Masquer/Afficher les contrôles LOD">▼</button>
+                </div>
+                <div class="render-stats-lod-content">
+                    <div class="render-stats-lod-item">
+                        <label class="render-stats-lod-label">
+                            <input type="checkbox" class="building-lod-enable" checked>
+                            Activer LOD Bâtiments
+                        </label>
+                    </div>
+                    <div class="render-stats-lod-item">
+                        <label class="render-stats-lod-label">Distance LOD:</label>
+                        <input type="range" class="building-lod-distance" min="50" max="300" value="100" step="10">
+                        <span class="building-lod-distance-value">100</span>
+                    </div>
+                </div>
+            </div>
         `;
 
         // Ajouter les styles CSS
@@ -265,6 +284,11 @@ export default class RenderStatsUI {
             categoriesContent: this.container.querySelector('.render-stats-categories-content'),
             countsToggleButton: this.container.querySelector('.render-stats-counts-toggle'),
             countsContent: this.container.querySelector('.render-stats-counts-content'),
+            lodToggleButton: this.container.querySelector('.render-stats-lod-toggle'),
+            lodContent: this.container.querySelector('.render-stats-lod-content'),
+            buildingLodEnable: this.container.querySelector('.building-lod-enable'),
+            buildingLodDistance: this.container.querySelector('.building-lod-distance'),
+            buildingLodDistanceValue: this.container.querySelector('.building-lod-distance-value'),
             drawCalls: document.getElementById('draw-calls'),
             triangles: document.getElementById('triangles'),
             geometries: document.getElementById('geometries'),
@@ -611,6 +635,99 @@ export default class RenderStatsUI {
                 color: #999999;
                 font-size: 9px;
             }
+
+            .render-stats-lod-controls {
+                margin-top: 10px;
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                padding-top: 8px;
+            }
+
+            .render-stats-lod-toggle {
+                background: none;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                width: 16px;
+                height: 16px;
+                border-radius: 2px;
+                cursor: pointer;
+                font-size: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .render-stats-lod-toggle:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            .render-stats-lod-content {
+                transition: all 0.3s ease;
+                padding: 6px;
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 4px;
+                border-left: 3px solid #00ff88;
+            }
+
+            .render-stats-lod-content.hidden {
+                display: none;
+            }
+
+            .render-stats-lod-item {
+                display: flex;
+                align-items: center;
+                margin-bottom: 6px;
+                gap: 8px;
+            }
+
+            .render-stats-lod-label {
+                color: #cccccc;
+                font-size: 10px;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                cursor: pointer;
+            }
+
+            .building-lod-enable {
+                margin: 0;
+                cursor: pointer;
+            }
+
+            .building-lod-distance {
+                flex: 1;
+                height: 16px;
+                background: rgba(255, 255, 255, 0.1);
+                border: none;
+                border-radius: 8px;
+                outline: none;
+                cursor: pointer;
+            }
+
+            .building-lod-distance::-webkit-slider-thumb {
+                appearance: none;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #00ff88;
+                cursor: pointer;
+            }
+
+            .building-lod-distance::-moz-range-thumb {
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #00ff88;
+                cursor: pointer;
+                border: none;
+            }
+
+            .building-lod-distance-value {
+                color: #00ff88;
+                font-weight: bold;
+                font-size: 10px;
+                min-width: 30px;
+                text-align: right;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -634,6 +751,23 @@ export default class RenderStatsUI {
         // Toggle counts visibility
         this.elements.countsToggleButton.addEventListener('click', () => {
             this.toggleCounts();
+        });
+
+        // Toggle LOD controls visibility
+        this.elements.lodToggleButton.addEventListener('click', () => {
+            this.toggleLODControls();
+        });
+
+        // Building LOD enable/disable
+        this.elements.buildingLodEnable.addEventListener('change', (event) => {
+            this.setBuildingLOD(event.target.checked);
+        });
+
+        // Building LOD distance
+        this.elements.buildingLodDistance.addEventListener('input', (event) => {
+            const distance = parseInt(event.target.value);
+            this.elements.buildingLodDistanceValue.textContent = distance;
+            this.setBuildingLODDistance(distance);
         });
 
         // Keyboard shortcut (Ctrl+R pour toggle)
@@ -980,6 +1114,32 @@ export default class RenderStatsUI {
         } else {
             this.elements.countsContent.classList.remove('hidden');
             this.elements.countsToggleButton.textContent = '▼';
+        }
+    }
+
+    toggleLODControls() {
+        const isLODVisible = !this.elements.lodContent.classList.contains('hidden');
+        
+        if (isLODVisible) {
+            this.elements.lodContent.classList.add('hidden');
+            this.elements.lodToggleButton.textContent = '▶';
+        } else {
+            this.elements.lodContent.classList.remove('hidden');
+            this.elements.lodToggleButton.textContent = '▼';
+        }
+    }
+
+    setBuildingLOD(enabled) {
+        const instancedMeshManager = this.experience.world?.cityManager?.contentGenerator?.instancedMeshManager;
+        if (instancedMeshManager) {
+            instancedMeshManager.setBuildingLOD(enabled);
+        }
+    }
+
+    setBuildingLODDistance(distance) {
+        const instancedMeshManager = this.experience.world?.cityManager?.contentGenerator?.instancedMeshManager;
+        if (instancedMeshManager) {
+            instancedMeshManager.setBuildingLODDistance(distance);
         }
     }
 

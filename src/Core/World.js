@@ -701,6 +701,11 @@ export default class World {
 		// PlotContentGenerator.update (fenêtres) est géré par CityManager ou ici si besoin
 		if (this.cityManager?.contentGenerator) {
 				this.cityManager.contentGenerator.update(currentHour); // Appel via CityManager
+				
+				// Mettre à jour le système LOD des bâtiments
+				if (this.cityManager.contentGenerator.instancedMeshManager) {
+					this.cityManager.contentGenerator.instancedMeshManager.updateLODVisibility();
+				}
 		}
 		if(this.cityManager?.lampPostManager) {
 			this.cityManager.lampPostManager.updateLampPostLights(currentHour); // Appel via CityManager

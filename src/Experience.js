@@ -23,6 +23,8 @@ import * as DebugTools from './World/Rendering/DebugTools.js';
 import AgentUI from './UI/AgentUI.js';
 // Import du pool d'objets
 import ObjectPool from './Utils/ObjectPool.js';
+// Import des commandes de test LOD (en développement)
+import './Utils/BuildingLODTestCommands.js';
 import { defaultUIStates, saveUIStates, loadUIStates } from './config/uiConfig.js';
 import TimeScheduler from './World/TimeScheduler.js';
 

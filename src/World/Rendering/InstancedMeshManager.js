@@ -1,6 +1,7 @@
 // src/World/InstancedMeshManager.js
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import BuildingLODRenderer from '../Buildings/BuildingLODRenderer.js';
 
 /**
  * @typedef {import('../CityAssetLoader.js').default} CityAssetLoader
@@ -34,11 +35,18 @@ export default class InstancedMeshManager {
 
         /** @type {Object.<string, THREE.InstancedMesh>} */
         this.instancedMeshes = {}; // Stocke les meshes créés, clé = type_idOrKey
+        /** @type {Object.<string, THREE.InstancedMesh>} */
+        this.lodInstancedMeshes = {}; // Stocke les meshes LOD créés, clé = type_idOrKey
         /** @type {Array<THREE.InstancedMesh>} */
         this.windowMeshes = []; // Références spécifiques aux meshes de fenêtres pour l'update
 
         // Optimisation des draw calls pour les bâtiments
         this.enableBuildingOptimization = true; // Flag pour activer/désactiver l'optimisation
+        
+        // Système LOD pour les bâtiments
+        this.buildingLODRenderer = new BuildingLODRenderer();
+        this.buildingLODDistance = config.buildingLodDistance || 100; // Distance à laquelle activer le LOD
+        this.enableBuildingLOD = true; // Flag pour activer/désactiver le LOD des bâtiments
 
         // Géométrie de base pour les passages piétons (si applicable)
         this.stripeBaseGeometry = null;
@@ -356,6 +364,115 @@ export default class InstancedMeshManager {
     }
 
     /**
+     * Active ou désactive le système LOD des bâtiments
+     * @param {boolean} enabled - True pour activer le LOD
+     */
+    setBuildingLOD(enabled) {
+        this.enableBuildingLOD = enabled;
+        console.log(`Building LOD ${enabled ? 'enabled' : 'disabled'}`);
+        
+        if (!enabled) {
+            // Si désactivé, masquer tous les meshes LOD et afficher les haute qualité
+            Object.values(this.lodInstancedMeshes).forEach(mesh => {
+                if (mesh) mesh.visible = false;
+            });
+            Object.values(this.instancedMeshes).forEach(mesh => {
+                if (mesh) mesh.visible = true;
+            });
+        }
+    }
+
+    /**
+     * Définit la distance LOD pour les bâtiments
+     * @param {number} distance - Distance en unités de monde
+     */
+    setBuildingLODDistance(distance) {
+        this.buildingLODDistance = distance;
+        console.log(`Building LOD distance set to ${distance}`);
+    }
+
+    /**
+     * Crée les meshes LOD pour les bâtiments
+     * @param {Object.<string, Object.<string, Array<THREE.Matrix4>>>} instanceData - Données d'instance
+     */
+    createLODMeshes(instanceData) {
+        if (!this.enableBuildingLOD) return;
+
+        const buildingTypes = ['house', 'building', 'skyscraper', 'industrial', 'commercial', 'movietheater', 'newhouse', 'newbuilding', 'newskyscraper'];
+        const lodMaterial = this.buildingLODRenderer.getLODMaterial();
+
+        buildingTypes.forEach(buildingType => {
+            if (!instanceData[buildingType]) return;
+
+            // Collecter toutes les matrices pour ce type de bâtiment
+            const allMatrices = [];
+            Object.values(instanceData[buildingType]).forEach(matrices => {
+                allMatrices.push(...matrices);
+            });
+
+            if (allMatrices.length === 0) return;
+
+            // Créer la géométrie LOD pour ce type
+            const lodGeometry = this.buildingLODRenderer.createLODGeometry(buildingType);
+            
+            // Créer l'InstancedMesh LOD
+            const lodMesh = new THREE.InstancedMesh(lodGeometry, lodMaterial.clone(), allMatrices.length);
+            lodMesh.castShadow = true;
+            lodMesh.receiveShadow = true;
+            lodMesh.name = `${buildingType}_LOD`;
+            lodMesh.visible = false; // Initialement invisible
+
+            // Appliquer les matrices
+            allMatrices.forEach((matrix, index) => {
+                lodMesh.setMatrixAt(index, matrix);
+            });
+            lodMesh.instanceMatrix.needsUpdate = true;
+
+            // Ajouter à la scène et stocker
+            this.parentGroup.add(lodMesh);
+            this.lodInstancedMeshes[buildingType] = lodMesh;
+
+            console.log(`[IMM] Created LOD mesh for ${buildingType}: ${allMatrices.length} instances`);
+        });
+    }
+
+    /**
+     * Met à jour la visibilité des meshes en fonction de la distance à la caméra
+     */
+    updateLODVisibility() {
+        if (!this.enableBuildingLOD || !this.experience?.camera?.instance) return;
+
+        const camera = this.experience.camera.instance;
+        const cameraPosition = camera.position;
+
+        // Pour chaque type de bâtiment, déterminer s'il faut utiliser le LOD
+        Object.keys(this.lodInstancedMeshes).forEach(buildingType => {
+            const lodMesh = this.lodInstancedMeshes[buildingType];
+            if (!lodMesh) return;
+
+            // Calculer la distance moyenne des bâtiments à la caméra
+            // Pour simplifier, on utilise la distance au centre de la ville
+            const cityCenter = new THREE.Vector3(0, 0, 0); // Ajuster selon votre ville
+            const distanceToCity = cameraPosition.distanceTo(cityCenter);
+
+            const shouldUseLOD = distanceToCity > this.buildingLODDistance;
+
+            // Basculer la visibilité
+            lodMesh.visible = shouldUseLOD;
+
+            // Masquer/afficher les meshes haute qualité correspondants
+            Object.keys(this.instancedMeshes).forEach(meshKey => {
+                if (meshKey.startsWith(buildingType + '_')) {
+                    const highDetailMesh = this.instancedMeshes[meshKey];
+                    if (highDetailMesh) {
+                        highDetailMesh.visible = !shouldUseLOD;
+                    }
+                }
+            });
+        });
+    }
+
+    /**
      * Crée tous les InstancedMesh basés sur les données fournies.
      * @param {Object.<string, Object.<string, Array<THREE.Matrix4>>>} instanceData - Données provenant de InstanceDataManager.
      */
@@ -365,6 +482,9 @@ export default class InstancedMeshManager {
 
         let totalMeshesCreated = 0;
         let totalInstancesCreated = 0;
+
+        // Créer d'abord les meshes LOD
+        this.createLODMeshes(instanceData);
 
         for (const type in instanceData) {
             if (!instanceData.hasOwnProperty(type)) continue;
@@ -1117,8 +1237,24 @@ export default class InstancedMeshManager {
             }
         });
 
-        // Réinitialiser le conteneur
+        // Nettoyer les InstancedMesh LOD
+        Object.keys(this.lodInstancedMeshes).forEach(key => {
+            const mesh = this.lodInstancedMeshes[key];
+            if (mesh) {
+                // Retirer de la scène
+                if (mesh.parent) {
+                    mesh.parent.remove(mesh);
+                }
+                // Nettoyer le matériau cloné
+                if (mesh.material) {
+                    mesh.material.dispose();
+                }
+            }
+        });
+
+        // Réinitialiser les conteneurs
         this.instancedMeshes = {};
+        this.lodInstancedMeshes = {};
 
         // Nettoyer la géométrie de base des passages piétons si elle existe
         if (this.stripeBaseGeometry) {
@@ -1143,6 +1279,13 @@ export default class InstancedMeshManager {
     destroy() {
         //console.log("Destroying InstancedMeshManager...");
         this.reset(); // Effectue le nettoyage principal
+        
+        // Nettoyer le BuildingLODRenderer
+        if (this.buildingLODRenderer) {
+            this.buildingLODRenderer.dispose();
+            this.buildingLODRenderer = null;
+        }
+        
         // Libérer les références
         this.config = null;
         this.materials = null;
