@@ -214,18 +214,6 @@ export default class RenderStatsUI {
                                 <span class="render-stats-count-sublabel">Cinémas:</span>
                                 <span class="render-stats-count-value" id="buildings-movietheater">0</span>
                             </div>
-                            <div class="render-stats-count-item">
-                                <span class="render-stats-count-sublabel">Nouveaux Gratte-ciels:</span>
-                                <span class="render-stats-count-value" id="buildings-newskyscraper">0</span>
-                            </div>
-                            <div class="render-stats-count-item">
-                                <span class="render-stats-count-sublabel">Nouvelles Maisons:</span>
-                                <span class="render-stats-count-value" id="buildings-newhouse">0</span>
-                            </div>
-                            <div class="render-stats-count-item">
-                                <span class="render-stats-count-sublabel">Nouveaux Immeubles:</span>
-                                <span class="render-stats-count-value" id="buildings-newbuilding">0</span>
-                            </div>
                         </div>
                     </div>
                     <div class="render-stats-count-section">
@@ -312,9 +300,6 @@ export default class RenderStatsUI {
             buildingsIndustrial: document.getElementById('buildings-industrial'),
             buildingsCommercial: document.getElementById('buildings-commercial'),
             buildingsMovietheater: document.getElementById('buildings-movietheater'),
-            buildingsNewSkyscraper: document.getElementById('buildings-newskyscraper'),
-            buildingsNewHouse: document.getElementById('buildings-newhouse'),
-            buildingsNewBuilding: document.getElementById('buildings-newbuilding'),
             treesCount: document.getElementById('trees-count'),
             lamppostsCount: document.getElementById('lampposts-count'),
             sidewalksCount: document.getElementById('sidewalks-count'),
@@ -785,9 +770,6 @@ export default class RenderStatsUI {
         this.elements.buildingsIndustrial.textContent = safeFormat(objectCounts.buildings.industrial);
         this.elements.buildingsCommercial.textContent = safeFormat(objectCounts.buildings.commercial);
         this.elements.buildingsMovietheater.textContent = safeFormat(objectCounts.buildings.movietheater);
-        this.elements.buildingsNewSkyscraper.textContent = safeFormat(objectCounts.buildings.newskyscraper);
-        this.elements.buildingsNewHouse.textContent = safeFormat(objectCounts.buildings.newhouse);
-        this.elements.buildingsNewBuilding.textContent = safeFormat(objectCounts.buildings.newbuilding);
         
         // Environnement urbain
         this.elements.treesCount.textContent = safeFormat(objectCounts.trees);
@@ -1032,10 +1014,7 @@ export default class RenderStatsUI {
                 skyscraper: 0,
                 industrial: 0,
                 commercial: 0,
-                movietheater: 0,
-                newskyscraper: 0,
-                newhouse: 0,
-                newbuilding: 0
+                movietheater: 0
             },
             trees: 0,
             lampposts: 0,
