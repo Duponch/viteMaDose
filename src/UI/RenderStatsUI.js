@@ -177,6 +177,89 @@ export default class RenderStatsUI {
 
                 </div>
             </div>
+            <div class="render-stats-object-counts">
+                <div class="render-stats-section-header">
+                    <span>Compteurs d'objets</span>
+                    <button class="render-stats-counts-toggle" title="Masquer/Afficher les compteurs">▼</button>
+                </div>
+                <div class="render-stats-counts-content">
+                    <div class="render-stats-count-section">
+                        <div class="render-stats-count-header">🏢 Bâtiments</div>
+                        <div class="render-stats-count-item">
+                            <span class="render-stats-count-label">Total:</span>
+                            <span class="render-stats-count-value" id="buildings-total">0</span>
+                        </div>
+                        <div class="render-stats-count-subsection">
+                            <div class="render-stats-count-item">
+                                <span class="render-stats-count-sublabel">Maisons:</span>
+                                <span class="render-stats-count-value" id="buildings-house">0</span>
+                            </div>
+                            <div class="render-stats-count-item">
+                                <span class="render-stats-count-sublabel">Immeubles:</span>
+                                <span class="render-stats-count-value" id="buildings-building">0</span>
+                            </div>
+                            <div class="render-stats-count-item">
+                                <span class="render-stats-count-sublabel">Gratte-ciels:</span>
+                                <span class="render-stats-count-value" id="buildings-skyscraper">0</span>
+                            </div>
+                            <div class="render-stats-count-item">
+                                <span class="render-stats-count-sublabel">Industriels:</span>
+                                <span class="render-stats-count-value" id="buildings-industrial">0</span>
+                            </div>
+                            <div class="render-stats-count-item">
+                                <span class="render-stats-count-sublabel">Commerciaux:</span>
+                                <span class="render-stats-count-value" id="buildings-commercial">0</span>
+                            </div>
+                            <div class="render-stats-count-item">
+                                <span class="render-stats-count-sublabel">Cinémas:</span>
+                                <span class="render-stats-count-value" id="buildings-movietheater">0</span>
+                            </div>
+                            <div class="render-stats-count-item">
+                                <span class="render-stats-count-sublabel">Nouveaux Gratte-ciels:</span>
+                                <span class="render-stats-count-value" id="buildings-newskyscraper">0</span>
+                            </div>
+                            <div class="render-stats-count-item">
+                                <span class="render-stats-count-sublabel">Nouvelles Maisons:</span>
+                                <span class="render-stats-count-value" id="buildings-newhouse">0</span>
+                            </div>
+                            <div class="render-stats-count-item">
+                                <span class="render-stats-count-sublabel">Nouveaux Immeubles:</span>
+                                <span class="render-stats-count-value" id="buildings-newbuilding">0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="render-stats-count-section">
+                        <div class="render-stats-count-header">🌳 Environnement urbain</div>
+                        <div class="render-stats-count-item">
+                            <span class="render-stats-count-label">Arbres:</span>
+                            <span class="render-stats-count-value" id="trees-count">0</span>
+                        </div>
+                        <div class="render-stats-count-item">
+                            <span class="render-stats-count-label">Lampadaires:</span>
+                            <span class="render-stats-count-value" id="lampposts-count">0</span>
+                        </div>
+                        <div class="render-stats-count-item">
+                            <span class="render-stats-count-label">Trottoirs:</span>
+                            <span class="render-stats-count-value" id="sidewalks-count">0</span>
+                        </div>
+                        <div class="render-stats-count-item">
+                            <span class="render-stats-count-label">Passages piétons:</span>
+                            <span class="render-stats-count-value" id="crosswalks-count">0</span>
+                        </div>
+                        <div class="render-stats-count-item">
+                            <span class="render-stats-count-label">Lignes de route:</span>
+                            <span class="render-stats-count-value" id="roadlines-count">0</span>
+                        </div>
+                    </div>
+                    <div class="render-stats-count-section">
+                        <div class="render-stats-count-header">☁️ Atmosphère</div>
+                        <div class="render-stats-count-item">
+                            <span class="render-stats-count-label">Nuages:</span>
+                            <span class="render-stats-count-value" id="clouds-count">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         `;
 
         // Ajouter les styles CSS
@@ -192,6 +275,8 @@ export default class RenderStatsUI {
             content: this.container.querySelector('.render-stats-content'),
             detailsToggleButton: this.container.querySelector('.render-stats-details-toggle'),
             categoriesContent: this.container.querySelector('.render-stats-categories-content'),
+            countsToggleButton: this.container.querySelector('.render-stats-counts-toggle'),
+            countsContent: this.container.querySelector('.render-stats-counts-content'),
             drawCalls: document.getElementById('draw-calls'),
             triangles: document.getElementById('triangles'),
             geometries: document.getElementById('geometries'),
@@ -218,7 +303,24 @@ export default class RenderStatsUI {
             agentsInstances: document.getElementById('agents-instances'),
             vehiclesDrawCalls: document.getElementById('vehicles-draw-calls'),
             vehiclesTriangles: document.getElementById('vehicles-triangles'),
-            vehiclesInstances: document.getElementById('vehicles-instances')
+            vehiclesInstances: document.getElementById('vehicles-instances'),
+            // Compteurs d'objets
+            buildingsTotal: document.getElementById('buildings-total'),
+            buildingsHouse: document.getElementById('buildings-house'),
+            buildingsBuilding: document.getElementById('buildings-building'),
+            buildingsSkyscraper: document.getElementById('buildings-skyscraper'),
+            buildingsIndustrial: document.getElementById('buildings-industrial'),
+            buildingsCommercial: document.getElementById('buildings-commercial'),
+            buildingsMovietheater: document.getElementById('buildings-movietheater'),
+            buildingsNewSkyscraper: document.getElementById('buildings-newskyscraper'),
+            buildingsNewHouse: document.getElementById('buildings-newhouse'),
+            buildingsNewBuilding: document.getElementById('buildings-newbuilding'),
+            treesCount: document.getElementById('trees-count'),
+            lamppostsCount: document.getElementById('lampposts-count'),
+            sidewalksCount: document.getElementById('sidewalks-count'),
+            crosswalksCount: document.getElementById('crosswalks-count'),
+            roadlinesCount: document.getElementById('roadlines-count'),
+            cloudsCount: document.getElementById('clouds-count')
         };
     }
 
@@ -442,6 +544,88 @@ export default class RenderStatsUI {
                 font-weight: bold;
                 font-size: 9px;
             }
+
+            .render-stats-object-counts {
+                margin-top: 10px;
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                padding-top: 8px;
+            }
+
+            .render-stats-counts-toggle {
+                background: none;
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                color: white;
+                width: 16px;
+                height: 16px;
+                border-radius: 2px;
+                cursor: pointer;
+                font-size: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .render-stats-counts-toggle:hover {
+                background: rgba(255, 255, 255, 0.1);
+            }
+
+            .render-stats-counts-content {
+                transition: all 0.3s ease;
+            }
+
+            .render-stats-counts-content.hidden {
+                display: none;
+            }
+
+            .render-stats-count-section {
+                margin-bottom: 8px;
+                padding: 6px;
+                background: rgba(255, 255, 255, 0.03);
+                border-radius: 4px;
+                border-left: 3px solid #00ff88;
+            }
+
+            .render-stats-count-header {
+                color: #00ff88;
+                font-weight: bold;
+                font-size: 11px;
+                margin-bottom: 4px;
+            }
+
+            .render-stats-count-item {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 2px;
+                padding: 2px 0;
+            }
+
+            .render-stats-count-label {
+                color: #cccccc;
+                font-size: 10px;
+            }
+
+            .render-stats-count-value {
+                color: #00ff88;
+                font-weight: bold;
+                text-align: right;
+                font-size: 10px;
+            }
+
+            .render-stats-count-subsection {
+                margin-left: 10px;
+                margin-top: 4px;
+                padding-left: 10px;
+                border-left: 1px solid rgba(255, 255, 255, 0.1);
+            }
+
+            .render-stats-count-subsection .render-stats-count-item {
+                margin-bottom: 1px;
+            }
+
+            .render-stats-count-sublabel {
+                color: #999999;
+                font-size: 9px;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -460,6 +644,11 @@ export default class RenderStatsUI {
         // Toggle details visibility
         this.elements.detailsToggleButton.addEventListener('click', () => {
             this.toggleDetails();
+        });
+
+        // Toggle counts visibility
+        this.elements.countsToggleButton.addEventListener('click', () => {
+            this.toggleCounts();
         });
 
         // Keyboard shortcut (Ctrl+R pour toggle)
@@ -579,6 +768,36 @@ export default class RenderStatsUI {
         this.elements.vehiclesTriangles.textContent = this.isStatsEnabled ? 
             categoryStats.vehicles.triangles.toLocaleString() : 'N/A';
         this.elements.vehiclesInstances.textContent = stats.categories.vehicles.instances.toLocaleString();
+        
+        // Mettre à jour les compteurs d'objets
+        const objectCounts = this.calculateObjectCounts();
+        
+        // Fonction helper pour formater les nombres de manière sécurisée
+        const safeFormat = (value) => {
+            return (typeof value === 'number' && !isNaN(value)) ? value.toLocaleString() : '0';
+        };
+        
+        // Bâtiments
+        this.elements.buildingsTotal.textContent = safeFormat(objectCounts.buildings.total);
+        this.elements.buildingsHouse.textContent = safeFormat(objectCounts.buildings.house);
+        this.elements.buildingsBuilding.textContent = safeFormat(objectCounts.buildings.building);
+        this.elements.buildingsSkyscraper.textContent = safeFormat(objectCounts.buildings.skyscraper);
+        this.elements.buildingsIndustrial.textContent = safeFormat(objectCounts.buildings.industrial);
+        this.elements.buildingsCommercial.textContent = safeFormat(objectCounts.buildings.commercial);
+        this.elements.buildingsMovietheater.textContent = safeFormat(objectCounts.buildings.movietheater);
+        this.elements.buildingsNewSkyscraper.textContent = safeFormat(objectCounts.buildings.newskyscraper);
+        this.elements.buildingsNewHouse.textContent = safeFormat(objectCounts.buildings.newhouse);
+        this.elements.buildingsNewBuilding.textContent = safeFormat(objectCounts.buildings.newbuilding);
+        
+        // Environnement urbain
+        this.elements.treesCount.textContent = safeFormat(objectCounts.trees);
+        this.elements.lamppostsCount.textContent = safeFormat(objectCounts.lampposts);
+        this.elements.sidewalksCount.textContent = safeFormat(objectCounts.sidewalks);
+        this.elements.crosswalksCount.textContent = safeFormat(objectCounts.crosswalks);
+        this.elements.roadlinesCount.textContent = safeFormat(objectCounts.roadlines);
+        
+        // Atmosphère
+        this.elements.cloudsCount.textContent = safeFormat(objectCounts.clouds);
     }
 
     calculateStats() {
@@ -770,6 +989,18 @@ export default class RenderStatsUI {
         }
     }
 
+    toggleCounts() {
+        const isCountsVisible = !this.elements.countsContent.classList.contains('hidden');
+        
+        if (isCountsVisible) {
+            this.elements.countsContent.classList.add('hidden');
+            this.elements.countsToggleButton.textContent = '▶';
+        } else {
+            this.elements.countsContent.classList.remove('hidden');
+            this.elements.countsToggleButton.textContent = '▼';
+        }
+    }
+
     /**
      * Calcule le nombre de triangles dans une géométrie
      * @param {THREE.BufferGeometry} geometry - La géométrie à analyser
@@ -790,6 +1021,92 @@ export default class RenderStatsUI {
         }
         
         return 0;
+    }
+
+    calculateObjectCounts() {
+        const counts = {
+            buildings: {
+                total: 0,
+                house: 0,
+                building: 0,
+                skyscraper: 0,
+                industrial: 0,
+                commercial: 0,
+                movietheater: 0,
+                newskyscraper: 0,
+                newhouse: 0,
+                newbuilding: 0
+            },
+            trees: 0,
+            lampposts: 0,
+            sidewalks: 0,
+            crosswalks: 0,
+            roadlines: 0,
+            clouds: 0
+        };
+
+        try {
+            // Compter les bâtiments depuis CitizenManager (buildingInstances est une Map, pas un Array)
+            const citizenManager = this.experience.world?.cityManager?.citizenManager;
+            if (citizenManager?.buildingInstances && citizenManager.buildingInstances instanceof Map) {
+                counts.buildings.total = citizenManager.buildingInstances.size;
+                
+                // Compter par type en itérant sur les valeurs de la Map
+                for (const building of citizenManager.buildingInstances.values()) {
+                    if (building && building.type) {
+                        const type = building.type.toLowerCase();
+                        if (type && counts.buildings.hasOwnProperty(type)) {
+                            counts.buildings[type]++;
+                        }
+                    }
+                }
+            }
+
+            // Compter les instances depuis InstancedMeshManager
+            const instancedMeshManager = this.experience.world?.cityManager?.contentGenerator?.instancedMeshManager;
+            if (instancedMeshManager?.instancedMeshes) {
+                Object.entries(instancedMeshManager.instancedMeshes).forEach(([key, mesh]) => {
+                    if (mesh instanceof THREE.InstancedMesh && typeof mesh.count === 'number') {
+                        // Arbres
+                        if (key.startsWith('tree_')) {
+                            counts.trees += mesh.count;
+                        }
+                        // Trottoirs
+                        else if (key.startsWith('sidewalk_')) {
+                            counts.sidewalks += mesh.count;
+                        }
+                        // Passages piétons (chercher dans les clés crosswalk)
+                        else if (key.startsWith('crosswalk_')) {
+                            counts.crosswalks += mesh.count;
+                        }
+                        // Lignes de route (chercher différentes variantes)
+                        else if (key.includes('roadLine') || key.includes('road_line') || key.includes('roadlines') || key.includes('roadMarking')) {
+                            counts.roadlines += mesh.count;
+                        }
+                    }
+                });
+            }
+
+            // Compter les lampadaires depuis LampPostManager
+            const lampPostManager = this.experience.world?.cityManager?.lampPostManager;
+            if (lampPostManager?.lampPostMeshes) {
+                // LampPostManager stocke les meshes dans lampPostMeshes.grey, .light, .lightCone
+                const greyMesh = lampPostManager.lampPostMeshes.grey;
+                if (greyMesh instanceof THREE.InstancedMesh && typeof greyMesh.count === 'number') {
+                    counts.lampposts = greyMesh.count;
+                }
+            }
+
+            // Compter les nuages (temps réel)
+            const cloudSystem = this.experience.world?.environment?.environmentSystem?.cloudSystem;
+            if (cloudSystem?.clouds && Array.isArray(cloudSystem.clouds)) {
+                counts.clouds = cloudSystem.clouds.length;
+            }
+        } catch (error) {
+            console.warn('Erreur lors du calcul des compteurs d\'objets:', error);
+        }
+
+        return counts;
     }
 
     destroy() {
