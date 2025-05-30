@@ -251,4 +251,13 @@ export default class CommercialManager {
     getHoursUntilCommercialOpen(calendarDate, currentHour) {
         return this.openingHoursStrategy.hoursUntilOpen(calendarDate, currentHour);
     }
+    
+    /**
+     * Réinitialise le gestionnaire commercial.
+     * Nettoie la liste des parcelles avec commerces.
+     */
+    reset() {
+        this.plotsWithCommercial.clear();
+        //console.log("CommercialManager reset.");
+    }
 } 

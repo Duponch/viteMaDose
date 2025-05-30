@@ -7,6 +7,7 @@ import PlotGroundGenerator from './PlotGroundGenerator.js'; // Placeholder impor
 import CrosswalkInstancer from './CrosswalkInstancer.js'; // Placeholder import
 import ShaderGrassInstancer from '../Vegetation/ShaderGrassInstancer.js'; // Nouvelle implémentation d'herbe
 import CommercialManager from './CommercialManager.js'; // Import du nouveau gestionnaire
+import OptimizedBuildingLODManager from '../Rendering/OptimizedBuildingLODManager.js'; // Système de LOD optimisé pour bâtiments
 // import MovieTheaterManager from './MovieTheaterManager.js'; // Import du gestionnaire de cinémas - SUPPRIMÉ
 
 // Stratégies de placement
@@ -52,6 +53,15 @@ export default class PlotContentGenerator {
         this.instancedMeshManager = null; // Sera créé dans generateContent une fois les renderers disponibles
         this.commercialManager = new CommercialManager(config); // Nouveau gestionnaire de commerces
         // this.movieTheaterManager = new MovieTheaterManager(config); // Gestionnaire de cinémas - SUPPRIMÉ
+        
+        // --- Système de LOD optimisé pour bâtiments ---
+        this.buildingLODManager = new OptimizedBuildingLODManager({
+            highDetailDistance: config.lodHighDetailDistance || 50,
+            mediumDetailDistance: config.lodMediumDetailDistance || 150,
+            lowDetailDistance: config.lodLowDetailDistance || 300,
+            cullDistance: config.lodCullDistance || 500,
+            rebuildInterval: config.lodRebuildInterval || 200
+        });
 
         // --- Générateurs Spécifiques ---
         this.sidewalkGenerator = new SidewalkGenerator(config, materials);
@@ -214,6 +224,13 @@ export default class PlotContentGenerator {
             this.instancedMeshManager.createMeshes(this.instanceDataManager.getData());
         } catch (error) {
              console.error(`Error during InstancedMesh creation:`, error);
+        }
+
+        // --- Enregistrement des bâtiments dans le système LOD ---
+        try {
+            this._registerBuildingsInLODSystem();
+        } catch (error) {
+            console.error(`Error during LOD system registration:`, error);
         }
 
         // Ajouter le groupe d'herbe à la scène
@@ -413,6 +430,11 @@ export default class PlotContentGenerator {
         }
         // Mettre à jour l'animation de l'herbe
         this.grassInstancer?.update();
+        
+        // --- Mise à jour du système LOD ---
+        if (this.buildingLODManager && this.experience.camera?.instance) {
+            this.buildingLODManager.update(this.experience.camera.instance, this.experience.time.delta);
+        }
     }
 
     /**
@@ -502,6 +524,134 @@ export default class PlotContentGenerator {
     setGrassAnimationAmplitude(amplitude) {
         if (this.grassInstancer) {
             this.grassInstancer.setAnimationAmplitude(amplitude);
+        }
+    }
+
+    /**
+     * Enregistre tous les bâtiments créés dans le système LOD optimisé
+     * @private
+     */
+    _registerBuildingsInLODSystem() {
+        if (!this.instancedMeshManager || !this.buildingLODManager) {
+            return;
+        }
+
+        // Parcourir tous les meshes instanciés créés
+        const instancedMeshes = this.instancedMeshManager.instancedMeshes;
+        Object.entries(instancedMeshes).forEach(([key, mesh]) => {
+            // Déterminer le type de bâtiment à partir de la clé
+            let buildingType = 'default';
+            if (key.includes('house')) {
+                buildingType = 'house';
+            } else if (key.includes('building')) {
+                buildingType = 'building';
+            } else if (key.includes('skyscraper')) {
+                buildingType = 'skyscraper';
+            } else if (key.includes('industrial')) {
+                buildingType = 'industrial';
+            } else if (key.includes('commercial')) {
+                buildingType = 'commercial';
+            }
+
+            // Enregistrer le mesh entier dans le système LOD optimisé
+            if (mesh.isInstancedMesh && mesh.count > 0) {
+                this.buildingLODManager.registerInstancedMesh(mesh, buildingType, this.experience.scene);
+            }
+        });
+
+        console.log(`OptimizedBuildingLODManager: Registered ${Object.keys(instancedMeshes).length} InstancedMesh types`);
+    }
+
+    /**
+     * Réinitialise les managers internes (inclut maintenant le système LOD).
+     */
+    resetManagers() {
+        // Nettoyer le système LOD optimisé
+        if (this.buildingLODManager) {
+            this.buildingLODManager.dispose();
+            
+            // Recréer un nouveau manager LOD optimisé
+            this.buildingLODManager = new OptimizedBuildingLODManager({
+                highDetailDistance: this.config.lodHighDetailDistance || 50,
+                mediumDetailDistance: this.config.lodMediumDetailDistance || 150,
+                lowDetailDistance: this.config.lodLowDetailDistance || 300,
+                cullDistance: this.config.lodCullDistance || 500,
+                rebuildInterval: this.config.lodRebuildInterval || 200
+            });
+        }
+
+        // Réinitialisation des autres managers
+        this.instanceDataManager.reset();
+        this.instancedMeshManager?.reset(); // Nettoie et recrée les meshes
+        this.commercialManager.reset();
+        this.sidewalkGenerator.reset();
+        this.plotGroundGenerator.reset();
+        this.crosswalkInstancer.reset();
+        this.grassInstancer.reset();
+
+        // Nettoyer les groupes de scène
+        this._clearGroup(this.sidewalkGroup);
+        this._clearGroup(this.buildingGroup);
+        this._clearGroup(this.groundGroup);
+        this._clearGroup(this.grassGroup);
+
+        // Retirer le groupe d'herbe de la scène s'il y est
+        if (this.grassGroup.parent) {
+            this.grassGroup.parent.remove(this.grassGroup);
+        }
+
+        ////console.log("PlotContentGenerator managers reset (including LOD system).");
+    }
+
+    /**
+     * Obtient les statistiques du système LOD
+     * @returns {Object} - Statistiques LOD
+     */
+    getLODStats() {
+        return this.buildingLODManager ? this.buildingLODManager.getStats() : null;
+    }
+
+    /**
+     * Configure les distances de transition LOD
+     * @param {Object} distances - Nouvelles distances
+     */
+    setLODDistances(distances) {
+        if (this.buildingLODManager) {
+            this.buildingLODManager.setLODDistances(distances);
+        }
+    }
+
+    /**
+     * Nettoie un groupe Three.js en supprimant tous ses enfants
+     * @param {THREE.Group} group - Le groupe à nettoyer
+     * @private
+     */
+    _clearGroup(group) {
+        if (!group) return;
+        
+        // Supprimer tous les enfants du groupe
+        while (group.children.length > 0) {
+            const child = group.children[0];
+            group.remove(child);
+            
+            // Nettoyer les ressources du child si c'est un mesh
+            if (child.isMesh) {
+                if (child.geometry) {
+                    child.geometry.dispose();
+                }
+                if (child.material) {
+                    if (Array.isArray(child.material)) {
+                        child.material.forEach(mat => mat.dispose());
+                    } else {
+                        child.material.dispose();
+                    }
+                }
+            }
+            
+            // Nettoyer récursivement les groupes enfants
+            if (child.isGroup) {
+                this._clearGroup(child);
+            }
         }
     }
 

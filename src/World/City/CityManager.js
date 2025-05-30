@@ -165,7 +165,14 @@ export default class CityManager {
             // Herbe avec shader
             grassInstanceCount: 50000, // Nombre d'instances d'herbe par parcelle
             grassWindStrength: 0.8,   // Force du vent dans l'animation de l'herbe
-            grassShadowDensity: 0.7   // Densité des ombres sur l'herbe
+            grassShadowDensity: 0.7,   // Densité des ombres sur l'herbe
+            
+            // Système LOD (Level of Detail) pour bâtiments
+            lodHighDetailDistance: 50,    // Distance pour le détail max
+            lodMediumDetailDistance: 150, // Distance pour le détail moyen
+            lodLowDetailDistance: 300,    // Distance pour le détail bas (cubes)
+            lodCullDistance: 500,         // Distance de culling complet
+            lodUpdateInterval: 100        // Fréquence de mise à jour LOD (ms)
         };
 
         // Fusion de configuration externe
@@ -814,5 +821,23 @@ export default class CityManager {
     shouldPlotHaveSpecialBuilding(buildingType, plot) {
         const rules = this.specialPlacementRules[buildingType];
         return rules ? rules.selectedPlots.has(plot.id) : false;
+    }
+
+    /**
+     * Obtient les statistiques du système LOD
+     * @returns {Object|null} - Statistiques LOD
+     */
+    getLODStats() {
+        return this.contentGenerator ? this.contentGenerator.getLODStats() : null;
+    }
+
+    /**
+     * Configure les distances de transition LOD
+     * @param {Object} distances - Nouvelles distances
+     */
+    setLODDistances(distances) {
+        if (this.contentGenerator) {
+            this.contentGenerator.setLODDistances(distances);
+        }
     }
 }
