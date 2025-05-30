@@ -25,6 +25,7 @@ import AgentUI from './UI/AgentUI.js';
 import ObjectPool from './Utils/ObjectPool.js';
 import { defaultUIStates, saveUIStates, loadUIStates } from './config/uiConfig.js';
 import TimeScheduler from './World/TimeScheduler.js';
+import PerformanceMonitor from './Utils/PerformanceMonitor.js';
 
 let instance = null;
 
@@ -46,6 +47,10 @@ export default class Experience extends EventTarget {
         this.scene.fog = this.originalFog;
         this.camera = new Camera(this);
         this.renderer = new Renderer(this);
+        
+        // --- Performance monitoring ---
+        this.performanceMonitor = new PerformanceMonitor(this.renderer.instance);
+        
         // --- Création du pool d'objets AVANT le world ---
         this.objectPool = new ObjectPool();
         this.world = new World(this);
@@ -192,6 +197,9 @@ export default class Experience extends EventTarget {
 
         // Exposer le pool d'objets pour un accès facile dans la console
         window.objectPool = this.objectPool;
+        
+        // Exposer des méthodes de test de performance
+        window.testBatchingPerformance = () => this.testBatchingPerformance();
 
         this.agentUI = new AgentUI(this);
 
@@ -1415,6 +1423,11 @@ export default class Experience extends EventTarget {
         if (this.timeScheduler) {
             this.timeScheduler.update(this.time.elapsed);
         }
+        
+        // Update performance monitor
+        if (this.performanceMonitor) {
+            this.performanceMonitor.update();
+        }
 
         // End stats measurement
         this.stats.end();
@@ -1711,5 +1724,53 @@ export default class Experience extends EventTarget {
         this.dispatchEvent(new CustomEvent(`${uiName}uichanged`, {
             detail: { isVisible }
         }));
+    }
+    
+    /**
+     * Teste et compare les performances avec et sans batching agressif
+     */
+    testBatchingPerformance() {
+        console.log('\n=== TEST DE PERFORMANCE DU BATCHING ===');
+        
+        // Attendre que la scène soit stable
+        setTimeout(() => {
+            // Mesure 1: Performance actuelle
+            this.performanceMonitor.reset();
+            let stats1 = null;
+            
+            // Collecter les stats pendant 3 secondes
+            setTimeout(() => {
+                stats1 = this.performanceMonitor.getStats();
+                this.performanceMonitor.logStats('État actuel');
+                
+                // Basculer l'optimisation
+                const meshManager = this.world?.instancedMeshManager;
+                if (meshManager) {
+                    const currentState = meshManager.enableBuildingOptimization;
+                    console.log(`\nBasculement de l'optimisation: ${currentState} → ${!currentState}`);
+                    meshManager.setBuildingOptimization(!currentState);
+                    
+                    // Recréer la ville pour appliquer les changements
+                    console.log('Régénération de la ville...');
+                    this.world.regenerateCity();
+                    
+                    // Attendre que la régénération soit complète
+                    setTimeout(() => {
+                        // Mesure 2: Nouvelle performance
+                        this.performanceMonitor.reset();
+                        
+                        setTimeout(() => {
+                            const stats2 = this.performanceMonitor.getStats();
+                            this.performanceMonitor.logStats('Après changement');
+                            
+                            // Comparer les résultats
+                            PerformanceMonitor.compareStats(stats1, stats2, 'Optimisation Batching');
+                            
+                            console.log('\n=== FIN DU TEST ===\n');
+                        }, 3000);
+                    }, 2000); // Attendre que la ville soit régénérée
+                }
+            }, 3000);
+        }, 1000); // Attendre que la scène soit stable
     }
 }

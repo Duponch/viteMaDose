@@ -1,6 +1,7 @@
 // src/World/InstancedMeshManager.js
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import BuildingBatchOptimizer from './BuildingBatchOptimizer.js';
 
 /**
  * @typedef {import('../CityAssetLoader.js').default} CityAssetLoader
@@ -39,6 +40,7 @@ export default class InstancedMeshManager {
 
         // Optimisation des draw calls pour les bâtiments
         this.enableBuildingOptimization = true; // Flag pour activer/désactiver l'optimisation
+        this.batchOptimizer = new BuildingBatchOptimizer(); // Nouveau système d'optimisation agressive
 
         // Géométrie de base pour les passages piétons (si applicable)
         this.stripeBaseGeometry = null;
@@ -68,6 +70,16 @@ export default class InstancedMeshManager {
     optimizeBuildingParts(parts, matrices, buildingType, assetId) {
         if (!this.enableBuildingOptimization || !parts || parts.length === 0) {
             return null;
+        }
+        
+        // Utiliser le nouveau système d'optimisation agressive
+        if (this.batchOptimizer) {
+            console.log(`[IMM] Using aggressive batch optimization for ${buildingType}`);
+            const result = this.batchOptimizer.optimizeBuilding(parts, matrices, buildingType, assetId);
+            if (result && result.length > 0) {
+                console.log(`[IMM] Batch optimization successful: ${parts.length} parts → ${result.length} meshes`);
+            }
+            return result;
         }
 
         // Grouper les parties par matériau avec optimisation agressive
@@ -430,6 +442,12 @@ export default class InstancedMeshManager {
                                     optimizedMeshes.forEach((optimizedMesh) => {
                                         this.parentGroup.add(optimizedMesh.mesh);
                                         this.instancedMeshes[`commercial_${optimizedMesh.key}`] = optimizedMesh.mesh;
+                                        
+                                        // Ajouter les fenêtres à la liste de suivi
+                                        if (optimizedMesh.isWindow) {
+                                            this.windowMeshes.push(optimizedMesh.mesh);
+                                        }
+                                        
                                         totalMeshesCreated++;
                                         totalInstancesCreated += optimizedMesh.mesh.count;
                                     });
@@ -603,6 +621,12 @@ export default class InstancedMeshManager {
                                         optimizedMeshes.forEach((optimizedMesh) => {
                                             this.parentGroup.add(optimizedMesh.mesh);
                                             this.instancedMeshes[`house_${optimizedMesh.key}`] = optimizedMesh.mesh;
+                                            
+                                            // Ajouter les fenêtres à la liste de suivi
+                                            if (optimizedMesh.isWindow) {
+                                                this.windowMeshes.push(optimizedMesh.mesh);
+                                            }
+                                            
                                             totalMeshesCreated++;
                                             totalInstancesCreated += optimizedMesh.mesh.count;
                                         });
@@ -733,6 +757,12 @@ export default class InstancedMeshManager {
                                      optimizedMeshes.forEach((optimizedMesh) => {
                                          this.parentGroup.add(optimizedMesh.mesh);
                                          this.instancedMeshes[`${type}_${optimizedMesh.key}`] = optimizedMesh.mesh;
+                                         
+                                         // Ajouter les fenêtres à la liste de suivi
+                                         if (optimizedMesh.isWindow) {
+                                             this.windowMeshes.push(optimizedMesh.mesh);
+                                         }
+                                         
                                          totalMeshesCreated++;
                                          totalInstancesCreated += optimizedMesh.mesh.count;
                                      });
@@ -790,6 +820,12 @@ export default class InstancedMeshManager {
                                         optimizedMeshes.forEach((optimizedMesh) => {
                                             this.parentGroup.add(optimizedMesh.mesh);
                                             this.instancedMeshes[`${type}_${optimizedMesh.key}`] = optimizedMesh.mesh;
+                                            
+                                            // Ajouter les fenêtres à la liste de suivi
+                                            if (optimizedMesh.isWindow) {
+                                                this.windowMeshes.push(optimizedMesh.mesh);
+                                            }
+                                            
                                             totalMeshesCreated++;
                                             totalInstancesCreated += optimizedMesh.mesh.count;
                                         });
@@ -1038,6 +1074,7 @@ export default class InstancedMeshManager {
             const isNewHouseWindow = material.name === "HouseWindowPaneMat"; // <-- AJOUTER CETTE NOUVELLE VÉRIFICATION
             const isBuildingWindow = material.name === "BuildingWindowMat";
             const isNewBuildingWindow = material.name === "NewBuildingWindow" || material.name === "NewBuildingBalconyWindow";
+            const isUnifiedWindow = material.name && material.name.includes("Unified_") && material.name.includes("_Windows"); // Fenêtres optimisées
 
             let targetIntensity = 0.0;
 
@@ -1071,6 +1108,8 @@ export default class InstancedMeshManager {
                 //     material.roughness = targetRoughness;
                 //     needsMaterialUpdate = true;
                 // }
+            } else if (isUnifiedWindow) { // Gestion des fenêtres optimisées
+                targetIntensity = lightsOn ? 1.0 : 0.0; // Intensité générique pour toutes les fenêtres unifiées
             } else {
                 // Fenêtre non reconnue ou type non géré
                 return;
@@ -1143,6 +1182,13 @@ export default class InstancedMeshManager {
     destroy() {
         //console.log("Destroying InstancedMeshManager...");
         this.reset(); // Effectue le nettoyage principal
+        
+        // Nettoyer le batch optimizer
+        if (this.batchOptimizer) {
+            this.batchOptimizer.dispose();
+            this.batchOptimizer = null;
+        }
+        
         // Libérer les références
         this.config = null;
         this.materials = null;

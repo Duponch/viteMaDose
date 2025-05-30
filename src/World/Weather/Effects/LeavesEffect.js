@@ -552,7 +552,7 @@ export default class LeavesEffect {
         this.leavesMaterial.uniforms.windSpeed.value = scaledSpeed;
         
         // Log pour vérifier les valeurs (à enlever après débogage)
-        console.log(`Speed update: factor=${this._speedFactor}, speed=${scaledSpeed}`);
+        //console.log(`Speed update: factor=${this._speedFactor}, speed=${scaledSpeed}`);
         
         // Mettre à jour les valeurs de hauteur
         this.leavesMaterial.uniforms.leaveHeight.value = this.leafHeight;
